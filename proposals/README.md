@@ -32,3 +32,4 @@ This directory contains proposals for new Forge features and enhancements.
 | [Stable PR-to-Ticket Association via State Lookup](stable-pr-to-ticket-association.md) | Draft | eshulman2 |
 | [Skill Packages via Jira Project Metadata](skill-installer.md) | Implemented | eshulman2 |
 | [Repository Configuration via Jira Project Metadata](project-metadata-repos.md) | Implemented | eshulman2 |
+| [S3-Compatible Artifact Store for `.forge/` and Workspace Cleanup](forge-artifact-store.md) | Draft | eshulman2 |
