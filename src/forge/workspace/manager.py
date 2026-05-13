@@ -2,6 +2,7 @@
 
 import logging
 import shutil
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -102,18 +103,37 @@ class WorkspaceManager:
     def destroy_workspace(self, workspace: Workspace) -> None:
         """Destroy a workspace and clean up files.
 
-        Args:
-            workspace: Workspace to destroy.
+        Uses podman unshare rm -rf to handle root-owned files written by
+        containers. Falls back to shutil.rmtree when podman is unavailable
+        or the unshare command fails.
         """
         workspace_id = f"{workspace.ticket_key}:{workspace.repo_name}"
 
-        try:
-            if workspace.path.exists():
+        if workspace.path.exists():
+            podman = shutil.which("podman")
+            if podman:
+                try:
+                    result = subprocess.run(
+                        [podman, "unshare", "rm", "-rf", str(workspace.path)],
+                        check=False,
+                    )
+                except OSError as exc:
+                    logger.warning(
+                        "podman unshare failed for %s, falling back to shutil: %s",
+                        workspace.path,
+                        exc,
+                    )
+                    shutil.rmtree(workspace.path)
+                else:
+                    if result.returncode != 0:
+                        logger.warning(
+                            "podman unshare failed for %s, falling back to shutil",
+                            workspace.path,
+                        )
+                        shutil.rmtree(workspace.path)
+            else:
                 shutil.rmtree(workspace.path)
-                logger.info(f"Destroyed workspace: {workspace}")
-        except Exception as e:
-            logger.error(f"Failed to destroy workspace {workspace}: {e}")
-            raise
+            logger.info(f"Destroyed workspace: {workspace}")
 
         workspace.is_active = False
         if workspace_id in self._workspaces:
