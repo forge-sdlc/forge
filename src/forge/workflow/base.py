@@ -67,6 +67,7 @@ class PRIntegrationState(TypedDict, total=False):
     review_push_pending: bool
     review_push_pending_updates: dict[str, Any]
     review_exhaustion_report: Annotated[dict[str, Any], operator.or_]
+    forge_artifacts: dict[str, dict[str, str]]
 
 
 class CIIntegrationState(TypedDict, total=False):
