@@ -27,6 +27,7 @@ from forge.workflow.nodes.git_persistence import (
 from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
+from forge.workspace.artifacts import harvest_forge_artifacts
 from forge.workspace.git_ops import GitOperations
 
 logger = logging.getLogger(__name__)
@@ -223,6 +224,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
         if result.success:
             logger.info(f"Container completed successfully for {current_task}")
+
+            state = harvest_forge_artifacts(workspace_path, current_repo, ["handoff.md"], state)
 
             # Persist each task commit before checkpointing. A subsequent task
             # or local review may resume on a worker with a different filesystem.
