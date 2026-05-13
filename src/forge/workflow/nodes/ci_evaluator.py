@@ -24,6 +24,7 @@ from forge.workflow.utils.jira_status import (
     set_ci_pending_label,
     set_review_pending_label,
 )
+from forge.workspace.artifacts import harvest_forge_artifacts
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
@@ -442,6 +443,10 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 pr_number=state.get("current_pr_number"),
                 attempt=attempt,
             )
+
+        state = harvest_forge_artifacts(
+            workspace_path, state.get("current_repo", ""), ["handoff.md", "fix-plan.md"], state
+        )
 
         return update_state_timestamp(
             {
