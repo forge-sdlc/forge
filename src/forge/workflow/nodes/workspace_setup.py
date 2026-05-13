@@ -17,6 +17,7 @@ from forge.workflow.utils.jira_status import (
     set_implementing_label,
     transition_tasks_to_in_progress,
 )
+from forge.workspace.artifacts import restore_forge_artifacts
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.guardrails import GuardrailsLoader
 from forge.workspace.manager import Workspace, WorkspaceManager
@@ -44,6 +45,7 @@ def _recreate_workspace_from_fork(
     branch_name: str,
     fork_owner: str,
     fork_repo: str,
+    state: WorkflowState,
     stale_workspace_path: str | None = None,
 ) -> tuple[str, GitOperations]:
     if not branch_name or not current_repo or not fork_owner or not fork_repo:
@@ -106,6 +108,7 @@ def _recreate_workspace_from_fork(
     git.workspace.path = target_path
     git.workspace_recreated = True
     write_workspace_identity(target_path, ticket_key=ticket_key, repo_name=current_repo)
+    restore_forge_artifacts(target_path, current_repo, state)
     logger.info(f"Workspace recreated at {target_path} for {ticket_key}")
     return str(target_path), git
 
@@ -165,6 +168,7 @@ def prepare_workspace(
                 branch_name=branch_name,
                 fork_owner=fork_owner,
                 fork_repo=fork_repo,
+                state=state,
                 stale_workspace_path=workspace_path,
             )
         return workspace_path, git
@@ -176,6 +180,7 @@ def prepare_workspace(
         branch_name=branch_name,
         fork_owner=fork_owner,
         fork_repo=fork_repo,
+        state=state,
     )
 
 
@@ -340,6 +345,7 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
             repo_name=current_repo,
         )
+        restore_forge_artifacts(workspace.path, current_repo, state)
 
         # Keep Forge handoff files local to this clone without modifying the
         # target repository's tracked .gitignore.
