@@ -330,9 +330,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             )
             state = merge_review_exhaustion(state, result, ticket_key, "implement_review_fix")
 
-            state = harvest_forge_artifacts(
-                workspace_path, current_repo, ["handoff.md"], state
-            )
+            state = harvest_forge_artifacts(workspace_path, current_repo, ["handoff.md"], state)
 
             # Commit any uncommitted changes the container left
             if git.has_uncommitted_changes():
