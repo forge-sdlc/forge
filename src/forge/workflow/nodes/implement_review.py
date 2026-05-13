@@ -21,6 +21,7 @@ from forge.workflow.utils.review_decisions import (
     merge_review_decisions,
     reply_to_review_decisions,
 )
+from forge.workspace.artifacts import harvest_forge_artifacts
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,11 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             decisions=response_decisions,
         )
 
+        # Harvest Phase 1 outputs so they survive if the workspace is recreated later.
+        state = harvest_forge_artifacts(
+            workspace_path, current_repo, ["review-plan.md", "review-objections.md"], state
+        )
+
         # Backward-compatible fallback if an older analysis prompt writes only
         # the legacy objections file. New analysis never blocks accepted work.
         objections_path = Path(workspace_path) / _REVIEW_OBJECTIONS_FILE
@@ -323,6 +329,10 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
                 skill_name="implement-review",
             )
             state = merge_review_exhaustion(state, result, ticket_key, "implement_review_fix")
+
+            state = harvest_forge_artifacts(
+                workspace_path, current_repo, ["handoff.md"], state
+            )
 
             # Commit any uncommitted changes the container left
             if git.has_uncommitted_changes():
