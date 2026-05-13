@@ -1,0 +1,135 @@
+---
+config:
+  flowchart:
+    curve: linear
+id: 0ab6d989-0a4c-469d-9a28-b0c7bc4c3fac
+---
+graph TD;
+	__start__(<p>__start__</p>)
+	route_entry(route_entry)
+	generate_prd(generate_prd)
+	prd_approval_gate(prd_approval_gate)
+	regenerate_prd(regenerate_prd)
+	generate_spec(generate_spec)
+	spec_approval_gate(spec_approval_gate)
+	regenerate_spec(regenerate_spec)
+	decompose_epics(decompose_epics)
+	plan_approval_gate(plan_approval_gate)
+	regenerate_all_epics(regenerate_all_epics)
+	update_single_epic(update_single_epic)
+	generate_tasks(generate_tasks)
+	task_approval_gate(task_approval_gate)
+	regenerate_all_tasks(regenerate_all_tasks)
+	update_single_task(update_single_task)
+	aggregate_pr_results(aggregate_pr_results)
+	task_router(task_router)
+	setup_workspace(setup_workspace)
+	implement_task(implement_task)
+	local_review(local_review)
+	create_pr(create_pr)
+	teardown_workspace(teardown_workspace)
+	wait_for_ci_gate(wait_for_ci_gate)
+	ci_evaluator(ci_evaluator)
+	attempt_ci_fix(attempt_ci_fix)
+	escalate_blocked(escalate_blocked)
+	ai_review(ai_review)
+	human_review_gate(human_review_gate)
+	complete_tasks(complete_tasks)
+	aggregate_epic_status(aggregate_epic_status)
+	aggregate_feature_status(aggregate_feature_status)
+	answer_question(answer_question)
+	analyze_bug(analyze_bug)
+	rca_approval_gate(rca_approval_gate)
+	regenerate_rca(regenerate_rca)
+	implement_bug_fix(implement_bug_fix)
+	task_workflow(task_workflow)
+	__end__(<p>__end__</p>)
+	__start__ --> route_entry;
+	aggregate_epic_status --> aggregate_feature_status;
+	ai_review -.-> human_review_gate;
+	ai_review -.-> implement_task;
+	analyze_bug --> rca_approval_gate;
+	attempt_ci_fix --> ci_evaluator;
+	ci_evaluator -.-> ai_review;
+	ci_evaluator -.-> attempt_ci_fix;
+	ci_evaluator -.-> escalate_blocked;
+	complete_tasks --> aggregate_epic_status;
+	create_pr -.-> escalate_blocked;
+	create_pr -.-> teardown_workspace;
+	decompose_epics -.-> __end__;
+	decompose_epics -.-> plan_approval_gate;
+	generate_prd -.-> __end__;
+	generate_prd -.-> prd_approval_gate;
+	generate_spec -.-> __end__;
+	generate_spec -.-> spec_approval_gate;
+	generate_tasks -.-> __end__;
+	generate_tasks -.-> task_approval_gate;
+	human_review_gate -.-> __end__;
+	human_review_gate -.-> complete_tasks;
+	human_review_gate -.-> implement_task;
+	implement_bug_fix --> create_pr;
+	implement_task -.-> local_review;
+	implement_task -.-> escalate_blocked;
+	local_review -.-> local_review;
+	local_review -.-> create_pr;
+	plan_approval_gate -.-> __end__;
+	plan_approval_gate -.-> generate_tasks;
+	plan_approval_gate -.-> regenerate_all_epics;
+	plan_approval_gate -.-> update_single_epic;
+	plan_approval_gate -.-> answer_question;
+	prd_approval_gate -.-> __end__;
+	prd_approval_gate -.-> generate_spec;
+	prd_approval_gate -.-> regenerate_prd;
+	prd_approval_gate -.-> answer_question;
+	rca_approval_gate -.-> __end__;
+	rca_approval_gate -.-> implement_bug_fix;
+	rca_approval_gate -.-> regenerate_rca;
+	rca_approval_gate -.-> answer_question;
+	regenerate_all_epics --> plan_approval_gate;
+	regenerate_all_tasks --> task_approval_gate;
+	regenerate_prd --> prd_approval_gate;
+	regenerate_rca --> rca_approval_gate;
+	regenerate_spec --> spec_approval_gate;
+	route_entry -.-> analyze_bug;
+	route_entry -.-> decompose_epics;
+	route_entry -.-> generate_prd;
+	route_entry -.-> generate_spec;
+	route_entry -.-> generate_tasks;
+	route_entry -.-> implement_bug_fix;
+	route_entry -.-> plan_approval_gate;
+	route_entry -.-> prd_approval_gate;
+	route_entry -.-> rca_approval_gate;
+	route_entry -.-> spec_approval_gate;
+	route_entry -.-> task_approval_gate;
+	route_entry -.-> task_router;
+	route_entry -.-> task_workflow;
+	setup_workspace -.-> escalate_blocked;
+	setup_workspace -.-> implement_task;
+	spec_approval_gate -.-> __end__;
+	spec_approval_gate -.-> decompose_epics;
+	spec_approval_gate -.-> regenerate_spec;
+	spec_approval_gate -.-> answer_question;
+	task_approval_gate -.-> __end__;
+	task_approval_gate -.-> regenerate_all_tasks;
+	task_approval_gate -.-> task_router;
+	task_approval_gate -.-> update_single_task;
+	task_approval_gate -.-> answer_question;
+	teardown_workspace -.-> wait_for_ci_gate;
+	teardown_workspace -.-> setup_workspace;
+	wait_for_ci_gate -.-> ci_evaluator;
+	wait_for_ci_gate -.-> __end__;
+	update_single_epic --> plan_approval_gate;
+	update_single_task --> task_approval_gate;
+	answer_question -.-> prd_approval_gate;
+	answer_question -.-> spec_approval_gate;
+	answer_question -.-> plan_approval_gate;
+	answer_question -.-> task_approval_gate;
+	answer_question -.-> rca_approval_gate;
+	aggregate_feature_status --> __end__;
+	escalate_blocked --> __end__;
+	task_router --> __end__;
+	task_workflow --> __end__;
+	implement_task -.-> implement_task;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
