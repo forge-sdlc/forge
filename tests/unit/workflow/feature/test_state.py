@@ -54,6 +54,7 @@ class TestFeatureState:
         assert state["ticket_key"] == "TEST-123"
         assert state["prd_content"] == ""
         assert state["epic_keys"] == []
+        assert state["forge_artifacts"] == {}
 
 
 class TestQAStateFields:
@@ -132,3 +133,4 @@ class TestQAStateFields:
         assert state["qa_history"] == []
         assert state["generation_context"] == {}
         assert state["is_question"] is False
+        assert state["forge_artifacts"] == {}
