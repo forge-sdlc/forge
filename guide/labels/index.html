@@ -1290,15 +1290,35 @@
 <thead>
 <tr>
 <th>Stage</th>
-<th>Pending Label</th>
-<th>Approved Label</th>
+<th>Label</th>
+<th>Set by</th>
+<th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>RCA</td>
+<td>Triage</td>
+<td><code>forge:triage-pending</code></td>
+<td>Forge</td>
+<td>Ticket is missing required fields; waiting for reporter to update</td>
+</tr>
+<tr>
+<td>RCA Option Gate</td>
+<td><code>forge:rca-pending</code></td>
+<td>Forge</td>
+<td>RCA posted with fix options; waiting for <code>&gt;option N</code> selection</td>
+</tr>
+<tr>
+<td>Plan Approval Gate</td>
 <td><code>forge:plan-pending</code></td>
+<td>Forge</td>
+<td>Plan posted; waiting for approval</td>
+</tr>
+<tr>
+<td>Plan Approval Gate</td>
 <td><code>forge:plan-approved</code></td>
+<td>Human</td>
+<td>Approve plan and trigger task decomposition + implementation</td>
 </tr>
 </tbody>
 </table>

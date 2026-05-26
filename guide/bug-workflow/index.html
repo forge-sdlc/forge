@@ -582,10 +582,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#rca-analysis" class="md-nav__link">
+  <a href="#1-triage" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        RCA Analysis
+        1. Triage
       </span>
     </span>
   </a>
@@ -593,10 +593,43 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#implementation-pr-ci-review" class="md-nav__link">
+  <a href="#2-rca-analysis" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Implementation → PR → CI → Review
+        2. RCA Analysis
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-rca-option-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        3. RCA Option Gate
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-planning" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        4. Planning
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-decompose-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        5. Decompose → Implementation
       </span>
     </span>
   </a>
@@ -1233,10 +1266,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#rca-analysis" class="md-nav__link">
+  <a href="#1-triage" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        RCA Analysis
+        1. Triage
       </span>
     </span>
   </a>
@@ -1244,10 +1277,43 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#implementation-pr-ci-review" class="md-nav__link">
+  <a href="#2-rca-analysis" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Implementation → PR → CI → Review
+        2. RCA Analysis
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-rca-option-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        3. RCA Option Gate
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-planning" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        4. Planning
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-decompose-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        5. Decompose → Implementation
       </span>
     </span>
   </a>
@@ -1316,47 +1382,91 @@
 
 
 <h1 id="bug-workflow">Bug Workflow<a class="headerlink" href="#bug-workflow" title="Permanent link">&para;</a></h1>
-<p>Bugs follow a simpler workflow than features: one approval gate instead of four, then straight to implementation.</p>
+<p>Bugs go through a structured five-stage pipeline that produces a root cause analysis, a concrete fix plan, and implementation — all within a single Forge-managed workflow.</p>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <pre class="mermaid"><code>flowchart TD
-    A[Create Bug] --&gt; B[Analyze - RCA]
-    B --&gt;|Approval + Q&amp;A| C[Implement Fix]
-    C --&gt; D[Local Review]
-    D --&gt; E[Create PR]
-    E --&gt; F[CI/CD + Fix]
-    F --&gt; G[AI Review]
-    G --&gt; H[Human Review]
-    H --&gt;|Approved| I[Merge]</code></pre>
+    A[Create Bug + forge:managed] --&gt; B[Triage Check]
+    B --&gt;|Fields missing| C[Triage Gate\nwait for reporter update]
+    C --&gt; B
+    B --&gt;|Sufficient| D[RCA Analysis\ncontainer]
+    D --&gt; E[RCA Reflection\nvalidation loop up to 3x]
+    E --&gt;|Invalid| D
+    E --&gt;|Valid| F[RCA Option Gate\nforge:rca-pending]
+    F --&gt;|'&gt;option N'| G[Plan Bug Fix\ncontainer]
+    F --&gt;|feedback| D
+    G --&gt; H[Plan Approval Gate\nforge:plan-pending]
+    H --&gt;|forge:plan-approved| I[Decompose Plan\ncreate per-repo tasks]
+    H --&gt;|feedback| G
+    I --&gt; J[Implementation\ncontainer per repo]
+    J --&gt; K[Qualitative Review\n7-item checklist]
+    K --&gt;|adequate| L[Update Docs → PR]
+    K --&gt;|needs work, retry &lt; 2| J
+    L --&gt; M[CI/CD + Review → Merge]
+    M --&gt; N[Post-merge Summary\nJira comment]</code></pre>
 <h2 id="triggering-a-bug-workflow">Triggering a Bug Workflow<a class="headerlink" href="#triggering-a-bug-workflow" title="Permanent link">&para;</a></h2>
 <p>Create a Jira issue with:</p>
 <ul>
 <li><strong>Issue type:</strong> Bug</li>
 <li><strong>Label:</strong> <code>forge:managed</code></li>
 </ul>
-<p>Forge detects the issue type and routes it through the bug pipeline instead of the feature pipeline.</p>
+<p>Forge detects the issue type and routes it through the bug pipeline.</p>
 <h2 id="stage-reference">Stage Reference<a class="headerlink" href="#stage-reference" title="Permanent link">&para;</a></h2>
-<h3 id="rca-analysis">RCA Analysis<a class="headerlink" href="#rca-analysis" title="Permanent link">&para;</a></h3>
-<p>Forge analyzes the bug report and generates a root cause analysis. The RCA includes:</p>
-<ul>
-<li>Probable root cause</li>
-<li>Affected code areas</li>
-<li>Proposed fix approach</li>
-</ul>
-<p>The RCA is posted as a comment on the Jira ticket.</p>
-<p><strong>Human action:</strong> Review the RCA. Optionally ask questions with <code>?</code> or <code>@forge ask</code>. Approve with <code>forge:plan-approved</code> to proceed to implementation.</p>
+<h3 id="1-triage">1. Triage<a class="headerlink" href="#1-triage" title="Permanent link">&para;</a></h3>
+<p>Forge immediately acknowledges the ticket and evaluates it against a 7-field completeness checklist:</p>
+<ol>
+<li>Steps to reproduce</li>
+<li>Expected vs. actual behavior</li>
+<li>Environment</li>
+<li>Affected versions</li>
+<li>Error output</li>
+<li>Affected component</li>
+<li>Disambiguating context</li>
+</ol>
+<p><strong>If fields are missing:</strong> Forge posts a targeted comment listing only the absent fields and sets <code>forge:triage-pending</code>. Update the ticket — Forge re-evaluates automatically.</p>
+<p><strong>If sufficient:</strong> Forge posts confirmation and starts RCA analysis.</p>
 <hr />
-<h3 id="implementation-pr-ci-review">Implementation → PR → CI → Review<a class="headerlink" href="#implementation-pr-ci-review" title="Permanent link">&para;</a></h3>
-<p>The remaining stages are identical to the <a href="../feature-workflow/">Feature Workflow</a>:</p>
+<h3 id="2-rca-analysis">2. RCA Analysis<a class="headerlink" href="#2-rca-analysis" title="Permanent link">&para;</a></h3>
+<p>Forge spawns a container that clones the relevant repo(s) and performs hypothesis-driven codebase exploration:</p>
 <ul>
-<li>Code implemented in an ephemeral Podman container</li>
-<li>Local code review before PR creation</li>
-<li>Fork-based PR created</li>
-<li>CI validation with automatic fix loop (up to 5 retries)</li>
-<li>AI review against the RCA</li>
-<li>Human review and merge</li>
+<li>Forms ranked candidate root causes</li>
+<li>Investigates each with <code>grep</code>, <code>git blame</code>, and file reads</li>
+<li>Accepts or rejects each hypothesis with evidence</li>
+<li>Writes <code>.forge/rca.json</code> with summary, code location, mechanism, confidence, and 1–4 fix options</li>
 </ul>
+<p>The RCA then goes through a <strong>reflection loop</strong> (up to 3 iterations) where a second container validates it for correctness — confirming file/function existence, mechanism plausibility, distinct fix options, and git history attribution. Failures loop back to re-analysis with the critique.</p>
+<hr />
+<h3 id="3-rca-option-gate">3. RCA Option Gate<a class="headerlink" href="#3-rca-option-gate" title="Permanent link">&para;</a></h3>
+<p>Forge posts the validated RCA as a structured Jira comment with numbered fix options and sets <code>forge:rca-pending</code>.</p>
+<p><strong>Human actions:</strong>
+- <strong>Select an option:</strong> Reply with <code>&gt;option N</code> (e.g., <code>&gt;option 1</code>). Case-insensitive; can appear anywhere in the comment.
+- <strong>Request revision:</strong> Post feedback — Forge regenerates the RCA incorporating your input.
+- <strong>Ask a question:</strong> Prefix with <code>?</code> — Forge answers without advancing the workflow.</p>
+<hr />
+<h3 id="4-planning">4. Planning<a class="headerlink" href="#4-planning" title="Permanent link">&para;</a></h3>
+<p>After option selection, Forge spawns a container to produce a concrete implementation plan covering specific files, tests, and order of operations. Each involved repository is tagged <code>repo:&lt;owner&gt;/&lt;name&gt;</code> for automatic task decomposition.</p>
+<p>The plan is posted as a Jira comment and <code>forge:plan-pending</code> is set.</p>
+<p><strong>Human actions:</strong>
+- <strong>Approve:</strong> Change label to <code>forge:plan-approved</code>.
+- <strong>Request revision:</strong> Post feedback — Forge regenerates the plan.
+- <strong>Ask a question:</strong> Prefix with <code>?</code>.</p>
+<hr />
+<h3 id="5-decompose-implementation">5. Decompose → Implementation<a class="headerlink" href="#5-decompose-implementation" title="Permanent link">&para;</a></h3>
+<p>After plan approval, Forge:</p>
+<ol>
+<li><strong>Decomposes</strong> the plan into one Jira Task per repository identified in the plan, each linked to the bug ticket.</li>
+<li><strong>Clones</strong> each repo into an isolated workspace.</li>
+<li><strong>Implements</strong> the fix using a container that follows the plan, using TDD with bidirectional test validation.</li>
+<li><strong>Qualitative review:</strong> A 7-item checklist verifies root-cause alignment, test proof, stability, plan scope adherence, call-site completeness, backward compatibility, and bidirectional validation. Up to 2 retry passes before proceeding.</li>
+<li><strong>Updates documentation</strong> (non-blocking).</li>
+<li><strong>Creates a fork-based PR</strong> with a release note section (Component, Fix, Root cause, Impact).</li>
+<li><strong>CI validation</strong> with automatic fix loop.</li>
+<li><strong>Human review</strong> gate.</li>
+<li><strong>Post-merge summary:</strong> After merge, Forge posts a fix summary and release note to the Jira ticket.</li>
+</ol>
+<hr />
 <h2 id="qa-mode">Q&amp;A Mode<a class="headerlink" href="#qa-mode" title="Permanent link">&para;</a></h2>
-<p>Same as features — prefix your comment with <code>?</code> or <code>@forge ask</code> to ask questions without triggering regeneration.</p>
+<p>At any approval gate, prefix a comment with <code>?</code> or <code>@forge ask</code> to ask questions. Forge answers using the current artifact as context and stays paused — it does not advance or regenerate.</p>
+<hr />
 <h2 id="key-differences-from-feature-workflow">Key Differences from Feature Workflow<a class="headerlink" href="#key-differences-from-feature-workflow" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1370,7 +1480,7 @@
 <tr>
 <td>Planning stages</td>
 <td>4 (PRD → Spec → Epics → Tasks)</td>
-<td>1 (RCA)</td>
+<td>5 (Triage → RCA → Options → Plan → Decompose)</td>
 </tr>
 <tr>
 <td>Approval labels</td>
@@ -1379,39 +1489,61 @@
 </tr>
 <tr>
 <td>Implementation</td>
-<td>Multi-task, multi-repo</td>
-<td>Single fix pass</td>
+<td>Multi-task, multi-repo, parallel capable</td>
+<td>Per-repo task, sequential</td>
+</tr>
+<tr>
+<td>Post-merge</td>
+<td>—</td>
+<td>Fix summary + release note posted to Jira</td>
 </tr>
 </tbody>
 </table>
+<hr />
 <h2 id="labels">Labels<a class="headerlink" href="#labels" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>Label</th>
+<th>Set by</th>
 <th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>forge:managed</code></td>
+<td>Human</td>
 <td>Activate Forge for this bug</td>
 </tr>
 <tr>
+<td><code>forge:triage-pending</code></td>
+<td>Forge</td>
+<td>Ticket incomplete, waiting for reporter</td>
+</tr>
+<tr>
+<td><code>forge:rca-pending</code></td>
+<td>Forge</td>
+<td>RCA posted, waiting for option selection</td>
+</tr>
+<tr>
 <td><code>forge:plan-pending</code></td>
-<td>RCA posted, awaiting approval</td>
+<td>Forge</td>
+<td>Plan posted, waiting for approval</td>
 </tr>
 <tr>
 <td><code>forge:plan-approved</code></td>
-<td>RCA approved, proceed to implementation</td>
+<td>Human</td>
+<td>Approve plan, trigger decompose + implementation</td>
 </tr>
 <tr>
 <td><code>forge:blocked</code></td>
-<td>Workflow blocked</td>
+<td>Forge</td>
+<td>Workflow blocked, needs intervention</td>
 </tr>
 <tr>
 <td><code>forge:retry</code></td>
-<td>Resume from failed node</td>
+<td>Human</td>
+<td>Resume from the failed node</td>
 </tr>
 </tbody>
 </table>
