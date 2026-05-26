@@ -635,6 +635,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#forge-rebase" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>/forge rebase</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1210,6 +1221,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#forge-rebase" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        <code>/forge rebase</code>
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1272,7 +1294,7 @@
 
 
 <h1 id="pr-commands">PR Commands<a class="headerlink" href="#pr-commands" title="Permanent link">&para;</a></h1>
-<p>Forge listens for commands posted as comments on GitHub pull requests during CI validation stages.</p>
+<p>Forge listens for commands posted as comments on GitHub pull requests. Some commands are stage-specific (CI gates), while others work from any workflow stage.</p>
 <h2 id="available-commands">Available Commands<a class="headerlink" href="#available-commands" title="Permanent link">&para;</a></h2>
 <h3 id="forge-skip-gate-name"><code>/forge skip-gate &lt;name&gt;</code><a class="headerlink" href="#forge-skip-gate-name" title="Permanent link">&para;</a></h3>
 <p>Bypass a specific CI check. Use this for infrastructure failures unrelated to your code (cloud outages, quota exhaustion, flaky test runners).</p>
@@ -1297,14 +1319,33 @@
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>/forge unskip-gate e2e-openstack-ovn
 </code></pre></div>
 <p>Forge confirms the removal and re-evaluates CI without the skip.</p>
+<hr />
+<h3 id="forge-rebase"><code>/forge rebase</code><a class="headerlink" href="#forge-rebase" title="Permanent link">&para;</a></h3>
+<p>Merge <code>main</code> into the PR branch and resolve any merge conflicts using AI. Use this when the PR falls behind <code>main</code> and develops conflicts — especially important for fork-based PRs where GitHub won't run CI on conflicted branches.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>/forge rebase
+</code></pre></div>
+<p><strong>What Forge does:</strong></p>
+<ol>
+<li>Replies on the PR confirming the rebase was triggered</li>
+<li>Posts an audit comment on the Jira ticket</li>
+<li>Clones the repository and checks out the PR branch from the fork</li>
+<li>Attempts <code>git merge origin/main</code></li>
+<li>If no conflicts: pushes the merge commit to the fork branch</li>
+<li>If conflicts: spawns a container with Claude to resolve them using the PR description and changed files as context</li>
+<li>Verifies no conflict markers remain, commits, and force-pushes to the fork</li>
+<li>Returns the workflow to the node it was at before the rebase</li>
+</ol>
+<p><strong>When it works:</strong> Unlike skip-gate commands, <code>/forge rebase</code> works from <strong>any workflow stage</strong> — CI gate, human review, implementation, or any other point where a PR exists.</p>
+<p><strong>Conflict resolution:</strong> The AI agent reads each conflicted file, understands the intent of both the branch changes and the incoming main changes, and merges them intelligently. It preserves the branch's intentional changes while incorporating necessary updates from main (new APIs, renamed functions, moved code, etc.).</p>
+<p><strong>If resolution fails:</strong> Forge aborts the merge, posts a comment explaining the failure, and returns the workflow to its previous state. Manual intervention is needed.</p>
 <h2 id="when-commands-are-active">When Commands Are Active<a class="headerlink" href="#when-commands-are-active" title="Permanent link">&para;</a></h2>
-<p>PR commands only work when Forge's workflow is in a CI stage:</p>
+<p><strong>Skip-gate and unskip-gate</strong> only work when Forge's workflow is in a CI stage:</p>
 <ul>
 <li><code>wait_for_ci_gate</code></li>
 <li><code>ci_evaluator</code></li>
 <li><code>attempt_ci_fix</code></li>
 </ul>
-<p>Commands on PRs outside these stages are ignored.</p>
+<p><strong>Rebase</strong> works from any workflow stage where a PR exists in the workflow state.</p>
 <h2 id="permanently-ignored-checks">Permanently Ignored Checks<a class="headerlink" href="#permanently-ignored-checks" title="Permanent link">&para;</a></h2>
 <p>Some checks are always pending and are permanently ignored regardless of skip commands. Configure the list with <code>CI_IGNORED_CHECKS</code> in <code>.env</code>.</p>
 <p>Common examples: <code>tide</code> (Prow's merge-queue controller), status checks that reflect queue position rather than test results.</p>

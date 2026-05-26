@@ -653,6 +653,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#merge-conflicts" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Merge Conflicts
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-differences-from-feature-workflow" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1337,6 +1348,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#merge-conflicts" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Merge Conflicts
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-differences-from-feature-workflow" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1466,6 +1488,9 @@
 <hr />
 <h2 id="qa-mode">Q&amp;A Mode<a class="headerlink" href="#qa-mode" title="Permanent link">&para;</a></h2>
 <p>At any approval gate, prefix a comment with <code>?</code> or <code>@forge ask</code> to ask questions. Forge answers using the current artifact as context and stays paused — it does not advance or regenerate.</p>
+<hr />
+<h2 id="merge-conflicts">Merge Conflicts<a class="headerlink" href="#merge-conflicts" title="Permanent link">&para;</a></h2>
+<p>Bug fix PRs are created from fork branches. If <code>main</code> advances while the PR is open, merge conflicts can prevent CI from running. Post <code>/forge rebase</code> as a PR comment to trigger AI-assisted conflict resolution. See <a href="../pr-commands/">PR Commands</a> for details.</p>
 <hr />
 <h2 id="key-differences-from-feature-workflow">Key Differences from Feature Workflow<a class="headerlink" href="#key-differences-from-feature-workflow" title="Permanent link">&para;</a></h2>
 <table>
