@@ -28,6 +28,7 @@ from forge.queue.models import QueueMessage
 from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
+from forge.workflow.nodes.error_handler import notify_error
 from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
@@ -39,6 +40,14 @@ logger = logging.getLogger(__name__)
 def _is_workflow_errored(state: dict) -> bool:
     """Return True when workflow has a recorded error and is not paused for human input."""
     return not state.get("is_paused") and state.get("last_error") is not None
+
+
+def _has_new_reportable_error(result: dict, error_before_invoke: str | None) -> bool:
+    """Return whether an invocation produced an error that should be reported."""
+    last_error = result.get("last_error")
+    return bool(
+        last_error and not result.get("is_paused", False) and last_error != error_before_invoke
+    )
 
 
 _PRD_GATE_NODES = ("prd_approval_gate", "generate_prd", "regenerate_prd")
@@ -362,6 +371,8 @@ class OrchestratorWorker:
                     force_fresh_invoke or updated_values.get("current_node") in _FRESH_INVOKE_NODES
                 )
 
+                error_before_invoke = updated_values.get("last_error")
+
                 if was_errored or needs_fresh_invoke:
                     logger.info(
                         f"{'Retrying' if was_errored else 'Re-invoking'} workflow "
@@ -373,6 +384,8 @@ class OrchestratorWorker:
                     await compiled_workflow.aupdate_state(config, updated_values)
                     result = await compiled_workflow.ainvoke(None, config=config)
             else:
+                error_before_invoke = None
+
                 # New workflow - build initial state
                 state = self._build_initial_state(message)
                 logger.info(f"Starting new workflow for {ticket_key}")
@@ -391,6 +404,12 @@ class OrchestratorWorker:
                 f"final node: {final_node}, "
                 f"paused: {is_paused}"
             )
+
+            # Report errors to Jira — only if the error is new (not carried
+            # over from a previous invocation that already reported it).
+            last_error = result.get("last_error")
+            if _has_new_reportable_error(result, error_before_invoke):
+                await notify_error(result, last_error, final_node)
 
             # Record workflow completed metric (only if not paused - paused means waiting for approval)
             if not is_paused:

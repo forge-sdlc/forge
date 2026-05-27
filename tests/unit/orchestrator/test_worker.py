@@ -6,8 +6,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.models.events import EventSource
-from forge.orchestrator.worker import OrchestratorWorker
+from forge.orchestrator.worker import OrchestratorWorker, _has_new_reportable_error
 from forge.queue.models import QueueMessage
+
+
+@pytest.mark.parametrize(
+    ("result", "error_before_invoke", "expected"),
+    [
+        ({"last_error": "new failure", "is_paused": False}, None, True),
+        ({"last_error": "same failure", "is_paused": False}, "same failure", False),
+        ({"last_error": "needs input", "is_paused": True}, None, False),
+        ({"last_error": None, "is_paused": False}, None, False),
+    ],
+)
+def test_has_new_reportable_error(result: dict, error_before_invoke: str | None, expected: bool):
+    assert _has_new_reportable_error(result, error_before_invoke) is expected
 
 
 class TestQuestionDetection:
@@ -1102,13 +1115,13 @@ class TestWorkerRouting:
             ticket_key="TEST-123",
             payload={
                 "issue": {
-                        "key": "TEST-123",
-                        "fields": {
-                            "issuetype": {"name": "Task"},
-                            "labels": ["forge:managed"],
-                        },
+                    "key": "TEST-123",
+                    "fields": {
+                        "issuetype": {"name": "Task"},
+                        "labels": ["forge:managed"],
                     },
                 },
+            },
         )
 
         mock_router = MagicMock()
