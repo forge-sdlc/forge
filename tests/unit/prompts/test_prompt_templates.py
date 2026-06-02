@@ -173,6 +173,18 @@ class TestPromptContent:
         assert "Test requirements" in result
         assert "Test context" in result
 
+    def test_regenerate_prompt_has_preservation_instructions(self):
+        """Regenerate prompt must instruct the LLM to preserve unmodified sections."""
+        result = load_prompt(
+            "regenerate",
+            content_type="PRD",
+            original_content="original",
+            feedback="feedback",
+        )
+
+        assert "preserve" in result.lower() or "Preserve" in result
+        assert "not objected" in result.lower() or "not addressed" in result.lower()
+
     def test_prompts_are_reasonable_length(self):
         """Prompts should not be excessively long (sanity check)."""
         # A rough estimate: 1 token ~ 4 characters

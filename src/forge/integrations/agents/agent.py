@@ -637,11 +637,11 @@ class ForgeAgent:
     @staticmethod
     def _strip_preamble(text: str) -> str:
         """Strip agent narration before the first markdown heading."""
+        if text.startswith("#"):
+            return text
         idx = text.find("\n#")
         if idx != -1:
             return text[idx + 1 :]
-        if text.startswith("#"):
-            return text
         return text
 
     async def run_task(
