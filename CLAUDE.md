@@ -59,6 +59,37 @@ uv run forge worker
 podman build -t forge-dev:latest containers/
 ```
 
+## Debugging Container Failures
+
+When a container exits with a non-zero code and the logs are unhelpful (e.g. only showing MCP server startup messages), enable container preservation to inspect the full state:
+
+**1. Set in `.env`:**
+```bash
+FORGE_CONTAINER_KEEP=true
+```
+
+**2. Trigger the failing workflow.** When a container fails, the worker logs will print the container name and ready-to-run commands:
+```
+Container kept for debugging (FORGE_CONTAINER_KEEP=true): forge-AISOS-678-12345
+  Inspect logs:      podman logs forge-AISOS-678-12345
+  Enter filesystem:  podman export forge-AISOS-678-12345 | tar -xC /tmp/forge-AISOS-678-12345
+  Remove when done:  podman rm forge-AISOS-678-12345
+```
+
+**3. Common things to check:**
+- `podman logs <name>` — full stdout/stderr from the agent inside the container
+- `podman export <name> | tar -xC /tmp/<name>` then inspect `/tmp/<name>/workspace/` and `/tmp/<name>/workspace/.forge/` for any partial outputs
+- Check if the container image needs to be rebuilt: `podman build -t forge-dev:latest containers/`
+
+**4. Clean up when done:**
+```bash
+podman rm forge-AISOS-678-12345
+# or remove all stopped forge containers:
+podman rm $(podman ps -a --filter name=forge- -q)
+```
+
+**Remember:** Set `FORGE_CONTAINER_KEEP=false` (or remove it) before running in production — accumulated stopped containers consume disk space.
+
 ## Code Style
 
 - Use `X | None` instead of `Optional[X]` (PEP 604)
@@ -72,9 +103,11 @@ podman build -t forge-dev:latest containers/
 | Label | Meaning |
 |-------|---------|
 | `forge:managed` | Ticket is managed by Forge |
+| `forge:triage-pending` | Bug awaiting triage completion |
+| `forge:rca-pending` | Bug awaiting RCA option selection |
 | `forge:prd-pending` | Awaiting PRD approval |
 | `forge:spec-pending` | Awaiting spec approval |
-| `forge:plan-pending` | Awaiting epic plan approval |
+| `forge:plan-pending` | Awaiting plan approval |
 | `forge:task-pending` | Awaiting task approval |
 | `forge:blocked` | Workflow blocked, needs intervention |
 | `forge:retry` | Trigger retry of failed step |
@@ -85,8 +118,9 @@ podman build -t forge-dev:latest containers/
 |---------|-------|--------|
 | `/forge skip-gate <name>` | PR comment | Skip a named CI check (substring match); persists across pushes |
 | `/forge unskip-gate <name>` | PR comment | Remove a previously set skip |
+| `/forge rebase` | PR comment | Merge main into PR branch, resolving conflicts with AI |
 
-Commands are only active when the workflow is at a CI stage (`wait_for_ci_gate`, `ci_evaluator`, `attempt_ci_fix`).
+Skip-gate commands are only active at CI stages (`wait_for_ci_gate`, `ci_evaluator`, `attempt_ci_fix`). Rebase works from any workflow stage.
 
 ## Container Execution
 

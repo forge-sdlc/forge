@@ -1,10 +1,9 @@
 """Tests for label state transitions."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from forge.models.workflow import ForgeLabel, TicketType, get_workflow_phase
-from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
+import pytest
+
+from forge.models.workflow import ForgeLabel, get_workflow_phase
 
 
 class TestLabelTransitionsForward:

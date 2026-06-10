@@ -1,17 +1,14 @@
 """Unit tests for workflow state management."""
 
-import pytest
-from datetime import datetime
 
 from forge.models.workflow import TicketType
-from forge.workflow.feature.state import FeatureState as WorkflowState
-from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 from forge.workflow.bug.state import create_initial_bug_state
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 from forge.workflow.utils import (
-    update_state_timestamp,
-    set_paused,
     resume_state,
     set_error,
+    set_paused,
+    update_state_timestamp,
 )
 
 

@@ -1,7 +1,8 @@
 """Tests for BaseState and mixins."""
 
-import pytest
 from typing import get_type_hints
+
+import pytest
 
 
 class TestBaseState:
@@ -99,6 +100,7 @@ class TestBaseWorkflow:
     def test_base_workflow_is_abstract(self):
         """BaseWorkflow cannot be instantiated directly."""
         from abc import ABC
+
         from forge.workflow.base import BaseWorkflow
 
         assert issubclass(BaseWorkflow, ABC)
@@ -117,8 +119,9 @@ class TestBaseWorkflow:
 
     def test_create_initial_state_returns_proper_state(self):
         """create_initial_state returns dict with all required BaseState fields."""
-        from forge.workflow.base import BaseWorkflow
         from langgraph.graph import StateGraph
+
+        from forge.workflow.base import BaseWorkflow
 
         # Create concrete implementation for testing
         class ConcreteWorkflow(BaseWorkflow):

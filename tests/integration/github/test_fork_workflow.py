@@ -6,8 +6,9 @@ These tests verify:
 3. PR creation with fork head format
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from forge.integrations.github.client import GitHubClient
 

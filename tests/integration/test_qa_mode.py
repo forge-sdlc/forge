@@ -1,10 +1,11 @@
 """Integration tests for Q&A mode."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from forge.workflow.feature.state import create_initial_feature_state
-from forge.workflow.utils.comment_classifier import classify_comment, CommentType
+from forge.workflow.utils.comment_classifier import CommentType, classify_comment
 
 
 class TestQAModeIntegration:

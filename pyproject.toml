@@ -105,6 +105,7 @@ indent-style = "space"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+addopts = "--import-mode=importlib"
 markers = [
     "slow: tests taking >5s",
     "flow: workflow state machine tests",

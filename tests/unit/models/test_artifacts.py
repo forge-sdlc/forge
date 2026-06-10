@@ -1,9 +1,8 @@
 """Unit tests for artifact models."""
 
-import pytest
 from datetime import datetime
 
-from forge.models.artifacts import Feature, Epic, Task
+from forge.models.artifacts import Epic, Feature, Task
 
 
 class TestFeature:

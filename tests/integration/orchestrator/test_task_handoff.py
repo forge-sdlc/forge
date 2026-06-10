@@ -11,8 +11,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from forge.models.workflow import TicketType
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
@@ -114,7 +112,7 @@ class TestPreviousTaskKeysPassing:
                     )
 
                     # Check the task file content (created before the command runs)
-                    task_file = workspace / ".forge-task.json"
+                    workspace / ".forge-task.json"
                     # File is cleaned up, but we can verify the call was made
                     # by checking _build_podman_command was called
 

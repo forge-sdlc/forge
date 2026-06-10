@@ -4,9 +4,11 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import signal
 import sys
 import uuid
+from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +22,7 @@ from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.models.events import EventSource
 from forge.models.workflow import TicketType
-from forge.orchestrator.checkpointer import get_checkpointer
+from forge.orchestrator.checkpointer import get_checkpointer, get_ticket_from_pr_index
 from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
 from forge.skills.orchestrator import ensure_skills
@@ -30,6 +32,16 @@ from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
 
 logger = logging.getLogger(__name__)
+
+
+def _is_workflow_errored(state: dict) -> bool:
+    """Return True when workflow has a recorded error and is not paused for human input."""
+    return not state.get("is_paused") and state.get("last_error") is not None
+
+
+# Matches >option N anywhere in comment (case-insensitive, first match wins)
+# Supports both start-of-line usage (>option 2) and in-prose usage (let's go with >option 2)
+_OPTION_PATTERN = re.compile(r"(?mi)>option\s+(\d+)")
 
 
 class OrchestratorWorker:
@@ -68,7 +80,75 @@ class OrchestratorWorker:
         Args:
             message: The queue message to process.
         """
+        if not message.ticket_key:
+            message = await self._resolve_ticket_from_pr_index(message)
+            if not message.ticket_key:
+                logger.info(
+                    f"Dropping GitHub event {message.event_id}: "
+                    "no ticket key in message and PR URL not found in Redis index"
+                )
+                return
         await self._process_workflow(message)
+
+    async def _resolve_ticket_from_pr_index(self, message: QueueMessage) -> QueueMessage:
+        """Attempt to resolve ticket key from Redis PR index when not in message.
+
+        Extracts the PR URL from the event payload and looks it up in the
+        forge:pr_index Redis key populated at PR creation time.
+
+        Args:
+            message: Queue message with empty ticket_key.
+
+        Returns:
+            Message with ticket_key populated if found, otherwise unchanged.
+        """
+        payload = message.payload
+        repo = payload.get("repository", {}).get("full_name", "")
+        api_url = payload.get("review", {}).get("pull_request_url", "")
+        suite_prs = (
+            payload.get("check_suite", {}).get("pull_requests")
+            or payload.get("check_run", {}).get("pull_requests")
+            or []
+        )
+        pr_number = (
+            payload.get("pull_request", {}).get("number")
+            or payload.get("issue", {}).get("number")
+            or (suite_prs[0].get("number") if suite_prs else None)
+        )
+
+        pr_url = (
+            payload.get("pull_request", {}).get("html_url")
+            or payload.get("review", {}).get("html_url")
+            or (f"https://github.com/{repo}/pull/{pr_number}" if repo and pr_number else None)
+            or (
+                api_url.replace("https://api.github.com/repos/", "https://github.com/").replace(
+                    "/pulls/", "/pull/"
+                )
+                if api_url
+                else None
+            )
+        )
+
+        logger.debug(f"PR URL extracted for {message.event_id}: {pr_url!r}")
+
+        if not pr_url:
+            return message
+
+        try:
+            ticket_key = await get_ticket_from_pr_index(pr_url)
+            if ticket_key:
+                logger.info(
+                    f"Resolved ticket key {ticket_key} for GitHub event "
+                    f"{message.event_id} from PR index ({pr_url})"
+                )
+                return dataclass_replace(message, ticket_key=ticket_key)
+        except Exception:
+            logger.warning(
+                f"PR index lookup failed for {pr_url}",
+                exc_info=True,
+            )
+
+        return message
 
     async def _process_workflow(self, message: QueueMessage) -> None:
         """Process a message through the workflow.
@@ -204,11 +284,7 @@ class OrchestratorWorker:
 
                 logger.info(f"Resuming workflow for {ticket_key}")
 
-                # Check if we're retrying from an error state
-                was_errored = (
-                    not existing_state.values.get("is_paused")
-                    and existing_state.values.get("last_error") is not None
-                )
+                was_errored = _is_workflow_errored(existing_state.values)
 
                 # Nodes that wait for external events (CI webhooks, human review)
                 # must be re-invoked fresh so route_by_ticket_type re-runs them.
@@ -218,6 +294,7 @@ class OrchestratorWorker:
                     "ci_evaluator",
                     "attempt_ci_fix",
                     "human_review_gate",
+                    "rebase_pr",
                 )
 
                 if was_errored or needs_fresh_invoke:
@@ -292,6 +369,7 @@ class OrchestratorWorker:
         is_retry = False
         is_question = False
         is_ci_webhook = False
+        pr_merged = False
         feedback = None
 
         current_node = current_state.get("current_node", "")
@@ -303,7 +381,10 @@ class OrchestratorWorker:
         # GitHub fires check_suite webhooks for created/in_progress/completed — evaluating
         # on the earlier actions would see a partial set of check runs and could
         # prematurely declare success. Other event types (push, pull_request) always wake up.
-        if current_node == "wait_for_ci_gate" and message.source == EventSource.GITHUB:
+        if (
+            current_node in ("wait_for_ci_gate", "ci_evaluator")
+            and message.source == EventSource.GITHUB
+        ):
             event = message.event_type
             is_check_event = "check_suite" in event or "check_run" in event
             if is_check_event:
@@ -318,7 +399,7 @@ class OrchestratorWorker:
                 else:
                     is_ci_webhook = True
                     logger.info(f"Detected GitHub CI webhook signal for {current_node}")
-            else:
+            elif "issue_comment" not in event:
                 is_ci_webhook = True
                 logger.info(f"Detected GitHub CI webhook signal for {current_node}")
 
@@ -383,6 +464,29 @@ class OrchestratorWorker:
                     }
                 return current_state
 
+            rebase_prefix = "/forge rebase"
+            if gh_comment_body.lower().startswith(rebase_prefix.lower()):
+                if not current_state.get("current_pr_number"):
+                    logger.warning(
+                        f"Ignoring /forge rebase for {message.ticket_key}: no PR in state"
+                    )
+                    return current_state
+
+                logger.info(f"Detected /forge rebase for {message.ticket_key}")
+                await self._post_rebase_feedback(
+                    ticket_key=message.ticket_key,
+                    owner=_owner,
+                    repo=_repo,
+                    pr_number=pr_number,
+                    sender=sender,
+                )
+                return {
+                    **current_state,
+                    "rebase_return_node": current_node,
+                    "is_paused": False,
+                    "current_node": "rebase_pr",
+                }
+
         for change in label_changes:
             to_labels = change.get("toString", "")
             from_labels = change.get("fromString", "")
@@ -434,6 +538,23 @@ class OrchestratorWorker:
                         f"(expects {expected_stage})"
                     )
 
+        # Fallback: check current labels on the ticket when changelog-based
+        # detection missed the approval (e.g. user changed labels in two steps).
+        if not is_approved and not is_rejected and not is_retry:
+            current_labels = payload.get("issue", {}).get("fields", {}).get("labels", [])
+            current_labels_lower = [lbl.lower() for lbl in current_labels]
+            gate_to_approved_label = {
+                "prd_approval_gate": "forge:prd-approved",
+                "spec_approval_gate": "forge:spec-approved",
+                "plan_approval_gate": "forge:plan-approved",
+                "task_approval_gate": "forge:task-approved",
+            }
+            expected_label = gate_to_approved_label.get(current_node)
+            if expected_label and expected_label in current_labels_lower:
+                is_approved = True
+                stage = current_node.replace("_approval_gate", "")
+                logger.info(f"Detected {stage} approval via current label: {expected_label}")
+
         # Check for rejection comment (contains feedback)
         # Determine if comment is on Epic/Task (child) vs Feature (parent)
         # based on current workflow phase
@@ -446,6 +567,43 @@ class OrchestratorWorker:
                 comment_body = self._extract_text_from_adf(comment_body)
 
             if comment_body.strip():
+                # >option N detection for rca_option_gate (runs before general classification)
+                if current_node == "rca_option_gate":
+                    option_match = _OPTION_PATTERN.search(comment_body)
+                    if option_match:
+                        n = int(option_match.group(1))
+                        rca_options = current_state.get("rca_options", [])
+                        if 1 <= n <= len(rca_options):
+                            logger.info(f"Detected >option {n} for {message.ticket_key}")
+                            return {
+                                **current_state,
+                                "selected_fix_option": n,
+                                "selected_fix_approach": rca_options[n - 1],
+                                "is_paused": False,
+                                "is_question": False,
+                                "revision_requested": False,
+                                "feedback_comment": None,
+                                "context": {
+                                    **current_state.get("context", {}),
+                                    "resume_event": message.event_type,
+                                    "payload": payload,
+                                },
+                            }
+                        else:
+                            max_n = len(rca_options)
+                            logger.info(
+                                f">option {n} out of range (max {max_n}) for {message.ticket_key}"
+                            )
+                            jira = JiraClient()
+                            try:
+                                await jira.add_comment(
+                                    message.ticket_key,
+                                    f"Please reply with >option N where N is between 1 and {max_n}.",
+                                )
+                            finally:
+                                await jira.close()
+                            return current_state
+
                 comment_type = classify_comment(comment_body)
 
                 if comment_type == CommentType.QUESTION:
@@ -596,6 +754,7 @@ class OrchestratorWorker:
             and current_node == "human_review_gate"
         ):
             is_approved = True
+            pr_merged = True
             logger.info(f"Detected PR merge for {message.ticket_key}")
 
         # Build updated state — do NOT set is_paused=False here.
@@ -611,20 +770,14 @@ class OrchestratorWorker:
             },
         }
 
-        # Check if workflow was in an error state (not paused, but has error)
-        was_errored = (
-            not current_state.get("is_paused") and current_state.get("last_error") is not None
-        )
+        was_errored = _is_workflow_errored(current_state)
 
         # Check if workflow is at a terminal state (complete)
         terminal_states = ("complete", "complete_tasks", "aggregate_feature_status")
         is_terminal = current_node in terminal_states
 
         if is_retry:
-            # Explicit retry signal - but only if there's an error/blocked state to retry from
-            prev_error = current_state.get("last_error")
-            is_blocked = current_state.get("is_blocked", False)
-            if not prev_error and not was_errored and not is_blocked:
+            if is_terminal:
                 logger.info(
                     f"Ignoring forge:retry for {message.ticket_key} - workflow already complete"
                 )
@@ -634,6 +787,7 @@ class OrchestratorWorker:
                 )
                 return current_state
 
+            prev_error = current_state.get("last_error")
             logger.info(
                 f"Retry requested for {message.ticket_key} at {current_node} "
                 f"(clearing error: {prev_error[:100] if prev_error else 'none'})"
@@ -654,6 +808,8 @@ class OrchestratorWorker:
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
             updated_state["last_error"] = None
+            if pr_merged:
+                updated_state["pr_merged"] = True
         elif is_question:
             # Unpause so answer_question node runs, it will re-pause after answering
             updated_state["is_paused"] = False
@@ -703,13 +859,32 @@ class OrchestratorWorker:
                 updated_state["is_paused"] = False
                 updated_state["last_error"] = None
         else:
-            # No recognized signal — do not unpause or modify the workflow.
-            # This covers wrong-stage approvals, unrelated label changes, etc.
-            logger.info(
-                f"No valid signal detected for {message.ticket_key} "
-                f"at {current_node} — ignoring event, workflow state unchanged"
+            # Nodes that wait for specific external events should not auto-proceed.
+            _signal_required_nodes = (
+                "ci_evaluator",
+                "attempt_ci_fix",
+                "human_review_gate",
+                "wait_for_ci_gate",
             )
-            return current_state
+            if (
+                not current_state.get("is_paused", True)
+                and current_node not in _signal_required_nodes
+            ):
+                # Workflow is unpaused at an execution node — let it run.
+                # Covers checkpoint patches and nodes that don't need a signal.
+                logger.info(
+                    f"Workflow for {message.ticket_key} is unpaused at {current_node} "
+                    f"— proceeding without explicit signal"
+                )
+                updated_state["is_paused"] = False
+            else:
+                # Paused gate with no recognized signal — do not unpause.
+                # Covers wrong-stage approvals, unrelated label changes, etc.
+                logger.info(
+                    f"No valid signal detected for {message.ticket_key} "
+                    f"at {current_node} — ignoring event, workflow state unchanged"
+                )
+                return current_state
 
         return updated_state
 
@@ -719,12 +894,17 @@ class OrchestratorWorker:
         if not isinstance(adf, dict):
             return str(adf) if adf else ""
 
-        texts = []
-        for node in adf.get("content", []):
-            if node.get("type") == "paragraph":
-                for child in node.get("content", []):
-                    if child.get("type") == "text":
-                        texts.append(child.get("text", ""))
+        texts: list[str] = []
+
+        def _walk(nodes: list[dict]) -> None:
+            for node in nodes:
+                if node.get("type") == "text":
+                    texts.append(node.get("text", ""))
+                children = node.get("content")
+                if children:
+                    _walk(children)
+
+        _walk(adf.get("content", []))
         return " ".join(texts)
 
     async def _post_skip_gate_feedback(
@@ -786,6 +966,36 @@ class OrchestratorWorker:
         except Exception as e:
             logger.warning(f"Failed to post skip-gate feedback: {e}")
 
+    async def _post_rebase_feedback(
+        self,
+        ticket_key: str,
+        owner: str,
+        repo: str,
+        pr_number: int | None,
+        sender: str,
+    ) -> None:
+        """Post feedback for a /forge rebase command."""
+        try:
+            github = GitHubClient()
+            jira = JiraClient()
+            try:
+                gh_comment = (
+                    f"Rebase triggered by @{sender}\n\n"
+                    f"Merging `main` into the PR branch and resolving any conflicts. "
+                    f"This may take a few minutes."
+                )
+                jira_comment = (
+                    f"Rebase triggered via `/forge rebase` on PR #{pr_number} by {sender}."
+                )
+                if pr_number:
+                    await github.create_issue_comment(owner, repo, pr_number, gh_comment)
+                await jira.add_comment(ticket_key, jira_comment)
+            finally:
+                await github.close()
+                await jira.close()
+        except Exception as e:
+            logger.warning(f"Failed to post rebase feedback: {e}")
+
     async def _post_terminal_error_comment(self, ticket_key: str, error: str) -> None:
         """Post a comment explaining how to retry a terminal error.
 
@@ -824,6 +1034,41 @@ class OrchestratorWorker:
             no existing state is found.
         """
         config = {"configurable": {"thread_id": ticket_key}}
+
+        # Read ticket_type from the raw checkpoint bytes — not through a compiled
+        # graph's schema, which would apply the schema's default value and lose the
+        # stored type (e.g. FeatureState defaults ticket_type to FEATURE).
+        # aget() returns the checkpoint dict directly (not an object with .checkpoint).
+        # Read ticket_type from the raw bytes — not through a compiled graph's schema,
+        # which would apply the schema's default and lose the stored type.
+        raw_checkpoint: dict | None = None
+        with contextlib.suppress(Exception):
+            raw_checkpoint = await self._checkpointer.aget(config)
+
+        if not raw_checkpoint:
+            # No checkpoint at all — skip every aget_state call.
+            return None, None
+
+        saved_ticket_type: TicketType | None = None
+        if isinstance(raw_checkpoint, dict):
+            raw_type = raw_checkpoint.get("channel_values", {}).get("ticket_type", "")
+            with contextlib.suppress(ValueError):
+                saved_ticket_type = TicketType(str(raw_type))
+
+        if saved_ticket_type is not None:
+            # Prefer the workflow whose ticket type matches the checkpoint.
+            preferred = self.router.resolve(ticket_type=saved_ticket_type, labels=[], event={})
+            if preferred is not None:
+                compiled = self._get_compiled_workflow(preferred)
+                state = await compiled.aget_state(config)
+                if state and state.values:
+                    logger.debug(
+                        f"Found existing state for {ticket_key} in workflow "
+                        f"'{preferred.name}' (ticket_type={saved_ticket_type})"
+                    )
+                    return preferred, state
+
+        # Fallback: return the first workflow with any state.
         for workflow_class in self.router._workflows:
             workflow_instance = workflow_class()
             compiled = self._get_compiled_workflow(workflow_instance)

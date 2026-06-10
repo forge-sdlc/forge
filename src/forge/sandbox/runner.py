@@ -169,6 +169,11 @@ class ContainerRunner:
 
     def _get_gcloud_credentials_path(self) -> Path | None:
         """Get path to gcloud application default credentials if they exist."""
+        env_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if env_path:
+            p = Path(env_path)
+            if p.exists():
+                return p
         adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
         if adc_path.exists():
             return adc_path
@@ -213,20 +218,20 @@ class ContainerRunner:
     def _build_container_name(
         self,
         ticket_key: str | None = None,
-        repo_name: str | None = None,
+        _repo_name: str | None = None,
     ) -> str:
         """Build container name for identification.
 
-        Format: forge-{ticket}-{repo}-{pid} e.g., forge-AISOS-189-installer-12345
+        Format: forge-{ticket}-{uid} e.g., forge-AISOS-189-a1b2c3
+        Uses a unique suffix to avoid name collisions when multiple
+        containers run for the same ticket (e.g., RCA → reflection → RCA).
         """
+        import uuid
+
         name_parts = ["forge"]
         if ticket_key:
             name_parts.append(ticket_key)
-        if repo_name:
-            # Extract just the repo name from "owner/repo" format
-            short_repo = repo_name.split("/")[-1] if "/" in repo_name else repo_name
-            name_parts.append(short_repo)
-        name_parts.append(str(os.getpid()))
+        name_parts.append(uuid.uuid4().hex[:6])
         return "-".join(name_parts)
 
     def _build_podman_command(
@@ -242,9 +247,12 @@ class ContainerRunner:
         cmd = [
             "podman",
             "run",
-            "--rm",  # Remove container after exit
             "--name",
             container_name,
+        ]
+        if not self.settings.container_keep:
+            cmd.append("--rm")
+        cmd += [
             # Mount workspace
             "-v",
             f"{workspace_path}:/workspace:Z",
@@ -420,6 +428,14 @@ class ContainerRunner:
                     logger.info(f"Container stderr:\n{stderr_str}")
                 if stdout_str:
                     logger.debug(f"Container stdout:\n{stdout_str}")
+                if self.settings.container_keep:
+                    logger.warning(
+                        f"Container kept for debugging (FORGE_CONTAINER_KEEP=true): "
+                        f"{container_name}\n"
+                        f"  Inspect logs:      podman logs {container_name}\n"
+                        f"  Enter filesystem:  podman export {container_name} | tar -xC /tmp/{container_name}\n"
+                        f"  Remove when done:  podman rm {container_name}"
+                    )
             else:
                 # Success: stderr at DEBUG only
                 if stderr_str:

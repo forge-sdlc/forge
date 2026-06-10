@@ -1,8 +1,9 @@
 """Unit tests for health check endpoints."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import AsyncMock, patch
 
 from forge.main import app
 

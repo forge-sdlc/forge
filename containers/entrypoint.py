@@ -453,9 +453,9 @@ async def run_agent_task(
                 tags=["forge-container", "task-implementation"],
                 metadata={"task_summary": task_summary},
             ):
-                result = agent.invoke(initial_message, config=config)
+                result = await agent.ainvoke(initial_message, config=config)
         else:
-            result = agent.invoke(initial_message, config=config)
+            result = await agent.ainvoke(initial_message, config=config)
 
         # Flush Langfuse traces before exit
         if langfuse_enabled:
@@ -589,12 +589,19 @@ def main():
         logger.error("Task implementation failed")
         sys.exit(EXIT_TASK_FAILED)
 
-    # Ensure changes are committed (agent should have done this, but as fallback)
-    # Use task_key in commit message to match expected format
-    fallback_message = f"[{task_key}] {task_summary}\n\nAuto-committed by Forge container fallback."
-    if not git_commit(workspace, fallback_message):
-        logger.error("Failed to commit changes")
-        sys.exit(EXIT_TASK_FAILED)
+    # Ensure changes are committed (agent should have done this, but as fallback).
+    # Skip if workspace is not a git repo — analysis tasks (RCA, reflection) write
+    # artifacts to .forge/ without needing a commit.
+    is_git_repo = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=workspace,
+        capture_output=True,
+    ).returncode == 0
+    if is_git_repo:
+        fallback_message = f"[{task_key}] {task_summary}\n\nAuto-committed by Forge container fallback."
+        if not git_commit(workspace, fallback_message):
+            logger.error("Failed to commit changes")
+            sys.exit(EXIT_TASK_FAILED)
 
     logger.info("Task completed successfully")
     sys.exit(EXIT_SUCCESS)

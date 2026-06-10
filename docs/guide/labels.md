@@ -17,9 +17,12 @@ These labels advance the pipeline. Forge watches for label changes via Jira webh
 
 ### Bug Workflow
 
-| Stage | Pending Label | Approved Label |
-|-------|--------------|----------------|
-| RCA | `forge:plan-pending` | `forge:plan-approved` |
+| Stage | Label | Set by | Purpose |
+|-------|-------|--------|---------|
+| Triage | `forge:triage-pending` | Forge | Ticket is missing required fields; waiting for reporter to update |
+| RCA Option Gate | `forge:rca-pending` | Forge | RCA posted with fix options; waiting for `>option N` selection |
+| Plan Approval Gate | `forge:plan-pending` | Forge | Plan posted; waiting for approval |
+| Plan Approval Gate | `forge:plan-approved` | Human | Approve plan and trigger task decomposition + implementation |
 
 ## Control Labels
 

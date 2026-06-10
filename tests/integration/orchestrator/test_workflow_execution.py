@@ -14,7 +14,6 @@ import pytest
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from forge.models.workflow import TicketType
-from forge.workflow.feature import FeatureWorkflow
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
@@ -97,7 +96,7 @@ class TestWorkflowRouting:
     async def test_feature_ticket_routes_to_prd_generation(self, temp_checkpoint_db):
         """Feature tickets should route to generate_prd node."""
         async with AsyncSqliteSaver.from_conn_string(str(temp_checkpoint_db)) as checkpointer:
-            workflow = compile_workflow(checkpointer=checkpointer)
+            compile_workflow(checkpointer=checkpointer)
 
             initial_state = create_initial_state(
                 thread_id="TEST-123",
@@ -106,7 +105,7 @@ class TestWorkflowRouting:
             )
 
             # Check the graph structure - feature should go to generate_prd
-            graph = create_workflow_graph()
+            create_workflow_graph()
 
             # Test routing function directly
             from forge.orchestrator.graph import route_by_ticket_type
@@ -337,8 +336,9 @@ class TestConditionalEdges:
 
     async def test_prd_approval_pauses_when_waiting(self):
         """PRD approval should return END when waiting for approval."""
-        from forge.orchestrator.gates import route_prd_approval
         from langgraph.graph import END
+
+        from forge.orchestrator.gates import route_prd_approval
 
         # State while waiting for approval
         state: WorkflowState = {

@@ -8,14 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
+from tests.fixtures.github_payloads import (
+    WEBHOOK_CHECK_RUN_COMPLETED_FAILURE,
+    WEBHOOK_CHECK_RUN_COMPLETED_SUCCESS,
+    WEBHOOK_PULL_REQUEST_REVIEW_APPROVED,
+)
 
 from forge.main import app
-from tests.fixtures.github_payloads import (
-    WEBHOOK_CHECK_RUN_COMPLETED_SUCCESS,
-    WEBHOOK_CHECK_RUN_COMPLETED_FAILURE,
-    WEBHOOK_PULL_REQUEST_REVIEW_APPROVED,
-    make_check_run,
-)
 
 
 def compute_signature(payload: bytes, secret: str) -> str:

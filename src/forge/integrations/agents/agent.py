@@ -297,23 +297,36 @@ class ForgeAgent:
 
         logger.info(f"Loading MCP tools from servers: {list(mcp_config.keys())}")
 
-        try:
-            client = MultiServerMCPClient(mcp_config)
-            tools = await client.get_tools()
-            logger.info(f"Loaded {len(tools)} tools from MCP servers")
+        # Load each server independently so a single failing server does not
+        # prevent tools from the other servers from loading.
+        all_tools: list[Any] = []
+        for server_name, server_config in mcp_config.items():
+            try:
+                client = MultiServerMCPClient({server_name: server_config})
+                server_tools = await client.get_tools()
+                logger.info(f"Loaded {len(server_tools)} tools from MCP server '{server_name}'")
+                all_tools.extend(server_tools)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load MCP tools from server '{server_name}' "
+                    f"(skipping, other servers unaffected): {e}"
+                )
 
-            # Filter to read-only tools if configured
-            if self.settings.agent_mcp_read_only:
-                tools = self._filter_read_only_tools(tools)
-
-            # Wrap tools with error handling to prevent crashes
-            tools = [self._wrap_tool_with_error_handling(t) for t in tools]
-            logger.debug(f"Wrapped {len(tools)} MCP tools with error handling")
-
-            return tools
-        except Exception as e:
-            logger.error(f"Failed to load MCP tools: {e}")
+        if not all_tools:
+            logger.warning("No MCP tools loaded from any server")
             return []
+
+        logger.info(f"Loaded {len(all_tools)} tools from MCP servers")
+
+        # Filter to read-only tools if configured
+        if self.settings.agent_mcp_read_only:
+            all_tools = self._filter_read_only_tools(all_tools)
+
+        # Wrap tools with error handling to prevent crashes
+        all_tools = [self._wrap_tool_with_error_handling(t) for t in all_tools]
+        logger.debug(f"Wrapped {len(all_tools)} MCP tools with error handling")
+
+        return all_tools
 
     def _filter_read_only_tools(self, tools: list[Any]) -> list[Any]:
         """Filter tools to only read-only operations.
@@ -467,6 +480,7 @@ class ForgeAgent:
             "gateway timeout",
             "server error",
             "internal server error",
+            "internal_failure",
             "500",
             "overloaded",
             "try again",

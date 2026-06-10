@@ -1,11 +1,11 @@
 """Tests for Spec rejection and revision cycles."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from forge.models.workflow import ForgeLabel, TicketType
+import pytest
+
+from forge.models.workflow import TicketType
+from forge.workflow.gates import route_spec_approval
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
-from forge.orchestrator.gates import route_spec_approval
 
 
 class TestSpecRejectedOnce:

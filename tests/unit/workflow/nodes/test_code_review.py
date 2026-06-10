@@ -1,10 +1,9 @@
 """Tests for the shared code_review utility module."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from tests.fixtures.workflow_states import make_workflow_state
-
 
 FIX_COMMITS = (
     "Fix CalculateJitteredDuration to use positive-only jitter\n"

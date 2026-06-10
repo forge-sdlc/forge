@@ -18,8 +18,7 @@ import pytest
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from forge.integrations.jira.models import JiraIssue
-from forge.models.workflow import ForgeLabel, TicketType
-from forge.workflow.feature import FeatureWorkflow
+from forge.models.workflow import TicketType
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
@@ -152,7 +151,6 @@ def temp_checkpoint_db():
 @pytest.fixture
 def mock_jira_client():
     """Mock JiraClient that simulates Jira API."""
-    from forge.integrations.jira.models import JiraIssue
 
     mock = MagicMock()
 

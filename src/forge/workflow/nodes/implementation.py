@@ -51,7 +51,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": "Workspace not set up",
-            "current_node": "implement_task",
+            "current_node": "implement_bug_fix",
         }
 
     # Get next task to implement if not set
@@ -113,6 +113,14 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         task_description = task_issue.description or ""
         task_summary = task_issue.summary
 
+        try:
+            await jira.add_comment(
+                ticket_key,
+                f"Implementation started for [{current_task}]: {task_summary}",
+            )
+        except Exception:
+            logger.warning(f"Failed to post implementation-started comment for {current_task}")
+
         # Get guardrails context
         guardrails = state.get("context", {}).get("guardrails", "")
 
@@ -151,9 +159,9 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
                     **state,
                     "current_task_key": None,
                     "implemented_tasks": implemented,
-                    "current_node": "implement_task",  # Loop back for next task
+                    "current_node": "implement_bug_fix",
                     "last_error": None,
-                    "retry_count": 0,  # Reset retry count on success
+                    "retry_count": 0,
                 }
             )
         else:
@@ -172,7 +180,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": str(e),
-            "current_node": "implement_task",
+            "current_node": "implement_bug_fix",
             "retry_count": state.get("retry_count", 0) + 1,
         }
     finally:

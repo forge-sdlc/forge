@@ -22,6 +22,7 @@ Implement code changes following Task specifications and project standards.
 3. **Test Coverage**: Include tests for new functionality
 4. **Clean Code**: Self-documenting, well-structured code
 5. **No Scope Creep**: Don't fix unrelated issues
+6. **Ordering invariants**: Before committing, read the plan's `## Ordering Invariants` section. For each entry, locate the relevant calls in your implementation and confirm the stated order is preserved. If the section says "None identified.", skip this step.
 
 ## File Change Format
 
@@ -63,3 +64,4 @@ Before submitting implementation:
 - [ ] Code follows project conventions
 - [ ] Error handling appropriate
 - [ ] No hardcoded values that should be configurable
+- [ ] Ordering invariants verified: each entry in `## Ordering Invariants` is preserved in the implementation (skip if section says "None identified.")

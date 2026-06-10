@@ -161,6 +161,10 @@ def setup_logging(
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
+    # GitHub Copilot MCP only supports POST (not the optional SSE GET stream).
+    # The mcp library retries the GET stream on 405, generating INFO noise.
+    # Tools still load correctly via POST — suppress the reconnect chatter.
+    logging.getLogger("mcp.client.streamable_http").setLevel(logging.WARNING)
 
 
 def get_context_logger(

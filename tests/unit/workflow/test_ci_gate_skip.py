@@ -1,13 +1,13 @@
 """Tests for CI gate skip via GitHub PR comment (proposal 005)."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from tests.fixtures.workflow_states import make_workflow_state
 
 from forge.models.events import EventSource
 from forge.orchestrator.worker import OrchestratorWorker
 from forge.queue.models import QueueMessage
-from tests.fixtures.workflow_states import make_workflow_state
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -93,8 +93,8 @@ class TestCISkippedChecksStateField:
 
     def test_initial_feature_state_has_empty_skipped_checks(self):
         """Fresh feature state initialises ci_skipped_checks to []."""
-        from forge.workflow.feature.state import create_initial_feature_state
         from forge.models.workflow import TicketType
+        from forge.workflow.feature.state import create_initial_feature_state
         state = create_initial_feature_state(
             thread_id="t", ticket_key="TEST-1", ticket_type=TicketType.FEATURE
         )
@@ -102,8 +102,8 @@ class TestCISkippedChecksStateField:
 
     def test_initial_bug_state_has_empty_skipped_checks(self):
         """Fresh bug state initialises ci_skipped_checks to []."""
-        from forge.workflow.bug.state import create_initial_bug_state
         from forge.models.workflow import TicketType
+        from forge.workflow.bug.state import create_initial_bug_state
         state = create_initial_bug_state(
             thread_id="t", ticket_key="TEST-2", ticket_type=TicketType.BUG
         )

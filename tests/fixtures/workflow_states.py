@@ -1,8 +1,8 @@
 """Pre-built WorkflowState snapshots for testing."""
 
-from typing import Any
 from copy import deepcopy
 from datetime import datetime
+from typing import Any
 
 from forge.models.workflow import TicketType
 from forge.workflow.feature.state import FeatureState as WorkflowState
@@ -244,10 +244,7 @@ def make_workflow_state(
     Returns:
         WorkflowState dict.
     """
-    if base_state:
-        state = deepcopy(base_state)
-    else:
-        state = deepcopy(_BASE_STATE)
+    state = deepcopy(base_state) if base_state else deepcopy(_BASE_STATE)
 
     state["ticket_key"] = ticket_key
     state["ticket_type"] = ticket_type
@@ -300,4 +297,65 @@ STATE_RCA_APPROVED: WorkflowState = {
     **deepcopy(STATE_RCA_PENDING),
     "current_node": "implement_bug_fix",
     "is_paused": False,
+}
+
+# New bug workflow redesign states
+
+STATE_TRIAGE_PENDING: WorkflowState = {
+    **deepcopy(STATE_BUG_NEW),
+    "current_node": "triage_gate",
+    "is_paused": True,
+    "triage_passed": False,
+    "triage_missing_fields": ["steps_to_reproduce", "affected_versions"],
+}
+
+STATE_RCA_OPTION_PENDING: WorkflowState = {
+    **deepcopy(STATE_BUG_NEW),
+    "current_node": "rca_option_gate",
+    "is_paused": True,
+    "triage_passed": True,
+    "triage_missing_fields": [],
+    "rca_content": """## Root Cause Analysis
+
+The password validator rejects valid special characters ($@!) due to an overly
+restrictive regex pattern in src/auth/validators.py:23.
+
+Introduced in: commit abc1234 (PR #42, 2024-01-15)
+Confidence: High — 90%
+""",
+    "rca_options": [
+        {
+            "title": "Update regex pattern",
+            "description": "Extend VALID_PASSWORD_PATTERN to include $@! characters.",
+            "tradeoffs": "Low risk; well-scoped to one constant. Must verify no other callers rely on old pattern.",
+        },
+        {
+            "title": "Escape input before validation",
+            "description": "Pre-process input to escape special characters before applying regex.",
+            "tradeoffs": "Higher complexity; adds escaping step to auth pipeline.",
+        },
+    ],
+}
+
+STATE_BUG_PLAN_PENDING: WorkflowState = {
+    **deepcopy(STATE_RCA_OPTION_PENDING),
+    "current_node": "plan_approval_gate",
+    "is_paused": True,
+    "selected_fix_option": 0,  # 0-based index into rca_options
+    "selected_fix_approach": {
+        "title": "Update regex pattern",
+        "description": "Extend VALID_PASSWORD_PATTERN to include $@! characters.",
+        "tradeoffs": "Low risk; well-scoped to one constant.",
+    },
+    "plan_content": (
+        "## Implementation Plan\n\n"
+        "**Approach: Update regex pattern**\n\n"
+        "### Changes\n"
+        "1. `src/auth/validators.py` — update VALID_PASSWORD_PATTERN constant (repo:backend)\n"
+        "2. `tests/auth/test_validators.py` — add regression test for special char passwords\n\n"
+        "### Order of operations\n"
+        "1. Update constant\n"
+        "2. Run existing tests to confirm no regression\n"
+        "3. Add new test verifying special chars accepted\n"
+    ),
 }

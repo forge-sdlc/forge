@@ -1,6 +1,6 @@
 """Shared test fixtures for Forge test suite."""
 
-from typing import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

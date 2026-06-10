@@ -4,8 +4,8 @@ import pytest
 from langgraph.graph import END
 
 from forge.models.workflow import TicketType
-from forge.workflow.gates import prd_approval_gate, route_prd_approval
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
+from forge.workflow.gates import prd_approval_gate, route_prd_approval
 
 
 class TestPrdApprovalGate:

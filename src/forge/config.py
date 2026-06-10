@@ -226,6 +226,16 @@ class Settings(BaseSettings):
         default=False,
         description="Enable LangChain verbose/debug logging in container",
     )
+    container_keep: bool = Field(
+        default=False,
+        alias="forge_container_keep",
+        description=(
+            "Keep all containers after exit instead of removing them with --rm. "
+            "Useful for debugging: inspect logs with `podman logs <name>` and "
+            "filesystem with `podman export <name> | tar -x`. "
+            "Set FORGE_CONTAINER_KEEP=true in .env."
+        ),
+    )
     agent_backend: str = Field(
         default="filesystem",
         description="Deep Agents backend type: filesystem, state, or store",
@@ -285,6 +295,12 @@ class Settings(BaseSettings):
     container_cpus: str = Field(
         default="2",
         description="Container CPU limit",
+    )
+
+    # Queue Consumer Configuration
+    queue_max_concurrent_tasks: int = Field(
+        default=20,
+        description="Maximum number of in-flight message processing tasks in the queue consumer. Prevents resource exhaustion during message bursts.",
     )
 
     # Worker Metrics Configuration

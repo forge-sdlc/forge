@@ -249,16 +249,20 @@ class JiraClient:
         project_key: str,
         summary: str,
         description: str,
-        parent_key: str,
+        parent_key: str | None = None,
         labels: list[str] | None = None,
     ) -> str:
-        """Create a new Task linked to a parent Epic.
+        """Create a new Task, optionally under a parent Epic.
+
+        Note: parent_key must be an Epic or higher-level issue. Bug/Story/Task
+        cannot be parents of Task in Jira's hierarchy — use create_issue_link
+        to express peer relationships such as 'implements'.
 
         Args:
             project_key: The Jira project key.
             summary: Task title/summary.
             description: Task implementation details.
-            parent_key: Parent Epic key for linking.
+            parent_key: Optional parent Epic key. Omit for peer-linked tasks.
             labels: Optional labels (e.g., target repository).
 
         Returns:
@@ -272,15 +276,16 @@ class JiraClient:
             "summary": summary,
             "description": adf_content,
             "issuetype": {"name": "Task"},
-            "parent": {"key": parent_key},
         }
+        if parent_key:
+            fields["parent"] = {"key": parent_key}
         if labels:
             fields["labels"] = labels
 
         response = await client.post("/issue", json={"fields": fields})
         response.raise_for_status()
         task_key = response.json()["key"]
-        logger.info(f"Created Task {task_key} under {parent_key}")
+        logger.info(f"Created Task {task_key}" + (f" under {parent_key}" if parent_key else ""))
         return task_key
 
     async def delete_issue(self, issue_key: str, delete_subtasks: bool = True) -> None:
@@ -471,6 +476,64 @@ class JiraClient:
         )
         response.raise_for_status()
         logger.info(f"Added remote link to {issue_key}: {url}")
+
+    async def create_issue_link(
+        self,
+        link_type: str,
+        inward_key: str,
+        outward_key: str,
+    ) -> None:
+        """Create a link between two Jira issues.
+
+        Args:
+            link_type: Link type name (e.g., "implements").
+            inward_key: Key of the inward issue (the one that "does" the action).
+            outward_key: Key of the outward issue (the one the action is done to).
+        """
+        client = await self._get_client()
+        response = await client.post(
+            "/issueLink",
+            json={
+                "type": {"name": link_type},
+                "inwardIssue": {"key": inward_key},
+                "outwardIssue": {"key": outward_key},
+            },
+        )
+        response.raise_for_status()
+        logger.info(f"Created {link_type} link: {inward_key} → {outward_key}")
+
+    async def get_issue_links(self, issue_key: str) -> list[dict[str, str | None]]:
+        """Get all issue links for an issue.
+
+        Returns a list of dicts with keys:
+          type: normalized lowercase link type name
+          inward_key: key of the inward issue relative to this issue (may be None)
+          outward_key: key of the outward issue relative to this issue (may be None)
+
+        Args:
+            issue_key: The Jira issue key.
+
+        Returns:
+            List of link dicts.
+        """
+        client = await self._get_client()
+        response = await client.get(f"/issue/{issue_key}", params={"fields": "issuelinks"})
+        response.raise_for_status()
+        data = response.json()
+        links = data.get("fields", {}).get("issuelinks", [])
+        result = []
+        for link in links:
+            link_type = link.get("type", {}).get("name", "").lower()
+            inward = link.get("inwardIssue") or {}
+            outward = link.get("outwardIssue") or {}
+            result.append(
+                {
+                    "type": link_type,
+                    "inward_key": inward.get("key"),
+                    "outward_key": outward.get("key"),
+                }
+            )
+        return result
 
     async def add_comment(self, issue_key: str, body: str) -> JiraComment:
         """Add a comment to a Jira issue.

@@ -133,6 +133,19 @@ async def receive_jira_webhook(
                 "reason": "missing forge:managed label",
             }
 
+        # Filter: ignore comment events authored by Forge itself
+        comment_author_email = payload.get("comment", {}).get("author", {}).get("emailAddress", "")
+        if comment_author_email and comment_author_email == settings.jira_user_email:
+            span.set_attribute("forge.skipped", True)
+            span.set_attribute("forge.skip_reason", "self-comment")
+            logger.debug(f"Skipping self-comment on {webhook_data.ticket_key}")
+            return {
+                "status": "skipped",
+                "event_id": event_id,
+                "ticket_key": webhook_data.ticket_key,
+                "reason": "self-comment",
+            }
+
         # Check if this is a child ticket (Epic/Task) - route to parent Feature
         issue_type = payload.get("issue", {}).get("fields", {}).get("issuetype", {}).get("name", "")
         routing_ticket_key = webhook_data.ticket_key

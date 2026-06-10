@@ -112,18 +112,7 @@ async def receive_github_webhook(
         # Record webhook received metric
         record_webhook_received(source="github", event_type=x_github_event)
 
-        # Skip events without ticket association
-        if not webhook_data.ticket_key:
-            span.set_attribute("forge.skipped", True)
-            span.set_attribute("forge.skip_reason", "no_ticket_association")
-            logger.debug(f"Skipping GitHub event {event_id} - no ticket association")
-            return {
-                "status": "skipped",
-                "event_id": event_id,
-                "reason": "no_ticket_association",
-            }
-
-        span.set_attribute("forge.ticket_key", webhook_data.ticket_key)
+        span.set_attribute("forge.ticket_key", webhook_data.ticket_key or "")
         webhook_event = create_github_webhook_event(webhook_data)
 
         # Queue for async processing
@@ -145,7 +134,7 @@ async def receive_github_webhook(
         return {
             "status": "accepted",
             "event_id": event_id,
-            "ticket_key": webhook_data.ticket_key,
+            "ticket_key": webhook_data.ticket_key or "",
         }
 
     except HTTPException:

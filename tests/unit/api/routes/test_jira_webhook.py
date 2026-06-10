@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
-
-from forge.main import app
 from tests.fixtures.jira_payloads import (
     WEBHOOK_ISSUE_CREATED,
-    WEBHOOK_ISSUE_UPDATED_LABEL_ADDED,
     WEBHOOK_ISSUE_UPDATED_COMMENT_ADDED,
+    WEBHOOK_ISSUE_UPDATED_LABEL_ADDED,
     make_jira_webhook,
 )
+
+from forge.main import app
 
 
 def compute_signature(payload: bytes, secret: str) -> str:

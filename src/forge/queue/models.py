@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import dataclass, field
+from dataclasses import replace as dataclass_replace
 from datetime import datetime
 from typing import Any
 
@@ -61,13 +62,4 @@ class QueueMessage:
 
     def increment_retry(self) -> "QueueMessage":
         """Return a new message with incremented retry count."""
-        return QueueMessage(
-            message_id=self.message_id,
-            event_id=self.event_id,
-            source=self.source,
-            event_type=self.event_type,
-            ticket_key=self.ticket_key,
-            payload=self.payload,
-            timestamp=self.timestamp,
-            retry_count=self.retry_count + 1,
-        )
+        return dataclass_replace(self, retry_count=self.retry_count + 1)

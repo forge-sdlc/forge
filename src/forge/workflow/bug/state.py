@@ -29,6 +29,36 @@ class BugState(
     generation_context: dict[str, Any]  # Stored context from generation
     is_question: bool  # Current comment is a question (not feedback)
 
+    # Triage stage
+    triage_passed: bool
+    triage_missing_fields: list[str]
+
+    # Analysis / reflection loop
+    reflection_count: int
+    reflection_critique: str | None
+    rca_options: list[dict]  # [{title, description, tradeoffs}, ...]
+    reproducibility_assessment: str | None
+
+    # Option selection
+    selected_fix_option: int | None
+    selected_fix_approach: dict | None
+    rca_comment_posted: bool  # Guard against re-posting the RCA comment on gate re-entry
+
+    # Planning
+    plan_content: str | None
+    linked_task_keys: list[str]
+    task_keys: list[str]
+    tasks_by_repo: dict[str, list[str]]
+
+    # Qualitative review (implementation phase)
+    local_review_verdict: str | None  # "adequate" | "tests_incomplete" | "symptom_only"
+    qualitative_feedback: str | None
+    qualitative_retry_count: int
+    qualitative_review_failed: bool
+
+    # reflect_rca container failure counter (separate from analyze_bug's retry_count)
+    reflect_rca_retry_count: int
+
 
 def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
     """Create initial state for a new Bug workflow run."""
@@ -76,6 +106,29 @@ def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
         "qa_history": [],
         "generation_context": {},
         "is_question": False,
+        # Triage stage
+        "triage_passed": False,
+        "triage_missing_fields": [],
+        # Analysis / reflection loop
+        "reflection_count": 0,
+        "reflection_critique": None,
+        "rca_options": [],
+        "reproducibility_assessment": None,
+        # Option selection
+        "selected_fix_option": None,
+        "selected_fix_approach": None,
+        "rca_comment_posted": False,
+        # Planning
+        "plan_content": None,
+        "linked_task_keys": [],
+        "task_keys": [],
+        "tasks_by_repo": {},
+        # Qualitative review
+        "local_review_verdict": None,
+        "qualitative_feedback": None,
+        "qualitative_retry_count": 0,
+        "qualitative_review_failed": False,
+        "reflect_rca_retry_count": 0,
     }
 
     # Merge with kwargs, letting kwargs override defaults

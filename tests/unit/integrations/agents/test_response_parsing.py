@@ -4,7 +4,6 @@ These tests verify that AI responses are parsed correctly without calling real L
 They use realistic AI output samples to test extraction and parsing logic.
 """
 
-import pytest
 
 from forge.integrations.agents.agent import ForgeAgent
 

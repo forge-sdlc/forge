@@ -48,3 +48,24 @@ uv run python devtools/patch_checkpoint.py AISOS-376 \
 ```
 
 Values are parsed as JSON where possible (`true`/`false`/`null`/numbers/lists), otherwise as strings.
+
+## run-wh.sh
+
+Send a Jira webhook payload to a local Forge instance. Substitutes the ticket ID into the payload and, for revision/question payloads, fetches the latest comment from Jira automatically.
+
+```bash
+devtools/run-wh.sh <TICKET-ID>
+
+# Examples:
+devtools/run-wh.sh AISOS-741    # shows menu of payloads to send
+devtools/run-wh.sh --help       # show usage
+```
+
+The script:
+1. Shows a numbered menu of all payloads in `tests/payloads/`
+2. Substitutes `TEST-123` with your ticket ID
+3. For revision/question payloads: fetches the latest comment from Jira (via REST API) and injects it into the payload
+4. Sends the payload to `http://localhost:8000/api/v1/webhooks/jira`
+5. Saves the final payload to a temp file (path printed) for debugging
+
+Requires `JIRA_BASE_URL`, `JIRA_USER_EMAIL`, and `JIRA_API_TOKEN` in `.env` for comment fetching.

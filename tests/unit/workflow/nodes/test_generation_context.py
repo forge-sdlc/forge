@@ -1,6 +1,6 @@
 """Tests for generation context storage in PRD and Spec generation nodes."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

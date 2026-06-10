@@ -5,7 +5,6 @@ using a real Redis instance via testcontainers.
 """
 
 import asyncio
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -43,7 +42,7 @@ class TestQueueProducer:
         """Publish a GitHub event to the queue."""
         producer = QueueProducer(redis_client=redis_client)
 
-        message_id = await producer.publish(
+        await producer.publish(
             event_id="gh-event-456",
             source=EventSource.GITHUB,
             event_type="check_run:completed",
@@ -122,11 +121,10 @@ class TestQueueConsumer:
             block=1000,
         )
 
-        for stream_name, entries in messages:
+        for _stream_name, entries in messages:
             for message_id, data in entries:
                 message = QueueMessage.from_redis(message_id, data)
-                await consumer._process_message(message)
-                await redis_client.xack(JIRA_STREAM, CONSUMER_GROUP, message_id)
+                await consumer._process_message(message, JIRA_STREAM)
 
         # Verify message was processed
         assert len(processed_messages) == 1
@@ -173,11 +171,10 @@ class TestQueueConsumer:
             block=1000,
         )
 
-        for stream_name, entries in messages:
+        for _stream_name, entries in messages:
             for message_id, data in entries:
                 message = QueueMessage.from_redis(message_id, data)
-                await consumer._process_message(message)
-                await redis_client.xack(JIRA_STREAM, CONSUMER_GROUP, message_id)
+                await consumer._process_message(message, JIRA_STREAM)
 
         # Verify FIFO order was maintained
         assert processing_order == [0, 1, 2, 3, 4]
@@ -248,11 +245,10 @@ class TestQueueConsumer:
             block=1000,
         )
 
-        for stream_name, entries in messages:
+        for _stream_name, entries in messages:
             for message_id, data in entries:
                 message = QueueMessage.from_redis(message_id, data)
-                await consumer._process_message(message)
-                await redis_client.xack(JIRA_STREAM, CONSUMER_GROUP, message_id)
+                await consumer._process_message(message, JIRA_STREAM)
 
         # Try to read again - should get no new messages
         messages = await redis_client.xreadgroup(
@@ -283,11 +279,7 @@ class TestQueueMessageSerialization:
                     "labels": ["forge:managed", "backend"],
                 },
             },
-            "changelog": {
-                "items": [
-                    {"field": "status", "toString": "In Progress"}
-                ]
-            },
+            "changelog": {"items": [{"field": "status", "toString": "In Progress"}]},
         }
 
         await producer.publish(

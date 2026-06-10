@@ -148,6 +148,8 @@ def _determine_artifact_type(current_node: str) -> str:
         return "prd"
     elif "spec" in node_lower:
         return "spec"
+    elif "triage" in node_lower:
+        return "triage"
     elif "rca" in node_lower:
         return "rca"
     elif "plan" in node_lower:
@@ -165,6 +167,23 @@ def _get_artifact_content(state: WorkflowState, artifact_type: str) -> str:
     Returns:
         The artifact content string, or empty string if not found.
     """
+    # Triage: assemble ticket context from summary, description, comments
+    if artifact_type == "triage":
+        summary = state.get("summary", "")
+        description = state.get("description", "")
+        comments = state.get("comments", [])
+        parts = [
+            p
+            for p in [
+                f"Summary: {summary}" if summary else "",
+                f"Description: {description}" if description else "",
+            ]
+            if p
+        ]
+        if comments:
+            parts.append("Comments:\n" + "\n---\n".join(str(c) for c in comments))
+        return "\n\n".join(parts)
+
     mapping = {
         "prd": "prd_content",
         "spec": "spec_content",
@@ -174,8 +193,11 @@ def _get_artifact_content(state: WorkflowState, artifact_type: str) -> str:
     if field:
         return state.get(field, "")
 
-    # Plan content is stored in generation_context (built during epic decomposition)
+    # Plan: check plan_content first (bug workflow), fall back to generation_context (feature workflow)
     if artifact_type == "plan":
+        plan_content = state.get("plan_content")
+        if plan_content is not None:
+            return plan_content
         return state.get("generation_context", {}).get("plan", "")
 
     return ""

@@ -1,6 +1,6 @@
 """Integration test fixtures - tests with mocked external services."""
 
-from typing import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

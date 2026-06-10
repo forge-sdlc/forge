@@ -1,10 +1,7 @@
 """Tests for the implement_review node and review_response_gate (proposal 007)."""
 
-import pytest
 from langgraph.graph import END
-
 from tests.fixtures.workflow_states import make_workflow_state
-
 
 # ── State fields ──────────────────────────────────────────────────────────────
 
@@ -25,8 +22,8 @@ class TestReviewStateFields:
         assert "review_response_posted" in ReviewIntegrationState.__annotations__
 
     def test_initial_feature_state_has_empty_review_fields(self):
-        from forge.workflow.feature.state import create_initial_feature_state
         from forge.models.workflow import TicketType
+        from forge.workflow.feature.state import create_initial_feature_state
         state = create_initial_feature_state(
             thread_id="t", ticket_key="TEST-1", ticket_type=TicketType.FEATURE
         )

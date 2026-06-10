@@ -42,6 +42,7 @@ from forge.workflow.nodes import (
     route_tasks_parallel,
     setup_workspace,
     teardown_and_route,
+    update_documentation,
     update_single_epic,
     wait_for_ci_gate,
 )
@@ -51,7 +52,9 @@ from forge.workflow.nodes.implement_review import (
     route_review_response,
 )
 from forge.workflow.nodes.qa_handler import answer_question
+from forge.workflow.nodes.rebase import rebase_pr
 from forge.workflow.nodes.task_generation import regenerate_all_tasks, update_single_task
+from forge.workflow.utils import resolve_shared_resume_node
 
 logger = logging.getLogger(__name__)
 
@@ -76,43 +79,32 @@ def route_by_ticket_type(state: FeatureState) -> str:
     if current_node and current_node not in ("entry", "__end__", ""):
         logger.info(f"Resuming workflow at node: {current_node}")
 
-        # Map current_node to the appropriate starting point
-        # PRD stage
+        # Shared nodes: same resume mapping across all workflow types
+        shared = resolve_shared_resume_node(current_node)
+        if shared is not None:
+            if shared is END:
+                logger.info(f"Workflow at terminal state '{current_node}', returning END")
+            return shared
+
+        # Feature-specific resume mapping
         if current_node in ("generate_prd", "regenerate_prd"):
             return "generate_prd"
         elif current_node == "prd_approval_gate":
             return "prd_approval_gate"
-        # Spec stage
         elif current_node in ("generate_spec", "regenerate_spec"):
             return "generate_spec"
         elif current_node == "spec_approval_gate":
             return "spec_approval_gate"
-        # Epic decomposition stage
         elif current_node in ("decompose_epics", "regenerate_all_epics", "update_single_epic"):
             return "decompose_epics"
         elif current_node == "plan_approval_gate":
             return "plan_approval_gate"
-        # Task generation stage
         elif current_node == "generate_tasks":
             return "generate_tasks"
         elif current_node == "task_approval_gate":
             return "task_approval_gate"
-        # Local review runs before PR creation
-        elif current_node == "local_review":
-            return "local_review"
-        # CI gate pauses here waiting for GitHub webhook
         elif current_node == "wait_for_ci_gate":
             return "wait_for_ci_gate"
-        # CI/review stages that wait for external events - resume directly
-        elif current_node in ("ci_evaluator", "attempt_ci_fix"):
-            return "ci_evaluator"
-        elif current_node == "human_review_gate":
-            return "human_review_gate"
-        elif current_node == "implement_review":
-            return "implement_review"
-        elif current_node == "review_response_gate":
-            return "review_response_gate"
-        # Execution stages (implementation, PR) - re-route through task_router
         elif current_node in (
             "task_router",
             "setup_workspace",
@@ -124,11 +116,6 @@ def route_by_ticket_type(state: FeatureState) -> str:
             "escalate_blocked",
         ):
             return "task_router"
-        # Terminal states - workflow is complete, route to END
-        elif current_node in ("complete", "complete_tasks", "aggregate_feature_status"):
-            logger.info(f"Workflow at terminal state '{current_node}', returning END")
-            return END
-        # If we don't recognize the node, log and fall through
         else:
             logger.warning(f"Unrecognized current_node '{current_node}', using ticket type routing")
 
@@ -386,6 +373,9 @@ def build_feature_graph() -> StateGraph:
     # Local code review node (pre-PR, fixes breaking issues in-place)
     graph.add_node("local_review", local_review_changes)
 
+    # Documentation update node (pre-PR, updates stale docs)
+    graph.add_node("update_documentation", update_documentation)
+
     # CI/CD Validation nodes (US7)
     graph.add_node("wait_for_ci_gate", wait_for_ci_gate)
     graph.add_node("ci_evaluator", evaluate_ci_status)
@@ -425,11 +415,14 @@ def build_feature_graph() -> StateGraph:
             "task_router": "task_router",
             # Resume routing for pre-PR and CI/review stages
             "local_review": "local_review",
+            "update_documentation": "update_documentation",
             "wait_for_ci_gate": "wait_for_ci_gate",
             "ci_evaluator": "ci_evaluator",
             "human_review_gate": "human_review_gate",
             "implement_review": "implement_review",
             "review_response_gate": "review_response_gate",
+            # Rebase (merge conflict resolution)
+            "rebase_pr": "rebase_pr",
             # Terminal states route directly to END
             END: END,
         },
@@ -549,8 +542,9 @@ def build_feature_graph() -> StateGraph:
     graph.add_conditional_edges(
         "local_review",
         lambda s: s.get("current_node", "create_pr"),
-        {"local_review": "local_review", "create_pr": "create_pr"},
+        {"local_review": "local_review", "create_pr": "update_documentation"},
     )
+    graph.add_edge("update_documentation", "create_pr")
     graph.add_conditional_edges(
         "create_pr",
         _route_after_pr_creation,
@@ -612,6 +606,7 @@ def build_feature_graph() -> StateGraph:
             "wait_for_ci_gate": "wait_for_ci_gate",
             "review_response_gate": "review_response_gate",
             "implement_review": "implement_review",
+            "human_review_gate": "human_review_gate",
             "escalate_blocked": "escalate_blocked",
         },
     )
@@ -637,6 +632,25 @@ def build_feature_graph() -> StateGraph:
             "spec_approval_gate": "spec_approval_gate",
             "plan_approval_gate": "plan_approval_gate",
             "task_approval_gate": "task_approval_gate",
+        },
+    )
+
+    # ── Rebase (merge conflict resolution, triggered by /forge rebase) ──
+    graph.add_node("rebase_pr", rebase_pr)
+    graph.add_conditional_edges(
+        "rebase_pr",
+        lambda s: s.get("current_node", END),
+        {
+            "prd_approval_gate": "prd_approval_gate",
+            "spec_approval_gate": "spec_approval_gate",
+            "plan_approval_gate": "plan_approval_gate",
+            "task_approval_gate": "task_approval_gate",
+            "task_router": "task_router",
+            "setup_workspace": "setup_workspace",
+            "ci_evaluator": "ci_evaluator",
+            "human_review_gate": "human_review_gate",
+            "escalate_blocked": "escalate_blocked",
+            END: END,
         },
     )
 

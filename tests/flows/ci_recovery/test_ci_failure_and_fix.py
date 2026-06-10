@@ -1,12 +1,11 @@
 """Flow tests for CI failure, fix attempts, and recovery scenarios."""
 
-import pytest
 from copy import deepcopy
+
 from langgraph.graph import END
 
 from forge.workflow.feature.graph import _route_ci_evaluation
 from tests.fixtures.workflow_states import (
-    STATE_PR_CREATED,
     STATE_CI_FAILED,
     make_workflow_state,
 )

@@ -7,10 +7,7 @@ real GitHub webhook payloads. Fixtures are based on actual webhook events.
 import json
 from pathlib import Path
 
-import pytest
-
 from forge.integrations.github.webhooks import (
-    GitHubWebhookData,
     is_ci_failure,
     is_ci_success,
     is_pr_merged,

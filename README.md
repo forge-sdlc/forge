@@ -166,13 +166,27 @@ Skips persist across pushes — if the infra check fails again on the next commi
 
 > **Note:** Certain checks (e.g. `tide`, Prow's merge-queue) are always pending and are permanently ignored. Configure with `CI_IGNORED_CHECKS` in `.env`.
 
+### Resolving Merge Conflicts
+
+When a PR falls behind `main` and develops merge conflicts, post a comment:
+
+```
+/forge rebase
+```
+
+Forge merges `main` into the PR branch, resolving any conflicts using AI. If the merge is clean, it pushes immediately. If there are conflicts, a container with Claude resolves them using the PR description as context, then force-pushes to the fork. This works from any workflow stage.
+
+See [PR Commands](docs/guide/pr-commands.md) for the full reference.
+
 ### Bug Workflow
 
-Bugs follow a simpler workflow:
+Bugs follow a five-stage pipeline:
 
 ```
-Create Bug → Analyze (RCA) → [Approval + Q&A] → Implement Fix → PR → CI → Review → Done
+Create Bug → Triage → RCA Analysis + Reflection → [RCA Option Gate] → Plan → [Plan Approval] → Decompose → Implement → PR → CI → Review → Post-merge Summary
 ```
+
+See [Bug Workflow Guide](docs/guide/bug-workflow.md) for the full stage reference.
 
 ## Workflow Details
 
@@ -195,9 +209,14 @@ Create Bug → Analyze (RCA) → [Approval + Q&A] → Implement Fix → PR → C
 
 | Stage | What Happens | Human Action |
 |-------|--------------|--------------|
-| **RCA Analysis** | AI analyzes bug and generates root cause analysis | Review, ask questions (?), approve or request changes |
-| **Implementation** | Fix implemented in ephemeral container | (Automatic) |
-| **PR → CI → Review** | Same as Feature workflow | Merge or request changes |
+| **Triage** | Evaluates ticket against 7-field completeness checklist | Provide missing fields if prompted |
+| **RCA Analysis** | Container performs hypothesis-driven codebase exploration; reflection loop validates the output (up to 3 passes) | (Automatic) |
+| **RCA Option Gate** | Structured RCA + fix options posted; `forge:rca-pending` set | Reply `>option N` to select approach; or give feedback |
+| **Planning** | Container produces concrete implementation plan with per-repo `repo:` tags | Approve with `forge:plan-approved`; or give feedback |
+| **Decompose** | One Jira Task created per repository; tasks linked to bug | (Automatic) |
+| **Implementation** | Fix implemented in ephemeral container with TDD + bidirectional test validation; qualitative review (7-item checklist, up to 2 retries) | (Automatic) |
+| **PR → CI → Review** | Same as Feature workflow; PR includes release note section | Merge or request changes |
+| **Post-merge Summary** | Fix summary + release note posted to Jira ticket | (Automatic) |
 
 ## Architecture
 

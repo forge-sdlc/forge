@@ -1,6 +1,5 @@
 """Tests for FeatureWorkflow."""
 
-import pytest
 
 from forge.models.workflow import TicketType
 
@@ -58,6 +57,7 @@ class TestFeatureWorkflow:
     def test_build_graph_returns_state_graph(self):
         """build_graph returns a StateGraph."""
         from langgraph.graph import StateGraph
+
         from forge.workflow.feature import FeatureWorkflow
 
         workflow = FeatureWorkflow()

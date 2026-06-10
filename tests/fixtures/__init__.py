@@ -1,5 +1,13 @@
 """Shared test fixtures for Forge test suite."""
 
+from tests.fixtures.github_payloads import (
+    API_GET_PR,
+    WEBHOOK_CHECK_RUN_COMPLETED_FAILURE,
+    WEBHOOK_CHECK_RUN_COMPLETED_SUCCESS,
+    WEBHOOK_PULL_REQUEST_REVIEW_APPROVED,
+    make_check_run,
+    make_github_pr,
+)
 from tests.fixtures.jira_payloads import (
     API_GET_ISSUE_BUG,
     API_GET_ISSUE_FEATURE,
@@ -8,14 +16,6 @@ from tests.fixtures.jira_payloads import (
     WEBHOOK_ISSUE_UPDATED_LABEL_ADDED,
     make_jira_issue,
     make_jira_webhook,
-)
-from tests.fixtures.github_payloads import (
-    API_GET_PR,
-    WEBHOOK_CHECK_RUN_COMPLETED_FAILURE,
-    WEBHOOK_CHECK_RUN_COMPLETED_SUCCESS,
-    WEBHOOK_PULL_REQUEST_REVIEW_APPROVED,
-    make_check_run,
-    make_github_pr,
 )
 from tests.fixtures.workflow_states import (
     STATE_CI_FAILED,

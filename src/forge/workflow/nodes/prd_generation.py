@@ -159,7 +159,16 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
         )
 
         # Update Jira with regenerated PRD
-        await jira.update_description(ticket_key, new_prd)
+        settings = get_settings()
+        if settings.jira_store_in_comments:
+            await jira.add_structured_comment(
+                ticket_key,
+                "Product Requirements Document (PRD)",
+                new_prd,
+                comment_type="prd",
+            )
+        else:
+            await jira.update_description(ticket_key, new_prd)
 
         # Add comment acknowledging the revision
         await jira.add_comment(

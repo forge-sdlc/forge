@@ -5,10 +5,7 @@ real Jira API response shapes. Fixtures are based on actual API responses.
 """
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
-
-import pytest
 
 from forge.integrations.jira.models import JiraComment, JiraIssue
 

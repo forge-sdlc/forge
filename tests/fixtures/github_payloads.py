@@ -1,8 +1,7 @@
 """GitHub webhook and API response fixtures for testing."""
 
-from typing import Any
 from copy import deepcopy
-
+from typing import Any
 
 # Sample GitHub webhook: check_run completed with success
 WEBHOOK_CHECK_RUN_COMPLETED_SUCCESS: dict[str, Any] = {

@@ -439,3 +439,160 @@ class TestEnsureSkillsIntegration:
         assert ensure_skills_called, (
             "ensure_skills must be called for resumed workflows, not just new ones"
         )
+
+
+class TestCiWebhookSignalAtCiEvaluator:
+    """check_suite events must wake up the workflow when paused at ci_evaluator.
+
+    Previously the signal check only covered wait_for_ci_gate. Workflows that
+    resume directly at ci_evaluator (e.g. after a skip-gate command) were silently
+    ignored, leaving CI failures unhandled.
+    """
+
+    @pytest.fixture
+    def worker(self) -> OrchestratorWorker:
+        return OrchestratorWorker(consumer_name="test-worker")
+
+    def _ci_state(self, node: str) -> dict:
+        return {
+            "ticket_key": "AISOS-701",
+            "ticket_type": "Bug",
+            "current_node": node,
+            "is_paused": False,
+            "last_error": None,
+            "context": {},
+        }
+
+    def _check_suite_message(self, conclusion: str = "failure") -> QueueMessage:
+        return QueueMessage(
+            message_id="1-0",
+            event_id="test-ci-001",
+            source=EventSource.GITHUB,
+            event_type="check_suite",
+            ticket_key="AISOS-701",
+            payload={
+                "action": "completed",
+                "check_suite": {
+                    "status": "completed",
+                    "conclusion": conclusion,
+                    "head_branch": "forge/aisos-701",
+                    "pull_requests": [{"number": 52}],
+                },
+                "repository": {"full_name": "forge-sdlc/forge"},
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_check_suite_recognized_at_ci_evaluator(self, worker):
+        """A completed check_suite event at ci_evaluator must produce a new state object.
+
+        _handle_resume_event signals 'no valid event' by returning the *same* state
+        object unchanged. A recognised signal always returns a new dict. We verify
+        object identity to catch the bug where the worker silently ignored the event.
+        """
+        state = self._ci_state("ci_evaluator")
+        message = self._check_suite_message("failure")
+
+        result = await worker._handle_resume_event(message, state)
+
+        assert result is not state, (
+            "check_suite at ci_evaluator returned the original state unchanged — "
+            "signal was not recognised"
+        )
+        assert result["is_paused"] is False
+
+    @pytest.mark.asyncio
+    async def test_check_suite_at_wait_for_ci_gate_still_works(self, worker):
+        """Existing wait_for_ci_gate behaviour must be preserved."""
+        state = self._ci_state("wait_for_ci_gate")
+        message = self._check_suite_message("success")
+
+        result = await worker._handle_resume_event(message, state)
+
+        assert result is not state
+        assert result["is_paused"] is False
+
+    @pytest.mark.asyncio
+    async def test_incomplete_check_suite_does_not_unpause_at_ci_evaluator(self, worker):
+        """A check_suite with status=in_progress must not wake up the workflow."""
+        state = self._ci_state("ci_evaluator")
+        message = QueueMessage(
+            message_id="1-0",
+            event_id="test-ci-002",
+            source=EventSource.GITHUB,
+            event_type="check_suite",
+            ticket_key="AISOS-701",
+            payload={
+                "check_suite": {"status": "in_progress", "conclusion": None},
+                "repository": {"full_name": "forge-sdlc/forge"},
+            },
+        )
+
+        result = await worker._handle_resume_event(message, state)
+
+        # unchanged state returned — is_paused stays as it was
+        assert result is state
+
+
+class TestExtractTextFromAdf:
+    """Tests for _extract_text_from_adf."""
+
+    def test_paragraph_text(self):
+        adf = {
+            "type": "doc",
+            "content": [{"type": "paragraph", "content": [{"type": "text", "text": "hello"}]}],
+        }
+        assert OrchestratorWorker._extract_text_from_adf(adf) == "hello"
+
+    def test_blockquote_text(self):
+        adf = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "blockquote",
+                    "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": "option 2"}]}
+                    ],
+                }
+            ],
+        }
+        assert "option 2" in OrchestratorWorker._extract_text_from_adf(adf)
+
+    def test_heading_text(self):
+        adf = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "heading",
+                    "attrs": {"level": 1},
+                    "content": [{"type": "text", "text": "Title"}],
+                }
+            ],
+        }
+        assert "Title" in OrchestratorWorker._extract_text_from_adf(adf)
+
+    def test_bullet_list_text(self):
+        adf = {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "bulletList",
+                    "content": [
+                        {
+                            "type": "listItem",
+                            "content": [
+                                {
+                                    "type": "paragraph",
+                                    "content": [{"type": "text", "text": "item one"}],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+        assert "item one" in OrchestratorWorker._extract_text_from_adf(adf)
+
+    def test_non_dict_returns_string(self):
+        assert OrchestratorWorker._extract_text_from_adf("plain") == "plain"
+        assert OrchestratorWorker._extract_text_from_adf(None) == ""

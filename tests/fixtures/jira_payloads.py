@@ -1,8 +1,7 @@
 """Jira webhook and API response fixtures for testing."""
 
-from typing import Any
 from copy import deepcopy
-
+from typing import Any
 
 # Sample Jira webhook: issue_created
 WEBHOOK_ISSUE_CREATED: dict[str, Any] = {

@@ -236,6 +236,38 @@ async def verify_checkpoint_recovery(thread_id: str) -> dict:
     return result
 
 
+_PR_INDEX_KEY = "forge:state:pr_index"
+
+
+async def set_pr_ticket_index(pr_url: str, ticket_key: str) -> None:
+    """Associate a PR URL with a Jira ticket key in the state PR index.
+
+    Stored as a Redis HASH field so all PR-to-ticket mappings live under a
+    single managed key rather than scattered per-PR string keys. No TTL —
+    PR URL to ticket key mappings are permanent.
+
+    Args:
+        pr_url: The full GitHub PR URL (e.g. https://github.com/org/repo/pull/42).
+        ticket_key: The Jira ticket key (e.g. PROJ-123).
+    """
+    redis_client = await get_redis_client()
+    await redis_client.hset(_PR_INDEX_KEY, pr_url, ticket_key)
+    logger.debug(f"PR index: {pr_url} → {ticket_key}")
+
+
+async def get_ticket_from_pr_index(pr_url: str) -> str | None:
+    """Look up the Jira ticket key for a PR URL from the state PR index.
+
+    Args:
+        pr_url: The full GitHub PR URL to look up.
+
+    Returns:
+        The associated ticket key, or None if not found.
+    """
+    redis_client = await get_redis_client()
+    return await redis_client.hget(_PR_INDEX_KEY, pr_url) or None
+
+
 async def list_checkpoints(limit: int = 100) -> list[dict]:
     """List all checkpoint thread IDs.
 

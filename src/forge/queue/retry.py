@@ -35,8 +35,11 @@ class RetryEntry:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for Redis storage."""
+        msg = self.message.to_dict()
+        # Preserve message_id separately so round-trip is lossless.
+        msg["message_id"] = self.message.message_id
         return {
-            "message": self.message.model_dump(),
+            "message": msg,
             "attempt": self.attempt,
             "next_retry": self.next_retry.isoformat(),
             "last_error": self.last_error,
@@ -45,8 +48,10 @@ class RetryEntry:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RetryEntry":
         """Create from dictionary loaded from Redis."""
+        msg_data = dict(data["message"])  # shallow copy — do not mutate the caller's dict
+        message_id = msg_data.pop("message_id", "")
         return cls(
-            message=QueueMessage(**data["message"]),
+            message=QueueMessage.from_redis(message_id, msg_data),
             attempt=data["attempt"],
             next_retry=datetime.fromisoformat(data["next_retry"]),
             last_error=data["last_error"],
@@ -132,8 +137,11 @@ class RetryQueue:
         redis = await self._get_redis()
         message_id = f"{message.source}:{message.ticket_key}:{message.event_id}"
 
+        msg = message.to_dict()
+        # Preserve message_id so round-trip through requeue_dead_letter is lossless.
+        msg["message_id"] = message.message_id
         entry = {
-            "message": message.model_dump(),
+            "message": msg,
             "error": error,
             "attempts": attempt,
             "failed_at": datetime.utcnow().isoformat(),
@@ -179,6 +187,9 @@ class RetryQueue:
     async def remove_from_retry(self, entry: RetryEntry) -> None:
         """Remove a message from the retry queue after successful processing.
 
+        Removes the sorted-set entry **and** clears the attempt counter so the
+        message starts fresh if it ever fails again.
+
         Args:
             entry: The retry entry to remove.
         """
@@ -188,6 +199,21 @@ class RetryQueue:
         # Clear attempt counter
         message_id = f"{entry.message.source}:{entry.message.ticket_key}:{entry.message.event_id}"
         await redis.delete(f"{RETRY_ATTEMPTS_KEY}:{message_id}")
+
+    async def remove_from_retry_without_counter_reset(self, entry: RetryEntry) -> None:
+        """Remove a message's sorted-set entry without clearing the attempt counter.
+
+        Use this in the failure path so that the attempt counter keeps
+        accumulating across re-enqueues.  If the counter were deleted here,
+        ``enqueue_for_retry`` would call ``INCR`` on a missing key and Redis
+        would reinitialise it to 1, preventing the message from ever reaching
+        the dead-letter queue.
+
+        Args:
+            entry: The retry entry to remove from the sorted set.
+        """
+        redis = await self._get_redis()
+        await redis.zrem(RETRY_QUEUE_KEY, json.dumps(entry.to_dict()))
 
     async def get_dead_letter_entries(
         self,
@@ -228,7 +254,9 @@ class RetryQueue:
 
         try:
             data = json.loads(entries[0])
-            message = QueueMessage(**data["message"])
+            msg_data = dict(data["message"])  # shallow copy — do not mutate the caller's dict
+            stream_entry_id = msg_data.pop("message_id", "")
+            message = QueueMessage.from_redis(stream_entry_id, msg_data)
 
             # Reset attempt counter
             message_id = f"{message.source}:{message.ticket_key}:{message.event_id}"
@@ -268,46 +296,3 @@ class RetryQueue:
             "retry_queue_depth": await redis.zcard(RETRY_QUEUE_KEY),
             "dead_letter_depth": await redis.llen(DEAD_LETTER_KEY),
         }
-
-
-# Singleton instance
-_retry_queue: RetryQueue | None = None
-
-
-async def get_retry_queue() -> RetryQueue:
-    """Get the singleton retry queue instance."""
-    global _retry_queue
-    if _retry_queue is None:
-        _retry_queue = RetryQueue()
-    return _retry_queue
-
-
-async def process_retry_queue() -> int:
-    """Process due retry messages.
-
-    This should be called periodically by a background task.
-
-    Returns:
-        Number of messages processed.
-    """
-    from forge.queue.consumer import process_message
-
-    retry_queue = await get_retry_queue()
-    entries = await retry_queue.get_due_messages()
-    processed = 0
-
-    for entry in entries:
-        try:
-            # Attempt to process the message
-            await process_message(entry.message)
-            await retry_queue.remove_from_retry(entry)
-            processed += 1
-            logger.info(
-                f"Successfully processed retry for "
-                f"{entry.message.ticket_key}:{entry.message.event_id}"
-            )
-        except Exception as e:
-            # Re-enqueue for another retry
-            await retry_queue.enqueue_for_retry(entry.message, str(e))
-
-    return processed

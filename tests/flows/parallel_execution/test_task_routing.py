@@ -1,17 +1,16 @@
 """Flow tests for multi-repo task routing and parallel execution."""
 
+from unittest.mock import patch
+
 import pytest
-from copy import deepcopy
-from unittest.mock import AsyncMock, patch
 
 from forge.workflow.nodes.task_router import (
-    route_after_pr,
     get_repo_execution_plan,
-    should_use_parallel_execution,
+    route_after_pr,
     route_tasks_parallel,
+    should_use_parallel_execution,
 )
 from tests.fixtures.workflow_states import (
-    STATE_IMPLEMENTING,
     make_workflow_state,
 )
 
@@ -250,7 +249,6 @@ class TestParallelFanOut:
 
     def test_parallel_send_targets_setup_workspace(self):
         """Each Send targets the setup_workspace node."""
-        from langgraph.types import Send
 
         state = make_workflow_state(
             tasks_by_repo={
@@ -267,7 +265,6 @@ class TestParallelFanOut:
 
     def test_parallel_each_branch_gets_correct_repo(self):
         """Each branch state has the correct current_repo assigned."""
-        from langgraph.types import Send
 
         state = make_workflow_state(
             tasks_by_repo={
@@ -285,7 +282,6 @@ class TestParallelFanOut:
 
     def test_single_repo_falls_back_to_sequential(self):
         """Single repo returns a string (sequential) rather than Send list."""
-        from langgraph.types import Send
 
         state = make_workflow_state(
             tasks_by_repo={"org/backend": ["TEST-200"]},

@@ -1,23 +1,12 @@
 """Tests for complete feature workflow flow."""
 
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from forge.models.workflow import ForgeLabel, TicketType
-from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
+from forge.models.workflow import TicketType
 from forge.workflow.feature.graph import route_by_ticket_type
-
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 from tests.fixtures.workflow_states import (
-    STATE_NEW_FEATURE,
-    STATE_PRD_PENDING,
-    STATE_PRD_APPROVED,
-    STATE_SPEC_PENDING,
-    STATE_SPEC_APPROVED,
-    STATE_PLAN_PENDING,
-    STATE_PLAN_APPROVED,
-    STATE_IMPLEMENTING,
-    STATE_PR_CREATED,
-    STATE_REVIEW_PENDING,
     STATE_COMPLETED,
     make_workflow_state,
 )
@@ -158,8 +147,9 @@ class TestMultiEpicFeature:
         # Workflow is paused waiting for approval
         multi_epic_state["is_paused"] = True
 
-        from forge.workflow.gates import route_plan_approval
         from langgraph.graph import END
+
+        from forge.workflow.gates import route_plan_approval
 
         result = route_plan_approval(multi_epic_state)
 

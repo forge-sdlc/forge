@@ -1,15 +1,10 @@
 """Flow tests for blocked state escalation and forge:retry recovery."""
 
-import pytest
-from copy import deepcopy
-from langgraph.graph import END
 
-from forge.workflow.feature.graph import route_by_ticket_type
-from forge.workflow.bug.graph import route_entry
 from forge.models.workflow import TicketType
+from forge.workflow.bug.graph import route_entry
+from forge.workflow.feature.graph import route_by_ticket_type
 from tests.fixtures.workflow_states import (
-    STATE_CI_FAILED,
-    STATE_IMPLEMENTING,
     make_workflow_state,
 )
 
@@ -224,7 +219,6 @@ class TestRetryResumesAtCorrectNode:
 
     def test_bug_retry_from_ci_resumes_at_ci(self):
         """Bug workflow blocked at ci_evaluator resumes there after retry."""
-        from forge.workflow.bug.state import BugState
 
         state = make_workflow_state(
             ticket_key="TEST-456",

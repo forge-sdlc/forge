@@ -1,7 +1,8 @@
 """Unit tests for epic decomposition node — repo resolution paths."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from forge.integrations.jira.client import MissingProjectConfig
 from forge.models.workflow import ForgeLabel

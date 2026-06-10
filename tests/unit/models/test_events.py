@@ -1,6 +1,5 @@
 """Unit tests for event models."""
 
-import pytest
 from datetime import datetime
 
 from forge.models.events import (

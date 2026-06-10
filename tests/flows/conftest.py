@@ -1,34 +1,23 @@
 """Flow test fixtures - workflow state machine testing."""
 
-from typing import Any, AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
 from copy import deepcopy
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
 from forge.config import Settings
-from forge.models.workflow import ForgeLabel, TicketType
+from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import FeatureState as WorkflowState
-from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
-
 from tests.fixtures.workflow_states import (
-    STATE_NEW_FEATURE,
-    STATE_PRD_PENDING,
-    STATE_PRD_APPROVED,
-    STATE_SPEC_PENDING,
-    STATE_SPEC_APPROVED,
-    STATE_PLAN_PENDING,
-    STATE_PLAN_APPROVED,
-    STATE_IMPLEMENTING,
-    STATE_PR_CREATED,
-    STATE_CI_FAILED,
-    STATE_REVIEW_PENDING,
-    STATE_COMPLETED,
     STATE_BUG_NEW,
+    STATE_CI_FAILED,
+    STATE_IMPLEMENTING,
+    STATE_NEW_FEATURE,
+    STATE_PLAN_PENDING,
+    STATE_PRD_PENDING,
     STATE_RCA_PENDING,
-    STATE_RCA_APPROVED,
-    make_workflow_state,
+    STATE_REVIEW_PENDING,
+    STATE_SPEC_PENDING,
 )
 
 

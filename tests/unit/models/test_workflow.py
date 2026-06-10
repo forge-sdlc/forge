@@ -1,6 +1,5 @@
 """Unit tests for workflow models."""
 
-import pytest
 
 from forge.models.workflow import (
     ForgeLabel,
@@ -51,6 +50,18 @@ class TestForgeLabel:
         assert ForgeLabel.RCA_DRAFTING.value == "forge:rca-drafting"
         assert ForgeLabel.RCA_PENDING.value == "forge:rca-pending"
         assert ForgeLabel.RCA_APPROVED.value == "forge:rca-approved"
+
+    def test_triage_pending_label_value(self):
+        """ForgeLabel.TRIAGE_PENDING == 'forge:triage-pending'."""
+        assert ForgeLabel.TRIAGE_PENDING.value == "forge:triage-pending"
+
+    def test_plan_pending_label_value(self):
+        """ForgeLabel.PLAN_PENDING already exists with correct value."""
+        assert ForgeLabel.PLAN_PENDING.value == "forge:plan-pending"
+
+    def test_plan_approved_label_value(self):
+        """ForgeLabel.PLAN_APPROVED already exists with correct value."""
+        assert ForgeLabel.PLAN_APPROVED.value == "forge:plan-approved"
 
     def test_general_labels_exist(self):
         """Verify general labels are defined."""

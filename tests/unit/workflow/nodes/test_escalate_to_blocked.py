@@ -1,8 +1,8 @@
 """Unit tests for escalate_to_blocked node."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from tests.fixtures.workflow_states import make_workflow_state
 
 
@@ -106,8 +106,8 @@ class TestEscalateToBlockedExistingBehaviourUnchanged:
     @pytest.mark.asyncio
     async def test_sets_blocked_jira_label(self, state_at_ci, mock_jira):
         """forge:blocked label is still applied to the Jira ticket."""
-        from forge.workflow.nodes.ci_evaluator import escalate_to_blocked
         from forge.models.workflow import ForgeLabel
+        from forge.workflow.nodes.ci_evaluator import escalate_to_blocked
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira), \
              patch("forge.workflow.nodes.error_handler.notify_error", AsyncMock()):
