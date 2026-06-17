@@ -1401,6 +1401,10 @@
 <li>Review the PRD and change the label to <code>forge:prd-approved</code> to continue</li>
 </ol>
 <p>That's it. Forge will carry the ticket through the full pipeline with similar approval gates at each planning stage.</p>
+<div class="admonition warning">
+<p class="admonition-title">Skipping approvals with forge:yolo</p>
+<p>Adding <code>forge:yolo</code> to a ticket causes Forge to skip all planning approval gates (PRD, spec, plan, tasks) and proceed directly to implementation. Only use this when you trust the requirements fully — there are no checkpoints to catch mistakes before code is written. The code review gate on the implementation PR is always required regardless.</p>
+</div>
 <div class="admonition tip">
 <p class="admonition-title">Local development shortcut</p>
 <p>Set <code>FORGE_REQUIRE_PROJECT_CONFIG=false</code> in <code>.env</code> and configure <code>GITHUB_KNOWN_REPOS</code> / <code>GITHUB_DEFAULT_REPO</code> to skip the Jira project property setup. See the <a href="../developer-guide/">Developer Guide</a> for details.</p>
