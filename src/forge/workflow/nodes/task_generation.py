@@ -11,6 +11,7 @@ from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,12 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
     settings = get_settings()
     jira = JiraClient()
     agent = ForgeAgent()
+
+    await post_status_comment(
+        jira,
+        ticket_key,
+        "⚙️ Forge is generating implementation tasks — this may take a few minutes.",
+    )
 
     all_task_keys: list[str] = []
     tasks_by_repo: dict[str, list[str]] = {}

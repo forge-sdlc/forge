@@ -13,6 +13,7 @@ from forge.models.workflow import ForgeLabel
 from forge.orchestrator.checkpointer import set_pr_ticket_index
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,12 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
     jira_error = None
 
     try:
+        await post_status_comment(
+            jira,
+            ticket_key,
+            "📝 Forge is generating your PRD — this may take a few minutes.",
+        )
+
         # Fetch current issue to get raw requirements
         issue = await jira.get_issue(ticket_key)
         raw_requirements = issue.description or ""

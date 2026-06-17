@@ -9,6 +9,7 @@ from forge.integrations.jira.client import JiraClient, MissingProjectConfig
 from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,12 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
     jira_error = None
 
     try:
+        await post_status_comment(
+            jira,
+            ticket_key,
+            "🗺️ Forge is decomposing your spec into an implementation plan — this may take a few minutes.",
+        )
+
         # If spec not in state, this is an error
         if not spec_content.strip():
             logger.error(f"No spec content found for {ticket_key}")
