@@ -1553,7 +1553,7 @@
 <hr />
 <h3 id="spec-generation">Spec Generation<a class="headerlink" href="#spec-generation" title="Permanent link">&para;</a></h3>
 <p>Forge generates a behavioral specification from the approved PRD, typically using Given/When/Then acceptance criteria.</p>
-<p><strong>Human action:</strong> Review the spec. Ask questions or request revisions. Approve with <code>forge:spec-approved</code>.</p>
+<p><strong>Human action:</strong> Review the spec. Ask questions with <code>?</code> or request revisions with <code>!</code>. Approve with <code>forge:spec-approved</code>.</p>
 <hr />
 <h3 id="epic-decomposition">Epic Decomposition<a class="headerlink" href="#epic-decomposition" title="Permanent link">&para;</a></h3>
 <p>Forge breaks the feature into logical epics — high-level areas of work that map to implementation phases.</p>
@@ -1576,11 +1576,11 @@
 </tr>
 <tr>
 <td>Revise one epic</td>
-<td>Comment on the <strong>specific epic sub-ticket</strong> — Forge updates only that epic</td>
+<td><code>!</code> comment on the <strong>specific epic sub-ticket</strong> — Forge updates only that epic</td>
 </tr>
 <tr>
 <td>Redo the full decomposition</td>
-<td>Comment on the <strong>feature ticket</strong> (no <code>?</code> prefix) — Forge regenerates all epics with your feedback</td>
+<td><code>!</code> comment on the <strong>feature ticket</strong> — Forge regenerates all epics with your feedback</td>
 </tr>
 </tbody>
 </table>
@@ -1588,8 +1588,8 @@
     Gate([plan_approval_gate])
     Gate --&gt;|forge:plan-approved| Next[Generate Tasks]
     Gate --&gt;|"? on feature ticket"| QA[Answer Question]
-    Gate --&gt;|Comment on feature ticket| Regen[Regenerate All Epics]
-    Gate --&gt;|Comment on epic sub-ticket| Update[Update Single Epic]
+    Gate --&gt;|"! on feature ticket"| Regen[Regenerate All Epics]
+    Gate --&gt;|"! on epic sub-ticket"| Update[Update Single Epic]
     QA --&gt; Gate
     Regen --&gt; Gate
     Update --&gt; Gate</code></pre>
@@ -1615,11 +1615,11 @@
 </tr>
 <tr>
 <td>Revise one task</td>
-<td>Comment on the <strong>specific task sub-ticket</strong> — Forge updates only that task</td>
+<td><code>!</code> comment on the <strong>specific task sub-ticket</strong> — Forge updates only that task</td>
 </tr>
 <tr>
 <td>Regenerate all tasks</td>
-<td>Comment on the <strong>feature or epic ticket</strong> (no <code>?</code> prefix) — Forge regenerates the full task list with your feedback</td>
+<td><code>!</code> comment on the <strong>feature or epic ticket</strong> — Forge regenerates the full task list with your feedback</td>
 </tr>
 </tbody>
 </table>
@@ -1627,8 +1627,8 @@
     Gate([task_approval_gate])
     Gate --&gt;|forge:task-approved| Next[Implement Tasks]
     Gate --&gt;|"? on ticket"| QA[Answer Question]
-    Gate --&gt;|Comment on feature/epic| Regen[Regenerate All Tasks]
-    Gate --&gt;|Comment on task sub-ticket| Update[Update Single Task]
+    Gate --&gt;|"! on feature/epic"| Regen[Regenerate All Tasks]
+    Gate --&gt;|"! on task sub-ticket"| Update[Update Single Task]
     QA --&gt; Gate
     Regen --&gt; Gate
     Update --&gt; Gate</code></pre>
@@ -1674,7 +1674,13 @@
 <p>Forge answers based on the artifact content and generation context, then keeps the workflow paused. When you're ready to approve, change the label as normal.</p>
 <p>A summary of all Q&amp;A exchanges is posted to the ticket when you approve.</p>
 <h2 id="requesting-revisions">Requesting Revisions<a class="headerlink" href="#requesting-revisions" title="Permanent link">&para;</a></h2>
-<p>Add a comment with your feedback (without a <code>?</code> prefix). Forge regenerates the current artifact incorporating your feedback, replacing the previous version.</p>
+<p>Start a comment with <code>!</code> followed by your feedback. Forge regenerates the current artifact incorporating your feedback, replacing the previous version.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>! The spec is missing error handling for the webhook retry path
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Comments without a recognized prefix (<code>!</code>, <code>?</code>, <code>@forge ask</code>) are treated as informational and ignored by the workflow. Only <code>!</code>-prefixed comments trigger regeneration.</p>
+</div>
 <h2 id="handling-failures">Handling Failures<a class="headerlink" href="#handling-failures" title="Permanent link">&para;</a></h2>
 <p>If a stage fails, Forge:</p>
 <ol>

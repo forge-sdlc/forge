@@ -642,10 +642,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#qa-mode" class="md-nav__link">
+  <a href="#comment-syntax" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Q&amp;A Mode
+        Comment Syntax
       </span>
     </span>
   </a>
@@ -1337,10 +1337,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#qa-mode" class="md-nav__link">
+  <a href="#comment-syntax" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Q&amp;A Mode
+        Comment Syntax
       </span>
     </span>
   </a>
@@ -1415,10 +1415,10 @@
     E --&gt;|Invalid| D
     E --&gt;|Valid| F[RCA Option Gate\nforge:rca-pending]
     F --&gt;|'&gt;option N'| G[Plan Bug Fix\ncontainer]
-    F --&gt;|feedback| D
+    F --&gt;|'! feedback'| D
     G --&gt; H[Plan Approval Gate\nforge:plan-pending]
     H --&gt;|forge:plan-approved| I[Decompose Plan\ncreate per-repo tasks]
-    H --&gt;|feedback| G
+    H --&gt;|'! feedback'| G
     I --&gt; J[Implementation\ncontainer per repo]
     J --&gt; K[Qualitative Review\n7-item checklist]
     K --&gt;|adequate| L[Update Docs → PR]
@@ -1461,16 +1461,18 @@
 <p>Forge posts the validated RCA as a structured Jira comment with numbered fix options and sets <code>forge:rca-pending</code>.</p>
 <p><strong>Human actions:</strong>
 - <strong>Select an option:</strong> Reply with <code>&gt;option N</code> (e.g., <code>&gt;option 1</code>). Case-insensitive; can appear anywhere in the comment.
-- <strong>Request revision:</strong> Post feedback — Forge regenerates the RCA incorporating your input.
-- <strong>Ask a question:</strong> Prefix with <code>?</code> — Forge answers without advancing the workflow.</p>
+- <strong>Request revision:</strong> Start a comment with <code>!</code> — Forge regenerates the RCA incorporating your input.
+- <strong>Ask a question:</strong> Prefix with <code>?</code> or <code>@forge ask</code> — Forge answers without advancing the workflow.</p>
+<p>Plain comments (no prefix) are ignored by the workflow.</p>
 <hr />
 <h3 id="4-planning">4. Planning<a class="headerlink" href="#4-planning" title="Permanent link">&para;</a></h3>
 <p>After option selection, Forge spawns a container to produce a concrete implementation plan covering specific files, tests, and order of operations. Each involved repository is tagged <code>repo:&lt;owner&gt;/&lt;name&gt;</code> for automatic task decomposition.</p>
 <p>The plan is posted as a Jira comment and <code>forge:plan-pending</code> is set.</p>
 <p><strong>Human actions:</strong>
 - <strong>Approve:</strong> Change label to <code>forge:plan-approved</code>.
-- <strong>Request revision:</strong> Post feedback — Forge regenerates the plan.
-- <strong>Ask a question:</strong> Prefix with <code>?</code>.</p>
+- <strong>Request revision:</strong> Start a comment with <code>!</code> — Forge regenerates the plan with your feedback.
+- <strong>Ask a question:</strong> Prefix with <code>?</code> or <code>@forge ask</code>.</p>
+<p>Plain comments (no prefix) are ignored by the workflow.</p>
 <hr />
 <h3 id="5-decompose-implementation">5. Decompose → Implementation<a class="headerlink" href="#5-decompose-implementation" title="Permanent link">&para;</a></h3>
 <p>After plan approval, Forge:</p>
@@ -1486,8 +1488,14 @@
 <li><strong>Post-merge summary:</strong> After merge, Forge posts a fix summary and release note to the Jira ticket.</li>
 </ol>
 <hr />
-<h2 id="qa-mode">Q&amp;A Mode<a class="headerlink" href="#qa-mode" title="Permanent link">&para;</a></h2>
-<p>At any approval gate, prefix a comment with <code>?</code> or <code>@forge ask</code> to ask questions. Forge answers using the current artifact as context and stays paused — it does not advance or regenerate.</p>
+<h2 id="comment-syntax">Comment Syntax<a class="headerlink" href="#comment-syntax" title="Permanent link">&para;</a></h2>
+<p>At any approval gate, Forge classifies your comment by its prefix:</p>
+<ul>
+<li><strong><code>!</code> prefix</strong> — revision request: Forge regenerates the current artifact with your feedback</li>
+<li><strong><code>?</code> prefix or <code>@forge ask</code></strong> — question: Forge answers and stays paused</li>
+<li><strong><code>&gt;option N</code></strong> — RCA option selection (RCA Option Gate only)</li>
+<li><strong>No prefix</strong> — informational: ignored by the workflow</li>
+</ul>
 <hr />
 <h2 id="merge-conflicts">Merge Conflicts<a class="headerlink" href="#merge-conflicts" title="Permanent link">&para;</a></h2>
 <p>Bug fix PRs are created from fork branches. If <code>main</code> advances while the PR is open, merge conflicts can prevent CI from running. Post <code>/forge rebase</code> as a PR comment to trigger AI-assisted conflict resolution. See <a href="../pr-commands/">PR Commands</a> for details.</p>

@@ -1348,8 +1348,9 @@
 <h2 id="how-to-use-labels">How to Use Labels<a class="headerlink" href="#how-to-use-labels" title="Permanent link">&para;</a></h2>
 <p><strong>Starting a workflow:</strong> Create a Jira issue and add <code>forge:managed</code>. Forge detects the issue type (Feature or Bug) and begins the appropriate pipeline.</p>
 <p><strong>Approving a stage:</strong> When Forge posts a PRD, spec, or other artifact, it sets the <code>forge:*-pending</code> label. Change it to <code>forge:*-approved</code> to advance the workflow. Do not add the approved label manually before Forge posts — it won't be recognized until the pending state is set.</p>
-<p><strong>Requesting revisions:</strong> Add a comment with your feedback (no <code>?</code> prefix). Forge regenerates the artifact and resets the pending label.</p>
+<p><strong>Requesting revisions:</strong> Start a comment with <code>!</code> followed by your feedback. Forge regenerates the artifact and resets the pending label.</p>
 <p><strong>Asking questions:</strong> Start a comment with <code>?</code> or <code>@forge ask</code>. Forge answers without advancing or regenerating.</p>
+<p><strong>Informational comments:</strong> Comments without a recognized prefix (<code>!</code>, <code>?</code>, <code>@forge ask</code>, <code>&gt;option</code>) are ignored by the workflow — use them for team discussion without triggering Forge.</p>
 <p><strong>Handling failures:</strong> When <code>forge:blocked</code> appears, read the Forge comment for the error. Fix the underlying issue if needed, then add <code>forge:retry</code>.</p>
 <div class="admonition warning">
 <p class="admonition-title">Don't remove <code>forge:managed</code></p>
