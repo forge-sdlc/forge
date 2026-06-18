@@ -1150,6 +1150,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#grafana-dashboards" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Grafana Dashboards
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#mcp-servers" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1370,6 +1381,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         Langfuse Tracing
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#grafana-dashboards" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Grafana Dashboards
       </span>
     </span>
   </a>
@@ -1605,6 +1627,78 @@
 <tr>
 <td><code>LANGFUSE_HOST</code></td>
 <td>Langfuse host (defaults to cloud; set for self-hosted)</td>
+</tr>
+<tr>
+<td><code>LANGFUSE_TRACE_TAGS</code></td>
+<td>Comma-separated list of trace attributes to attach as Langfuse tags. Available values: <code>ticket_key</code>, <code>ticket_type</code>, <code>project_id</code>, <code>workflow_step</code>, <code>repo</code>, <code>pr_number</code>, <code>ci_status</code>, <code>event_source</code>, <code>event_type</code>, <code>llm_model</code>. Default: empty (no tags).</td>
+</tr>
+<tr>
+<td><code>LANGFUSE_TRACE_METADATA</code></td>
+<td>Comma-separated list of trace attributes to attach as Langfuse metadata. Available values: same as tags plus <code>retry_count</code>, <code>system_prompt_length</code>. Default: empty (no metadata).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="grafana-dashboards">Grafana Dashboards<a class="headerlink" href="#grafana-dashboards" title="Permanent link">&para;</a></h3>
+<p>These variables are used by <code>docker-compose.yml</code>, <code>devtools/docker-compose.dev.yml</code>, and <code>devtools/grafana/compose.grafana.yml</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GRAFANA_PORT</code></td>
+<td>Host port for Grafana (default: <code>3010</code>)</td>
+</tr>
+<tr>
+<td><code>GRAFANA_ADMIN_USER</code></td>
+<td>Grafana admin user (default: <code>admin</code>)</td>
+</tr>
+<tr>
+<td><code>GRAFANA_ADMIN_PASSWORD</code></td>
+<td>Grafana admin password (default: <code>grafana</code>)</td>
+</tr>
+<tr>
+<td><code>LANGFUSE_DOCKER_NETWORK</code></td>
+<td>External Docker/Podman network for self-hosted Langfuse when using <code>devtools/grafana/compose.langfuse-network.yml</code> (default: <code>langfuse_default</code>)</td>
+</tr>
+<tr>
+<td><code>CLICKHOUSE_HOST</code></td>
+<td>Langfuse ClickHouse host reachable from the Grafana container</td>
+</tr>
+<tr>
+<td><code>CLICKHOUSE_PORT</code></td>
+<td>Langfuse ClickHouse native protocol port (default: <code>9000</code>)</td>
+</tr>
+<tr>
+<td><code>CLICKHOUSE_DATABASE</code></td>
+<td>Langfuse ClickHouse database (default: <code>default</code>)</td>
+</tr>
+<tr>
+<td><code>CLICKHOUSE_USER</code></td>
+<td>Langfuse ClickHouse user</td>
+</tr>
+<tr>
+<td><code>CLICKHOUSE_PASSWORD</code></td>
+<td>Langfuse ClickHouse password</td>
+</tr>
+<tr>
+<td><code>PROMETHEUS_HOST</code></td>
+<td>Prometheus host for standalone Grafana compose</td>
+</tr>
+<tr>
+<td><code>PROMETHEUS_PORT</code></td>
+<td>Prometheus port for standalone Grafana compose</td>
+</tr>
+<tr>
+<td><code>REDIS_HOST</code></td>
+<td>Redis host for standalone Grafana compose</td>
+</tr>
+<tr>
+<td><code>REDIS_PORT</code></td>
+<td>Redis port for standalone Grafana compose</td>
 </tr>
 </tbody>
 </table>

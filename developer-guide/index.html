@@ -888,10 +888,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#start-prometheus-optional-for-metrics" class="md-nav__link">
+  <a href="#start-prometheus-and-grafana-optional-for-observability" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Start Prometheus (optional, for metrics)
+        Start Prometheus and Grafana (optional, for observability)
       </span>
     </span>
   </a>
@@ -1158,6 +1158,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         What gets traced
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trace-tags-and-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Trace tags and metadata
       </span>
     </span>
   </a>
@@ -2003,10 +2014,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#start-prometheus-optional-for-metrics" class="md-nav__link">
+  <a href="#start-prometheus-and-grafana-optional-for-observability" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Start Prometheus (optional, for metrics)
+        Start Prometheus and Grafana (optional, for observability)
       </span>
     </span>
   </a>
@@ -2273,6 +2284,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         What gets traced
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#trace-tags-and-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Trace tags and metadata
       </span>
     </span>
   </a>
@@ -2689,10 +2711,21 @@ If not configured, Forge will block the workflow and post detailed instructions 
 <a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="nv">LANGFUSE_PUBLIC_KEY</span><span class="o">=</span>pk-lf-...
 <a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="nv">LANGFUSE_SECRET_KEY</span><span class="o">=</span>sk-lf-...
 <a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="nv">LANGFUSE_HOST</span><span class="o">=</span>https://cloud.langfuse.com
-<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
-<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="c1"># CI behaviour</span>
-<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="nv">CI_FIX_MAX_RETRIES</span><span class="o">=</span><span class="m">5</span>
-<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="nv">CI_IGNORED_CHECKS</span><span class="o">=</span>tide<span class="w">          </span><span class="c1"># comma-separated substrings of checks to ignore</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nv">LANGFUSE_TRACE_TAGS</span><span class="o">=</span>ticket_key,ticket_type,project_id,workflow_step,repo,pr_number,ci_status,event_source,event_type,llm_model
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="nv">LANGFUSE_TRACE_METADATA</span><span class="o">=</span>ticket_key,ticket_type,project_id,workflow_step,repo,pr_number,ci_status,event_source,event_type,retry_count,system_prompt_length,llm_model
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="c1"># Grafana dashboard stack</span>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="nv">GRAFANA_PORT</span><span class="o">=</span><span class="m">3010</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="nv">LANGFUSE_DOCKER_NETWORK</span><span class="o">=</span>langfuse_default
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="nv">CLICKHOUSE_HOST</span><span class="o">=</span>clickhouse
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="nv">CLICKHOUSE_PORT</span><span class="o">=</span><span class="m">9000</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="nv">CLICKHOUSE_DATABASE</span><span class="o">=</span>default
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="nv">CLICKHOUSE_USER</span><span class="o">=</span>clickhouse
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="nv">CLICKHOUSE_PASSWORD</span><span class="o">=</span>clickhouse
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="c1"># CI behaviour</span>
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a><span class="nv">CI_FIX_MAX_RETRIES</span><span class="o">=</span><span class="m">5</span>
+<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a><span class="nv">CI_IGNORED_CHECKS</span><span class="o">=</span>tide<span class="w">          </span><span class="c1"># comma-separated substrings of checks to ignore</span>
 </code></pre></div>
 <hr />
 <h2 id="4-running-services">4. Running Services<a class="headerlink" href="#4-running-services" title="Permanent link">&para;</a></h2>
@@ -2712,172 +2745,182 @@ If not configured, Forge will block the workflow and post detailed instructions 
 <blockquote>
 <p><strong>Why not in Docker?</strong> The worker spawns Podman containers. Running it inside Docker would require socket mounting which is not supported in this setup.</p>
 </blockquote>
-<h3 id="start-prometheus-optional-for-metrics">Start Prometheus (optional, for metrics)<a class="headerlink" href="#start-prometheus-optional-for-metrics" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>prometheus<span class="w"> </span>-d
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="c1"># Dashboard at http://localhost:9092</span>
+<h3 id="start-prometheus-and-grafana-optional-for-observability">Start Prometheus and Grafana (optional, for observability)<a class="headerlink" href="#start-prometheus-and-grafana-optional-for-observability" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--env-file<span class="w"> </span>.env<span class="w"> </span>-f<span class="w"> </span>docker-compose.yml<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>prometheus<span class="w"> </span>grafana
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="c1"># Prometheus at http://localhost:9092</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="c1"># Grafana dashboards at http://localhost:3010</span>
 </code></pre></div>
+<p><strong>With self-hosted Langfuse</strong> — add the network override so Grafana can reach ClickHouse:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>compose<span class="w"> </span>--env-file<span class="w"> </span>.env<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>-f<span class="w"> </span>docker-compose.yml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span>-f<span class="w"> </span>devtools/grafana/compose.langfuse-network.yml<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span>up<span class="w"> </span>-d<span class="w"> </span>prometheus<span class="w"> </span>grafana
+</code></pre></div>
+<blockquote>
+<p><code>compose.langfuse-network.yml</code> requires the <code>langfuse_default</code> Docker network to already exist. Omit it if you are not running self-hosted Langfuse — the Prometheus and Redis datasources work without it.</p>
+</blockquote>
 <h3 id="full-local-stack">Full local stack<a class="headerlink" href="#full-local-stack" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Terminal 1 — Redis (and optionally Prometheus)</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>redis<span class="w"> </span>prometheus<span class="w"> </span>-d
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
-<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># Terminal 2 — API server</span>
-<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>uv<span class="w"> </span>run<span class="w"> </span>uvicorn<span class="w"> </span>forge.main:app<span class="w"> </span>--reload<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span><span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0
-<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>
-<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="c1"># Terminal 3 — Worker</span>
-<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Terminal 1 — Redis, Prometheus, and Grafana</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>--env-file<span class="w"> </span>.env<span class="w"> </span>-f<span class="w"> </span>docker-compose.yml<span class="w"> </span>up<span class="w"> </span>-d<span class="w"> </span>redis<span class="w"> </span>prometheus<span class="w"> </span>grafana
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Terminal 2 — API server</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>uv<span class="w"> </span>run<span class="w"> </span>uvicorn<span class="w"> </span>forge.main:app<span class="w"> </span>--reload<span class="w"> </span>--port<span class="w"> </span><span class="m">8000</span><span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># Terminal 3 — Worker</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker
 </code></pre></div>
 <h3 id="health-check">Health check<a class="headerlink" href="#health-check" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>curl<span class="w"> </span>http://localhost:8000/api/v1/health
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>curl<span class="w"> </span>http://localhost:8000/api/v1/health
 </code></pre></div>
 <hr />
 <h2 id="5-running-tests">5. Running Tests<a class="headerlink" href="#5-running-tests" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1"># Full test suite</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="c1"># Unit tests only (fast)</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/<span class="w"> </span>-v
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>
-<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="c1"># Flow/scenario tests</span>
-<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/flows/<span class="w"> </span>-v
-<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>
-<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="c1"># Single file</span>
-<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/workflow/test_ci_gate_skip.py<span class="w"> </span>-v
-<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>
-<a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="c1"># With output (useful for debugging)</span>
-<a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/<span class="w"> </span>-s
-<a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>
-<a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a><span class="c1"># Linting</span>
-<a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>src/
-<a id="__codelineno-15-18" name="__codelineno-15-18" href="#__codelineno-15-18"></a>
-<a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a><span class="c1"># Type checking</span>
-<a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>src/forge/
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Full test suite</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Unit tests only (fast)</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/<span class="w"> </span>-v
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Flow/scenario tests</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/flows/<span class="w"> </span>-v
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="c1"># Single file</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/workflow/test_ci_gate_skip.py<span class="w"> </span>-v
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="c1"># With output (useful for debugging)</span>
+<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/<span class="w"> </span>-s
+<a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a>
+<a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a><span class="c1"># Linting</span>
+<a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>src/
+<a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a>
+<a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a><span class="c1"># Type checking</span>
+<a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>src/forge/
 </code></pre></div>
 <p>The pre-existing failures in <code>tests/flows/status_transitions/</code> and a few other files are known issues unrelated to current work — ignore them.</p>
 <hr />
 <h2 id="6-testing-with-payloads">6. Testing with Payloads<a class="headerlink" href="#6-testing-with-payloads" title="Permanent link">&para;</a></h2>
 <p>Sample Jira webhook payloads live in <code>tests/payloads/</code>. They simulate the full feature workflow from creation to task approval.</p>
 <h3 id="endpoint">Endpoint<a class="headerlink" href="#endpoint" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>POST http://localhost:8000/api/v1/webhooks/jira
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>Content-Type: application/json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>POST http://localhost:8000/api/v1/webhooks/jira
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>Content-Type: application/json
 </code></pre></div>
 <h3 id="complete-feature-workflow-sequence">Complete feature workflow sequence<a class="headerlink" href="#complete-feature-workflow-sequence" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="c1"># 1. Create a feature ticket → Forge generates PRD</span>
-<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/01-feature-created.json
-<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>
-<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="c1"># 2. Request PRD revision (comment with feedback)</span>
-<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/02-prd-revision-requested.json
-<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>
-<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="c1"># 3. Approve PRD → Forge generates spec</span>
-<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/03-prd-approved.json
-<a id="__codelineno-17-15" name="__codelineno-17-15" href="#__codelineno-17-15"></a>
-<a id="__codelineno-17-16" name="__codelineno-17-16" href="#__codelineno-17-16"></a><span class="c1"># 4–9. Continue: spec, plan, tasks (same pattern)</span>
-<a id="__codelineno-17-17" name="__codelineno-17-17" href="#__codelineno-17-17"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-18" name="__codelineno-17-18" href="#__codelineno-17-18"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-19" name="__codelineno-17-19" href="#__codelineno-17-19"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/05-spec-approved.json
-<a id="__codelineno-17-20" name="__codelineno-17-20" href="#__codelineno-17-20"></a>
-<a id="__codelineno-17-21" name="__codelineno-17-21" href="#__codelineno-17-21"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-22" name="__codelineno-17-22" href="#__codelineno-17-22"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-23" name="__codelineno-17-23" href="#__codelineno-17-23"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/07-plan-approved.json
-<a id="__codelineno-17-24" name="__codelineno-17-24" href="#__codelineno-17-24"></a>
-<a id="__codelineno-17-25" name="__codelineno-17-25" href="#__codelineno-17-25"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-26" name="__codelineno-17-26" href="#__codelineno-17-26"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-17-27" name="__codelineno-17-27" href="#__codelineno-17-27"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/09-task-approved.json
-<a id="__codelineno-17-28" name="__codelineno-17-28" href="#__codelineno-17-28"></a><span class="c1"># → Implementation starts</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># 1. Create a feature ticket → Forge generates PRD</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/01-feature-created.json
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="c1"># 2. Request PRD revision (comment with feedback)</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/02-prd-revision-requested.json
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>
+<a id="__codelineno-18-11" name="__codelineno-18-11" href="#__codelineno-18-11"></a><span class="c1"># 3. Approve PRD → Forge generates spec</span>
+<a id="__codelineno-18-12" name="__codelineno-18-12" href="#__codelineno-18-12"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-13" name="__codelineno-18-13" href="#__codelineno-18-13"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-14" name="__codelineno-18-14" href="#__codelineno-18-14"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/03-prd-approved.json
+<a id="__codelineno-18-15" name="__codelineno-18-15" href="#__codelineno-18-15"></a>
+<a id="__codelineno-18-16" name="__codelineno-18-16" href="#__codelineno-18-16"></a><span class="c1"># 4–9. Continue: spec, plan, tasks (same pattern)</span>
+<a id="__codelineno-18-17" name="__codelineno-18-17" href="#__codelineno-18-17"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-18" name="__codelineno-18-18" href="#__codelineno-18-18"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-19" name="__codelineno-18-19" href="#__codelineno-18-19"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/05-spec-approved.json
+<a id="__codelineno-18-20" name="__codelineno-18-20" href="#__codelineno-18-20"></a>
+<a id="__codelineno-18-21" name="__codelineno-18-21" href="#__codelineno-18-21"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-22" name="__codelineno-18-22" href="#__codelineno-18-22"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-23" name="__codelineno-18-23" href="#__codelineno-18-23"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/07-plan-approved.json
+<a id="__codelineno-18-24" name="__codelineno-18-24" href="#__codelineno-18-24"></a>
+<a id="__codelineno-18-25" name="__codelineno-18-25" href="#__codelineno-18-25"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-26" name="__codelineno-18-26" href="#__codelineno-18-26"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-18-27" name="__codelineno-18-27" href="#__codelineno-18-27"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/09-task-approved.json
+<a id="__codelineno-18-28" name="__codelineno-18-28" href="#__codelineno-18-28"></a><span class="c1"># → Implementation starts</span>
 </code></pre></div>
 <h3 id="qa-mode-ask-without-triggering-regeneration">Q&amp;A mode (ask without triggering regeneration)<a class="headerlink" href="#qa-mode-ask-without-triggering-regeneration" title="Permanent link">&para;</a></h3>
 <p>Comments starting with <code>?</code> or <code>@forge ask</code> ask a question instead of requesting a revision:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Ask about the PRD</span>
-<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/10-prd-question.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># Ask about the PRD</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/10-prd-question.json
 </code></pre></div>
 <p>Supported prefixes (case-insensitive):
 - <code>?Why did you choose REST?</code>
 - <code>@forge ask explain the auth approach</code></p>
 <h3 id="editing-ticket-keys-in-payloads">Editing ticket keys in payloads<a class="headerlink" href="#editing-ticket-keys-in-payloads" title="Permanent link">&para;</a></h3>
 <p>The payloads use <code>TEST-123</code> as a placeholder. Replace it with your actual ticket:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>sed<span class="w"> </span><span class="s1">&#39;s/TEST-123/AISOS-999/g&#39;</span><span class="w"> </span>tests/payloads/01-feature-created.json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="w">  </span>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="w">  </span>-d<span class="w"> </span>@-
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>sed<span class="w"> </span><span class="s1">&#39;s/TEST-123/AISOS-999/g&#39;</span><span class="w"> </span>tests/payloads/01-feature-created.json<span class="w"> </span><span class="p">|</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">  </span>-d<span class="w"> </span>@-
 </code></pre></div>
 <h3 id="bug-workflow">Bug workflow<a class="headerlink" href="#bug-workflow" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Create a bug → Forge generates RCA</span>
-<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="c1"># (use a payload with issuetype: Bug)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1"># Create a bug → Forge generates RCA</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="c1"># (use a payload with issuetype: Bug)</span>
 </code></pre></div>
 <hr />
 <h2 id="7-github-webhook-testing">7. GitHub Webhook Testing<a class="headerlink" href="#7-github-webhook-testing" title="Permanent link">&para;</a></h2>
 <p>GitHub webhooks require the <code>X-GitHub-Event</code> header. Always include it.</p>
 <h3 id="ci-check-result-triggers-ci-evaluation">CI check result (triggers CI evaluation)<a class="headerlink" href="#ci-check-result-triggers-ci-evaluation" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: check_run&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
-<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="s1">    &quot;action&quot;: &quot;completed&quot;,</span>
-<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="s1">    &quot;check_run&quot;: {</span>
-<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="s1">      &quot;status&quot;: &quot;completed&quot;,</span>
-<a id="__codelineno-21-8" name="__codelineno-21-8" href="#__codelineno-21-8"></a><span class="s1">      &quot;conclusion&quot;: &quot;failure&quot;,</span>
-<a id="__codelineno-21-9" name="__codelineno-21-9" href="#__codelineno-21-9"></a><span class="s1">      &quot;head_sha&quot;: &quot;YOUR_HEAD_SHA&quot;,</span>
-<a id="__codelineno-21-10" name="__codelineno-21-10" href="#__codelineno-21-10"></a><span class="s1">      &quot;pull_requests&quot;: [</span>
-<a id="__codelineno-21-11" name="__codelineno-21-11" href="#__codelineno-21-11"></a><span class="s1">        {&quot;number&quot;: 42, &quot;head&quot;: {&quot;ref&quot;: &quot;forge/ticket-key&quot;}}</span>
-<a id="__codelineno-21-12" name="__codelineno-21-12" href="#__codelineno-21-12"></a><span class="s1">      ]</span>
-<a id="__codelineno-21-13" name="__codelineno-21-13" href="#__codelineno-21-13"></a><span class="s1">    },</span>
-<a id="__codelineno-21-14" name="__codelineno-21-14" href="#__codelineno-21-14"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
-<a id="__codelineno-21-15" name="__codelineno-21-15" href="#__codelineno-21-15"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;your-username&quot;}</span>
-<a id="__codelineno-21-16" name="__codelineno-21-16" href="#__codelineno-21-16"></a><span class="s1">  }&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: check_run&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<a id="__codelineno-22-5" name="__codelineno-22-5" href="#__codelineno-22-5"></a><span class="s1">    &quot;action&quot;: &quot;completed&quot;,</span>
+<a id="__codelineno-22-6" name="__codelineno-22-6" href="#__codelineno-22-6"></a><span class="s1">    &quot;check_run&quot;: {</span>
+<a id="__codelineno-22-7" name="__codelineno-22-7" href="#__codelineno-22-7"></a><span class="s1">      &quot;status&quot;: &quot;completed&quot;,</span>
+<a id="__codelineno-22-8" name="__codelineno-22-8" href="#__codelineno-22-8"></a><span class="s1">      &quot;conclusion&quot;: &quot;failure&quot;,</span>
+<a id="__codelineno-22-9" name="__codelineno-22-9" href="#__codelineno-22-9"></a><span class="s1">      &quot;head_sha&quot;: &quot;YOUR_HEAD_SHA&quot;,</span>
+<a id="__codelineno-22-10" name="__codelineno-22-10" href="#__codelineno-22-10"></a><span class="s1">      &quot;pull_requests&quot;: [</span>
+<a id="__codelineno-22-11" name="__codelineno-22-11" href="#__codelineno-22-11"></a><span class="s1">        {&quot;number&quot;: 42, &quot;head&quot;: {&quot;ref&quot;: &quot;forge/ticket-key&quot;}}</span>
+<a id="__codelineno-22-12" name="__codelineno-22-12" href="#__codelineno-22-12"></a><span class="s1">      ]</span>
+<a id="__codelineno-22-13" name="__codelineno-22-13" href="#__codelineno-22-13"></a><span class="s1">    },</span>
+<a id="__codelineno-22-14" name="__codelineno-22-14" href="#__codelineno-22-14"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
+<a id="__codelineno-22-15" name="__codelineno-22-15" href="#__codelineno-22-15"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;your-username&quot;}</span>
+<a id="__codelineno-22-16" name="__codelineno-22-16" href="#__codelineno-22-16"></a><span class="s1">  }&#39;</span>
 </code></pre></div>
 <p>Get the current head SHA for a PR:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>gh<span class="w"> </span>pr<span class="w"> </span>view<span class="w"> </span><span class="m">42</span><span class="w"> </span>--repo<span class="w"> </span>org/repo<span class="w"> </span>--json<span class="w"> </span>headRefOid,headRefName
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>gh<span class="w"> </span>pr<span class="w"> </span>view<span class="w"> </span><span class="m">42</span><span class="w"> </span>--repo<span class="w"> </span>org/repo<span class="w"> </span>--json<span class="w"> </span>headRefOid,headRefName
 </code></pre></div></p>
 <h3 id="ci-gate-skip-skip-a-failing-check-by-name">CI gate skip (skip a failing check by name)<a class="headerlink" href="#ci-gate-skip-skip-a-failing-check-by-name" title="Permanent link">&para;</a></h3>
 <p>Post this as a PR comment:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: issue_comment&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
-<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="s1">    &quot;action&quot;: &quot;created&quot;,</span>
-<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="s1">    &quot;issue&quot;: {</span>
-<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a><span class="s1">      &quot;number&quot;: 42,</span>
-<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Your PR title&quot;,</span>
-<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="s1">      &quot;pull_request&quot;: {&quot;url&quot;: &quot;https://api.github.com/repos/org/repo/pulls/42&quot;}</span>
-<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a><span class="s1">    },</span>
-<a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a><span class="s1">    &quot;comment&quot;: {&quot;body&quot;: &quot;/forge skip-gate e2e-openstack&quot;},</span>
-<a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
-<a id="__codelineno-23-13" name="__codelineno-23-13" href="#__codelineno-23-13"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;your-username&quot;}</span>
-<a id="__codelineno-23-14" name="__codelineno-23-14" href="#__codelineno-23-14"></a><span class="s1">  }&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: issue_comment&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="s1">    &quot;action&quot;: &quot;created&quot;,</span>
+<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="s1">    &quot;issue&quot;: {</span>
+<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="s1">      &quot;number&quot;: 42,</span>
+<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Your PR title&quot;,</span>
+<a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a><span class="s1">      &quot;pull_request&quot;: {&quot;url&quot;: &quot;https://api.github.com/repos/org/repo/pulls/42&quot;}</span>
+<a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a><span class="s1">    },</span>
+<a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a><span class="s1">    &quot;comment&quot;: {&quot;body&quot;: &quot;/forge skip-gate e2e-openstack&quot;},</span>
+<a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
+<a id="__codelineno-24-13" name="__codelineno-24-13" href="#__codelineno-24-13"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;your-username&quot;}</span>
+<a id="__codelineno-24-14" name="__codelineno-24-14" href="#__codelineno-24-14"></a><span class="s1">  }&#39;</span>
 </code></pre></div>
 <p>To remove a skip: change <code>skip-gate</code> to <code>unskip-gate</code>.</p>
 <p>The check name is matched as a <strong>case-insensitive substring</strong> — <code>e2e-openstack</code> skips any check whose name contains that string.</p>
 <h3 id="pr-review-triggers-human-review-gate">PR review (triggers human review gate)<a class="headerlink" href="#pr-review-triggers-human-review-gate" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># Approved review → advances to complete_tasks</span>
-<a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: pull_request_review&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
-<a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a><span class="s1">    &quot;action&quot;: &quot;submitted&quot;,</span>
-<a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="s1">    &quot;review&quot;: {</span>
-<a id="__codelineno-24-8" name="__codelineno-24-8" href="#__codelineno-24-8"></a><span class="s1">      &quot;state&quot;: &quot;approved&quot;,</span>
-<a id="__codelineno-24-9" name="__codelineno-24-9" href="#__codelineno-24-9"></a><span class="s1">      &quot;body&quot;: &quot;LGTM&quot;,</span>
-<a id="__codelineno-24-10" name="__codelineno-24-10" href="#__codelineno-24-10"></a><span class="s1">      &quot;commit_id&quot;: &quot;YOUR_HEAD_SHA&quot;</span>
-<a id="__codelineno-24-11" name="__codelineno-24-11" href="#__codelineno-24-11"></a><span class="s1">    },</span>
-<a id="__codelineno-24-12" name="__codelineno-24-12" href="#__codelineno-24-12"></a><span class="s1">    &quot;pull_request&quot;: {</span>
-<a id="__codelineno-24-13" name="__codelineno-24-13" href="#__codelineno-24-13"></a><span class="s1">      &quot;number&quot;: 42,</span>
-<a id="__codelineno-24-14" name="__codelineno-24-14" href="#__codelineno-24-14"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Your PR title&quot;,</span>
-<a id="__codelineno-24-15" name="__codelineno-24-15" href="#__codelineno-24-15"></a><span class="s1">      &quot;head&quot;: {&quot;ref&quot;: &quot;forge/ticket-123&quot;, &quot;sha&quot;: &quot;YOUR_HEAD_SHA&quot;},</span>
-<a id="__codelineno-24-16" name="__codelineno-24-16" href="#__codelineno-24-16"></a><span class="s1">      &quot;state&quot;: &quot;open&quot;</span>
-<a id="__codelineno-24-17" name="__codelineno-24-17" href="#__codelineno-24-17"></a><span class="s1">    },</span>
-<a id="__codelineno-24-18" name="__codelineno-24-18" href="#__codelineno-24-18"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
-<a id="__codelineno-24-19" name="__codelineno-24-19" href="#__codelineno-24-19"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;your-username&quot;}</span>
-<a id="__codelineno-24-20" name="__codelineno-24-20" href="#__codelineno-24-20"></a><span class="s1">  }&#39;</span>
-<a id="__codelineno-24-21" name="__codelineno-24-21" href="#__codelineno-24-21"></a>
-<a id="__codelineno-24-22" name="__codelineno-24-22" href="#__codelineno-24-22"></a><span class="c1"># Changes requested / comment → triggers implement_review</span>
-<a id="__codelineno-24-23" name="__codelineno-24-23" href="#__codelineno-24-23"></a><span class="c1"># Same payload but: &quot;state&quot;: &quot;changes_requested&quot; or &quot;state&quot;: &quot;commented&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="c1"># Approved review → advances to complete_tasks</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: pull_request_review&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a><span class="s1">    &quot;action&quot;: &quot;submitted&quot;,</span>
+<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a><span class="s1">    &quot;review&quot;: {</span>
+<a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a><span class="s1">      &quot;state&quot;: &quot;approved&quot;,</span>
+<a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a><span class="s1">      &quot;body&quot;: &quot;LGTM&quot;,</span>
+<a id="__codelineno-25-10" name="__codelineno-25-10" href="#__codelineno-25-10"></a><span class="s1">      &quot;commit_id&quot;: &quot;YOUR_HEAD_SHA&quot;</span>
+<a id="__codelineno-25-11" name="__codelineno-25-11" href="#__codelineno-25-11"></a><span class="s1">    },</span>
+<a id="__codelineno-25-12" name="__codelineno-25-12" href="#__codelineno-25-12"></a><span class="s1">    &quot;pull_request&quot;: {</span>
+<a id="__codelineno-25-13" name="__codelineno-25-13" href="#__codelineno-25-13"></a><span class="s1">      &quot;number&quot;: 42,</span>
+<a id="__codelineno-25-14" name="__codelineno-25-14" href="#__codelineno-25-14"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Your PR title&quot;,</span>
+<a id="__codelineno-25-15" name="__codelineno-25-15" href="#__codelineno-25-15"></a><span class="s1">      &quot;head&quot;: {&quot;ref&quot;: &quot;forge/ticket-123&quot;, &quot;sha&quot;: &quot;YOUR_HEAD_SHA&quot;},</span>
+<a id="__codelineno-25-16" name="__codelineno-25-16" href="#__codelineno-25-16"></a><span class="s1">      &quot;state&quot;: &quot;open&quot;</span>
+<a id="__codelineno-25-17" name="__codelineno-25-17" href="#__codelineno-25-17"></a><span class="s1">    },</span>
+<a id="__codelineno-25-18" name="__codelineno-25-18" href="#__codelineno-25-18"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
+<a id="__codelineno-25-19" name="__codelineno-25-19" href="#__codelineno-25-19"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;your-username&quot;}</span>
+<a id="__codelineno-25-20" name="__codelineno-25-20" href="#__codelineno-25-20"></a><span class="s1">  }&#39;</span>
+<a id="__codelineno-25-21" name="__codelineno-25-21" href="#__codelineno-25-21"></a>
+<a id="__codelineno-25-22" name="__codelineno-25-22" href="#__codelineno-25-22"></a><span class="c1"># Changes requested / comment → triggers implement_review</span>
+<a id="__codelineno-25-23" name="__codelineno-25-23" href="#__codelineno-25-23"></a><span class="c1"># Same payload but: &quot;state&quot;: &quot;changes_requested&quot; or &quot;state&quot;: &quot;commented&quot;</span>
 </code></pre></div>
 <blockquote>
 <p><strong>Note:</strong> Comments (<code>state: "commented"</code>) are treated as changes_requested — if your review has comments, Forge will address them.</p>
@@ -2905,51 +2948,55 @@ If not configured, Forge will block the workflow and post detailed instructions 
 <td>Prometheus UI</td>
 <td><code>http://localhost:9092</code></td>
 </tr>
+<tr>
+<td>Grafana dashboards</td>
+<td><code>http://localhost:3010</code></td>
+</tr>
 </tbody>
 </table>
 <h3 id="key-metrics-to-watch">Key metrics to watch<a class="headerlink" href="#key-metrics-to-watch" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a># Workflow throughput
-<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>forge_workflows_started_total
-<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>forge_workflows_completed_total
-<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>forge_workflows_failed_total
-<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>
-<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a># CI fixing
-<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a>forge_ci_fix_attempts_total
-<a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a>
-<a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a># Agent performance
-<a id="__codelineno-25-10" name="__codelineno-25-10" href="#__codelineno-25-10"></a>forge_agent_duration_seconds     # histogram of agent execution time
-<a id="__codelineno-25-11" name="__codelineno-25-11" href="#__codelineno-25-11"></a>forge_phase_duration_seconds     # time per workflow phase
-<a id="__codelineno-25-12" name="__codelineno-25-12" href="#__codelineno-25-12"></a>
-<a id="__codelineno-25-13" name="__codelineno-25-13" href="#__codelineno-25-13"></a># Webhook health
-<a id="__codelineno-25-14" name="__codelineno-25-14" href="#__codelineno-25-14"></a>forge_webhooks_received_total
-<a id="__codelineno-25-15" name="__codelineno-25-15" href="#__codelineno-25-15"></a>forge_webhooks_processed_total
-<a id="__codelineno-25-16" name="__codelineno-25-16" href="#__codelineno-25-16"></a>forge_webhooks_failed_total
-<a id="__codelineno-25-17" name="__codelineno-25-17" href="#__codelineno-25-17"></a>
-<a id="__codelineno-25-18" name="__codelineno-25-18" href="#__codelineno-25-18"></a># External API latency
-<a id="__codelineno-25-19" name="__codelineno-25-19" href="#__codelineno-25-19"></a>forge_external_api_latency_seconds{service=&quot;jira&quot;}
-<a id="__codelineno-25-20" name="__codelineno-25-20" href="#__codelineno-25-20"></a>forge_external_api_latency_seconds{service=&quot;github&quot;}
-<a id="__codelineno-25-21" name="__codelineno-25-21" href="#__codelineno-25-21"></a>forge_external_api_latency_seconds{service=&quot;claude&quot;}
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a># Workflow throughput
+<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a>forge_workflows_started_total
+<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a>forge_workflows_completed_total
+<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>forge_workflows_failed_total
+<a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a>
+<a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a># CI fixing
+<a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a>forge_ci_fix_attempts_total
+<a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a>
+<a id="__codelineno-26-9" name="__codelineno-26-9" href="#__codelineno-26-9"></a># Agent performance
+<a id="__codelineno-26-10" name="__codelineno-26-10" href="#__codelineno-26-10"></a>forge_agent_duration_seconds     # histogram of agent execution time
+<a id="__codelineno-26-11" name="__codelineno-26-11" href="#__codelineno-26-11"></a>forge_phase_duration_seconds     # time per workflow phase
+<a id="__codelineno-26-12" name="__codelineno-26-12" href="#__codelineno-26-12"></a>
+<a id="__codelineno-26-13" name="__codelineno-26-13" href="#__codelineno-26-13"></a># Webhook health
+<a id="__codelineno-26-14" name="__codelineno-26-14" href="#__codelineno-26-14"></a>forge_webhooks_received_total
+<a id="__codelineno-26-15" name="__codelineno-26-15" href="#__codelineno-26-15"></a>forge_webhooks_processed_total
+<a id="__codelineno-26-16" name="__codelineno-26-16" href="#__codelineno-26-16"></a>forge_webhooks_failed_total
+<a id="__codelineno-26-17" name="__codelineno-26-17" href="#__codelineno-26-17"></a>
+<a id="__codelineno-26-18" name="__codelineno-26-18" href="#__codelineno-26-18"></a># External API latency
+<a id="__codelineno-26-19" name="__codelineno-26-19" href="#__codelineno-26-19"></a>forge_external_api_latency_seconds{service=&quot;jira&quot;}
+<a id="__codelineno-26-20" name="__codelineno-26-20" href="#__codelineno-26-20"></a>forge_external_api_latency_seconds{service=&quot;github&quot;}
+<a id="__codelineno-26-21" name="__codelineno-26-21" href="#__codelineno-26-21"></a>forge_external_api_latency_seconds{service=&quot;claude&quot;}
 </code></pre></div>
 <h3 id="adding-worker-metrics-to-prometheus">Adding worker metrics to Prometheus<a class="headerlink" href="#adding-worker-metrics-to-prometheus" title="Permanent link">&para;</a></h3>
 <p>The default <code>prometheus.yml</code> only scrapes the API server. Add this to scrape the worker:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="c1"># prometheus.yml</span>
-<a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a><span class="nt">scrape_configs</span><span class="p">:</span>
-<a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">job_name</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;forge-worker&#39;</span>
-<a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a><span class="w">    </span><span class="nt">static_configs</span><span class="p">:</span>
-<a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">targets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;host.docker.internal:8001&#39;</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># on macOS/Windows</span>
-<a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a><span class="w">      </span><span class="c1"># or on Linux:</span>
-<a id="__codelineno-26-7" name="__codelineno-26-7" href="#__codelineno-26-7"></a><span class="w">      </span><span class="c1"># - targets: [&#39;172.17.0.1:8001&#39;]           # docker bridge gateway</span>
-<a id="__codelineno-26-8" name="__codelineno-26-8" href="#__codelineno-26-8"></a><span class="w">    </span><span class="nt">metrics_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/metrics</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="c1"># prometheus.yml</span>
+<a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="nt">scrape_configs</span><span class="p">:</span>
+<a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">job_name</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;forge-worker&#39;</span>
+<a id="__codelineno-27-4" name="__codelineno-27-4" href="#__codelineno-27-4"></a><span class="w">    </span><span class="nt">static_configs</span><span class="p">:</span>
+<a id="__codelineno-27-5" name="__codelineno-27-5" href="#__codelineno-27-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">targets</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&#39;host.docker.internal:8001&#39;</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># on macOS/Windows</span>
+<a id="__codelineno-27-6" name="__codelineno-27-6" href="#__codelineno-27-6"></a><span class="w">      </span><span class="c1"># or on Linux:</span>
+<a id="__codelineno-27-7" name="__codelineno-27-7" href="#__codelineno-27-7"></a><span class="w">      </span><span class="c1"># - targets: [&#39;172.17.0.1:8001&#39;]           # docker bridge gateway</span>
+<a id="__codelineno-27-8" name="__codelineno-27-8" href="#__codelineno-27-8"></a><span class="w">    </span><span class="nt">metrics_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/metrics</span>
 </code></pre></div>
 <p>Reload Prometheus after editing:
-<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:9092/-/reload
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:9092/-/reload
 </code></pre></div></p>
 <h3 id="quick-spot-check">Quick spot check<a class="headerlink" href="#quick-spot-check" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="c1"># Check workflow counts</span>
-<a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8000/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>forge_workflows
-<a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>
-<a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a><span class="c1"># Check if worker is serving metrics</span>
-<a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8001/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>forge_agent
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="c1"># Check workflow counts</span>
+<a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8000/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>forge_workflows
+<a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a>
+<a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a><span class="c1"># Check if worker is serving metrics</span>
+<a id="__codelineno-29-5" name="__codelineno-29-5" href="#__codelineno-29-5"></a>curl<span class="w"> </span>-s<span class="w"> </span>http://localhost:8001/metrics<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>forge_agent
 </code></pre></div>
 <hr />
 <h2 id="9-langfuse-tracing">9. Langfuse Tracing<a class="headerlink" href="#9-langfuse-tracing" title="Permanent link">&para;</a></h2>
@@ -2960,19 +3007,19 @@ If not configured, Forge will block the workflow and post detailed instructions 
 <li>Create a project, get your keys</li>
 <li>Add to <code>.env</code>:</li>
 </ol>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="nv">LANGFUSE_ENABLED</span><span class="o">=</span><span class="nb">true</span>
-<a id="__codelineno-29-2" name="__codelineno-29-2" href="#__codelineno-29-2"></a><span class="nv">LANGFUSE_PUBLIC_KEY</span><span class="o">=</span>pk-lf-...
-<a id="__codelineno-29-3" name="__codelineno-29-3" href="#__codelineno-29-3"></a><span class="nv">LANGFUSE_SECRET_KEY</span><span class="o">=</span>sk-lf-...
-<a id="__codelineno-29-4" name="__codelineno-29-4" href="#__codelineno-29-4"></a><span class="nv">LANGFUSE_HOST</span><span class="o">=</span>https://cloud.langfuse.com
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="nv">LANGFUSE_ENABLED</span><span class="o">=</span><span class="nb">true</span>
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="nv">LANGFUSE_PUBLIC_KEY</span><span class="o">=</span>pk-lf-...
+<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a><span class="nv">LANGFUSE_SECRET_KEY</span><span class="o">=</span>sk-lf-...
+<a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a><span class="nv">LANGFUSE_HOST</span><span class="o">=</span>https://cloud.langfuse.com
 </code></pre></div>
 <ol>
 <li>Restart the worker — traces appear in the Langfuse dashboard immediately</li>
 </ol>
 <h3 id="self-hosted-langfuse-optional">Self-hosted Langfuse (optional)<a class="headerlink" href="#self-hosted-langfuse-optional" title="Permanent link">&para;</a></h3>
 <p>Run Langfuse locally with Docker:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/langfuse/langfuse.git
-<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="nb">cd</span><span class="w"> </span>langfuse
-<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/langfuse/langfuse.git
+<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="nb">cd</span><span class="w"> </span>langfuse
+<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>-d
 </code></pre></div>
 <p>Then set <code>LANGFUSE_HOST=http://localhost:3000</code> in <code>.env</code>.</p>
 <h3 id="what-gets-traced">What gets traced<a class="headerlink" href="#what-gets-traced" title="Permanent link">&para;</a></h3>
@@ -2983,58 +3030,129 @@ If not configured, Forge will block the workflow and post detailed instructions 
 <li>CI fix analysis and implementation calls</li>
 <li>All calls have the ticket key, task type, and token counts attached</li>
 </ul>
+<h3 id="trace-tags-and-metadata">Trace tags and metadata<a class="headerlink" href="#trace-tags-and-metadata" title="Permanent link">&para;</a></h3>
+<p>You can attach workflow context to every Langfuse trace as tags or metadata, making it easy to filter traces by ticket type, CI status, event source, and so on.</p>
+<p>Configure the fields you want via two comma-separated env vars:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="c1"># Fields to attach as searchable Langfuse tags.</span>
+<a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a><span class="c1"># Keep these enabled for Grafana dashboards.</span>
+<a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a><span class="nv">LANGFUSE_TRACE_TAGS</span><span class="o">=</span>ticket_key,ticket_type,project_id,workflow_step,repo,pr_number,ci_status,event_source,event_type,llm_model
+<a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>
+<a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a><span class="c1"># Fields to attach as Langfuse trace metadata.</span>
+<a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a><span class="c1"># Grafana ClickHouse queries require project_id, ticket_type, workflow_step, and ticket_key.</span>
+<a id="__codelineno-32-7" name="__codelineno-32-7" href="#__codelineno-32-7"></a><span class="nv">LANGFUSE_TRACE_METADATA</span><span class="o">=</span>ticket_key,ticket_type,project_id,workflow_step,repo,pr_number,ci_status,event_source,event_type,retry_count,system_prompt_length,llm_model
+</code></pre></div>
+<p>Available field names for both settings:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ticket_key</code></td>
+<td>Jira ticket key (e.g. <code>PROJ-123</code>)</td>
+</tr>
+<tr>
+<td><code>ticket_type</code></td>
+<td>Ticket type (<code>Feature</code>, <code>Bug</code>, etc.)</td>
+</tr>
+<tr>
+<td><code>project_id</code></td>
+<td>Jira project ID derived from the ticket key</td>
+</tr>
+<tr>
+<td><code>workflow_step</code></td>
+<td>Name of the workflow node that triggered the call</td>
+</tr>
+<tr>
+<td><code>repo</code></td>
+<td>GitHub repository (<code>owner/repo</code>)</td>
+</tr>
+<tr>
+<td><code>pr_number</code></td>
+<td>Pull request number</td>
+</tr>
+<tr>
+<td><code>ci_status</code></td>
+<td>Last known CI status</td>
+</tr>
+<tr>
+<td><code>event_type</code></td>
+<td>Webhook event type that started the workflow</td>
+</tr>
+<tr>
+<td><code>event_source</code></td>
+<td>Source system (e.g. <code>jira</code>, <code>github</code>)</td>
+</tr>
+<tr>
+<td><code>retry_count</code></td>
+<td>Number of retries so far</td>
+</tr>
+<tr>
+<td><code>system_prompt_length</code></td>
+<td>Length of the system prompt in characters (metadata only)</td>
+</tr>
+<tr>
+<td><code>llm_model</code></td>
+<td>Model used for the call</td>
+</tr>
+</tbody>
+</table>
+<p>Invalid or unknown field names are ignored and logged at <code>WARNING</code> level on startup.</p>
 <h3 id="disabling-tracing">Disabling tracing<a class="headerlink" href="#disabling-tracing" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="nv">LANGFUSE_ENABLED</span><span class="o">=</span><span class="nb">false</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="nv">LANGFUSE_ENABLED</span><span class="o">=</span><span class="nb">false</span>
 </code></pre></div>
 <hr />
 <h2 id="10-debugging-tools">10. Debugging Tools<a class="headerlink" href="#10-debugging-tools" title="Permanent link">&para;</a></h2>
 <h3 id="snapshot-and-restore-a-workflow-checkpoint">Snapshot and restore a workflow checkpoint<a class="headerlink" href="#snapshot-and-restore-a-workflow-checkpoint" title="Permanent link">&para;</a></h3>
 <p>Save the full state of a ticket to a file and restore it later — useful for reproducing bugs, testing recovery paths, or resetting after a bad patch:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="c1"># Save current state (snapshot files go to devtools/snapshots/)</span>
-<a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>snapshot<span class="w"> </span>AISOS-376
-<a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>snapshot<span class="w"> </span>AISOS-376<span class="w"> </span>--label<span class="w"> </span>before-ci-fix
-<a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>
-<a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a><span class="c1"># List saved snapshots for a ticket</span>
-<a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>list<span class="w"> </span>AISOS-376
-<a id="__codelineno-32-7" name="__codelineno-32-7" href="#__codelineno-32-7"></a>
-<a id="__codelineno-32-8" name="__codelineno-32-8" href="#__codelineno-32-8"></a><span class="c1"># Preview what a restore would change (dry-run, default)</span>
-<a id="__codelineno-32-9" name="__codelineno-32-9" href="#__codelineno-32-9"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>restore<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-32-10" name="__codelineno-32-10" href="#__codelineno-32-10"></a><span class="w">  </span>devtools/snapshots/AISOS-376_20260505_143201_before-ci-fix.json
-<a id="__codelineno-32-11" name="__codelineno-32-11" href="#__codelineno-32-11"></a>
-<a id="__codelineno-32-12" name="__codelineno-32-12" href="#__codelineno-32-12"></a><span class="c1"># Actually apply the restore</span>
-<a id="__codelineno-32-13" name="__codelineno-32-13" href="#__codelineno-32-13"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>restore<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-32-14" name="__codelineno-32-14" href="#__codelineno-32-14"></a><span class="w">  </span>devtools/snapshots/AISOS-376_20260505_143201_before-ci-fix.json<span class="w"> </span>--apply
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="c1"># Save current state (snapshot files go to devtools/snapshots/)</span>
+<a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>snapshot<span class="w"> </span>AISOS-376
+<a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>snapshot<span class="w"> </span>AISOS-376<span class="w"> </span>--label<span class="w"> </span>before-ci-fix
+<a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>
+<a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="c1"># List saved snapshots for a ticket</span>
+<a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>list<span class="w"> </span>AISOS-376
+<a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a>
+<a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a><span class="c1"># Preview what a restore would change (dry-run, default)</span>
+<a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>restore<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a><span class="w">  </span>devtools/snapshots/AISOS-376_20260505_143201_before-ci-fix.json
+<a id="__codelineno-34-11" name="__codelineno-34-11" href="#__codelineno-34-11"></a>
+<a id="__codelineno-34-12" name="__codelineno-34-12" href="#__codelineno-34-12"></a><span class="c1"># Actually apply the restore</span>
+<a id="__codelineno-34-13" name="__codelineno-34-13" href="#__codelineno-34-13"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/snapshot_checkpoint.py<span class="w"> </span>restore<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-34-14" name="__codelineno-34-14" href="#__codelineno-34-14"></a><span class="w">  </span>devtools/snapshots/AISOS-376_20260505_143201_before-ci-fix.json<span class="w"> </span>--apply
 </code></pre></div>
 <p>Snapshot files are saved to <code>devtools/snapshots/</code> and are gitignored — they stay local.</p>
 <hr />
 <h3 id="patch-a-workflow-checkpoint">Patch a workflow checkpoint<a class="headerlink" href="#patch-a-workflow-checkpoint" title="Permanent link">&para;</a></h3>
 <p>Directly edit Redis state for a ticket — useful when a workflow gets stuck due to a bug or incorrect state:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>&lt;ticket-key&gt;<span class="w"> </span>&lt;<span class="nv">field</span><span class="o">=</span>value&gt;<span class="w"> </span><span class="o">[</span><span class="nv">field</span><span class="o">=</span>value<span class="w"> </span>...<span class="o">]</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>&lt;ticket-key&gt;<span class="w"> </span>&lt;<span class="nv">field</span><span class="o">=</span>value&gt;<span class="w"> </span><span class="o">[</span><span class="nv">field</span><span class="o">=</span>value<span class="w"> </span>...<span class="o">]</span>
 </code></pre></div>
 <p><strong>Examples:</strong></p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="c1"># Reset a stuck workflow to ci_evaluator</span>
-<a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a><span class="w">  </span><span class="nv">current_node</span><span class="o">=</span>ci_evaluator<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a><span class="w">  </span><span class="nv">is_paused</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="w">  </span><span class="nv">is_blocked</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a><span class="w">  </span><span class="nv">last_error</span><span class="o">=</span>null<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a><span class="w">  </span><span class="nv">ci_fix_attempts</span><span class="o">=</span><span class="m">0</span>
-<a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>
-<a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a><span class="c1"># Resume at wait_for_ci_gate after patching from escalated state</span>
-<a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-11" name="__codelineno-34-11" href="#__codelineno-34-11"></a><span class="w">  </span><span class="nv">current_node</span><span class="o">=</span>wait_for_ci_gate<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-12" name="__codelineno-34-12" href="#__codelineno-34-12"></a><span class="w">  </span><span class="nv">is_paused</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-13" name="__codelineno-34-13" href="#__codelineno-34-13"></a><span class="w">  </span><span class="nv">is_blocked</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-14" name="__codelineno-34-14" href="#__codelineno-34-14"></a><span class="w">  </span><span class="nv">last_error</span><span class="o">=</span>null
-<a id="__codelineno-34-15" name="__codelineno-34-15" href="#__codelineno-34-15"></a>
-<a id="__codelineno-34-16" name="__codelineno-34-16" href="#__codelineno-34-16"></a><span class="c1"># Skip e2e checks for a ticket</span>
-<a id="__codelineno-34-17" name="__codelineno-34-17" href="#__codelineno-34-17"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-18" name="__codelineno-34-18" href="#__codelineno-34-18"></a><span class="w">  </span><span class="s1">&#39;ci_skipped_checks=[&quot;e2e-openstack&quot;]&#39;</span>
-<a id="__codelineno-34-19" name="__codelineno-34-19" href="#__codelineno-34-19"></a>
-<a id="__codelineno-34-20" name="__codelineno-34-20" href="#__codelineno-34-20"></a><span class="c1"># Add new state fields introduced by a code change</span>
-<a id="__codelineno-34-21" name="__codelineno-34-21" href="#__codelineno-34-21"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-22" name="__codelineno-34-22" href="#__codelineno-34-22"></a><span class="w">  </span><span class="s1">&#39;ci_skipped_checks=[]&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-34-23" name="__codelineno-34-23" href="#__codelineno-34-23"></a><span class="w">  </span><span class="s1">&#39;review_comments=[]&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="c1"># Reset a stuck workflow to ci_evaluator</span>
+<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a><span class="w">  </span><span class="nv">current_node</span><span class="o">=</span>ci_evaluator<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a><span class="w">  </span><span class="nv">is_paused</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a><span class="w">  </span><span class="nv">is_blocked</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a><span class="w">  </span><span class="nv">last_error</span><span class="o">=</span>null<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a><span class="w">  </span><span class="nv">ci_fix_attempts</span><span class="o">=</span><span class="m">0</span>
+<a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a>
+<a id="__codelineno-36-9" name="__codelineno-36-9" href="#__codelineno-36-9"></a><span class="c1"># Resume at wait_for_ci_gate after patching from escalated state</span>
+<a id="__codelineno-36-10" name="__codelineno-36-10" href="#__codelineno-36-10"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-11" name="__codelineno-36-11" href="#__codelineno-36-11"></a><span class="w">  </span><span class="nv">current_node</span><span class="o">=</span>wait_for_ci_gate<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-12" name="__codelineno-36-12" href="#__codelineno-36-12"></a><span class="w">  </span><span class="nv">is_paused</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-13" name="__codelineno-36-13" href="#__codelineno-36-13"></a><span class="w">  </span><span class="nv">is_blocked</span><span class="o">=</span><span class="nb">false</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-14" name="__codelineno-36-14" href="#__codelineno-36-14"></a><span class="w">  </span><span class="nv">last_error</span><span class="o">=</span>null
+<a id="__codelineno-36-15" name="__codelineno-36-15" href="#__codelineno-36-15"></a>
+<a id="__codelineno-36-16" name="__codelineno-36-16" href="#__codelineno-36-16"></a><span class="c1"># Skip e2e checks for a ticket</span>
+<a id="__codelineno-36-17" name="__codelineno-36-17" href="#__codelineno-36-17"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-18" name="__codelineno-36-18" href="#__codelineno-36-18"></a><span class="w">  </span><span class="s1">&#39;ci_skipped_checks=[&quot;e2e-openstack&quot;]&#39;</span>
+<a id="__codelineno-36-19" name="__codelineno-36-19" href="#__codelineno-36-19"></a>
+<a id="__codelineno-36-20" name="__codelineno-36-20" href="#__codelineno-36-20"></a><span class="c1"># Add new state fields introduced by a code change</span>
+<a id="__codelineno-36-21" name="__codelineno-36-21" href="#__codelineno-36-21"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>AISOS-376<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-22" name="__codelineno-36-22" href="#__codelineno-36-22"></a><span class="w">  </span><span class="s1">&#39;ci_skipped_checks=[]&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-36-23" name="__codelineno-36-23" href="#__codelineno-36-23"></a><span class="w">  </span><span class="s1">&#39;review_comments=[]&#39;</span>
 </code></pre></div>
 <p><strong>JSON parsing:</strong> values are parsed as JSON if possible, otherwise as strings. Use quotes for lists and booleans: <code>true</code>/<code>false</code>/<code>null</code> are parsed correctly.</p>
 <h3 id="common-checkpoint-patches">Common checkpoint patches<a class="headerlink" href="#common-checkpoint-patches" title="Permanent link">&para;</a></h3>
@@ -3076,95 +3194,95 @@ If not configured, Forge will block the workflow and post detailed instructions 
 - Resume from the node that failed</p>
 <h3 id="worker-logs">Worker logs<a class="headerlink" href="#worker-logs" title="Permanent link">&para;</a></h3>
 <p>The worker logs to stdout. Useful log entries to grep for:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="c1"># Watch for a specific ticket</span>
-<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>AISOS-376
-<a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a>
-<a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a><span class="c1"># See what signals are detected</span>
-<a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;Detected&quot;</span>
-<a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>
-<a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a><span class="c1"># See CI evaluation results</span>
-<a id="__codelineno-35-8" name="__codelineno-35-8" href="#__codelineno-35-8"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;CI&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a><span class="c1"># Watch for a specific ticket</span>
+<a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>AISOS-376
+<a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>
+<a id="__codelineno-37-4" name="__codelineno-37-4" href="#__codelineno-37-4"></a><span class="c1"># See what signals are detected</span>
+<a id="__codelineno-37-5" name="__codelineno-37-5" href="#__codelineno-37-5"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;Detected&quot;</span>
+<a id="__codelineno-37-6" name="__codelineno-37-6" href="#__codelineno-37-6"></a>
+<a id="__codelineno-37-7" name="__codelineno-37-7" href="#__codelineno-37-7"></a><span class="c1"># See CI evaluation results</span>
+<a id="__codelineno-37-8" name="__codelineno-37-8" href="#__codelineno-37-8"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;CI&quot;</span>
 </code></pre></div>
 <h3 id="check-redis-state-directly">Check Redis state directly<a class="headerlink" href="#check-redis-state-directly" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="c1"># Connect to Redis</span>
-<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>redis-cli<span class="w"> </span>-p<span class="w"> </span><span class="m">6380</span>
-<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>
-<a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a><span class="c1"># List all checkpoints</span>
-<a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>KEYS<span class="w"> </span>checkpoint:*
-<a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a>
-<a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a><span class="c1"># Get a specific checkpoint (LangGraph stores them as JSON)</span>
-<a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a>GET<span class="w"> </span>checkpoint:AISOS-376:...
+<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="c1"># Connect to Redis</span>
+<a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>redis-cli<span class="w"> </span>-p<span class="w"> </span><span class="m">6380</span>
+<a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>
+<a id="__codelineno-38-4" name="__codelineno-38-4" href="#__codelineno-38-4"></a><span class="c1"># List all checkpoints</span>
+<a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a>KEYS<span class="w"> </span>checkpoint:*
+<a id="__codelineno-38-6" name="__codelineno-38-6" href="#__codelineno-38-6"></a>
+<a id="__codelineno-38-7" name="__codelineno-38-7" href="#__codelineno-38-7"></a><span class="c1"># Get a specific checkpoint (LangGraph stores them as JSON)</span>
+<a id="__codelineno-38-8" name="__codelineno-38-8" href="#__codelineno-38-8"></a>GET<span class="w"> </span>checkpoint:AISOS-376:...
 </code></pre></div>
 <hr />
 <h2 id="11-common-workflows">11. Common Workflows<a class="headerlink" href="#11-common-workflows" title="Permanent link">&para;</a></h2>
 <h3 id="start-a-new-feature-end-to-end-local-test">Start a new feature end-to-end (local test)<a class="headerlink" href="#start-a-new-feature-end-to-end-local-test" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a><span class="c1"># 1. Make sure worker and API are running</span>
-<a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>redis<span class="w"> </span>forge-api<span class="w"> </span>-d
-<a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="p">&amp;</span>
-<a id="__codelineno-37-4" name="__codelineno-37-4" href="#__codelineno-37-4"></a>
-<a id="__codelineno-37-5" name="__codelineno-37-5" href="#__codelineno-37-5"></a><span class="c1"># 2. Create the feature</span>
-<a id="__codelineno-37-6" name="__codelineno-37-6" href="#__codelineno-37-6"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-37-7" name="__codelineno-37-7" href="#__codelineno-37-7"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-37-8" name="__codelineno-37-8" href="#__codelineno-37-8"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/01-feature-created.json
-<a id="__codelineno-37-9" name="__codelineno-37-9" href="#__codelineno-37-9"></a>
-<a id="__codelineno-37-10" name="__codelineno-37-10" href="#__codelineno-37-10"></a><span class="c1"># 3. Watch worker logs, approve each stage as it completes</span>
-<a id="__codelineno-37-11" name="__codelineno-37-11" href="#__codelineno-37-11"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-37-12" name="__codelineno-37-12" href="#__codelineno-37-12"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-37-13" name="__codelineno-37-13" href="#__codelineno-37-13"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/03-prd-approved.json
-<a id="__codelineno-37-14" name="__codelineno-37-14" href="#__codelineno-37-14"></a><span class="c1"># ... and so on through task approval</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="c1"># 1. Make sure worker and API are running</span>
+<a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>redis<span class="w"> </span>forge-api<span class="w"> </span>-d
+<a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="p">&amp;</span>
+<a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a>
+<a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a><span class="c1"># 2. Create the feature</span>
+<a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-39-7" name="__codelineno-39-7" href="#__codelineno-39-7"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-39-8" name="__codelineno-39-8" href="#__codelineno-39-8"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/01-feature-created.json
+<a id="__codelineno-39-9" name="__codelineno-39-9" href="#__codelineno-39-9"></a>
+<a id="__codelineno-39-10" name="__codelineno-39-10" href="#__codelineno-39-10"></a><span class="c1"># 3. Watch worker logs, approve each stage as it completes</span>
+<a id="__codelineno-39-11" name="__codelineno-39-11" href="#__codelineno-39-11"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-39-12" name="__codelineno-39-12" href="#__codelineno-39-12"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-39-13" name="__codelineno-39-13" href="#__codelineno-39-13"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/03-prd-approved.json
+<a id="__codelineno-39-14" name="__codelineno-39-14" href="#__codelineno-39-14"></a><span class="c1"># ... and so on through task approval</span>
 </code></pre></div>
 <h3 id="test-ci-gate-skip">Test CI gate skip<a class="headerlink" href="#test-ci-gate-skip" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="c1"># 1. Get a PR with failing CI checks</span>
-<a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>gh<span class="w"> </span>pr<span class="w"> </span>checks<span class="w"> </span><span class="m">42</span><span class="w"> </span>--repo<span class="w"> </span>org/repo
-<a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>
-<a id="__codelineno-38-4" name="__codelineno-38-4" href="#__codelineno-38-4"></a><span class="c1"># 2. Patch the checkpoint to wait_for_ci_gate if not already there</span>
-<a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>TICKET-123<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-38-6" name="__codelineno-38-6" href="#__codelineno-38-6"></a><span class="w">  </span><span class="nv">current_node</span><span class="o">=</span>wait_for_ci_gate<span class="w"> </span><span class="nv">is_paused</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ci_fix_attempts</span><span class="o">=</span><span class="m">0</span>
-<a id="__codelineno-38-7" name="__codelineno-38-7" href="#__codelineno-38-7"></a>
-<a id="__codelineno-38-8" name="__codelineno-38-8" href="#__codelineno-38-8"></a><span class="c1"># 3. Send the skip-gate command</span>
-<a id="__codelineno-38-9" name="__codelineno-38-9" href="#__codelineno-38-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-38-10" name="__codelineno-38-10" href="#__codelineno-38-10"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-38-11" name="__codelineno-38-11" href="#__codelineno-38-11"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: issue_comment&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-38-12" name="__codelineno-38-12" href="#__codelineno-38-12"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
-<a id="__codelineno-38-13" name="__codelineno-38-13" href="#__codelineno-38-13"></a><span class="s1">    &quot;action&quot;: &quot;created&quot;,</span>
-<a id="__codelineno-38-14" name="__codelineno-38-14" href="#__codelineno-38-14"></a><span class="s1">    &quot;issue&quot;: {</span>
-<a id="__codelineno-38-15" name="__codelineno-38-15" href="#__codelineno-38-15"></a><span class="s1">      &quot;number&quot;: 42,</span>
-<a id="__codelineno-38-16" name="__codelineno-38-16" href="#__codelineno-38-16"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Title&quot;,</span>
-<a id="__codelineno-38-17" name="__codelineno-38-17" href="#__codelineno-38-17"></a><span class="s1">      &quot;pull_request&quot;: {&quot;url&quot;: &quot;https://api.github.com/repos/org/repo/pulls/42&quot;}</span>
-<a id="__codelineno-38-18" name="__codelineno-38-18" href="#__codelineno-38-18"></a><span class="s1">    },</span>
-<a id="__codelineno-38-19" name="__codelineno-38-19" href="#__codelineno-38-19"></a><span class="s1">    &quot;comment&quot;: {&quot;body&quot;: &quot;/forge skip-gate failing-check-name&quot;},</span>
-<a id="__codelineno-38-20" name="__codelineno-38-20" href="#__codelineno-38-20"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
-<a id="__codelineno-38-21" name="__codelineno-38-21" href="#__codelineno-38-21"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;you&quot;}</span>
-<a id="__codelineno-38-22" name="__codelineno-38-22" href="#__codelineno-38-22"></a><span class="s1">  }&#39;</span>
-<a id="__codelineno-38-23" name="__codelineno-38-23" href="#__codelineno-38-23"></a>
-<a id="__codelineno-38-24" name="__codelineno-38-24" href="#__codelineno-38-24"></a><span class="c1"># 4. Send a CI webhook to trigger re-evaluation</span>
-<a id="__codelineno-38-25" name="__codelineno-38-25" href="#__codelineno-38-25"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-38-26" name="__codelineno-38-26" href="#__codelineno-38-26"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-38-27" name="__codelineno-38-27" href="#__codelineno-38-27"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: check_run&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-38-28" name="__codelineno-38-28" href="#__codelineno-38-28"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;action&quot;:&quot;completed&quot;,&quot;check_run&quot;:{&quot;status&quot;:&quot;completed&quot;,&quot;conclusion&quot;:&quot;failure&quot;,&quot;head_sha&quot;:&quot;SHA&quot;,&quot;pull_requests&quot;:[{&quot;number&quot;:42,&quot;head&quot;:{&quot;ref&quot;:&quot;forge/ticket-123&quot;}}]},&quot;repository&quot;:{&quot;full_name&quot;:&quot;org/repo&quot;},&quot;sender&quot;:{&quot;login&quot;:&quot;you&quot;}}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="c1"># 1. Get a PR with failing CI checks</span>
+<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>gh<span class="w"> </span>pr<span class="w"> </span>checks<span class="w"> </span><span class="m">42</span><span class="w"> </span>--repo<span class="w"> </span>org/repo
+<a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a>
+<a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a><span class="c1"># 2. Patch the checkpoint to wait_for_ci_gate if not already there</span>
+<a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>TICKET-123<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a><span class="w">  </span><span class="nv">current_node</span><span class="o">=</span>wait_for_ci_gate<span class="w"> </span><span class="nv">is_paused</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ci_fix_attempts</span><span class="o">=</span><span class="m">0</span>
+<a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a>
+<a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a><span class="c1"># 3. Send the skip-gate command</span>
+<a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: issue_comment&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-12" name="__codelineno-40-12" href="#__codelineno-40-12"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<a id="__codelineno-40-13" name="__codelineno-40-13" href="#__codelineno-40-13"></a><span class="s1">    &quot;action&quot;: &quot;created&quot;,</span>
+<a id="__codelineno-40-14" name="__codelineno-40-14" href="#__codelineno-40-14"></a><span class="s1">    &quot;issue&quot;: {</span>
+<a id="__codelineno-40-15" name="__codelineno-40-15" href="#__codelineno-40-15"></a><span class="s1">      &quot;number&quot;: 42,</span>
+<a id="__codelineno-40-16" name="__codelineno-40-16" href="#__codelineno-40-16"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Title&quot;,</span>
+<a id="__codelineno-40-17" name="__codelineno-40-17" href="#__codelineno-40-17"></a><span class="s1">      &quot;pull_request&quot;: {&quot;url&quot;: &quot;https://api.github.com/repos/org/repo/pulls/42&quot;}</span>
+<a id="__codelineno-40-18" name="__codelineno-40-18" href="#__codelineno-40-18"></a><span class="s1">    },</span>
+<a id="__codelineno-40-19" name="__codelineno-40-19" href="#__codelineno-40-19"></a><span class="s1">    &quot;comment&quot;: {&quot;body&quot;: &quot;/forge skip-gate failing-check-name&quot;},</span>
+<a id="__codelineno-40-20" name="__codelineno-40-20" href="#__codelineno-40-20"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
+<a id="__codelineno-40-21" name="__codelineno-40-21" href="#__codelineno-40-21"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;you&quot;}</span>
+<a id="__codelineno-40-22" name="__codelineno-40-22" href="#__codelineno-40-22"></a><span class="s1">  }&#39;</span>
+<a id="__codelineno-40-23" name="__codelineno-40-23" href="#__codelineno-40-23"></a>
+<a id="__codelineno-40-24" name="__codelineno-40-24" href="#__codelineno-40-24"></a><span class="c1"># 4. Send a CI webhook to trigger re-evaluation</span>
+<a id="__codelineno-40-25" name="__codelineno-40-25" href="#__codelineno-40-25"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-26" name="__codelineno-40-26" href="#__codelineno-40-26"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-27" name="__codelineno-40-27" href="#__codelineno-40-27"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: check_run&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-28" name="__codelineno-40-28" href="#__codelineno-40-28"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;action&quot;:&quot;completed&quot;,&quot;check_run&quot;:{&quot;status&quot;:&quot;completed&quot;,&quot;conclusion&quot;:&quot;failure&quot;,&quot;head_sha&quot;:&quot;SHA&quot;,&quot;pull_requests&quot;:[{&quot;number&quot;:42,&quot;head&quot;:{&quot;ref&quot;:&quot;forge/ticket-123&quot;}}]},&quot;repository&quot;:{&quot;full_name&quot;:&quot;org/repo&quot;},&quot;sender&quot;:{&quot;login&quot;:&quot;you&quot;}}&#39;</span>
 </code></pre></div>
 <h3 id="trigger-the-human-review-flow">Trigger the human review flow<a class="headerlink" href="#trigger-the-human-review-flow" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="c1"># After CI passes, the workflow pauses at human_review_gate.</span>
-<a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a><span class="c1"># Send a review webhook to trigger implement_review:</span>
-<a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: pull_request_review&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
-<a id="__codelineno-39-7" name="__codelineno-39-7" href="#__codelineno-39-7"></a><span class="s1">    &quot;action&quot;: &quot;submitted&quot;,</span>
-<a id="__codelineno-39-8" name="__codelineno-39-8" href="#__codelineno-39-8"></a><span class="s1">    &quot;review&quot;: {</span>
-<a id="__codelineno-39-9" name="__codelineno-39-9" href="#__codelineno-39-9"></a><span class="s1">      &quot;state&quot;: &quot;commented&quot;,</span>
-<a id="__codelineno-39-10" name="__codelineno-39-10" href="#__codelineno-39-10"></a><span class="s1">      &quot;body&quot;: &quot;Please fix the jitter constant comment in controller.go.&quot;,</span>
-<a id="__codelineno-39-11" name="__codelineno-39-11" href="#__codelineno-39-11"></a><span class="s1">      &quot;commit_id&quot;: &quot;YOUR_HEAD_SHA&quot;</span>
-<a id="__codelineno-39-12" name="__codelineno-39-12" href="#__codelineno-39-12"></a><span class="s1">    },</span>
-<a id="__codelineno-39-13" name="__codelineno-39-13" href="#__codelineno-39-13"></a><span class="s1">    &quot;pull_request&quot;: {</span>
-<a id="__codelineno-39-14" name="__codelineno-39-14" href="#__codelineno-39-14"></a><span class="s1">      &quot;number&quot;: 42,</span>
-<a id="__codelineno-39-15" name="__codelineno-39-15" href="#__codelineno-39-15"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Title&quot;,</span>
-<a id="__codelineno-39-16" name="__codelineno-39-16" href="#__codelineno-39-16"></a><span class="s1">      &quot;head&quot;: {&quot;ref&quot;: &quot;forge/ticket-123&quot;, &quot;sha&quot;: &quot;YOUR_HEAD_SHA&quot;},</span>
-<a id="__codelineno-39-17" name="__codelineno-39-17" href="#__codelineno-39-17"></a><span class="s1">      &quot;state&quot;: &quot;open&quot;</span>
-<a id="__codelineno-39-18" name="__codelineno-39-18" href="#__codelineno-39-18"></a><span class="s1">    },</span>
-<a id="__codelineno-39-19" name="__codelineno-39-19" href="#__codelineno-39-19"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
-<a id="__codelineno-39-20" name="__codelineno-39-20" href="#__codelineno-39-20"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;you&quot;}</span>
-<a id="__codelineno-39-21" name="__codelineno-39-21" href="#__codelineno-39-21"></a><span class="s1">  }&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="c1"># After CI passes, the workflow pauses at human_review_gate.</span>
+<a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a><span class="c1"># Send a review webhook to trigger implement_review:</span>
+<a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-4" name="__codelineno-41-4" href="#__codelineno-41-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-5" name="__codelineno-41-5" href="#__codelineno-41-5"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: pull_request_review&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-6" name="__codelineno-41-6" href="#__codelineno-41-6"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<a id="__codelineno-41-7" name="__codelineno-41-7" href="#__codelineno-41-7"></a><span class="s1">    &quot;action&quot;: &quot;submitted&quot;,</span>
+<a id="__codelineno-41-8" name="__codelineno-41-8" href="#__codelineno-41-8"></a><span class="s1">    &quot;review&quot;: {</span>
+<a id="__codelineno-41-9" name="__codelineno-41-9" href="#__codelineno-41-9"></a><span class="s1">      &quot;state&quot;: &quot;commented&quot;,</span>
+<a id="__codelineno-41-10" name="__codelineno-41-10" href="#__codelineno-41-10"></a><span class="s1">      &quot;body&quot;: &quot;Please fix the jitter constant comment in controller.go.&quot;,</span>
+<a id="__codelineno-41-11" name="__codelineno-41-11" href="#__codelineno-41-11"></a><span class="s1">      &quot;commit_id&quot;: &quot;YOUR_HEAD_SHA&quot;</span>
+<a id="__codelineno-41-12" name="__codelineno-41-12" href="#__codelineno-41-12"></a><span class="s1">    },</span>
+<a id="__codelineno-41-13" name="__codelineno-41-13" href="#__codelineno-41-13"></a><span class="s1">    &quot;pull_request&quot;: {</span>
+<a id="__codelineno-41-14" name="__codelineno-41-14" href="#__codelineno-41-14"></a><span class="s1">      &quot;number&quot;: 42,</span>
+<a id="__codelineno-41-15" name="__codelineno-41-15" href="#__codelineno-41-15"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Title&quot;,</span>
+<a id="__codelineno-41-16" name="__codelineno-41-16" href="#__codelineno-41-16"></a><span class="s1">      &quot;head&quot;: {&quot;ref&quot;: &quot;forge/ticket-123&quot;, &quot;sha&quot;: &quot;YOUR_HEAD_SHA&quot;},</span>
+<a id="__codelineno-41-17" name="__codelineno-41-17" href="#__codelineno-41-17"></a><span class="s1">      &quot;state&quot;: &quot;open&quot;</span>
+<a id="__codelineno-41-18" name="__codelineno-41-18" href="#__codelineno-41-18"></a><span class="s1">    },</span>
+<a id="__codelineno-41-19" name="__codelineno-41-19" href="#__codelineno-41-19"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
+<a id="__codelineno-41-20" name="__codelineno-41-20" href="#__codelineno-41-20"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;you&quot;}</span>
+<a id="__codelineno-41-21" name="__codelineno-41-21" href="#__codelineno-41-21"></a><span class="s1">  }&#39;</span>
 </code></pre></div>
 <hr />
 <h2 id="12-service-reference">12. Service Reference<a class="headerlink" href="#12-service-reference" title="Permanent link">&para;</a></h2>
@@ -3202,6 +3320,11 @@ If not configured, Forge will block the workflow and post detailed instructions 
 <td>Prometheus</td>
 <td>9092</td>
 <td><code>http://localhost:9092</code></td>
+</tr>
+<tr>
+<td>Grafana</td>
+<td>3010</td>
+<td><code>http://localhost:3010</code></td>
 </tr>
 </tbody>
 </table>
@@ -3319,17 +3442,17 @@ If not configured, Forge will block the workflow and post detailed instructions 
 </tbody>
 </table>
 <h3 id="useful-env-knobs-for-development">Useful <code>.env</code> knobs for development<a class="headerlink" href="#useful-env-knobs-for-development" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="nv">LOG_LEVEL</span><span class="o">=</span>DEBUG<span class="w">              </span><span class="c1"># verbose logging</span>
-<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a><span class="nv">CONTAINER_LANGCHAIN_VERBOSE</span><span class="o">=</span><span class="nb">true</span><span class="w">  </span><span class="c1"># verbose container agent logs</span>
-<a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a><span class="nv">LANGFUSE_ENABLED</span><span class="o">=</span><span class="nb">false</span><span class="w">       </span><span class="c1"># disable tracing for speed</span>
-<a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a><span class="nv">JIRA_WEBHOOK_SECRET</span><span class="o">=</span><span class="w">         </span><span class="c1"># skip signature validation</span>
-<a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a><span class="nv">GITHUB_WEBHOOK_SECRET</span><span class="o">=</span><span class="w">       </span><span class="c1"># skip signature validation</span>
-<a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a><span class="nv">CI_FIX_MAX_RETRIES</span><span class="o">=</span><span class="m">1</span><span class="w">         </span><span class="c1"># fail fast during CI testing</span>
-<a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a>
-<a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a><span class="c1"># ⚠️ Dev only — fall back to env vars instead of requiring Jira project properties</span>
-<a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a><span class="nv">FORGE_REQUIRE_PROJECT_CONFIG</span><span class="o">=</span><span class="nb">false</span>
-<a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a><span class="nv">GITHUB_KNOWN_REPOS</span><span class="o">=</span>acme/backend,acme/frontend
-<a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a><span class="nv">GITHUB_DEFAULT_REPO</span><span class="o">=</span>acme/backend
+<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="nv">LOG_LEVEL</span><span class="o">=</span>DEBUG<span class="w">              </span><span class="c1"># verbose logging</span>
+<a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a><span class="nv">CONTAINER_LANGCHAIN_VERBOSE</span><span class="o">=</span><span class="nb">true</span><span class="w">  </span><span class="c1"># verbose container agent logs</span>
+<a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a><span class="nv">LANGFUSE_ENABLED</span><span class="o">=</span><span class="nb">false</span><span class="w">       </span><span class="c1"># disable tracing for speed</span>
+<a id="__codelineno-42-4" name="__codelineno-42-4" href="#__codelineno-42-4"></a><span class="nv">JIRA_WEBHOOK_SECRET</span><span class="o">=</span><span class="w">         </span><span class="c1"># skip signature validation</span>
+<a id="__codelineno-42-5" name="__codelineno-42-5" href="#__codelineno-42-5"></a><span class="nv">GITHUB_WEBHOOK_SECRET</span><span class="o">=</span><span class="w">       </span><span class="c1"># skip signature validation</span>
+<a id="__codelineno-42-6" name="__codelineno-42-6" href="#__codelineno-42-6"></a><span class="nv">CI_FIX_MAX_RETRIES</span><span class="o">=</span><span class="m">1</span><span class="w">         </span><span class="c1"># fail fast during CI testing</span>
+<a id="__codelineno-42-7" name="__codelineno-42-7" href="#__codelineno-42-7"></a>
+<a id="__codelineno-42-8" name="__codelineno-42-8" href="#__codelineno-42-8"></a><span class="c1"># ⚠️ Dev only — fall back to env vars instead of requiring Jira project properties</span>
+<a id="__codelineno-42-9" name="__codelineno-42-9" href="#__codelineno-42-9"></a><span class="nv">FORGE_REQUIRE_PROJECT_CONFIG</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-42-10" name="__codelineno-42-10" href="#__codelineno-42-10"></a><span class="nv">GITHUB_KNOWN_REPOS</span><span class="o">=</span>acme/backend,acme/frontend
+<a id="__codelineno-42-11" name="__codelineno-42-11" href="#__codelineno-42-11"></a><span class="nv">GITHUB_DEFAULT_REPO</span><span class="o">=</span>acme/backend
 </code></pre></div>
 
 
