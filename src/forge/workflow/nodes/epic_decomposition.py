@@ -122,6 +122,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
             "project_key": project_key,
             "feature_summary": parent_issue.summary,
             "available_repos": available_repos,
+            "feedback": state.get("feedback_comment", ""),
         }
 
         # Generate Epic breakdown using Claude - primary operation
