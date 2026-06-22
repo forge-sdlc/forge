@@ -1,6 +1,5 @@
 """Unit tests for task generation revision state."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -238,8 +237,6 @@ class TestRegenerateEpicTasks:
     @pytest.mark.asyncio
     async def test_archives_only_target_epic_tasks(self, base_state):
         """Only tasks parented to current_epic_key are archived."""
-        archived = []
-
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
             patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,

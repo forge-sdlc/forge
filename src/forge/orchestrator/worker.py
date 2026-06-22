@@ -720,6 +720,7 @@ class OrchestratorWorker:
                         "task_approval_gate",
                         "generate_tasks",
                         "regenerate_all_tasks",
+                        "regenerate_epic_tasks",
                         "update_single_task",
                     )
 
@@ -1167,6 +1168,7 @@ class OrchestratorWorker:
             "task_approval_gate": "the tasks",
             "generate_tasks": "the tasks",
             "regenerate_all_tasks": "the tasks",
+            "regenerate_epic_tasks": "the tasks",
             "update_single_task": "the task",
             "human_review_gate": "the implementation review",
         }

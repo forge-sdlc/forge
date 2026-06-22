@@ -523,7 +523,12 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
 
     if not epic_key:
         logger.warning(f"No current_epic_key for epic task regeneration on {ticket_key}")
-        return state
+        return {
+            **state,
+            "feedback_comment": None,
+            "revision_requested": False,
+            "current_node": "task_approval_gate",
+        }
 
     logger.info(f"Regenerating tasks for Epic {epic_key} on {ticket_key} with feedback")
 
