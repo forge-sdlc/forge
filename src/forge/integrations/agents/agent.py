@@ -1018,6 +1018,14 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
             repo_instruction=repo_instruction,
         )
 
+        feedback = context.get("feedback", "") if context else ""
+        if feedback:
+            prompt += (
+                f"\n\n## Revision Feedback\n\n"
+                f"The user has requested the following changes to the Epic breakdown:\n{feedback}\n\n"
+                f"Please incorporate this feedback when creating the Epics."
+            )
+
         logger.info("Generating Epics using Deep Agents with skill")
         result = await self.run_task(
             task="decompose-epics",
