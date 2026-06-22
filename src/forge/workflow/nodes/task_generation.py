@@ -289,6 +289,14 @@ async def _generate_tasks_for_epic(
         existing_tasks_section=existing_tasks_section,
     )
 
+    feedback = context.get("feedback", "") if context else ""
+    if feedback:
+        prompt += (
+            f"\n\n## Revision Feedback\n\n"
+            f"The user has requested the following changes to the tasks for this Epic:\n{feedback}\n\n"
+            f"Please incorporate this feedback when creating the tasks."
+        )
+
     result = await agent.run_task(
         task="generate-tasks",
         prompt=prompt,

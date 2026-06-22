@@ -1,10 +1,11 @@
 """Unit tests for task generation revision state."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
-from forge.workflow.nodes.task_generation import generate_tasks, regenerate_all_tasks
+from forge.workflow.nodes.task_generation import generate_tasks, regenerate_all_tasks, _generate_tasks_for_epic
 
 
 @pytest.fixture
@@ -133,3 +134,70 @@ class TestTaskRevisionState:
         assert result["revision_requested"] is False
         assert result["feedback_comment"] is None
         assert result["current_epic_key"] is None
+
+
+class TestFeedbackThreading:
+    """Feedback in context is appended to the generate-tasks prompt."""
+
+    @pytest.mark.asyncio
+    async def test_feedback_appended_to_prompt_when_present(self):
+        """When context contains feedback, it appears in the prompt sent to the agent."""
+        captured_prompts = []
+
+        async def fake_run_task(task, prompt, context):
+            captured_prompts.append(prompt)
+            return ""  # empty → _parse_tasks_response returns []
+
+        mock_agent = MagicMock()
+        mock_agent.run_task = fake_run_task
+
+        context = {
+            "ticket_key": "TEST-1",
+            "project_key": "TEST",
+            "epic_key": "TEST-10",
+            "epic_summary": "My Epic",
+            "feature_key": "TEST-1",
+            "epic_repo": "acme/backend",
+            "feedback": "Please split the auth task into two separate tasks.",
+        }
+
+        await _generate_tasks_for_epic(
+            agent=mock_agent,
+            epic_plan="Implement authentication.",
+            epic_summary="Auth Epic",
+            context=context,
+        )
+
+        assert captured_prompts, "run_task was never called"
+        assert "Revision Feedback" in captured_prompts[0]
+        assert "Please split the auth task into two separate tasks." in captured_prompts[0]
+
+    @pytest.mark.asyncio
+    async def test_no_feedback_section_when_feedback_absent(self):
+        """When context has no feedback, the prompt has no Revision Feedback section."""
+        captured_prompts = []
+
+        async def fake_run_task(task, prompt, context):
+            captured_prompts.append(prompt)
+            return ""
+
+        mock_agent = MagicMock()
+        mock_agent.run_task = fake_run_task
+
+        context = {
+            "ticket_key": "TEST-1",
+            "project_key": "TEST",
+            "epic_key": "TEST-10",
+            "epic_summary": "My Epic",
+            "feature_key": "TEST-1",
+            "epic_repo": "acme/backend",
+        }
+
+        await _generate_tasks_for_epic(
+            agent=mock_agent,
+            epic_plan="Implement authentication.",
+            epic_summary="Auth Epic",
+            context=context,
+        )
+
+        assert "Revision Feedback" not in captured_prompts[0]
