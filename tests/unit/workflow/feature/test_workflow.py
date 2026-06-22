@@ -166,3 +166,13 @@ class TestFeatureWorkflow:
         }
 
         assert route_by_ticket_type(state) == "implement_task"
+
+    def test_resume_regenerate_epic_tasks_stays_on_regeneration_node(self):
+        """Retrying epic-level task regeneration should not restart the workflow."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "regenerate_epic_tasks",
+        }
+
+        assert route_by_ticket_type(state) == "regenerate_epic_tasks"
