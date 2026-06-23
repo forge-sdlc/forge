@@ -336,7 +336,7 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
                 await jira.update_description(ticket_key, new_prd)
             await jira.add_comment(
                 ticket_key,
-                "PRD has been revised based on feedback. Please review.",
+                "📝 PRD has been revised based on feedback. Please review.",
             )
 
         logger.info(f"PRD regenerated for {ticket_key} ({len(new_prd)} chars)")

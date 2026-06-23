@@ -220,7 +220,7 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         # Add comment acknowledging revision
         await jira.add_comment(
             ticket_key,
-            "Specification has been revised based on feedback. Please review the updated version.",
+            "📋 Specification has been revised based on feedback. Please review the updated version.",
         )
 
         logger.info(f"Spec regenerated for {ticket_key} ({len(new_spec)} chars)")
