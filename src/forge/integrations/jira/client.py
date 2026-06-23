@@ -302,13 +302,12 @@ class JiraClient:
         logger.info(f"Deleted issue {issue_key}")
 
     async def archive_issue(self, issue_key: str, archive_subtasks: bool = True) -> None:
-        """Archive a Jira issue by unlinking from parent and adding archive label.
+        """Archive a Jira issue natively and clean up its forge labels.
 
-        Use this instead of delete_issue when deletion is not permitted.
         The issue will be:
-        1. Unlinked from its parent (Epic/Feature)
-        2. Marked with 'forge:archived' label
-        3. Have all forge workflow labels removed
+        1. Natively archived via the Jira archive endpoint (hidden from boards/backlogs)
+        2. Marked with 'forge:archived' label and all other forge labels removed
+        3. Unlinked from its parent (Epic/Feature)
 
         Args:
             issue_key: The Jira issue key.
@@ -335,9 +334,7 @@ class JiraClient:
         label_update = {
             "update": {
                 "labels": [
-                    # Remove all forge workflow labels
                     *[{"remove": label} for label in forge_labels],
-                    # Add archived label
                     {"add": "forge:archived"},
                 ]
             }
@@ -350,7 +347,7 @@ class JiraClient:
         except Exception as e:
             logger.warning(f"Failed to update labels for {issue_key}: {e}")
 
-        # Step 2: Try to unlink from parent (separate request, may fail in some configs)
+        # Step 2: Try to unlink from parent (may fail in some configs)
         try:
             parent_update = {"fields": {"parent": None}}
             response = await client.put(f"/issue/{issue_key}", json=parent_update)
@@ -358,6 +355,26 @@ class JiraClient:
             logger.info(f"Unlinked {issue_key} from parent")
         except Exception as e:
             logger.debug(f"Could not unlink parent for {issue_key} (may not be supported): {e}")
+
+        # Step 3: Natively archive the issue so it's hidden from boards and backlogs
+        try:
+            response = await client.put("/issue/archive", json={"issueIdsOrKeys": [issue_key]})
+            response.raise_for_status()
+            archive_result = response.json()
+            archive_errors = archive_result.get("errors", {}) if archive_result else {}
+            failed_error = next(
+                (
+                    error
+                    for error in archive_errors.values()
+                    if issue_key in error.get("issueIdsOrKeys", [])
+                ),
+                None,
+            )
+            if failed_error:
+                raise RuntimeError(failed_error.get("message", "Unknown Jira archive error"))
+            logger.info(f"Natively archived {issue_key}")
+        except Exception as e:
+            logger.warning(f"Failed to natively archive {issue_key}: {e}")
 
         logger.info(f"Archived issue {issue_key}")
 
