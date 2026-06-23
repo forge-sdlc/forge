@@ -571,9 +571,7 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
         epic_plan = epic_issue.description or ""
         epic_summary = epic_issue.summary
         epic_labels = await jira.get_labels(epic_key)
-        epic_repo = next(
-            (lbl[5:] for lbl in epic_labels if lbl.startswith("repo:")), ""
-        )
+        epic_repo = next((lbl[5:] for lbl in epic_labels if lbl.startswith("repo:")), "")
 
         # Fetch sibling epics for context
         all_epic_keys = state.get("epic_keys", [])
@@ -682,9 +680,7 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 logger.warning(f"Failed to create Task '{summary}' for {epic_key}: {e}")
 
         all_task_keys = remaining_task_keys + new_task_keys
-        logger.info(
-            f"Regenerated {len(new_task_keys)} tasks for Epic {epic_key} on {ticket_key}"
-        )
+        logger.info(f"Regenerated {len(new_task_keys)} tasks for Epic {epic_key} on {ticket_key}")
 
         return update_state_timestamp(
             {
