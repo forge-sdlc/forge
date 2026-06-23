@@ -65,6 +65,7 @@ def mock_jira_client() -> MagicMock:
     mock.add_structured_comment = AsyncMock()
     mock.get_structured_comment = AsyncMock(return_value=None)
     mock.get_prd_proposals_repo = AsyncMock(return_value=None)
+    mock.get_proposals_path = AsyncMock(return_value=None)
     mock.add_attachment = AsyncMock(return_value={"id": "12345"})
     mock.close = AsyncMock()
     return mock

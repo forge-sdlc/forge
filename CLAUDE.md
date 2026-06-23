@@ -143,17 +143,21 @@ Opt-in per project via Jira project property. When configured, Forge opens a PR 
 | Property | Example | Description |
 |----------|---------|-------------|
 | `forge.prd_proposals_repo` | `org/enhancement-proposals` | Enables PR-based PRD approval for this project |
+| `forge.prd_proposals_path` | `enhancements` | Base directory for enhancement folders (default: repo root) |
 
 Set via: `forge project-setup <PROJECT> --prd-proposals-repo owner/repo`
 Remove via: `forge project-setup <PROJECT> --prd-proposals-repo ""`
+Set path: `forge project-setup <PROJECT> --prd-proposals-path enhancements`
+Reset path: `forge project-setup <PROJECT> --prd-proposals-path ""`
 
 **Global fallbacks (`.env`, used when `FORGE_REQUIRE_PROJECT_CONFIG=false`):**
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `PRD_PROPOSALS_REPO` | (empty) | Fallback `owner/repo` for projects without the property |
-| `PRD_PROPOSALS_PATH` | `proposals` | Directory in the repo for PRD files |
+| `PRD_PROPOSALS_PATH` | (empty) | Base directory for enhancement folders (empty = repo root) |
 
+File structure: `{path}/{TICKET}/prd.md` (e.g., `OSAC-23/prd.md` or `enhancements/OSAC-23/prd.md`).
 Branch naming convention: `forge/prd/{ticket-key}` (e.g., `forge/prd/proj-123`).
 
 ## Container Execution

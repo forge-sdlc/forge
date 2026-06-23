@@ -981,6 +981,30 @@ class JiraClient:
         logger.info(f"Project {project_key}: PRD proposals repo: {value}")
         return value
 
+    async def get_proposals_path(self, project_key: str) -> str | None:
+        """Fetch the forge.prd_proposals_path project property.
+
+        When set, overrides the global default base directory for enhancement
+        folders in the proposals repo.
+
+        Args:
+            project_key: The Jira project key.
+
+        Returns:
+            Path string (may be empty for repo root), or None if not configured.
+        """
+        value = await self.get_project_property(project_key, "forge.prd_proposals_path")
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            logger.warning(
+                f"forge.prd_proposals_path for project {project_key} is malformed: {value!r}"
+            )
+            return None
+        value = value.strip("/")
+        logger.info(f"Project {project_key}: proposals path: {value!r}")
+        return value
+
     async def get_skills_config(self, project_key: str) -> list[SkillEntry] | None:
         """Fetch and parse the forge.skills project property.
 

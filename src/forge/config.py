@@ -132,8 +132,12 @@ class Settings(BaseSettings):
         ),
     )
     prd_proposals_path: str = Field(
-        default="proposals",
-        description="Directory in the proposals repo where PRD files are stored.",
+        default="",
+        description=(
+            "Base directory in the proposals repo for enhancement folders. "
+            "Empty string means repo root. Per-project config via Jira project "
+            "property forge.prd_proposals_path takes precedence."
+        ),
     )
 
     @property

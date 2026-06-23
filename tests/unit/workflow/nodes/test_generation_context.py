@@ -17,6 +17,7 @@ def create_mock_jira_client():
     mock.add_structured_comment = AsyncMock()
     mock.set_workflow_label = AsyncMock()
     mock.get_prd_proposals_repo = AsyncMock(return_value=None)
+    mock.get_proposals_path = AsyncMock(return_value=None)
     return mock
 
 

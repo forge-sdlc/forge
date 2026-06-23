@@ -22,7 +22,7 @@ class TestPrdApprovalConfig:
             github_token="test",
             anthropic_api_key="test",
         )
-        assert settings.prd_proposals_path == "proposals"
+        assert settings.prd_proposals_path == ""
 
     def test_proposals_repo_can_be_set_as_global_fallback(self):
         settings = Settings(
