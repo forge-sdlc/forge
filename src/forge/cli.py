@@ -547,9 +547,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 print("[OK] forge.prd_proposals_path removed (reset to default: repo root)")
             else:
                 path = args.prd_proposals_path.strip("/")
-                await jira.set_project_property(
-                    project_key, "forge.prd_proposals_path", path
-                )
+                await jira.set_project_property(project_key, "forge.prd_proposals_path", path)
                 print(f"[OK] forge.prd_proposals_path = {path!r}")
 
         # forge.skills — built from --add-skill flags and/or --skills-config JSON
@@ -611,14 +609,16 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             await jira.set_project_property(project_key, "forge.skills", skill_entries)
             print(f"[OK] forge.skills = {len(skill_entries)} entries")
 
-        if not any([
-            args.repo,
-            args.default_repo,
-            args.prd_proposals_repo is not None,
-            args.prd_proposals_path is not None,
-            args.skills_config,
-            args.add_skill,
-        ]):
+        if not any(
+            [
+                args.repo,
+                args.default_repo,
+                args.prd_proposals_repo is not None,
+                args.prd_proposals_path is not None,
+                args.skills_config,
+                args.add_skill,
+            ]
+        ):
             print(
                 "Nothing to set — specify at least one of: "
                 "--repo, --default-repo, --prd-proposals-repo, "
