@@ -1,8 +1,13 @@
 """Tests for FeatureWorkflow."""
 
 
+from langgraph.graph import END
+
 from forge.models.workflow import TicketType
-from forge.workflow.feature.graph import route_by_ticket_type
+from forge.workflow.feature.graph import (
+    _route_after_epic_task_regeneration,
+    route_by_ticket_type,
+)
 
 
 class TestFeatureWorkflow:
@@ -176,3 +181,25 @@ class TestFeatureWorkflow:
         }
 
         assert route_by_ticket_type(state) == "regenerate_epic_tasks"
+
+    def test_failed_regenerate_epic_tasks_preserves_retry_node(self):
+        """Failed epic-level task regeneration should not re-enter the approval gate."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "regenerate_epic_tasks",
+            "last_error": "No replacement Tasks generated",
+        }
+
+        assert _route_after_epic_task_regeneration(state) == END
+
+    def test_successful_regenerate_epic_tasks_returns_to_task_approval_gate(self):
+        """Successful epic-level task regeneration returns to task approval."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "task_approval_gate",
+            "last_error": None,
+        }
+
+        assert _route_after_epic_task_regeneration(state) == "task_approval_gate"
