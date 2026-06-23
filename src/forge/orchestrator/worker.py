@@ -42,6 +42,7 @@ def _is_workflow_errored(state: dict) -> bool:
 
 
 _PRD_GATE_NODES = ("prd_approval_gate", "generate_prd", "regenerate_prd")
+_SPEC_GATE_NODES = ("spec_approval_gate", "generate_spec", "regenerate_spec")
 
 _FRESH_INVOKE_NODES = (
     "ci_evaluator",
@@ -187,6 +188,23 @@ class OrchestratorWorker:
         ).get("number")
 
         return repo_full == prd_pr_repo and event_pr_number == prd_pr_number
+
+    def _is_spec_pr_event(self, message: QueueMessage, current_state: dict[str, Any]) -> bool:
+        """Check if a GitHub event targets the spec proposals PR."""
+        if message.source != EventSource.GITHUB:
+            return False
+        spec_pr_number = current_state.get("spec_pr_number")
+        spec_pr_repo = current_state.get("spec_pr_repo")
+        if not spec_pr_number or not spec_pr_repo:
+            return False
+
+        payload = message.payload
+        repo_full = payload.get("repository", {}).get("full_name", "")
+        event_pr_number = payload.get("pull_request", {}).get("number") or payload.get(
+            "issue", {}
+        ).get("number")
+
+        return repo_full == spec_pr_repo and event_pr_number == spec_pr_number
 
     async def _process_workflow(self, message: QueueMessage) -> None:
         """Process a message through the workflow.
@@ -626,6 +644,11 @@ class OrchestratorWorker:
                 f"Ignoring Jira comment for {message.ticket_key} — PRD review is on GitHub PR"
             )
             comment = {}
+        if comment and current_state.get("spec_pr_number") and current_node in _SPEC_GATE_NODES:
+            logger.info(
+                f"Ignoring Jira comment for {message.ticket_key} — spec review is on GitHub PR"
+            )
+            comment = {}
         if comment:
             comment_body = comment.get("body", "")
             # Extract text from ADF if needed
@@ -865,6 +888,106 @@ class OrchestratorWorker:
                         feedback = comment_body
                         logger.info(
                             f"PRD PR feedback for {message.ticket_key}: {comment_body[:100]}..."
+                        )
+
+        # GitHub events targeting the spec proposals PR — same pattern as PRD PR.
+        if self._is_spec_pr_event(message, current_state) and current_node in _SPEC_GATE_NODES:
+            event = message.event_type
+
+            if "pull_request_review" in event:
+                review = payload.get("review", {})
+                review_state = review.get("state", "").lower()
+                review_body = review.get("body", "") or ""
+
+                if review_state in ("changes_requested", "commented"):
+                    repo_full = payload.get("repository", {}).get("full_name", "")
+                    pr_number = payload.get("pull_request", {}).get("number")
+                    review_id = review.get("id")
+                    inline_comments: list[dict[str, Any]] = []
+                    if repo_full and pr_number and review_id:
+                        _owner, _repo = repo_full.split("/", 1)
+                        gh = GitHubClient()
+                        try:
+                            inline_comments = await gh.get_review_comments(
+                                _owner, _repo, pr_number, review_id
+                            )
+                        finally:
+                            await gh.close()
+
+                    parts = []
+                    if review_body.strip():
+                        parts.append(review_body.strip())
+                    if inline_comments:
+                        inline_text = "\n\n".join(
+                            f"**{c['path']}** (line {c.get('line') or c.get('original_line', '?')}):\n{c['body']}"
+                            for c in inline_comments
+                        )
+                        parts.append(f"Inline comments:\n{inline_text}")
+
+                    if parts:
+                        feedback = "\n\n".join(parts)
+                        is_rejected = True
+                        logger.info(
+                            f"Spec PR review ({review_state}) for {message.ticket_key}: "
+                            f"body={'yes' if review_body.strip() else 'no'}, "
+                            f"inline={len(inline_comments)}"
+                        )
+                    else:
+                        logger.info(
+                            f"Spec PR review ({review_state}) for {message.ticket_key} "
+                            "with no content — ignoring"
+                        )
+                        return current_state
+
+            elif "pull_request" in event and payload.get("pull_request", {}).get("merged") is True:
+                is_approved = True
+                logger.info(f"Spec PR merged for {message.ticket_key}")
+                jira = JiraClient()
+                try:
+                    await jira.set_workflow_label(message.ticket_key, ForgeLabel.SPEC_APPROVED)
+                    spec_content = current_state.get("spec_content", "")
+                    if spec_content:
+                        await jira.add_structured_comment(
+                            message.ticket_key,
+                            "Technical Specification (Approved)",
+                            spec_content,
+                            comment_type="spec",
+                        )
+                        logger.info(
+                            f"Copied approved spec to Jira comment for {message.ticket_key}"
+                        )
+                finally:
+                    await jira.close()
+
+            elif "issue_comment" in event:
+                gh_comment = payload.get("comment", {})
+                comment_body = gh_comment.get("body", "").strip()
+                sender_login = payload.get("sender", {}).get("login", "")
+
+                if comment_body and sender_login:
+                    gh = GitHubClient()
+                    try:
+                        forge_user = await gh.get_authenticated_user()
+                        forge_login = forge_user.get("login", "")
+                    finally:
+                        await gh.close()
+
+                    if sender_login == forge_login:
+                        logger.debug(f"Ignoring self-comment on spec PR for {message.ticket_key}")
+                        return current_state
+
+                    comment_type = classify_comment(comment_body)
+                    if comment_type == CommentType.QUESTION:
+                        is_question = True
+                        feedback = comment_body
+                        logger.info(
+                            f"Spec PR question for {message.ticket_key}: {comment_body[:100]}..."
+                        )
+                    else:
+                        is_rejected = True
+                        feedback = comment_body
+                        logger.info(
+                            f"Spec PR feedback for {message.ticket_key}: {comment_body[:100]}..."
                         )
 
         # GitHub pull_request_review events — handled when at human_review_gate.

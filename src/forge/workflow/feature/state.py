@@ -53,6 +53,13 @@ class FeatureState(
     prd_pr_branch: str | None
     prd_pr_file_path: str | None
 
+    # Spec PR tracking (enhancement proposal flow)
+    spec_pr_url: str | None
+    spec_pr_number: int | None
+    spec_pr_repo: str | None
+    spec_pr_branch: str | None
+    spec_pr_file_path: str | None
+
 
 def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState:
     """Create initial state for a new Feature workflow run."""
@@ -121,6 +128,11 @@ def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState
         "prd_pr_repo": None,
         "prd_pr_branch": None,
         "prd_pr_file_path": None,
+        "spec_pr_url": None,
+        "spec_pr_number": None,
+        "spec_pr_repo": None,
+        "spec_pr_branch": None,
+        "spec_pr_file_path": None,
         "yolo_mode": False,
     }
 
