@@ -103,7 +103,7 @@ def route_task_approval(state: WorkflowState) -> str:
             logger.info(f"Single Task revision requested for {current_task}")
             record_revision_requested("task")
             return "update_single_task"
-        elif current_epic and feedback:
+        elif current_epic:
             # Epic-level regeneration - comment was on a specific Epic
             logger.info(f"Epic Task regeneration requested for {current_epic} on {ticket_key}")
             record_revision_requested("task")

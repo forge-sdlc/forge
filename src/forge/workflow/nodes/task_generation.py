@@ -1,5 +1,6 @@
 """Task generation node for LangGraph workflow."""
 
+import asyncio
 import logging
 import re
 from typing import Any
@@ -117,6 +118,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 "feature_key": ticket_key,
                 "project_key": project_key,
                 "epic_repo": epic_repo,
+                "feedback": state.get("feedback_comment", ""),
             }
 
             # Sibling epics = all epics except the current one
@@ -537,26 +539,27 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
     agent = ForgeAgent()
 
     try:
-        # Identify which tasks belong to this epic
+        # Identify which tasks belong to this epic (fetched concurrently)
         epic_task_keys: list[str] = []
         parent_issue = await jira.get_issue(ticket_key)
         project_key = parent_issue.project_key
 
-        for task_key in existing_task_keys:
+        async def _check_task_parent(task_key: str) -> str | None:
             try:
                 task_issue = await jira.get_issue(task_key)
-                if task_issue.parent_key == epic_key:
-                    epic_task_keys.append(task_key)
+                if task_issue.parent_key is None:
+                    logger.warning(
+                        f"Task {task_key} has no parent in Jira; skipping archive "
+                        f"(cannot confirm it belongs to {epic_key})"
+                    )
+                    return None
+                return task_key if task_issue.parent_key == epic_key else None
             except Exception as e:
                 logger.warning(f"Could not check parent of {task_key}: {e}")
+                return None
 
-        # Archive only this epic's tasks
-        for task_key in epic_task_keys:
-            try:
-                await jira.archive_issue(task_key, archive_subtasks=False)
-                logger.info(f"Archived Task {task_key}")
-            except Exception as e:
-                logger.warning(f"Failed to archive Task {task_key}: {e}")
+        parent_results = await asyncio.gather(*(_check_task_parent(k) for k in existing_task_keys))
+        epic_task_keys = [k for k in parent_results if k is not None]
 
         # Compute remaining tasks from other epics
         remaining_task_keys = [k for k in existing_task_keys if k not in epic_task_keys]
@@ -571,25 +574,26 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
         epic_plan = epic_issue.description or ""
         epic_summary = epic_issue.summary
         epic_labels = await jira.get_labels(epic_key)
-        epic_repo = next((lbl[5:] for lbl in epic_labels if lbl.startswith("repo:")), "")
+        epic_repo = extract_repo_from_labels(epic_labels)
 
-        # Fetch sibling epics for context
+        # Fetch sibling epics for context (concurrently)
         all_epic_keys = state.get("epic_keys", [])
-        sibling_epics: list[dict[str, str]] = []
-        for ek in all_epic_keys:
-            if ek == epic_key:
-                continue
+        sibling_keys = [ek for ek in all_epic_keys if ek != epic_key]
+
+        async def _fetch_sibling(ek: str) -> dict[str, str] | None:
             try:
                 sib = await jira.get_issue(ek)
-                sibling_epics.append(
-                    {
-                        "epic_key": ek,
-                        "epic_summary": sib.summary,
-                        "epic_plan": sib.description or "",
-                    }
-                )
+                return {
+                    "epic_key": ek,
+                    "epic_summary": sib.summary,
+                    "epic_plan": sib.description or "",
+                }
             except Exception as e:
                 logger.warning(f"Failed to fetch sibling epic {ek}: {e}")
+                return None
+
+        sibling_results = await asyncio.gather(*(_fetch_sibling(ek) for ek in sibling_keys))
+        sibling_epics: list[dict[str, str]] = [s for s in sibling_results if s is not None]
 
         # Fetch remaining tasks for existing-tasks context (dedup)
         existing_tasks_ctx: list[dict[str, str]] = []
@@ -633,6 +637,14 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
             sibling_epics=sibling_epics if sibling_epics else None,
             existing_tasks=existing_tasks_ctx if existing_tasks_ctx else None,
         )
+
+        if not tasks_data:
+            return {
+                **state,
+                "last_error": f"No replacement Tasks generated for Epic {epic_key}",
+                "current_node": "regenerate_epic_tasks",
+                "retry_count": state.get("retry_count", 0) + 1,
+            }
 
         # Create new tasks in Jira under this epic
         new_task_keys: list[str] = []
@@ -679,6 +691,24 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 jira_error = str(e)
                 logger.warning(f"Failed to create Task '{summary}' for {epic_key}: {e}")
 
+        if not new_task_keys:
+            return {
+                **state,
+                "last_error": jira_error
+                or f"Failed to create replacement Tasks for Epic {epic_key}",
+                "current_node": "regenerate_epic_tasks",
+                "retry_count": state.get("retry_count", 0) + 1,
+            }
+
+        # Archive only after replacement tasks exist, so a bad generation cannot
+        # leave the target Epic with no implementation tasks.
+        for task_key in epic_task_keys:
+            try:
+                await jira.archive_issue(task_key, archive_subtasks=False)
+                logger.info(f"Archived Task {task_key}")
+            except Exception as e:
+                logger.warning(f"Failed to archive Task {task_key}: {e}")
+
         all_task_keys = remaining_task_keys + new_task_keys
         logger.info(f"Regenerated {len(new_task_keys)} tasks for Epic {epic_key} on {ticket_key}")
 
@@ -705,6 +735,10 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
             "last_error": str(e),
             "current_node": "regenerate_epic_tasks",
             "retry_count": state.get("retry_count", 0) + 1,
+            # Clear revision flags so task_approval_gate returns END instead of looping
+            "revision_requested": False,
+            "feedback_comment": None,
+            "current_epic_key": None,
         }
     finally:
         await jira.close()
