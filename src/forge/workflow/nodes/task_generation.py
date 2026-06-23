@@ -644,6 +644,9 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 "last_error": f"No replacement Tasks generated for Epic {epic_key}",
                 "current_node": "regenerate_epic_tasks",
                 "retry_count": state.get("retry_count", 0) + 1,
+                "revision_requested": False,
+                "feedback_comment": None,
+                "current_epic_key": None,
             }
 
         # Create new tasks in Jira under this epic
@@ -698,6 +701,9 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 or f"Failed to create replacement Tasks for Epic {epic_key}",
                 "current_node": "regenerate_epic_tasks",
                 "retry_count": state.get("retry_count", 0) + 1,
+                "revision_requested": False,
+                "feedback_comment": None,
+                "current_epic_key": None,
             }
 
         # Archive only after replacement tasks exist, so a bad generation cannot
