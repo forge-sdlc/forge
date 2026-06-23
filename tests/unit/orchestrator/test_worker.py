@@ -180,6 +180,50 @@ class TestQuestionDetection:
         assert "from TEST-124" in ack_text
 
     @pytest.mark.asyncio
+    async def test_retry_at_task_approval_gate_clears_stale_epic_and_task_keys(
+        self,
+        worker: OrchestratorWorker,
+        base_message: QueueMessage,
+        base_state: dict,
+    ):
+        """forge:retry at task_approval_gate must zero out current_epic_key and current_task_key."""
+        state = {
+            **base_state,
+            "current_node": "task_approval_gate",
+            "is_paused": True,
+            "task_keys": ["TEST-130"],
+            "current_epic_key": "TEST-124",  # stale from a prior epic comment
+            "current_task_key": "TEST-130",  # stale from a prior task comment
+            "last_error": None,
+        }
+        payload = {
+            **base_message.payload,
+            "changelog": {
+                "items": [
+                    {
+                        "field": "labels",
+                        "toString": "forge:managed forge:retry",
+                        "fromString": "forge:managed",
+                    }
+                ]
+            },
+        }
+        message = QueueMessage(
+            message_id=base_message.message_id,
+            event_id=base_message.event_id,
+            source=base_message.source,
+            event_type="jira:issue_updated",
+            ticket_key=base_message.ticket_key,
+            payload=payload,
+        )
+
+        result = await worker._handle_resume_event(message, state)
+
+        assert result["current_epic_key"] is None
+        assert result["current_task_key"] is None
+        assert result["revision_requested"] is True
+
+    @pytest.mark.asyncio
     async def test_prd_label_change_to_approved_sets_approved_flag(
         self, worker: OrchestratorWorker, base_message: QueueMessage, base_state: dict
     ):
