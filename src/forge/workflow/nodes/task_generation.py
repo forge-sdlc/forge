@@ -706,6 +706,34 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 "current_epic_key": None,
             }
 
+        if jira_error:
+            cleanup_errors: list[str] = []
+            for task_key in new_task_keys:
+                try:
+                    await jira.archive_issue(task_key, archive_subtasks=False)
+                    logger.info(f"Archived partially created replacement Task {task_key}")
+                except Exception as e:
+                    cleanup_errors.append(f"{task_key}: {e}")
+                    logger.warning(
+                        f"Failed to archive partially created replacement Task {task_key}: {e}"
+                    )
+
+            cleanup_suffix = (
+                f"; cleanup failures: {'; '.join(cleanup_errors)}" if cleanup_errors else ""
+            )
+            return {
+                **state,
+                "last_error": (
+                    f"Partial replacement Task creation failed for Epic {epic_key}: "
+                    f"{jira_error}{cleanup_suffix}"
+                ),
+                "current_node": "regenerate_epic_tasks",
+                "retry_count": state.get("retry_count", 0) + 1,
+                "revision_requested": False,
+                "feedback_comment": None,
+                "current_epic_key": None,
+            }
+
         # Archive only after replacement tasks exist, so a bad generation cannot
         # leave the target Epic with no implementation tasks.
         for task_key in epic_task_keys:

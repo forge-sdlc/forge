@@ -223,6 +223,15 @@ def _route_after_task_generation(state: FeatureState) -> str:
     return "task_approval_gate"
 
 
+def _route_after_epic_task_regeneration(state: FeatureState) -> str:
+    """Route after regenerating tasks for a single Epic."""
+    if state.get("last_error") and state.get("current_node") == "regenerate_epic_tasks":
+        logger.error(f"Epic task regeneration failed, workflow paused: {state['last_error']}")
+        return END
+
+    return "task_approval_gate"
+
+
 def _route_after_workspace_setup(
     state: FeatureState,
 ) -> Literal["implement_task", "escalate_blocked"]:
@@ -560,7 +569,14 @@ def build_feature_graph() -> StateGraph:
     )
     graph.add_edge("regenerate_all_tasks", "task_approval_gate")
     graph.add_edge("update_single_task", "task_approval_gate")
-    graph.add_edge("regenerate_epic_tasks", "task_approval_gate")
+    graph.add_conditional_edges(
+        "regenerate_epic_tasks",
+        _route_after_epic_task_regeneration,
+        {
+            "task_approval_gate": "task_approval_gate",
+            END: END,
+        },
+    )
 
     # Execution flow (US6) with parallel support (US10)
     # The routing function returns either "setup_workspace" or list[Send]

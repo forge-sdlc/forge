@@ -432,7 +432,60 @@ class TestRegenerateEpicTasks:
         mock_jira.archive_issue.assert_not_awaited()
         assert result["task_keys"] == ["TASK-100", "TASK-101", "TASK-200"]
         assert result["current_node"] == "regenerate_epic_tasks"
+        assert result["revision_requested"] is False
+        assert result["feedback_comment"] is None
+        assert result["current_epic_key"] is None
         assert "No replacement Tasks generated" in result["last_error"]
+
+    @pytest.mark.asyncio
+    async def test_partial_replacement_creation_cleans_up_new_tasks_and_keeps_old_tasks(
+        self, base_state
+    ):
+        """Partial replacement creation must not archive existing epic tasks."""
+        with (
+            patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
+            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch(
+                "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
+                new_callable=AsyncMock,
+                return_value=[
+                    {"summary": "New Task 1", "description": "D1", "repo": "acme/backend"},
+                    {"summary": "New Task 2", "description": "D2", "repo": "acme/backend"},
+                ],
+            ),
+        ):
+            mock_jira = AsyncMock()
+            MockJira.return_value = mock_jira
+            mock_jira.get_issue = AsyncMock(
+                side_effect=[
+                    _make_issue("FEAT-1", project_key="MYPROJ"),
+                    _make_issue("TASK-100", parent_key="EPIC-10"),
+                    _make_issue("TASK-101", parent_key="EPIC-10"),
+                    _make_issue("TASK-200", parent_key="EPIC-20"),
+                    _make_issue("EPIC-10", summary="Epic 10", description="Plan 10"),
+                    _make_issue("EPIC-20", summary="Epic 20", description="Plan 20"),
+                    _make_issue("TASK-200", summary="Old task 200"),
+                ]
+            )
+            mock_jira.get_labels = AsyncMock(return_value=["repo:acme/backend"])
+            mock_jira.create_task = AsyncMock(
+                side_effect=["TASK-102", RuntimeError("Jira create failed")]
+            )
+            mock_jira.archive_issue = AsyncMock()
+            MockAgent.return_value = AsyncMock()
+
+            result = await regenerate_epic_tasks(base_state)
+
+        archived_keys = [call.args[0] for call in mock_jira.archive_issue.call_args_list]
+        assert archived_keys == ["TASK-102"]
+        assert "TASK-100" not in archived_keys
+        assert "TASK-101" not in archived_keys
+        assert result["task_keys"] == ["TASK-100", "TASK-101", "TASK-200"]
+        assert result["current_node"] == "regenerate_epic_tasks"
+        assert result["revision_requested"] is False
+        assert result["feedback_comment"] is None
+        assert result["current_epic_key"] is None
+        assert "Partial replacement Task creation failed" in result["last_error"]
 
     @pytest.mark.asyncio
     async def test_error_path_clears_revision_flags_to_prevent_gate_loop(self, base_state):
