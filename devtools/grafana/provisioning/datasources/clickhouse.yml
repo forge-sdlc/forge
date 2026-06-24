@@ -1,0 +1,15 @@
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse
+    uid: langfuse-clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    jsonData:
+      host: ${CLICKHOUSE_HOST}
+      port: ${CLICKHOUSE_PORT}
+      protocol: native
+      username: ${CLICKHOUSE_USER}
+      defaultDatabase: ${CLICKHOUSE_DATABASE}
+    secureJsonData:
+      password: ${CLICKHOUSE_PASSWORD}

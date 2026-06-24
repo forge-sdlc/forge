@@ -69,6 +69,12 @@ def route_plan_approval(state: WorkflowState) -> str:
         logger.info(f"Q&A mode: routing to answer_question for {state['ticket_key']}")
         return "answer_question"
 
+    # YOLO mode: auto-approve without human input
+    if state.get("yolo_mode"):
+        logger.info(f"YOLO mode: auto-approving plan for {state['ticket_key']}")
+        record_approval("plan")
+        return "generate_tasks"
+
     # Check if revision requested
     if state.get("revision_requested"):
         feedback = state.get("feedback_comment", "")

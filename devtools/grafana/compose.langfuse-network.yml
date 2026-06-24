@@ -1,0 +1,24 @@
+# Optional compose override for local self-hosted Langfuse.
+#
+# Use this when Langfuse is running from its own compose project and exposes
+# ClickHouse on the Langfuse compose network. The default network name matches a
+# Langfuse checkout started as project "langfuse"; override with
+# LANGFUSE_DOCKER_NETWORK if your compose project name is different.
+#
+# Example:
+#   docker compose --env-file .env \
+#     -f docker-compose.yml \
+#     -f devtools/grafana/compose.langfuse-network.yml \
+#     up -d grafana
+
+services:
+  grafana:
+    networks:
+      - default
+      - langfuse
+
+networks:
+  default: {}
+  langfuse:
+    name: ${LANGFUSE_DOCKER_NETWORK:-langfuse_default}
+    external: true

@@ -432,6 +432,63 @@ class TestAnswerQuestion:
         mock_jira.close.assert_called_once()
         mock_agent.close.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_posts_answer_to_github_pr_in_pr_mode(self):
+        """When prd_pr_number exists, Q&A answer goes to GitHub PR."""
+        mock_jira = create_mock_jira_client()
+        mock_agent = create_mock_forge_agent()
+        mock_gh = MagicMock()
+        mock_gh.create_issue_comment = AsyncMock()
+        mock_gh.close = AsyncMock()
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-123",
+            ticket_type=TicketType.FEATURE,
+        )
+        state["feedback_comment"] = "?What does this feature do?"
+        state["current_node"] = "prd_approval_gate"
+        state["prd_content"] = "# PRD Content"
+        state["is_question"] = True
+        state["prd_pr_number"] = 7
+        state["prd_pr_repo"] = "org/proposals"
+
+        with (
+            patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.nodes.qa_handler.GitHubClient", return_value=mock_gh),
+        ):
+            await answer_question(state)
+
+        mock_gh.create_issue_comment.assert_called_once()
+        call_args = mock_gh.create_issue_comment.call_args[0]
+        assert call_args[0] == "org"
+        assert call_args[1] == "proposals"
+        assert call_args[2] == 7
+        mock_jira.add_comment.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_posts_answer_to_jira_when_no_prd_pr(self):
+        """Without prd_pr_number, Q&A answer goes to Jira as before."""
+        mock_jira = create_mock_jira_client()
+        mock_agent = create_mock_forge_agent()
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-123",
+            ticket_type=TicketType.FEATURE,
+        )
+        state["feedback_comment"] = "?What does this feature do?"
+        state["current_node"] = "prd_approval_gate"
+        state["prd_content"] = "# PRD Content"
+        state["is_question"] = True
+
+        with (
+            patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+        ):
+            await answer_question(state)
+
+        mock_jira.add_comment.assert_called_once()
+
 
 class TestDetermineArtifactTypeBugGates:
     """Bug workflow gate artifact type detection."""

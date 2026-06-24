@@ -254,6 +254,31 @@ class GitHubClient:
             response.raise_for_status()
             return response.json()
 
+    async def get_review_comments(
+        self, owner: str, repo: str, pr_number: int, review_id: int
+    ) -> list[dict[str, Any]]:
+        """Get inline comments from a specific PR review.
+
+        Scoped to a single review submission, avoiding stale comments
+        from prior review rounds.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+            review_id: The review ID from the webhook payload.
+
+        Returns:
+            List of comment dicts with path, line, and body.
+        """
+        client = await self._get_client()
+        response = await client.get(
+            f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews/{review_id}/comments",
+            params={"per_page": 100},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def create_issue_comment(
         self, owner: str, repo: str, issue_number: int, body: str
     ) -> dict[str, Any]:
@@ -695,3 +720,114 @@ class GitHubClient:
             return self.settings.github_fork_owner
         user = await self.get_authenticated_user()
         return user["login"]
+
+    async def create_branch(
+        self,
+        owner: str,
+        repo: str,
+        branch_name: str,
+        base: str = "main",
+    ) -> dict[str, Any]:
+        """Create a new branch from a base ref.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            branch_name: New branch name.
+            base: Base branch to branch from.
+
+        Returns:
+            API response with ref details.
+        """
+        client = await self._get_client()
+
+        ref_response = await client.get(f"/repos/{owner}/{repo}/git/ref/heads/{base}")
+        ref_response.raise_for_status()
+        sha = ref_response.json()["object"]["sha"]
+
+        try:
+            response = await client.post(
+                f"/repos/{owner}/{repo}/git/refs",
+                json={"ref": f"refs/heads/{branch_name}", "sha": sha},
+            )
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"Created branch {branch_name} in {owner}/{repo}")
+            return data
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 422:
+                logger.info(f"Branch {branch_name} already exists in {owner}/{repo}")
+                return {"ref": f"refs/heads/{branch_name}", "object": {"sha": sha}}
+            raise
+
+    async def create_or_update_file(
+        self,
+        owner: str,
+        repo: str,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+        sha: str | None = None,
+    ) -> dict[str, Any]:
+        """Create or update a file via the Contents API.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            path: File path in the repository.
+            content: File content (plain text, will be base64-encoded).
+            message: Commit message.
+            branch: Target branch.
+            sha: Existing file SHA (required for updates, omit for creates).
+
+        Returns:
+            API response with content details.
+        """
+        import base64 as b64
+
+        client = await self._get_client()
+        body: dict[str, Any] = {
+            "message": message,
+            "content": b64.b64encode(content.encode()).decode(),
+            "branch": branch,
+        }
+        if sha:
+            body["sha"] = sha
+
+        response = await client.put(f"/repos/{owner}/{repo}/contents/{path}", json=body)
+        response.raise_for_status()
+        data = response.json()
+        logger.info(f"{'Updated' if sha else 'Created'} file {path} on {branch} in {owner}/{repo}")
+        return data
+
+    async def get_file_contents(
+        self,
+        owner: str,
+        repo: str,
+        path: str,
+        ref: str,
+    ) -> dict[str, Any] | None:
+        """Get file contents and metadata from a repository.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            path: File path in the repository.
+            ref: Git ref (branch, tag, or SHA).
+
+        Returns:
+            File metadata including sha, or None if not found.
+        """
+        client = await self._get_client()
+        try:
+            response = await client.get(
+                f"/repos/{owner}/{repo}/contents/{path}",
+                params={"ref": ref},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise

@@ -44,6 +44,7 @@ def route_prd_approval(state: WorkflowState) -> str:
 
     This routing function determines the next node after PRD approval gate:
     - If question (Q&A mode) -> answer_question
+    - If yolo_mode enabled -> auto-approve without human input
     - If feedback provided (revision requested) -> regenerate PRD
     - If still paused -> END (wait for next webhook to resume)
     - Otherwise (approved) -> proceed to spec generation
@@ -58,6 +59,12 @@ def route_prd_approval(state: WorkflowState) -> str:
     if state.get("is_question") and state.get("feedback_comment"):
         logger.info(f"Q&A mode: routing to answer_question for {state['ticket_key']}")
         return "answer_question"
+
+    # YOLO mode: auto-approve without human input
+    if state.get("yolo_mode"):
+        logger.info(f"YOLO mode: auto-approving PRD for {state['ticket_key']}")
+        record_approval("prd")
+        return "generate_spec"
 
     # Check if revision was requested via comment
     if state.get("revision_requested") and state.get("feedback_comment"):

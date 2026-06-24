@@ -1,0 +1,41 @@
+# Ephemeral Grafana for Forge dashboard development.
+#
+# Usage:
+#   docker compose --env-file .env -f devtools/grafana/compose.grafana.yml up -d
+#
+# UI: http://localhost:${GRAFANA_PORT:-3010} (admin / grafana)
+#
+# This standalone compose file expects Prometheus, Redis, and Langfuse ClickHouse
+# to be reachable from the Grafana container. For local self-hosted Langfuse,
+# add compose.langfuse-network.yml so the default ClickHouse host "clickhouse"
+# resolves on the Langfuse compose network.
+name: forge-grafana
+
+services:
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "${GRAFANA_PORT:-3010}:3000"
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-grafana}
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource,redis-datasource
+      - CLICKHOUSE_HOST=${CLICKHOUSE_HOST:-clickhouse}
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-9000}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-default}
+      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-clickhouse}
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-clickhouse}
+      - PROMETHEUS_HOST=${PROMETHEUS_HOST:-host.containers.internal}
+      - PROMETHEUS_PORT=${PROMETHEUS_PORT:-9092}
+      - REDIS_HOST=${REDIS_HOST:-host.containers.internal}
+      - REDIS_PORT=${REDIS_PORT:-6380}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro,z
+      - ./dashboards:/var/lib/grafana/dashboards:ro,z
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+
+volumes:
+  grafana-data:

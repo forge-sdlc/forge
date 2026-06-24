@@ -130,6 +130,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
                     **state,
                     "last_error": str(e),
                     "current_node": "implement_review",
+                    "retry_count": state.get("retry_count", 0) + 1,
                 }
             )
 

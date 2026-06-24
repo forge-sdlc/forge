@@ -9,6 +9,7 @@ from forge.integrations.jira.client import JiraClient, MissingProjectConfig
 from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,12 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
     jira_error = None
 
     try:
+        await post_status_comment(
+            jira,
+            ticket_key,
+            "🗺️ Forge is decomposing your spec into an implementation plan — this may take a few minutes.",
+        )
+
         # If spec not in state, this is an error
         if not spec_content.strip():
             logger.error(f"No spec content found for {ticket_key}")
@@ -107,9 +114,15 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
         # Build context for Epic generation
         context: dict[str, Any] = {
             "ticket_key": ticket_key,
+            "ticket_type": state.get("ticket_type", ""),
+            "current_node": state.get("current_node", ""),
+            "event_type": state.get("event_type", ""),
+            "event_source": state.get("context", {}).get("source", ""),
+            "retry_count": state.get("retry_count", 0),
             "project_key": project_key,
             "feature_summary": parent_issue.summary,
             "available_repos": available_repos,
+            "feedback": state.get("feedback_comment", ""),
         }
 
         # Generate Epic breakdown using Claude - primary operation
@@ -192,6 +205,9 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
                     **state,
                     "epic_keys": epic_keys,
                     "generation_context": generation_context,
+                    "feedback_comment": None,
+                    "revision_requested": False,
+                    "current_epic_key": None,
                     "current_node": "plan_approval_gate",
                     "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
                 }
@@ -312,6 +328,13 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
             feedback=feedback,
             content_type="epic",
             ticket_key=ticket_key,
+            context={
+                "ticket_type": state.get("ticket_type", ""),
+                "current_node": state.get("current_node", ""),
+                "event_type": state.get("event_type", ""),
+                "event_source": state.get("context", {}).get("source", ""),
+                "retry_count": state.get("retry_count", 0),
+            },
         )
 
         # Update Epic description

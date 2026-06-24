@@ -102,6 +102,28 @@ Use these to skip the Jira project property requirement during local development
 | `LANGFUSE_PUBLIC_KEY` | Langfuse public key |
 | `LANGFUSE_SECRET_KEY` | Langfuse secret key |
 | `LANGFUSE_HOST` | Langfuse host (defaults to cloud; set for self-hosted) |
+| `LANGFUSE_TRACE_TAGS` | Comma-separated list of trace attributes to attach as Langfuse tags. Available values: `ticket_key`, `ticket_type`, `project_id`, `workflow_step`, `repo`, `pr_number`, `ci_status`, `event_source`, `event_type`, `llm_model`. Default: empty (no tags). |
+| `LANGFUSE_TRACE_METADATA` | Comma-separated list of trace attributes to attach as Langfuse metadata. Available values: same as tags plus `retry_count`, `system_prompt_length`. Default: empty (no metadata). |
+
+### Grafana Dashboards
+
+These variables are used by `docker-compose.yml`, `devtools/docker-compose.dev.yml`, and `devtools/grafana/compose.grafana.yml`.
+
+| Variable | Description |
+|----------|-------------|
+| `GRAFANA_PORT` | Host port for Grafana (default: `3010`) |
+| `GRAFANA_ADMIN_USER` | Grafana admin user (default: `admin`) |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password (default: `grafana`) |
+| `LANGFUSE_DOCKER_NETWORK` | External Docker/Podman network for self-hosted Langfuse when using `devtools/grafana/compose.langfuse-network.yml` (default: `langfuse_default`) |
+| `CLICKHOUSE_HOST` | Langfuse ClickHouse host reachable from the Grafana container |
+| `CLICKHOUSE_PORT` | Langfuse ClickHouse native protocol port (default: `9000`) |
+| `CLICKHOUSE_DATABASE` | Langfuse ClickHouse database (default: `default`) |
+| `CLICKHOUSE_USER` | Langfuse ClickHouse user |
+| `CLICKHOUSE_PASSWORD` | Langfuse ClickHouse password |
+| `PROMETHEUS_HOST` | Prometheus host for standalone Grafana compose |
+| `PROMETHEUS_PORT` | Prometheus port for standalone Grafana compose |
+| `REDIS_HOST` | Redis host for standalone Grafana compose |
+| `REDIS_PORT` | Redis port for standalone Grafana compose |
 
 ### MCP Servers
 

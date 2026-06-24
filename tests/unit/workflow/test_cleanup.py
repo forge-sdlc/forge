@@ -72,7 +72,7 @@ class TestRouteEntryCompleteness:
             "triage_gate": "triage_gate",
             "analyze_bug": "analyze_bug",
             "reflect_rca": "reflect_rca",
-            "regenerate_rca": "analyze_bug",  # loops back
+            "regenerate_rca": "regenerate_rca",  # reruns cleanup+setup before analyze_bug
             "rca_option_gate": "rca_option_gate",
             "plan_bug_fix": "plan_bug_fix",
             "plan_approval_gate": "plan_approval_gate",
@@ -101,7 +101,7 @@ class TestRouteEntryCompleteness:
             "teardown_workspace": "teardown_workspace",
             "ci_evaluator": "ci_evaluator",
             "attempt_ci_fix": "ci_evaluator",
-            "wait_for_ci_gate": "ci_evaluator",
+            "wait_for_ci_gate": "wait_for_ci_gate",
             "ai_review": "human_review_gate",
             "human_review_gate": "human_review_gate",
             "implement_review": "implement_review",

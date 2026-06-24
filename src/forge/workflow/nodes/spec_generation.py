@@ -10,6 +10,7 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,12 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
     jira_error = None
 
     try:
+        await post_status_comment(
+            jira,
+            ticket_key,
+            "📋 Forge is generating your specification — this may take a few minutes.",
+        )
+
         # If PRD not in state, fetch from Jira
         if not prd_content:
             issue = await jira.get_issue(ticket_key)
@@ -62,6 +69,11 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         # Build context
         context: dict[str, Any] = {
             "ticket_key": ticket_key,
+            "ticket_type": state.get("ticket_type", ""),
+            "current_node": state.get("current_node", ""),
+            "event_type": state.get("event_type", ""),
+            "event_source": state.get("context", {}).get("source", ""),
+            "retry_count": state.get("retry_count", 0),
         }
 
         # Generate specification using Claude - primary operation
@@ -167,6 +179,13 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
             feedback=feedback,
             content_type="spec",
             ticket_key=ticket_key,
+            context={
+                "ticket_type": state.get("ticket_type", ""),
+                "current_node": state.get("current_node", ""),
+                "event_type": state.get("event_type", ""),
+                "event_source": state.get("context", {}).get("source", ""),
+                "retry_count": state.get("retry_count", 0),
+            },
         )
 
         # Store updated spec in Jira (comment or custom field based on config)
@@ -201,7 +220,7 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         # Add comment acknowledging revision
         await jira.add_comment(
             ticket_key,
-            "Specification has been revised based on feedback. Please review the updated version.",
+            "📋 Specification has been revised based on feedback. Please review the updated version.",
         )
 
         logger.info(f"Spec regenerated for {ticket_key} ({len(new_spec)} chars)")

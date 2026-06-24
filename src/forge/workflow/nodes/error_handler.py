@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from forge.integrations.jira.client import JiraClient
+from forge.utils.redaction import redact_secrets
 from forge.workflow.feature.state import FeatureState as WorkflowState
 
 logger = logging.getLogger(__name__)
@@ -48,8 +49,9 @@ async def notify_error(
         ):
             mention_ids.append(issue.assignee.account_id)
 
-        # Truncate error message if too long
-        error_truncated = error[:500] + "..." if len(error) > 500 else error
+        # Redact secrets before truncation so credentials are never posted to Jira.
+        safe_error = redact_secrets(error)
+        error_truncated = safe_error[:500] + "..." if len(safe_error) > 500 else safe_error
 
         await jira.add_error_comment(
             issue_key=ticket_key,
@@ -84,7 +86,7 @@ def build_error_state(
     """
     return {
         **state,
-        "last_error": error,
+        "last_error": redact_secrets(error),
         "current_node": node_name,
         "retry_count": state.get("retry_count", 0) + 1,
     }

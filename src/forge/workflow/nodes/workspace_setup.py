@@ -5,8 +5,14 @@ from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
+from forge.integrations.jira.client import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import (
+    post_status_comment,
+    set_implementing_label,
+    transition_tasks_to_in_progress,
+)
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.guardrails import GuardrailsLoader
 from forge.workspace.manager import Workspace, WorkspaceManager
@@ -133,6 +139,30 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         }
 
     logger.info(f"Setting up workspace for {current_repo} ({ticket_key})")
+
+    # Extract repo name for display (handle "owner/repo" format)
+    repo_display = (
+        current_repo.split("/")[-1]
+        if current_repo and "/" in current_repo
+        else "unknown repository"
+    )
+
+    # Post initial status comment and update Jira labels/transitions
+    jira_client = JiraClient()
+    try:
+        await post_status_comment(
+            jira_client,
+            ticket_key,
+            f"⚙️ Implementation starting for {repo_display}. Setting up workspace...",
+        )
+        await set_implementing_label(jira_client, ticket_key)
+
+        # Transition task tickets to In Progress if present
+        task_keys = state.get("task_keys", [])
+        if task_keys:
+            await transition_tasks_to_in_progress(jira_client, task_keys)
+    finally:
+        await jira_client.close()
 
     manager = get_workspace_manager()
 

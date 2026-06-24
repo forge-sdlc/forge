@@ -12,6 +12,7 @@ from forge.config import Settings, get_settings
 from forge.integrations.jira.models import JiraComment, JiraIssue
 from forge.models.workflow import ForgeLabel
 from forge.skills.models import SkillEntry
+from forge.utils.redaction import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -302,13 +303,12 @@ class JiraClient:
         logger.info(f"Deleted issue {issue_key}")
 
     async def archive_issue(self, issue_key: str, archive_subtasks: bool = True) -> None:
-        """Archive a Jira issue by unlinking from parent and adding archive label.
+        """Archive a Jira issue natively and clean up its forge labels.
 
-        Use this instead of delete_issue when deletion is not permitted.
         The issue will be:
-        1. Unlinked from its parent (Epic/Feature)
-        2. Marked with 'forge:archived' label
-        3. Have all forge workflow labels removed
+        1. Natively archived via the Jira archive endpoint (hidden from boards/backlogs)
+        2. Marked with 'forge:archived' label and all other forge labels removed
+        3. Unlinked from its parent (Epic/Feature)
 
         Args:
             issue_key: The Jira issue key.
@@ -335,9 +335,7 @@ class JiraClient:
         label_update = {
             "update": {
                 "labels": [
-                    # Remove all forge workflow labels
                     *[{"remove": label} for label in forge_labels],
-                    # Add archived label
                     {"add": "forge:archived"},
                 ]
             }
@@ -350,7 +348,7 @@ class JiraClient:
         except Exception as e:
             logger.warning(f"Failed to update labels for {issue_key}: {e}")
 
-        # Step 2: Try to unlink from parent (separate request, may fail in some configs)
+        # Step 2: Try to unlink from parent (may fail in some configs)
         try:
             parent_update = {"fields": {"parent": None}}
             response = await client.put(f"/issue/{issue_key}", json=parent_update)
@@ -358,6 +356,26 @@ class JiraClient:
             logger.info(f"Unlinked {issue_key} from parent")
         except Exception as e:
             logger.debug(f"Could not unlink parent for {issue_key} (may not be supported): {e}")
+
+        # Step 3: Natively archive the issue so it's hidden from boards and backlogs
+        try:
+            response = await client.put("/issue/archive", json={"issueIdsOrKeys": [issue_key]})
+            response.raise_for_status()
+            archive_result = response.json()
+            archive_errors = archive_result.get("errors", {}) if archive_result else {}
+            failed_error = next(
+                (
+                    error
+                    for error in archive_errors.values()
+                    if issue_key in error.get("issueIdsOrKeys", [])
+                ),
+                None,
+            )
+            if failed_error:
+                raise RuntimeError(failed_error.get("message", "Unknown Jira archive error"))
+            logger.info(f"Natively archived {issue_key}")
+        except Exception as e:
+            logger.warning(f"Failed to natively archive {issue_key}: {e}")
 
         logger.info(f"Archived issue {issue_key}")
 
@@ -594,6 +612,8 @@ class JiraClient:
                     )
                     mention_nodes.append({"type": "text", "text": " "})
 
+        safe_error_message = redact_secrets(error_message)
+
         # Build the error message content
         error_paragraph: list[dict[str, Any]] = [
             {"type": "text", "text": "Workflow failed at ", "marks": []},
@@ -602,7 +622,7 @@ class JiraClient:
                 "text": node_name,
                 "marks": [{"type": "strong"}],
             },
-            {"type": "text", "text": f": {error_message}"},
+            {"type": "text", "text": f": {safe_error_message}"},
         ]
 
         adf_content: dict[str, Any] = {
@@ -897,6 +917,21 @@ class JiraClient:
         response.raise_for_status()
         _project_property_cache.pop((project_key, property_key), None)
 
+    async def delete_project_property(self, project_key: str, property_key: str) -> None:
+        """Delete a Jira project property.
+
+        Args:
+            project_key: The Jira project key (e.g., "MYPROJ").
+            property_key: The property key (e.g., "forge.prd_proposals_repo").
+        """
+        client = await self._get_client()
+        response = await client.delete(
+            f"/project/{project_key}/properties/{property_key}",
+        )
+        if response.status_code != 404:
+            response.raise_for_status()
+        _project_property_cache.pop((project_key, property_key), None)
+
     async def get_project_repos(self, project_key: str) -> list[str]:
         """Fetch the forge.repos project property.
 
@@ -941,6 +976,53 @@ class JiraClient:
                 f"forge.default_repo for project {project_key} is malformed: {value!r}"
             )
         logger.info(f"Project {project_key}: default repo: {value}")
+        return value
+
+    async def get_prd_proposals_repo(self, project_key: str) -> str | None:
+        """Fetch the forge.prd_proposals_repo project property.
+
+        When set, enables PRD approval via GitHub PR for this project.
+        The value is a GitHub repo in "owner/repo" format.
+
+        Args:
+            project_key: The Jira project key.
+
+        Returns:
+            Repo string in "owner/repo" format, or None if not configured.
+        """
+        value = await self.get_project_property(project_key, "forge.prd_proposals_repo")
+        if value is None:
+            return None
+        if not isinstance(value, str) or "/" not in value:
+            logger.warning(
+                f"forge.prd_proposals_repo for project {project_key} is malformed: {value!r}"
+            )
+            return None
+        logger.info(f"Project {project_key}: PRD proposals repo: {value}")
+        return value
+
+    async def get_proposals_path(self, project_key: str) -> str | None:
+        """Fetch the forge.prd_proposals_path project property.
+
+        When set, overrides the global default base directory for enhancement
+        folders in the proposals repo.
+
+        Args:
+            project_key: The Jira project key.
+
+        Returns:
+            Path string (may be empty for repo root), or None if not configured.
+        """
+        value = await self.get_project_property(project_key, "forge.prd_proposals_path")
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            logger.warning(
+                f"forge.prd_proposals_path for project {project_key} is malformed: {value!r}"
+            )
+            return None
+        value = value.strip("/")
+        logger.info(f"Project {project_key}: proposals path: {value!r}")
         return value
 
     async def get_skills_config(self, project_key: str) -> list[SkillEntry] | None:

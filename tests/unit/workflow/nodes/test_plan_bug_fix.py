@@ -243,7 +243,7 @@ class TestPlanBugFix:
 
     @pytest.mark.asyncio
     async def test_three_failures_escalate_blocked(self, base_bug_state):
-        """After 3 container failures, escalate to escalate_blocked."""
+        """After 3 container failures, preserve retry node for graph escalation."""
         base_bug_state["retry_count"] = 2
         mock_jira = _make_mock_jira()
         runner = _make_mock_runner_failure()
@@ -254,7 +254,8 @@ class TestPlanBugFix:
         ):
             result = await plan_bug_fix(base_bug_state)
 
-        assert result["current_node"] == "escalate_blocked"
+        assert result["current_node"] == "plan_bug_fix"
+        assert result["retry_count"] == 3
 
     @pytest.mark.asyncio
     async def test_failure_retries_to_plan_bug_fix(self, base_bug_state):
@@ -588,8 +589,22 @@ class TestDecomposePlan:
         with patch("forge.workflow.nodes.plan_bug_fix.JiraClient", return_value=mock_jira):
             result = await decompose_plan(plan_state)
 
-        assert result["current_node"] == "escalate_blocked"
+        assert result["current_node"] == "decompose_plan"
         assert result["last_error"] is not None
+
+    @pytest.mark.asyncio
+    async def test_no_repo_tags_and_no_project_repos_escalates(self, plan_state):
+        """Missing repo information blocks before workspace setup."""
+        plan_state["plan_content"] = "## Plan\n\nFix the bug without explicit repo tags."
+        mock_jira = _make_mock_jira()
+        mock_jira.get_project_repos = AsyncMock(return_value=[])
+
+        with patch("forge.workflow.nodes.plan_bug_fix.JiraClient", return_value=mock_jira):
+            result = await decompose_plan(plan_state)
+
+        assert result["current_node"] == "decompose_plan"
+        assert "No repositories found" in result["last_error"]
+        mock_jira.create_task.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_success_routes_to_setup_workspace(self, plan_state):

@@ -5,6 +5,7 @@ import logging
 from datetime import UTC, datetime
 
 from forge.integrations.agents import ForgeAgent
+from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
@@ -74,15 +75,30 @@ async def answer_question(state: WorkflowState) -> WorkflowState:
             question=question,
             artifact_content=artifact_content,
             context={
+                "ticket_key": ticket_key,
+                "ticket_type": state.get("ticket_type", ""),
+                "current_node": state.get("current_node", ""),
+                "event_type": state.get("event_type", ""),
+                "event_source": state.get("context", {}).get("source", ""),
+                "retry_count": state.get("retry_count", 0),
                 "artifact_type": artifact_type,
                 "generation_context": generation_context,
-                "ticket_key": ticket_key,
             },
         )
 
-        # Post to Jira
+        # Post answer to the right channel
         formatted_answer = f"*Q: {question}*\n\n{answer}"
-        await jira.add_comment(ticket_key, formatted_answer)
+        if state.get("prd_pr_number") and artifact_type == "prd":
+            owner, repo_name = state["prd_pr_repo"].split("/", 1)
+            gh = GitHubClient()
+            try:
+                await gh.create_issue_comment(
+                    owner, repo_name, state["prd_pr_number"], formatted_answer
+                )
+            finally:
+                await gh.close()
+        else:
+            await jira.add_comment(ticket_key, formatted_answer)
 
         # Record in Q&A history
         qa_history = list(state.get("qa_history", []))
@@ -113,11 +129,21 @@ async def answer_question(state: WorkflowState) -> WorkflowState:
     except Exception as e:
         logger.error(f"Failed to answer question for {ticket_key}: {e}")
         with contextlib.suppress(Exception):
-            await jira.add_comment(
-                ticket_key,
+            error_msg = (
                 f"I wasn't able to answer that question. Error: {e}\n\n"
-                "Please try rephrasing or ask a different question.",
+                "Please try rephrasing or ask a different question."
             )
+            if state.get("prd_pr_number") and artifact_type == "prd":
+                owner, repo_name = state["prd_pr_repo"].split("/", 1)
+                gh = GitHubClient()
+                try:
+                    await gh.create_issue_comment(
+                        owner, repo_name, state["prd_pr_number"], error_msg
+                    )
+                finally:
+                    await gh.close()
+            else:
+                await jira.add_comment(ticket_key, error_msg)
 
         return update_state_timestamp(
             {

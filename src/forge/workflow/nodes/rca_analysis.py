@@ -12,6 +12,7 @@ from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.bug.state import BugState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,12 @@ async def analyze_bug(state: BugState) -> BugState:
     jira = JiraClient()
 
     try:
+        await post_status_comment(
+            jira,
+            ticket_key,
+            "🔍 Forge is analyzing the bug root cause — this may take a few minutes.",
+        )
+
         issue = await jira.get_issue(ticket_key)
 
         try:

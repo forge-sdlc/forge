@@ -46,6 +46,20 @@ async def rca_option_gate(state: BugState) -> BugState:
     finally:
         await jira.close()
 
+    # YOLO mode: auto-select option 1 without pausing
+    if state.get("yolo_mode") and rca_options:
+        logger.info(f"YOLO mode: auto-selecting RCA option 1 for {ticket_key}")
+        return update_state_timestamp(
+            {
+                **state,
+                "rca_comment_posted": True,
+                "selected_fix_option": 1,
+                "selected_fix_approach": rca_options[0],
+                "is_paused": False,
+                "current_node": "rca_option_gate",
+            }
+        )
+
     paused = set_paused(state, "rca_option_gate")
     return {**paused, "rca_comment_posted": True}
 

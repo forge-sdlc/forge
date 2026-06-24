@@ -5,11 +5,13 @@ import re
 from pathlib import Path
 
 from forge.config import get_settings
+from forge.integrations.jira import JiraClient
 from forge.models.workflow import TicketType
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
@@ -18,6 +20,23 @@ logger = logging.getLogger(__name__)
 MAX_REVIEW_ATTEMPTS = 2
 _QUALITATIVE_CAP = 2
 _VALID_VERDICTS = {"adequate", "tests_incomplete", "symptom_only"}
+
+
+def _validate_pass_number(value: int | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        logger.warning(f"Invalid pass_number type: bool, expected int; value: {value}")
+        return None
+    if not isinstance(value, int):
+        logger.warning(
+            f"Invalid pass_number type: {type(value).__name__}, expected int; value: {value}"
+        )
+        return None
+    if value < 1:
+        logger.warning(f"Invalid pass_number value: {value}, expected positive integer >= 1")
+        return None
+    return value
 
 
 def _parse_bug_verdict(output: str) -> tuple[str, str]:
@@ -222,6 +241,39 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
     review_attempts = state.get("local_review_attempts", 0)
     current_repo = state.get("current_repo", "")
     branch_name = state.get("context", {}).get("branch_name", "")
+    raw_pass_number = state.get("local_review_pass_number", 1)
+    validated_pass = _validate_pass_number(raw_pass_number)
+
+    if validated_pass is not None:
+        logger.info(f"Starting local review pass {validated_pass} for {ticket_key}")
+
+    settings = get_settings()
+    jira = JiraClient(settings)
+    try:
+        if validated_pass is None:
+            logger.warning(
+                f"Pass number tracking unavailable or corrupted for {ticket_key} "
+                f"(raw value: {raw_pass_number!r}), using generic status comment"
+            )
+            await post_status_comment(
+                jira,
+                ticket_key,
+                "🔧 Local review found issues, applying fixes.",
+            )
+        elif validated_pass == 1:
+            await post_status_comment(
+                jira,
+                ticket_key,
+                "🔍 Running local code review on changes before creating PR.",
+            )
+        else:
+            await post_status_comment(
+                jira,
+                ticket_key,
+                f"🔧 Local review found issues, applying fixes (pass {validated_pass}).",
+            )
+    finally:
+        await jira.close()
 
     if review_attempts >= MAX_REVIEW_ATTEMPTS:
         logger.warning(
@@ -241,7 +293,6 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
         f"(attempt {review_attempts + 1}/{MAX_REVIEW_ATTEMPTS})"
     )
 
-    settings = get_settings()
     spec_content = state.get("spec_content", "Not available")
     guardrails = state.get("context", {}).get("guardrails", "")
 
@@ -284,10 +335,12 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
             logger.warning(
                 f"Breaking issues remain after review attempt {review_attempts + 1}, retrying"
             )
+            next_pass = (validated_pass or 1) + 1
             return update_state_timestamp(
                 {
                     **state,
                     "local_review_attempts": review_attempts + 1,
+                    "local_review_pass_number": next_pass,
                     "current_node": "local_review",
                 }
             )

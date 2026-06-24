@@ -52,7 +52,7 @@ Forge reads the ticket description and generates a structured Product Requiremen
 
 Forge generates a behavioral specification from the approved PRD, typically using Given/When/Then acceptance criteria.
 
-**Human action:** Review the spec. Ask questions or request revisions. Approve with `forge:spec-approved`.
+**Human action:** Review the spec. Ask questions with `?` or request revisions with `!`. Approve with `forge:spec-approved`.
 
 ---
 
@@ -66,16 +66,16 @@ Forge breaks the feature into logical epics — high-level areas of work that ma
 |--------|-----|
 | Approve | Change label to `forge:plan-approved` |
 | Ask a question | Comment with `?` prefix — Forge answers without re-decomposing |
-| Revise one epic | Comment on the **specific epic sub-ticket** — Forge updates only that epic |
-| Redo the full decomposition | Comment on the **feature ticket** (no `?` prefix) — Forge regenerates all epics with your feedback |
+| Revise one epic | `!` comment on the **specific epic sub-ticket** — Forge updates only that epic |
+| Redo the full decomposition | `!` comment on the **feature ticket** — Forge regenerates all epics with your feedback |
 
 ```mermaid
 flowchart TD
     Gate([plan_approval_gate])
     Gate -->|forge:plan-approved| Next[Generate Tasks]
     Gate -->|"? on feature ticket"| QA[Answer Question]
-    Gate -->|Comment on feature ticket| Regen[Regenerate All Epics]
-    Gate -->|Comment on epic sub-ticket| Update[Update Single Epic]
+    Gate -->|"! on feature ticket"| Regen[Regenerate All Epics]
+    Gate -->|"! on epic sub-ticket"| Update[Update Single Epic]
     QA --> Gate
     Regen --> Gate
     Update --> Gate
@@ -93,16 +93,16 @@ Forge generates granular implementation tasks scoped to individual repositories.
 |--------|-----|
 | Approve | Change label to `forge:task-approved` |
 | Ask a question | Comment with `?` prefix — Forge answers without regenerating |
-| Revise one task | Comment on the **specific task sub-ticket** — Forge updates only that task |
-| Regenerate all tasks | Comment on the **feature or epic ticket** (no `?` prefix) — Forge regenerates the full task list with your feedback |
+| Revise one task | `!` comment on the **specific task sub-ticket** — Forge updates only that task |
+| Regenerate all tasks | `!` comment on the **feature or epic ticket** — Forge regenerates the full task list with your feedback |
 
 ```mermaid
 flowchart TD
     Gate([task_approval_gate])
     Gate -->|forge:task-approved| Next[Implement Tasks]
     Gate -->|"? on ticket"| QA[Answer Question]
-    Gate -->|Comment on feature/epic| Regen[Regenerate All Tasks]
-    Gate -->|Comment on task sub-ticket| Update[Update Single Task]
+    Gate -->|"! on feature/epic"| Regen[Regenerate All Tasks]
+    Gate -->|"! on task sub-ticket"| Update[Update Single Task]
     QA --> Gate
     Regen --> Gate
     Update --> Gate
@@ -178,7 +178,14 @@ A summary of all Q&A exchanges is posted to the ticket when you approve.
 
 ## Requesting Revisions
 
-Add a comment with your feedback (without a `?` prefix). Forge regenerates the current artifact incorporating your feedback, replacing the previous version.
+Start a comment with `!` followed by your feedback. Forge regenerates the current artifact incorporating your feedback, replacing the previous version.
+
+```
+! The spec is missing error handling for the webhook retry path
+```
+
+!!! note
+    Comments without a recognized prefix (`!`, `?`, `@forge ask`) are treated as informational and ignored by the workflow. Only `!`-prefixed comments trigger regeneration.
 
 ## Handling Failures
 

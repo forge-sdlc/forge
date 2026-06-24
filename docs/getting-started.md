@@ -125,6 +125,9 @@ For local development you have two options:
 
 That's it. Forge will carry the ticket through the full pipeline with similar approval gates at each planning stage.
 
+!!! warning "Skipping approvals with forge:yolo"
+    Adding `forge:yolo` to a ticket causes Forge to skip all planning approval gates (PRD, spec, plan, tasks) and proceed directly to implementation. Only use this when you trust the requirements fully — there are no checkpoints to catch mistakes before code is written. The code review gate on the implementation PR is always required regardless.
+
 !!! tip "Local development shortcut"
     Set `FORGE_REQUIRE_PROJECT_CONFIG=false` in `.env` and configure `GITHUB_KNOWN_REPOS` / `GITHUB_DEFAULT_REPO` to skip the Jira project property setup. See the [Developer Guide](developer-guide.md) for details.
 

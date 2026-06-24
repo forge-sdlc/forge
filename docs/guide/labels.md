@@ -38,9 +38,11 @@ These labels advance the pipeline. Forge watches for label changes via Jira webh
 
 **Approving a stage:** When Forge posts a PRD, spec, or other artifact, it sets the `forge:*-pending` label. Change it to `forge:*-approved` to advance the workflow. Do not add the approved label manually before Forge posts — it won't be recognized until the pending state is set.
 
-**Requesting revisions:** Add a comment with your feedback (no `?` prefix). Forge regenerates the artifact and resets the pending label.
+**Requesting revisions:** Start a comment with `!` followed by your feedback. Forge regenerates the artifact and resets the pending label.
 
 **Asking questions:** Start a comment with `?` or `@forge ask`. Forge answers without advancing or regenerating.
+
+**Informational comments:** Comments without a recognized prefix (`!`, `?`, `@forge ask`, `>option`) are ignored by the workflow — use them for team discussion without triggering Forge.
 
 **Handling failures:** When `forge:blocked` appears, read the Forge comment for the error. Fix the underlying issue if needed, then add `forge:retry`.
 

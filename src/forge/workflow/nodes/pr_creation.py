@@ -197,6 +197,15 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         pr_url = pr_data.get("html_url", "")
         pr_number = pr_data.get("number")
 
+        # Log PR number extraction status
+        if pr_number is not None:
+            logger.debug(f"Successfully extracted PR number {pr_number} from GitHub API response")
+        else:
+            logger.warning(
+                f"PR number not available in GitHub API response for {ticket_key}. "
+                f"PR URL: {pr_url or 'unknown'}"
+            )
+
         # Store PR URL
         pr_urls = state.get("pr_urls", [])
         pr_urls.append(pr_url)
@@ -208,7 +217,14 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         )
 
         # Add remote link so the poller can discover the PR
-        await jira.create_remote_link(ticket_key, pr_url, f"PR #{pr_number}")
+        # Use pr_number if available, otherwise use generic label
+        pr_label = f"PR #{pr_number}" if pr_number is not None else "Pull Request"
+        await jira.create_remote_link(ticket_key, pr_url, pr_label)
+
+        if pr_number is not None:
+            logger.info(f"Created PR #{pr_number}: {pr_url}")
+        else:
+            logger.info(f"Created PR (number unavailable): {pr_url}")
 
         # Index PR URL → ticket key so the worker can resolve ticket association
         # from GitHub events without relying on PR/branch name parsing.
@@ -220,8 +236,6 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
                 "GitHub event routing will fall back to name-based extraction",
                 exc_info=True,
             )
-
-        logger.info(f"Created PR #{pr_number}: {pr_url}")
 
         # Sync description to catch any inaccuracies from local_review commits
         await sync_pr_description(
@@ -457,8 +471,18 @@ async def _generate_pr_body_with_agent(
             prompt=prompt,
             context={
                 "ticket_key": ticket_key,
-                "repo": current_repo,
                 "task_count": len(implemented_tasks),
+            },
+            trace_context={
+                "ticket_key": ticket_key,
+                "ticket_type": state.get("ticket_type", ""),
+                "current_node": state.get("current_node", ""),
+                "repo": current_repo,
+                "pr_number": state.get("current_pr_number", ""),
+                "ci_status": state.get("ci_status", ""),
+                "event_type": state.get("event_type", ""),
+                "event_source": state.get("context", {}).get("source", ""),
+                "retry_count": state.get("retry_count", 0),
             },
             include_tools=False,  # No tools needed for text generation
         )

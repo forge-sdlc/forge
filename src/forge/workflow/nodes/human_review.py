@@ -91,6 +91,7 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
                 **state,
                 "tasks_completed": True,
                 "current_node": "aggregate_epic_status",
+                "current_attempt": 0,  # Reset CI attempt counter on completion
             }
         )
 

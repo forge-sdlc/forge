@@ -210,6 +210,7 @@ def get_langfuse_config(
         "session_id": session_id,
         "user_id": user_id,
         "tags": tags,
+        "metadata": metadata,
     }
 
     return config

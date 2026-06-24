@@ -175,7 +175,7 @@ REDIS_URL=redis://localhost:6380/0   # matches docker-compose port mapping
 
 ```bash
 CONTAINER_IMAGE=localhost/forge-dev:latest   # built with podman above
-CONTAINER_TIMEOUT=7200                        # 2 hours max
+CONTAINER_TIMEOUT=1800                        # 30 minutes max
 CONTAINER_MEMORY=4g
 CONTAINER_CPUS=2
 ```
@@ -188,6 +188,17 @@ LANGFUSE_ENABLED=true
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_HOST=https://cloud.langfuse.com
+LANGFUSE_TRACE_TAGS=ticket_key,ticket_type,project_id,workflow_step,repo,pr_number,ci_status,event_source,event_type,llm_model
+LANGFUSE_TRACE_METADATA=ticket_key,ticket_type,project_id,workflow_step,repo,pr_number,ci_status,event_source,event_type,retry_count,system_prompt_length,llm_model
+
+# Grafana dashboard stack
+GRAFANA_PORT=3010
+LANGFUSE_DOCKER_NETWORK=langfuse_default
+CLICKHOUSE_HOST=clickhouse
+CLICKHOUSE_PORT=9000
+CLICKHOUSE_DATABASE=default
+CLICKHOUSE_USER=clickhouse
+CLICKHOUSE_PASSWORD=clickhouse
 
 # CI behaviour
 CI_FIX_MAX_RETRIES=5
@@ -226,18 +237,30 @@ uv run forge worker
 
 > **Why not in Docker?** The worker spawns Podman containers. Running it inside Docker would require socket mounting which is not supported in this setup.
 
-### Start Prometheus (optional, for metrics)
+### Start Prometheus and Grafana (optional, for observability)
 
 ```bash
-docker compose up prometheus -d
-# Dashboard at http://localhost:9092
+docker compose --env-file .env -f docker-compose.yml up -d prometheus grafana
+# Prometheus at http://localhost:9092
+# Grafana dashboards at http://localhost:3010
 ```
+
+**With self-hosted Langfuse** — add the network override so Grafana can reach ClickHouse:
+
+```bash
+docker compose --env-file .env \
+  -f docker-compose.yml \
+  -f devtools/grafana/compose.langfuse-network.yml \
+  up -d prometheus grafana
+```
+
+> `compose.langfuse-network.yml` requires the `langfuse_default` Docker network to already exist. Omit it if you are not running self-hosted Langfuse — the Prometheus and Redis datasources work without it.
 
 ### Full local stack
 
 ```bash
-# Terminal 1 — Redis (and optionally Prometheus)
-docker compose up redis prometheus -d
+# Terminal 1 — Redis, Prometheus, and Grafana
+docker compose --env-file .env -f docker-compose.yml up -d redis prometheus grafana
 
 # Terminal 2 — API server
 uv run uvicorn forge.main:app --reload --port 8000 --host 0.0.0.0
@@ -458,6 +481,7 @@ curl -X POST http://localhost:8000/api/v1/webhooks/github \
 | API server | `http://localhost:8000/metrics` |
 | Worker | `http://localhost:8001/metrics` |
 | Prometheus UI | `http://localhost:9092` |
+| Grafana dashboards | `http://localhost:3010` |
 
 ### Key metrics to watch
 
@@ -555,6 +579,41 @@ Then set `LANGFUSE_HOST=http://localhost:3000` in `.env`.
 - PR description sync calls
 - CI fix analysis and implementation calls
 - All calls have the ticket key, task type, and token counts attached
+
+### Trace tags and metadata
+
+You can attach workflow context to every Langfuse trace as tags or metadata, making it easy to filter traces by ticket type, CI status, event source, and so on.
+
+Configure the fields you want via two comma-separated env vars:
+
+```bash
+# Fields to attach as searchable Langfuse tags.
+# Keep these enabled for Grafana dashboards.
+LANGFUSE_TRACE_TAGS=ticket_key,ticket_type,project_id,workflow_step,repo,pr_number,ci_status,event_source,event_type,llm_model
+
+# Fields to attach as Langfuse trace metadata.
+# Grafana ClickHouse queries require project_id, ticket_type, workflow_step, and ticket_key.
+LANGFUSE_TRACE_METADATA=ticket_key,ticket_type,project_id,workflow_step,repo,pr_number,ci_status,event_source,event_type,retry_count,system_prompt_length,llm_model
+```
+
+Available field names for both settings:
+
+| Field | Description |
+|-------|-------------|
+| `ticket_key` | Jira ticket key (e.g. `PROJ-123`) |
+| `ticket_type` | Ticket type (`Feature`, `Bug`, etc.) |
+| `project_id` | Jira project ID derived from the ticket key |
+| `workflow_step` | Name of the workflow node that triggered the call |
+| `repo` | GitHub repository (`owner/repo`) |
+| `pr_number` | Pull request number |
+| `ci_status` | Last known CI status |
+| `event_type` | Webhook event type that started the workflow |
+| `event_source` | Source system (e.g. `jira`, `github`) |
+| `retry_count` | Number of retries so far |
+| `system_prompt_length` | Length of the system prompt in characters (metadata only) |
+| `llm_model` | Model used for the call |
+
+Invalid or unknown field names are ignored and logged at `WARNING` level on startup.
 
 ### Disabling tracing
 
@@ -770,6 +829,7 @@ curl -X POST http://localhost:8000/api/v1/webhooks/github \
 | Worker metrics | 8001 | `http://localhost:8001/metrics` |
 | Redis | 6380 | `redis://localhost:6380/0` |
 | Prometheus | 9092 | `http://localhost:9092` |
+| Grafana | 3010 | `http://localhost:3010` |
 
 ### API endpoints
 
@@ -802,6 +862,7 @@ curl -X POST http://localhost:8000/api/v1/webhooks/github \
 | `forge:task-approved` | Tasks approved, implementation starts |
 | `forge:blocked` | Workflow blocked, needs intervention |
 | `forge:retry` | Resume a blocked workflow |
+| `forge:yolo` | Autonomous mode — skip all artifact approval gates (⚠️ use with care, see README) |
 
 ### Useful `.env` knobs for development
 

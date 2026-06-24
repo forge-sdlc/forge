@@ -67,6 +67,7 @@ def route_task_approval(state: WorkflowState) -> str:
 
     Routing logic:
     - Question (Q&A mode) -> answer_question
+    - YOLO mode enabled -> auto-approve without human input
     - Comment on specific Task ticket -> update_single_task
     - Comment on Feature ticket -> regenerate_all_tasks
     - Label changed to approved -> task_router
@@ -85,16 +86,28 @@ def route_task_approval(state: WorkflowState) -> str:
         logger.info(f"Q&A mode: routing to answer_question for {ticket_key}")
         return "answer_question"
 
+    # YOLO mode: auto-approve without human input
+    if state.get("yolo_mode"):
+        logger.info(f"YOLO mode: auto-approving tasks for {ticket_key}")
+        record_approval("task")
+        return "task_router"
+
     # Check if revision requested (feedback comment added)
     if state.get("revision_requested"):
         feedback = state.get("feedback_comment", "")
         current_task = state.get("current_task_key")
+        current_epic = state.get("current_epic_key")
 
         if current_task:
             # Single Task update - comment was on a specific Task
             logger.info(f"Single Task revision requested for {current_task}")
             record_revision_requested("task")
             return "update_single_task"
+        elif current_epic:
+            # Epic-level regeneration - comment was on a specific Epic
+            logger.info(f"Epic Task regeneration requested for {current_epic} on {ticket_key}")
+            record_revision_requested("task")
+            return "regenerate_epic_tasks"
         elif feedback:
             # Feature-level regeneration - comment was on Feature
             logger.info(f"Full Task regeneration requested for {ticket_key}: {feedback[:100]}...")

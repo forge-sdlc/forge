@@ -1,0 +1,9 @@
+apiVersion: 1
+
+datasources:
+  - name: Redis
+    uid: forge-redis
+    type: redis-datasource
+    access: proxy
+    url: redis://${REDIS_HOST}:${REDIS_PORT}
+    isDefault: false

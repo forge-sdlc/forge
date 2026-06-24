@@ -14,10 +14,10 @@ flowchart TD
     E -->|Invalid| D
     E -->|Valid| F[RCA Option Gate\nforge:rca-pending]
     F -->|'>option N'| G[Plan Bug Fix\ncontainer]
-    F -->|feedback| D
+    F -->|'! feedback'| D
     G --> H[Plan Approval Gate\nforge:plan-pending]
     H -->|forge:plan-approved| I[Decompose Plan\ncreate per-repo tasks]
-    H -->|feedback| G
+    H -->|'! feedback'| G
     I --> J[Implementation\ncontainer per repo]
     J --> K[Qualitative Review\n7-item checklist]
     K -->|adequate| L[Update Docs → PR]
@@ -74,8 +74,10 @@ Forge posts the validated RCA as a structured Jira comment with numbered fix opt
 
 **Human actions:**
 - **Select an option:** Reply with `>option N` (e.g., `>option 1`). Case-insensitive; can appear anywhere in the comment.
-- **Request revision:** Post feedback — Forge regenerates the RCA incorporating your input.
-- **Ask a question:** Prefix with `?` — Forge answers without advancing the workflow.
+- **Request revision:** Start a comment with `!` — Forge regenerates the RCA incorporating your input.
+- **Ask a question:** Prefix with `?` or `@forge ask` — Forge answers without advancing the workflow.
+
+Plain comments (no prefix) are ignored by the workflow.
 
 ---
 
@@ -87,8 +89,10 @@ The plan is posted as a Jira comment and `forge:plan-pending` is set.
 
 **Human actions:**
 - **Approve:** Change label to `forge:plan-approved`.
-- **Request revision:** Post feedback — Forge regenerates the plan.
-- **Ask a question:** Prefix with `?`.
+- **Request revision:** Start a comment with `!` — Forge regenerates the plan with your feedback.
+- **Ask a question:** Prefix with `?` or `@forge ask`.
+
+Plain comments (no prefix) are ignored by the workflow.
 
 ---
 
@@ -108,9 +112,14 @@ After plan approval, Forge:
 
 ---
 
-## Q&A Mode
+## Comment Syntax
 
-At any approval gate, prefix a comment with `?` or `@forge ask` to ask questions. Forge answers using the current artifact as context and stays paused — it does not advance or regenerate.
+At any approval gate, Forge classifies your comment by its prefix:
+
+- **`!` prefix** — revision request: Forge regenerates the current artifact with your feedback
+- **`?` prefix or `@forge ask`** — question: Forge answers and stays paused
+- **`>option N`** — RCA option selection (RCA Option Gate only)
+- **No prefix** — informational: ignored by the workflow
 
 ---
 

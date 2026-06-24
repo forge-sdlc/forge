@@ -1,10 +1,16 @@
 """Configuration management using Pydantic settings."""
 
-from functools import lru_cache
-from typing import Literal
+import logging
+from functools import cached_property, lru_cache
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+if TYPE_CHECKING:
+    from forge.integrations.langfuse.fields import TracingField
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -115,6 +121,25 @@ class Settings(BaseSettings):
         ),
     )
 
+    # PRD Approval Configuration (global fallbacks — per-project config via
+    # Jira project property forge.prd_proposals_repo takes precedence)
+    prd_proposals_repo: str = Field(
+        default="",
+        description=(
+            "Global fallback GitHub repo (owner/repo) for enhancement proposals. "
+            "Per-project config via Jira project property forge.prd_proposals_repo "
+            "takes precedence. Only used when forge_require_project_config is False."
+        ),
+    )
+    prd_proposals_path: str = Field(
+        default="",
+        description=(
+            "Base directory in the proposals repo for enhancement folders. "
+            "Empty string means repo root. Per-project config via Jira project "
+            "property forge.prd_proposals_path takes precedence."
+        ),
+    )
+
     @property
     def known_repos(self) -> list[str]:
         """Get list of known repositories."""
@@ -187,6 +212,14 @@ class Settings(BaseSettings):
     langfuse_secret_key: SecretStr = Field(default=SecretStr(""), description="Langfuse secret key")
     langfuse_host: str = Field(
         default="https://cloud.langfuse.com", description="Langfuse host URL"
+    )
+    langfuse_trace_tags: str = Field(
+        default="",
+        description="Comma-separated list of TracingField names to include as Langfuse trace tags",
+    )
+    langfuse_trace_metadata: str = Field(
+        default="",
+        description="Comma-separated list of TracingField names to include as Langfuse trace metadata",
     )
 
     # Claude Agent SDK Configuration
@@ -285,8 +318,8 @@ class Settings(BaseSettings):
         description="Container image for task execution (local or registry URL)",
     )
     container_timeout: int = Field(
-        default=7200,
-        description="Container execution timeout in seconds (default: 2 hours)",
+        default=1800,
+        description="Container execution timeout in seconds (default: 30 minutes)",
     )
     container_memory: str = Field(
         default="4g",
@@ -335,6 +368,32 @@ class Settings(BaseSettings):
             and self.langfuse_public_key
             and self.langfuse_secret_key.get_secret_value()
         )
+
+    @cached_property
+    def trace_tag_fields(self) -> list["TracingField"]:
+        """Parse and validate configured Langfuse trace tag fields."""
+        from forge.integrations.langfuse.fields import parse_trace_fields
+
+        fields = parse_trace_fields(self.langfuse_trace_tags, allow_tags=True)
+        if fields:
+            logger.info(
+                "Langfuse trace tags configured: %s",
+                ", ".join(f.value for f in fields),
+            )
+        return fields
+
+    @cached_property
+    def trace_metadata_fields(self) -> list["TracingField"]:
+        """Parse and validate configured Langfuse trace metadata fields."""
+        from forge.integrations.langfuse.fields import parse_trace_fields
+
+        fields = parse_trace_fields(self.langfuse_trace_metadata, allow_tags=False)
+        if fields:
+            logger.info(
+                "Langfuse trace metadata configured: %s",
+                ", ".join(f.value for f in fields),
+            )
+        return fields
 
     @property
     def use_vertex_ai(self) -> bool:

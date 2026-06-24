@@ -59,7 +59,7 @@ class TestWorkerTerminalBlockedCheck:
     """Worker skips invocation when is_blocked=True, same as terminal nodes."""
 
     @pytest.mark.asyncio
-    async def test_blocked_state_skips_invocation(self, worker, base_message):
+    async def test_blocked_state_skips_invocation(self, base_message):
         """Workflow with is_blocked=True does not get invoked."""
         blocked_state = {
             "ticket_key": "TEST-123",
@@ -72,7 +72,7 @@ class TestWorkerTerminalBlockedCheck:
 
         invoked = False
 
-        async def fake_process(message):
+        async def fake_process(_message):
             nonlocal invoked
             mock_state = MagicMock()
             mock_state.values = blocked_state
@@ -91,7 +91,7 @@ class TestWorkerTerminalBlockedCheck:
         assert invoked is False
 
     @pytest.mark.asyncio
-    async def test_non_blocked_mid_workflow_is_invocable(self, worker, base_message):
+    async def test_non_blocked_mid_workflow_is_invocable(self):
         """Workflow without is_blocked proceeds to invocation."""
         state = {
             "ticket_key": "TEST-123",
@@ -201,6 +201,28 @@ class TestRetryHandlerClearsBlockedState:
         )
 
         assert result.get("current_node") == "ci_evaluator"
+
+    @pytest.mark.asyncio
+    async def test_retry_marks_non_gate_node_for_fresh_invoke(self, worker, base_message):
+        """forge:retry at an execution node asks the worker to re-run that node."""
+        blocked_state = {
+            "ticket_key": "TEST-123",
+            "current_node": "implement_bug_fix",
+            "is_paused": True,
+            "is_blocked": True,
+            "last_error": "Implementation failed",
+            "ci_fix_attempts": 0,
+            "retry_count": 0,
+            "revision_requested": False,
+            "feedback_comment": None,
+            "context": {},
+        }
+
+        result = await worker._handle_resume_event(
+            _make_retry_message(base_message), blocked_state
+        )
+
+        assert result.get("context", {}).get("force_fresh_invoke") is True
 
 
 class TestRetryOnStuckNonTerminalNode:

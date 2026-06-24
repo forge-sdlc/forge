@@ -53,7 +53,11 @@ from forge.workflow.nodes.implement_review import (
 )
 from forge.workflow.nodes.qa_handler import answer_question
 from forge.workflow.nodes.rebase import rebase_pr
-from forge.workflow.nodes.task_generation import regenerate_all_tasks, update_single_task
+from forge.workflow.nodes.task_generation import (
+    regenerate_all_tasks,
+    regenerate_epic_tasks,
+    update_single_task,
+)
 from forge.workflow.utils import resolve_shared_resume_node
 
 logger = logging.getLogger(__name__)
@@ -87,32 +91,56 @@ def route_by_ticket_type(state: FeatureState) -> str:
             return shared
 
         # Feature-specific resume mapping
-        if current_node in ("generate_prd", "regenerate_prd"):
+        if current_node == "generate_prd":
             return "generate_prd"
+        elif current_node == "regenerate_prd":
+            return "regenerate_prd"
         elif current_node == "prd_approval_gate":
             return "prd_approval_gate"
-        elif current_node in ("generate_spec", "regenerate_spec"):
+        elif current_node == "generate_spec":
             return "generate_spec"
+        elif current_node == "regenerate_spec":
+            return "regenerate_spec"
         elif current_node == "spec_approval_gate":
             return "spec_approval_gate"
-        elif current_node in ("decompose_epics", "regenerate_all_epics", "update_single_epic"):
+        elif current_node == "decompose_epics":
             return "decompose_epics"
+        elif current_node == "regenerate_all_epics":
+            return "regenerate_all_epics"
+        elif current_node == "update_single_epic":
+            return "update_single_epic"
         elif current_node == "plan_approval_gate":
             return "plan_approval_gate"
         elif current_node == "generate_tasks":
             return "generate_tasks"
+        elif current_node == "regenerate_all_tasks":
+            return "regenerate_all_tasks"
+        elif current_node == "update_single_task":
+            return "update_single_task"
+        elif current_node == "regenerate_epic_tasks":
+            return "regenerate_epic_tasks"
         elif current_node == "task_approval_gate":
             return "task_approval_gate"
         elif current_node == "wait_for_ci_gate":
             return "wait_for_ci_gate"
+        elif current_node in ("implement_task", "implementation", "implement_bug_fix"):
+            return "implement_task"
+        elif current_node == "setup_workspace":
+            return "setup_workspace"
+        elif current_node == "create_pr":
+            return "create_pr"
+        elif current_node == "teardown_workspace":
+            return "teardown_workspace"
+        elif current_node == "blocked":
+            return "create_pr"
+        elif current_node in (
+            "complete_tasks",
+            "aggregate_epic_status",
+            "aggregate_feature_status",
+        ):
+            return current_node
         elif current_node in (
             "task_router",
-            "setup_workspace",
-            "implement_task",
-            "implementation",
-            "create_pr",
-            "teardown_workspace",
-            "blocked",
             "escalate_blocked",
         ):
             return "task_router"
@@ -193,6 +221,67 @@ def _route_after_task_generation(state: FeatureState) -> str:
         return END
 
     return "task_approval_gate"
+
+
+def _route_after_epic_task_regeneration(state: FeatureState) -> str:
+    """Route after regenerating tasks for a single Epic."""
+    if state.get("last_error") and state.get("current_node") == "regenerate_epic_tasks":
+        logger.error(f"Epic task regeneration failed, workflow paused: {state['last_error']}")
+        return END
+
+    return "task_approval_gate"
+
+
+def _route_after_prd_regeneration(state: FeatureState) -> str:
+    """Route after PRD regeneration, preserving failed regeneration checkpoints."""
+    if state.get("current_node") == "regenerate_prd":
+        logger.error(f"PRD regeneration failed, workflow paused: {state.get('last_error')}")
+        return END
+    return "prd_approval_gate"
+
+
+def _route_after_spec_regeneration(state: FeatureState) -> str:
+    """Route after spec regeneration, preserving failed regeneration checkpoints."""
+    if state.get("current_node") == "regenerate_spec":
+        logger.error(f"Spec regeneration failed, workflow paused: {state.get('last_error')}")
+        return END
+    return "spec_approval_gate"
+
+
+def _route_after_epic_regeneration(state: FeatureState) -> str:
+    """Route after full Epic regeneration without advancing failed decomposition."""
+    if state.get("current_node") == "plan_approval_gate":
+        return "plan_approval_gate"
+    logger.error(
+        f"Epic regeneration failed at {state.get('current_node')}: {state.get('last_error')}"
+    )
+    return END
+
+
+def _route_after_single_epic_update(state: FeatureState) -> str:
+    """Route after a single Epic update, preserving failed update checkpoints."""
+    if state.get("current_node") == "plan_approval_gate":
+        return "plan_approval_gate"
+    logger.error(f"Epic update failed, workflow paused: {state.get('last_error')}")
+    return END
+
+
+def _route_after_task_regeneration(state: FeatureState) -> str:
+    """Route after full Task regeneration without advancing failed generation."""
+    if state.get("current_node") == "task_approval_gate":
+        return "task_approval_gate"
+    logger.error(
+        f"Task regeneration failed at {state.get('current_node')}: {state.get('last_error')}"
+    )
+    return END
+
+
+def _route_after_single_task_update(state: FeatureState) -> str:
+    """Route after a single Task update, preserving failed update checkpoints."""
+    if state.get("current_node") == "task_approval_gate":
+        return "task_approval_gate"
+    logger.error(f"Task update failed, workflow paused: {state.get('last_error')}")
+    return END
 
 
 def _route_after_workspace_setup(
@@ -362,6 +451,7 @@ def build_feature_graph() -> StateGraph:
     graph.add_node("task_approval_gate", task_approval_gate)
     graph.add_node("regenerate_all_tasks", regenerate_all_tasks)
     graph.add_node("update_single_task", update_single_task)
+    graph.add_node("regenerate_epic_tasks", regenerate_epic_tasks)
 
     # Execution nodes (US6)
     graph.add_node("task_router", route_tasks_by_repo)
@@ -406,13 +496,24 @@ def build_feature_graph() -> StateGraph:
             # Resume routing for Feature workflow - planning stages
             "prd_approval_gate": "prd_approval_gate",
             "generate_spec": "generate_spec",
+            "regenerate_prd": "regenerate_prd",
             "spec_approval_gate": "spec_approval_gate",
+            "regenerate_spec": "regenerate_spec",
             "decompose_epics": "decompose_epics",
+            "regenerate_all_epics": "regenerate_all_epics",
+            "update_single_epic": "update_single_epic",
             "plan_approval_gate": "plan_approval_gate",
             "generate_tasks": "generate_tasks",
+            "regenerate_all_tasks": "regenerate_all_tasks",
+            "update_single_task": "update_single_task",
+            "regenerate_epic_tasks": "regenerate_epic_tasks",
             "task_approval_gate": "task_approval_gate",
             # Resume routing for Feature workflow - execution stages
             "task_router": "task_router",
+            "setup_workspace": "setup_workspace",
+            "implement_task": "implement_task",
+            "create_pr": "create_pr",
+            "teardown_workspace": "teardown_workspace",
             # Resume routing for pre-PR and CI/review stages
             "local_review": "local_review",
             "update_documentation": "update_documentation",
@@ -423,7 +524,11 @@ def build_feature_graph() -> StateGraph:
             "review_response_gate": "review_response_gate",
             # Rebase (merge conflict resolution)
             "rebase_pr": "rebase_pr",
-            # Terminal states route directly to END
+            # Terminal chain — retried individually on failure
+            "complete_tasks": "complete_tasks",
+            "aggregate_epic_status": "aggregate_epic_status",
+            "aggregate_feature_status": "aggregate_feature_status",
+            # True terminal state routes directly to END
             END: END,
         },
     )
@@ -447,7 +552,14 @@ def build_feature_graph() -> StateGraph:
             END: END,  # Pause workflow until next webhook
         },
     )
-    graph.add_edge("regenerate_prd", "prd_approval_gate")
+    graph.add_conditional_edges(
+        "regenerate_prd",
+        _route_after_prd_regeneration,
+        {
+            "prd_approval_gate": "prd_approval_gate",
+            END: END,
+        },
+    )
 
     # Spec generation flow (US2)
     graph.add_conditional_edges(
@@ -468,7 +580,14 @@ def build_feature_graph() -> StateGraph:
             END: END,  # Pause workflow until next webhook
         },
     )
-    graph.add_edge("regenerate_spec", "spec_approval_gate")
+    graph.add_conditional_edges(
+        "regenerate_spec",
+        _route_after_spec_regeneration,
+        {
+            "spec_approval_gate": "spec_approval_gate",
+            END: END,
+        },
+    )
 
     # Epic decomposition flow (US3)
     graph.add_conditional_edges(
@@ -490,8 +609,22 @@ def build_feature_graph() -> StateGraph:
             END: END,  # Pause workflow until next webhook
         },
     )
-    graph.add_edge("regenerate_all_epics", "plan_approval_gate")
-    graph.add_edge("update_single_epic", "plan_approval_gate")
+    graph.add_conditional_edges(
+        "regenerate_all_epics",
+        _route_after_epic_regeneration,
+        {
+            "plan_approval_gate": "plan_approval_gate",
+            END: END,
+        },
+    )
+    graph.add_conditional_edges(
+        "update_single_epic",
+        _route_after_single_epic_update,
+        {
+            "plan_approval_gate": "plan_approval_gate",
+            END: END,
+        },
+    )
 
     # Task generation flow (US4)
     graph.add_conditional_edges(
@@ -508,13 +641,36 @@ def build_feature_graph() -> StateGraph:
         {
             "task_router": "task_router",
             "regenerate_all_tasks": "regenerate_all_tasks",  # Feature-level rejection
+            "regenerate_epic_tasks": "regenerate_epic_tasks",  # Epic-level rejection
             "update_single_task": "update_single_task",  # Task-level rejection
             "answer_question": "answer_question",  # Q&A mode
             END: END,  # Pause workflow until approval webhook
         },
     )
-    graph.add_edge("regenerate_all_tasks", "task_approval_gate")
-    graph.add_edge("update_single_task", "task_approval_gate")
+    graph.add_conditional_edges(
+        "regenerate_all_tasks",
+        _route_after_task_regeneration,
+        {
+            "task_approval_gate": "task_approval_gate",
+            END: END,
+        },
+    )
+    graph.add_conditional_edges(
+        "update_single_task",
+        _route_after_single_task_update,
+        {
+            "task_approval_gate": "task_approval_gate",
+            END: END,
+        },
+    )
+    graph.add_conditional_edges(
+        "regenerate_epic_tasks",
+        _route_after_epic_task_regeneration,
+        {
+            "task_approval_gate": "task_approval_gate",
+            END: END,
+        },
+    )
 
     # Execution flow (US6) with parallel support (US10)
     # The routing function returns either "setup_workspace" or list[Send]
@@ -585,6 +741,10 @@ def build_feature_graph() -> StateGraph:
             "wait_for_ci_gate": "wait_for_ci_gate",
             "escalate_blocked": "escalate_blocked",
             "ci_evaluator": "ci_evaluator",
+            # Exception handlers set current_node="attempt_ci_fix" so resume routing
+            # can map it back to ci_evaluator. Escalate within the current invocation
+            # so the graph doesn't crash on an unmapped key.
+            "attempt_ci_fix": "escalate_blocked",
         },
     )
     graph.add_edge("escalate_blocked", END)
@@ -647,8 +807,20 @@ def build_feature_graph() -> StateGraph:
             "task_approval_gate": "task_approval_gate",
             "task_router": "task_router",
             "setup_workspace": "setup_workspace",
+            "implement_task": "implement_task",
+            "local_review": "local_review",
+            "update_documentation": "update_documentation",
+            "create_pr": "create_pr",
+            "teardown_workspace": "teardown_workspace",
+            "wait_for_ci_gate": "wait_for_ci_gate",
             "ci_evaluator": "ci_evaluator",
+            "attempt_ci_fix": "ci_evaluator",
             "human_review_gate": "human_review_gate",
+            "implement_review": "implement_review",
+            "review_response_gate": "review_response_gate",
+            "complete_tasks": "complete_tasks",
+            "aggregate_epic_status": "aggregate_epic_status",
+            "aggregate_feature_status": "aggregate_feature_status",
             "escalate_blocked": "escalate_blocked",
             END: END,
         },

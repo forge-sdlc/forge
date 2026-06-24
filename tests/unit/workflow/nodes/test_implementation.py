@@ -9,6 +9,7 @@ from forge.models.workflow import TicketType
 
 def _make_state(
     ticket_key="BUG-123",
+    ticket_type=TicketType.BUG,
     current_task_key="TASK-456",
     workspace_path="/tmp/ws",
     current_repo="acme/backend",
@@ -17,7 +18,7 @@ def _make_state(
 ):
     return {
         "ticket_key": ticket_key,
-        "ticket_type": TicketType.BUG,
+        "ticket_type": ticket_type,
         "current_node": "implement_task",
         "is_paused": False,
         "retry_count": 0,
@@ -57,8 +58,8 @@ def _make_successful_runner():
 class TestImplementTaskStartedComment:
 
     @pytest.mark.asyncio
-    async def test_posts_comment_on_parent_ticket_before_container(self):
-        """A comment is posted on the parent ticket naming the task being started."""
+    async def test_posts_comment_on_task_ticket_before_container(self):
+        """A comment is posted on the task ticket (not parent) when implementation starts."""
         from forge.workflow.nodes.implementation import implement_task
 
         mock_jira = _make_mock_jira(summary="Fix null pointer in AuthService")
@@ -77,14 +78,14 @@ class TestImplementTaskStartedComment:
         ):
             await implement_task(_make_state())
 
-        mock_jira.add_comment.assert_called_once_with(
-            "BUG-123",
-            "Implementation started for [TASK-456]: Fix null pointer in AuthService",
+        mock_jira.add_comment.assert_any_call(
+            "TASK-456",
+            "🔨 Forge started implementing [TASK-456]: Fix null pointer in AuthService",
         )
 
     @pytest.mark.asyncio
     async def test_comment_mentions_correct_task_key(self):
-        """The comment body contains the child task key, not the parent key."""
+        """The comment body contains the child task key and summary."""
         from forge.workflow.nodes.implementation import implement_task
 
         mock_jira = _make_mock_jira(summary="Add retry logic")
@@ -109,8 +110,8 @@ class TestImplementTaskStartedComment:
                 )
             )
 
-        call_args = mock_jira.add_comment.call_args
-        assert call_args[0][0] == "FEAT-99"
+        call_args = mock_jira.add_comment.call_args_list[0]
+        assert call_args[0][0] == "TASK-100"
         assert "TASK-100" in call_args[0][1]
         assert "Add retry logic" in call_args[0][1]
 
@@ -139,3 +140,94 @@ class TestImplementTaskStartedComment:
         # Implementation succeeded despite comment failure
         assert result["last_error"] is None
         assert "TASK-456" in result["implemented_tasks"]
+
+
+class TestImplementationNodeRouting:
+
+    @pytest.mark.asyncio
+    async def test_feature_missing_workspace_uses_feature_implementation_node(self):
+        """Feature implementation failures must resume at implement_task."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        result = await implement_task(
+            _make_state(
+                ticket_key="FEAT-123",
+                ticket_type=TicketType.FEATURE,
+                workspace_path=None,
+            )
+        )
+
+        assert result["current_node"] == "implement_task"
+        assert result["last_error"] == "Workspace not set up"
+
+    @pytest.mark.asyncio
+    async def test_bug_missing_workspace_keeps_bug_implementation_node(self):
+        """Bug implementation failures must still resume at implement_bug_fix."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        result = await implement_task(_make_state(workspace_path=None))
+
+        assert result["current_node"] == "implement_bug_fix"
+        assert result["last_error"] == "Workspace not set up"
+
+    @pytest.mark.asyncio
+    async def test_feature_container_failure_uses_feature_implementation_node(self):
+        """Feature container failures must not checkpoint bug workflow node names."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira()
+        runner = MagicMock()
+        container_result = MagicMock()
+        container_result.success = False
+        container_result.error_message = "container failed"
+        runner.run = AsyncMock(return_value=container_result)
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            patch("forge.workflow.nodes.implementation.notify_error", new_callable=AsyncMock),
+        ):
+            result = await implement_task(
+                _make_state(ticket_key="FEAT-123", ticket_type=TicketType.FEATURE)
+            )
+
+        assert result["current_node"] == "implement_task"
+        assert result["last_error"] == "container failed"
+        assert result["retry_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_bug_container_failure_keeps_bug_implementation_node(self):
+        """Bug container failures keep the bug graph retry node."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira()
+        runner = MagicMock()
+        container_result = MagicMock()
+        container_result.success = False
+        container_result.error_message = "container failed"
+        runner.run = AsyncMock(return_value=container_result)
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            patch("forge.workflow.nodes.implementation.notify_error", new_callable=AsyncMock),
+        ):
+            result = await implement_task(_make_state())
+
+        assert result["current_node"] == "implement_bug_fix"
+        assert result["last_error"] == "container failed"
+        assert result["retry_count"] == 1
