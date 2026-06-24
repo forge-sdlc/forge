@@ -339,8 +339,7 @@ class OrchestratorWorker:
                 # ainvoke(None) only replays the routing edge after the node, not
                 # the node itself, so setup/retry work would never be attempted.
                 needs_fresh_invoke = (
-                    force_fresh_invoke
-                    or updated_values.get("current_node") in _FRESH_INVOKE_NODES
+                    force_fresh_invoke or updated_values.get("current_node") in _FRESH_INVOKE_NODES
                 )
 
                 if was_errored or needs_fresh_invoke:
