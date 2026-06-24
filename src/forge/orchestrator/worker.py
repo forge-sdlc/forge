@@ -43,6 +43,14 @@ def _is_workflow_errored(state: dict) -> bool:
 
 _PRD_GATE_NODES = ("prd_approval_gate", "generate_prd", "regenerate_prd")
 
+_FRESH_INVOKE_NODES = (
+    "ci_evaluator",
+    "attempt_ci_fix",
+    "human_review_gate",
+    "rebase_pr",
+    "setup_workspace",
+)
+
 # Matches >option N anywhere in comment (case-insensitive, first match wins)
 # Supports both start-of-line usage (>option 2) and in-prose usage (let's go with >option 2)
 _OPTION_PATTERN = re.compile(r"(?mi)>option\s+(\d+)")
@@ -287,7 +295,7 @@ class OrchestratorWorker:
                 # the workflow is at a terminal state without an explicit retry signal.
                 # In that case just persist the state update and stop.
                 # and stop — don't try to invoke a finished graph.
-                terminal_nodes = ("complete", "complete_tasks", "aggregate_feature_status")
+                terminal_nodes = ("complete",)
                 is_terminal_or_blocked = updated_values.get(
                     "current_node"
                 ) in terminal_nodes or updated_values.get("is_blocked", False)
@@ -315,16 +323,24 @@ class OrchestratorWorker:
                 logger.info(f"Resuming workflow for {ticket_key}")
 
                 was_errored = _is_workflow_errored(existing_state.values)
+                resume_context = updated_values.get("context", {})
+                force_fresh_invoke = bool(resume_context.get("force_fresh_invoke"))
+                if force_fresh_invoke:
+                    updated_values = {
+                        **updated_values,
+                        "context": {
+                            **resume_context,
+                        },
+                    }
+                    updated_values["context"].pop("force_fresh_invoke", None)
 
-                # Nodes that wait for external events (CI webhooks, human review)
+                # Nodes that wait for external events or need their body re-run
                 # must be re-invoked fresh so route_by_ticket_type re-runs them.
                 # ainvoke(None) only replays the routing edge after the node, not
-                # the node itself, so CI status would never be re-checked.
-                needs_fresh_invoke = updated_values.get("current_node") in (
-                    "ci_evaluator",
-                    "attempt_ci_fix",
-                    "human_review_gate",
-                    "rebase_pr",
+                # the node itself, so setup/retry work would never be attempted.
+                needs_fresh_invoke = (
+                    force_fresh_invoke
+                    or updated_values.get("current_node") in _FRESH_INVOKE_NODES
                 )
 
                 if was_errored or needs_fresh_invoke:
@@ -934,7 +950,7 @@ class OrchestratorWorker:
         was_errored = _is_workflow_errored(current_state)
 
         # Check if workflow is at a terminal state (complete)
-        terminal_states = ("complete", "complete_tasks", "aggregate_feature_status")
+        terminal_states = ("complete",)
         is_terminal = current_node in terminal_states
 
         if is_retry:
@@ -973,9 +989,10 @@ class OrchestratorWorker:
                 updated_state["retry_count"] = 0
                 # current_node remains the gate so the graph can correctly route out of it
             else:
+                safe_prev_error = redact_secrets(prev_error) if prev_error else None
                 logger.info(
                     f"Retry requested for {message.ticket_key} at {current_node} "
-                    f"(clearing error: {prev_error[:100] if prev_error else 'none'})"
+                    f"(clearing error: {safe_prev_error[:100] if safe_prev_error else 'none'})"
                 )
                 updated_state["is_paused"] = False
                 updated_state["is_blocked"] = False
@@ -984,6 +1001,10 @@ class OrchestratorWorker:
                 updated_state["feedback_comment"] = None
                 updated_state["retry_count"] = 0
                 updated_state["ci_fix_attempts"] = 0
+                updated_state["context"] = {
+                    **updated_state.get("context", {}),
+                    "force_fresh_invoke": True,
+                }
                 # Keep current_node — workflow resumes from the node that failed
         elif is_ci_webhook:
             # GitHub CI event — unpause the gate and let ci_evaluator check the results
@@ -1054,10 +1075,11 @@ class OrchestratorWorker:
             else:
                 # Transient failure — auto-resume and let the node retry
                 prev_error = current_state.get("last_error", "")
+                safe_prev_error = redact_secrets(prev_error) if prev_error else None
                 logger.info(
                     f"Auto-resuming {message.ticket_key} after error at '{current_node}' "
                     f"(attempt {retry_count + 1}/{MAX_AUTO_RETRIES}): "
-                    f"{prev_error[:100] if prev_error else 'unknown'}"
+                    f"{safe_prev_error[:100] if safe_prev_error else 'unknown'}"
                 )
                 updated_state["is_paused"] = False
                 updated_state["last_error"] = None
