@@ -1,5 +1,6 @@
 """Tests for the implement_review node and review_response_gate (proposal 007)."""
 
+import pytest
 from langgraph.graph import END
 from tests.fixtures.workflow_states import make_workflow_state
 
@@ -217,3 +218,34 @@ class TestResumeRoutingForReviewNodes:
         from forge.workflow.bug.graph import route_entry
         state = make_workflow_state(current_node="review_response_gate")
         assert route_entry(state) == "review_response_gate"
+
+
+# ── implement_review error handling ──────────────────────────────────────────
+
+
+class TestImplementReviewErrorHandling:
+
+    @pytest.mark.asyncio
+    async def test_workspace_prepare_failure_increments_retry_count(self):
+        """ValueError from prepare_workspace increments retry_count."""
+        from unittest.mock import patch
+
+        from forge.workflow.nodes.implement_review import implement_review
+
+        state = make_workflow_state(
+            current_node="implement_review",
+            retry_count=1,
+            workspace_path="/tmp/workspace",
+            current_repo="org/repo",
+            feedback_comment="Fix the tests",
+        )
+
+        with patch(
+            "forge.workflow.nodes.implement_review.prepare_workspace",
+            side_effect=ValueError("workspace gone"),
+        ):
+            result = await implement_review(state)
+
+        assert result["current_node"] == "implement_review"
+        assert result["retry_count"] == 2
+        assert "workspace gone" in result["last_error"]

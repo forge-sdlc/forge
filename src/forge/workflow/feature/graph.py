@@ -119,12 +119,22 @@ def route_by_ticket_type(state: FeatureState) -> str:
             return "wait_for_ci_gate"
         elif current_node in ("implement_task", "implementation", "implement_bug_fix"):
             return "implement_task"
+        elif current_node == "setup_workspace":
+            return "setup_workspace"
+        elif current_node == "create_pr":
+            return "create_pr"
+        elif current_node == "teardown_workspace":
+            return "teardown_workspace"
+        elif current_node == "blocked":
+            return "create_pr"
+        elif current_node in (
+            "complete_tasks",
+            "aggregate_epic_status",
+            "aggregate_feature_status",
+        ):
+            return current_node
         elif current_node in (
             "task_router",
-            "setup_workspace",
-            "create_pr",
-            "teardown_workspace",
-            "blocked",
             "escalate_blocked",
         ):
             return "task_router"
@@ -431,6 +441,10 @@ def build_feature_graph() -> StateGraph:
             "task_approval_gate": "task_approval_gate",
             # Resume routing for Feature workflow - execution stages
             "task_router": "task_router",
+            "setup_workspace": "setup_workspace",
+            "implement_task": "implement_task",
+            "create_pr": "create_pr",
+            "teardown_workspace": "teardown_workspace",
             # Resume routing for pre-PR and CI/review stages
             "local_review": "local_review",
             "update_documentation": "update_documentation",
@@ -441,7 +455,11 @@ def build_feature_graph() -> StateGraph:
             "review_response_gate": "review_response_gate",
             # Rebase (merge conflict resolution)
             "rebase_pr": "rebase_pr",
-            # Terminal states route directly to END
+            # Terminal chain — retried individually on failure
+            "complete_tasks": "complete_tasks",
+            "aggregate_epic_status": "aggregate_epic_status",
+            "aggregate_feature_status": "aggregate_feature_status",
+            # True terminal state routes directly to END
             END: END,
         },
     )

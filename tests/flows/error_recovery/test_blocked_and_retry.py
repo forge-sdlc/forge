@@ -189,12 +189,8 @@ class TestRetryResumesAtCorrectNode:
 
         assert result == "ci_evaluator"
 
-    def test_retry_from_setup_workspace_resumes_via_task_router(self):
-        """Workflow blocked at setup_workspace re-routes through task_router on resume.
-
-        Execution-stage nodes always re-enter through task_router so it can
-        reinitialise which repo to process and clear per-branch state.
-        """
+    def test_retry_from_setup_workspace_resumes_at_setup_workspace(self):
+        """Workflow blocked at setup_workspace retries that exact failed node."""
         state = make_workflow_state(
             current_node="setup_workspace",
             ticket_type=TicketType.FEATURE,
@@ -203,10 +199,10 @@ class TestRetryResumesAtCorrectNode:
 
         result = route_by_ticket_type(state)
 
-        assert result == "task_router"
+        assert result == "setup_workspace"
 
-    def test_retry_from_create_pr_resumes_via_task_router(self):
-        """Workflow blocked at create_pr re-routes through task_router on resume."""
+    def test_retry_from_create_pr_resumes_at_create_pr(self):
+        """Workflow blocked at create_pr retries that exact failed node."""
         state = make_workflow_state(
             current_node="create_pr",
             ticket_type=TicketType.FEATURE,
@@ -215,7 +211,7 @@ class TestRetryResumesAtCorrectNode:
 
         result = route_by_ticket_type(state)
 
-        assert result == "task_router"
+        assert result == "create_pr"
 
     def test_bug_retry_from_ci_resumes_at_ci(self):
         """Bug workflow blocked at ci_evaluator resumes there after retry."""
