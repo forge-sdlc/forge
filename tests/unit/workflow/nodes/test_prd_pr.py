@@ -104,6 +104,22 @@ class TestCreatePrdProposalPr:
         assert "enhancements/TEST-456/prd.md" in pr_call_kwargs["body"]
 
 
+class TestResolveProposalsPath:
+    @pytest.mark.asyncio
+    async def test_normalizes_global_fallback_path(self):
+        from forge.workflow.nodes.prd_generation import _resolve_proposals_path
+
+        mock_jira = MagicMock()
+        mock_jira.get_proposals_path = AsyncMock(return_value=None)
+        mock_settings = MagicMock()
+        mock_settings.prd_proposals_path = "/enhancements/"
+
+        with patch("forge.workflow.nodes.prd_generation.get_settings", return_value=mock_settings):
+            result = await _resolve_proposals_path("TEST", mock_jira)
+
+        assert result == "enhancements"
+
+
 class TestUpdatePrdProposalPr:
     @pytest.mark.asyncio
     async def test_updates_file_on_branch(self):

@@ -17,6 +17,11 @@ from forge.workflow.utils.jira_status import post_status_comment
 logger = logging.getLogger(__name__)
 
 
+def _normalize_proposals_path(path: str) -> str:
+    """Normalize a proposals base path for GitHub content paths."""
+    return path.strip("/")
+
+
 async def _resolve_prd_proposals_repo(project_key: str, jira: JiraClient) -> str | None:
     """Resolve the PRD proposals repo for a project.
 
@@ -55,7 +60,7 @@ async def _resolve_proposals_path(project_key: str, jira: JiraClient) -> str:
         return proposals_path
 
     settings = get_settings()
-    return settings.prd_proposals_path
+    return _normalize_proposals_path(settings.prd_proposals_path)
 
 
 async def _create_prd_proposal_pr(
@@ -68,6 +73,7 @@ async def _create_prd_proposal_pr(
     """Create a PR with the PRD in the enhancement proposals repo."""
     owner, repo = proposals_repo.split("/", 1)
     branch = f"forge/prd/{ticket_key.lower()}"
+    proposals_path = _normalize_proposals_path(proposals_path)
     file_path = "/".join(filter(None, [proposals_path, ticket_key, "prd.md"]))
 
     gh = GitHubClient()
