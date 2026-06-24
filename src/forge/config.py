@@ -221,6 +221,10 @@ class Settings(BaseSettings):
         default="",
         description="Comma-separated list of TracingField names to include as Langfuse trace metadata",
     )
+    grafana_base_url: str = Field(
+        default="",
+        description="Base URL for Forge Grafana dashboards, used for session observability links",
+    )
 
     # Claude Agent SDK Configuration
     agent_enable_tools: bool = Field(

@@ -24,6 +24,7 @@ graph TD
 - [Feature Workflow](guide/feature-workflow.md) — How features flow through Forge
 - [Developer Guide](developer-guide.md) — Full local development reference
 - [Skills System](skills/index.md) — Customize Forge for your stack
+- [Session Inspection](reference/session-inspection.md) — Check workflow progress safely
 - [Contributing](dev/contributing.md) — How to contribute
 
 ## Key Features

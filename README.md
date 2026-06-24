@@ -336,6 +336,10 @@ Forge agents can access external tools via MCP (Model Context Protocol):
 
 Configure in `mcp-servers.json`. By default, MCP tools are read-only.
 
+Forge also provides a separate read-only session-inspection API and optional MCP
+server for users who want to inspect workflow progress without Redis, Langfuse,
+or Grafana credentials. See [Session Inspection](docs/reference/session-inspection.md).
+
 ## Project Structure
 
 ```

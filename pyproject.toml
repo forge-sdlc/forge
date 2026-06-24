@@ -67,6 +67,7 @@ dev = [
 [project.scripts]
 forge = "forge.cli:main"
 forge-serve = "forge.main:main"
+forge-session-mcp = "forge.mcp.session:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/forge"]

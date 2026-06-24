@@ -112,10 +112,11 @@ These variables are used by `docker-compose.yml`, `devtools/docker-compose.dev.y
 | Variable | Description |
 |----------|-------------|
 | `GRAFANA_PORT` | Host port for Grafana (default: `3010`) |
+| `GRAFANA_BASE_URL` | Public/base URL for Grafana, used by Forge session summaries and MCP responses to include dashboard links |
 | `GRAFANA_ADMIN_USER` | Grafana admin user (default: `admin`) |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password (default: `grafana`) |
 | `LANGFUSE_DOCKER_NETWORK` | External Docker/Podman network for self-hosted Langfuse when using `devtools/grafana/compose.langfuse-network.yml` (default: `langfuse_default`) |
-| `CLICKHOUSE_HOST` | Langfuse ClickHouse host reachable from the Grafana container |
+| `CLICKHOUSE_HOST` | Langfuse ClickHouse host reachable from Grafana |
 | `CLICKHOUSE_PORT` | Langfuse ClickHouse native protocol port (default: `9000`) |
 | `CLICKHOUSE_DATABASE` | Langfuse ClickHouse database (default: `default`) |
 | `CLICKHOUSE_USER` | Langfuse ClickHouse user |
@@ -127,4 +128,9 @@ These variables are used by `docker-compose.yml`, `devtools/docker-compose.dev.y
 
 ### MCP Servers
 
-MCP server configuration lives in `mcp-servers.json`, not `.env`. See the [MCP servers section](https://github.com/forge-sdlc/forge/blob/main/mcp-servers.json) of the repository.
+MCP server configuration for Forge agents lives in `mcp-servers.json`, not `.env`.
+The checked-in file is loaded by Forge agents and should only include external
+tooling those agents need.
+
+The user-facing Forge session MCP server is configured separately in the user's
+assistant client. See [Session Inspection](session-inspection.md).

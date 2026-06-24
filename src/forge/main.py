@@ -11,7 +11,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from forge import __version__
 from forge.api.middleware.correlation import CorrelationIdMiddleware
-from forge.api.routes import github_router, health_router, jira_router, metrics_router
+from forge.api.routes import (
+    github_router,
+    health_router,
+    jira_router,
+    metrics_router,
+    observability_router,
+    sessions_router,
+)
 from forge.config import get_settings
 from forge.observability.config import configure_tracing, shutdown_tracing
 from forge.orchestrator.checkpointer import close_redis_pool
@@ -105,6 +112,14 @@ All webhook endpoints verify signatures:
                 "name": "github",
                 "description": "GitHub webhook endpoints",
             },
+            {
+                "name": "sessions",
+                "description": "Read-only Forge session inspection endpoints",
+            },
+            {
+                "name": "observability",
+                "description": "Read-only observability data access endpoints",
+            },
         ],
         docs_url="/docs",
         redoc_url="/redoc",
@@ -128,6 +143,8 @@ All webhook endpoints verify signatures:
     app.include_router(metrics_router)
     app.include_router(jira_router)
     app.include_router(github_router)
+    app.include_router(sessions_router)
+    app.include_router(observability_router)
 
     return app
 

@@ -193,6 +193,7 @@ LANGFUSE_TRACE_METADATA=ticket_key,ticket_type,project_id,workflow_step,repo,pr_
 
 # Grafana dashboard stack
 GRAFANA_PORT=3010
+GRAFANA_BASE_URL=http://localhost:3010
 LANGFUSE_DOCKER_NETWORK=langfuse_default
 CLICKHOUSE_HOST=clickhouse
 CLICKHOUSE_PORT=9000
