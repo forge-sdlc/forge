@@ -323,12 +323,25 @@ class OrchestratorWorker:
                 logger.info(f"Resuming workflow for {ticket_key}")
 
                 was_errored = _is_workflow_errored(existing_state.values)
+                resume_context = updated_values.get("context", {})
+                force_fresh_invoke = bool(resume_context.get("force_fresh_invoke"))
+                if force_fresh_invoke:
+                    updated_values = {
+                        **updated_values,
+                        "context": {
+                            **resume_context,
+                        },
+                    }
+                    updated_values["context"].pop("force_fresh_invoke", None)
 
                 # Nodes that wait for external events or need their body re-run
                 # must be re-invoked fresh so route_by_ticket_type re-runs them.
                 # ainvoke(None) only replays the routing edge after the node, not
                 # the node itself, so setup/retry work would never be attempted.
-                needs_fresh_invoke = updated_values.get("current_node") in _FRESH_INVOKE_NODES
+                needs_fresh_invoke = (
+                    force_fresh_invoke
+                    or updated_values.get("current_node") in _FRESH_INVOKE_NODES
+                )
 
                 if was_errored or needs_fresh_invoke:
                     logger.info(
@@ -988,6 +1001,10 @@ class OrchestratorWorker:
                 updated_state["feedback_comment"] = None
                 updated_state["retry_count"] = 0
                 updated_state["ci_fix_attempts"] = 0
+                updated_state["context"] = {
+                    **updated_state.get("context", {}),
+                    "force_fresh_invoke": True,
+                }
                 # Keep current_node — workflow resumes from the node that failed
         elif is_ci_webhook:
             # GitHub CI event — unpause the gate and let ci_evaluator check the results

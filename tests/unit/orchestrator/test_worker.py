@@ -559,6 +559,63 @@ class TestEnsureSkillsIntegration:
             config={"configurable": {"thread_id": "TEST-123"}},
         )
 
+    @pytest.mark.asyncio
+    async def test_retry_force_fresh_invoke_reruns_bug_implementation(
+        self, worker: OrchestratorWorker, jira_message: QueueMessage
+    ):
+        """Bug implementation retry re-enters implement_bug_fix instead of routing past it."""
+        blocked_state = MagicMock()
+        blocked_state.values = {
+            "ticket_key": "TEST-123",
+            "ticket_type": "Bug",
+            "current_node": "implement_bug_fix",
+            "is_paused": True,
+            "is_blocked": True,
+            "last_error": "Implementation failed",
+            "context": {},
+        }
+        retry_cleared_state = {
+            **blocked_state.values,
+            "is_paused": False,
+            "is_blocked": False,
+            "last_error": None,
+            "context": {"force_fresh_invoke": True},
+        }
+        expected_invoked_state = {
+            **retry_cleared_state,
+            "context": {},
+        }
+
+        fake_workflow = MagicMock()
+        fake_workflow.name = "bug_workflow"
+        fake_compiled = MagicMock()
+        fake_compiled.aget_state = AsyncMock(return_value=blocked_state)
+        fake_compiled.aupdate_state = AsyncMock(return_value=None)
+        fake_compiled.ainvoke = AsyncMock(
+            return_value={
+                "ticket_key": "TEST-123",
+                "current_node": "implement_bug_fix",
+                "is_paused": False,
+                "ticket_type": "Bug",
+            }
+        )
+
+        with (
+            patch("forge.orchestrator.worker.ensure_skills", AsyncMock()),
+            patch("forge.orchestrator.worker.JiraClient"),
+            patch.object(worker, "_extract_ticket_type", return_value=MagicMock(value="Bug")),
+            patch.object(worker.router, "resolve", return_value=fake_workflow),
+            patch.object(worker, "_get_compiled_workflow", return_value=fake_compiled),
+            patch.object(worker, "_handle_resume_event", return_value=retry_cleared_state),
+        ):
+            await worker._process_workflow(jira_message)
+
+        fake_compiled.aupdate_state.assert_not_awaited()
+        fake_compiled.ainvoke.assert_awaited_once_with(
+            expected_invoked_state,
+            config={"configurable": {"thread_id": "TEST-123"}},
+        )
+
 
 class TestCiWebhookSignalAtCiEvaluator:
     """check_suite events must wake up the workflow when paused at ci_evaluator.
