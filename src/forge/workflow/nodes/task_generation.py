@@ -1,5 +1,6 @@
 """Task generation node for LangGraph workflow."""
 
+import asyncio
 import logging
 import re
 from typing import Any
@@ -117,6 +118,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 "feature_key": ticket_key,
                 "project_key": project_key,
                 "epic_repo": epic_repo,
+                "feedback": state.get("feedback_comment", ""),
             }
 
             # Sibling epics = all epics except the current one
@@ -288,6 +290,14 @@ async def _generate_tasks_for_epic(
         sibling_epics_section=sibling_epics_section,
         existing_tasks_section=existing_tasks_section,
     )
+
+    feedback = context.get("feedback", "") if context else ""
+    if feedback:
+        prompt += (
+            f"\n\n## Revision Feedback\n\n"
+            f"The user has requested the following changes to the tasks for this Epic:\n{feedback}\n\n"
+            f"Please incorporate this feedback when creating the tasks."
+        )
 
     result = await agent.run_task(
         task="generate-tasks",
@@ -492,6 +502,281 @@ async def regenerate_all_tasks(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
+
+
+async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
+    """Archive and regenerate tasks for a single Epic with feedback.
+
+    Handles Epic-level rejection at task_approval_gate: only the tasks
+    belonging to current_epic_key are replaced. Tasks from other Epics
+    are preserved in state.
+
+    Args:
+        state: Workflow state with current_epic_key and feedback_comment set.
+
+    Returns:
+        Updated state with new tasks merged in for the target Epic.
+    """
+    ticket_key = state["ticket_key"]
+    epic_key = state.get("current_epic_key")
+    feedback = state.get("feedback_comment", "")
+    existing_task_keys = state.get("task_keys", [])
+    existing_tasks_by_repo = dict(state.get("tasks_by_repo", {}))
+
+    if not epic_key:
+        logger.warning(f"No current_epic_key for epic task regeneration on {ticket_key}")
+        return {
+            **state,
+            "feedback_comment": None,
+            "revision_requested": False,
+            "current_node": "task_approval_gate",
+        }
+
+    logger.info(f"Regenerating tasks for Epic {epic_key} on {ticket_key} with feedback")
+
+    settings = get_settings()
+    jira = JiraClient()
+    agent = ForgeAgent()
+
+    try:
+        # Identify which tasks belong to this epic (fetched concurrently)
+        epic_task_keys: list[str] = []
+        parent_issue = await jira.get_issue(ticket_key)
+        project_key = parent_issue.project_key
+
+        async def _check_task_parent(task_key: str) -> str | None:
+            try:
+                task_issue = await jira.get_issue(task_key)
+                if task_issue.parent_key is None:
+                    logger.warning(
+                        f"Task {task_key} has no parent in Jira; skipping archive "
+                        f"(cannot confirm it belongs to {epic_key})"
+                    )
+                    return None
+                return task_key if task_issue.parent_key == epic_key else None
+            except Exception as e:
+                logger.warning(f"Could not check parent of {task_key}: {e}")
+                return None
+
+        parent_results = await asyncio.gather(*(_check_task_parent(k) for k in existing_task_keys))
+        epic_task_keys = [k for k in parent_results if k is not None]
+
+        # Compute remaining tasks from other epics
+        remaining_task_keys = [k for k in existing_task_keys if k not in epic_task_keys]
+        remaining_tasks_by_repo: dict[str, list[str]] = {}
+        for repo, keys in existing_tasks_by_repo.items():
+            kept = [k for k in keys if k not in epic_task_keys]
+            if kept:
+                remaining_tasks_by_repo[repo] = kept
+
+        # Fetch epic details
+        epic_issue = await jira.get_issue(epic_key)
+        epic_plan = epic_issue.description or ""
+        epic_summary = epic_issue.summary
+        epic_labels = await jira.get_labels(epic_key)
+        epic_repo = extract_repo_from_labels(epic_labels)
+
+        # Fetch sibling epics for context (concurrently)
+        all_epic_keys = state.get("epic_keys", [])
+        sibling_keys = [ek for ek in all_epic_keys if ek != epic_key]
+
+        async def _fetch_sibling(ek: str) -> dict[str, str] | None:
+            try:
+                sib = await jira.get_issue(ek)
+                return {
+                    "epic_key": ek,
+                    "epic_summary": sib.summary,
+                    "epic_plan": sib.description or "",
+                }
+            except Exception as e:
+                logger.warning(f"Failed to fetch sibling epic {ek}: {e}")
+                return None
+
+        sibling_results = await asyncio.gather(*(_fetch_sibling(ek) for ek in sibling_keys))
+        sibling_epics: list[dict[str, str]] = [s for s in sibling_results if s is not None]
+
+        # Fetch remaining tasks for existing-tasks context (dedup)
+        existing_tasks_ctx: list[dict[str, str]] = []
+        for task_key in remaining_task_keys:
+            try:
+                task_issue = await jira.get_issue(task_key)
+                existing_tasks_ctx.append(
+                    {
+                        "epic_key": task_issue.parent_key or "",
+                        "epic_summary": "",
+                        "task_key": task_key,
+                        "summary": task_issue.summary,
+                    }
+                )
+            except Exception as e:
+                logger.warning(f"Failed to fetch remaining task {task_key}: {e}")
+
+        context: dict[str, Any] = {
+            "ticket_key": ticket_key,
+            "ticket_type": state.get("ticket_type", ""),
+            "current_node": state.get("current_node", ""),
+            "event_type": state.get("event_type", ""),
+            "event_source": state.get("context", {}).get("source", ""),
+            "retry_count": state.get("retry_count", 0),
+            "epic_key": epic_key,
+            "epic_summary": epic_summary,
+            "feature_key": ticket_key,
+            "project_key": project_key,
+            "epic_repo": epic_repo,
+            "feedback": feedback,
+        }
+
+        spec_content = state.get("spec_content", "")
+
+        tasks_data = await _generate_tasks_for_epic(
+            agent,
+            epic_plan,
+            epic_summary,
+            context,
+            spec_content=spec_content,
+            sibling_epics=sibling_epics if sibling_epics else None,
+            existing_tasks=existing_tasks_ctx if existing_tasks_ctx else None,
+        )
+
+        if not tasks_data:
+            return {
+                **state,
+                "last_error": f"No replacement Tasks generated for Epic {epic_key}",
+                "current_node": "regenerate_epic_tasks",
+                "retry_count": state.get("retry_count", 0) + 1,
+                "revision_requested": False,
+                "feedback_comment": None,
+                "current_epic_key": None,
+            }
+
+        # Create new tasks in Jira under this epic
+        new_task_keys: list[str] = []
+        jira_error = None
+
+        for task in tasks_data:
+            summary = task.get("summary", "Untitled Task")
+            description = task.get("description", "")
+            repo = task.get("repo", "")
+
+            if not repo or repo == "unknown" or "/" not in repo:
+                repo = epic_repo
+            if not repo or repo == "unknown" or "/" not in repo:
+                try:
+                    repo = await jira.get_project_default_repo(project_key)
+                except MissingProjectConfig:
+                    repo = (
+                        settings.github_default_repo
+                        if not settings.forge_require_project_config
+                        else ""
+                    )
+            if not repo or "/" not in repo:
+                repo = "unknown"
+
+            labels = [
+                ForgeLabel.FORGE_MANAGED.value,
+                f"forge:parent:{ticket_key}",
+            ]
+            if repo and repo != "unknown":
+                labels.append(f"repo:{repo}")
+
+            try:
+                task_key = await jira.create_task(
+                    project_key=project_key,
+                    summary=summary,
+                    description=description,
+                    parent_key=epic_key,
+                    labels=labels,
+                )
+                new_task_keys.append(task_key)
+                remaining_tasks_by_repo.setdefault(repo, []).append(task_key)
+                logger.info(f"Created Task {task_key}: {summary} (repo: {repo})")
+            except Exception as e:
+                jira_error = str(e)
+                logger.warning(f"Failed to create Task '{summary}' for {epic_key}: {e}")
+
+        if not new_task_keys:
+            return {
+                **state,
+                "last_error": jira_error
+                or f"Failed to create replacement Tasks for Epic {epic_key}",
+                "current_node": "regenerate_epic_tasks",
+                "retry_count": state.get("retry_count", 0) + 1,
+                "revision_requested": False,
+                "feedback_comment": None,
+                "current_epic_key": None,
+            }
+
+        if jira_error:
+            cleanup_errors: list[str] = []
+            for task_key in new_task_keys:
+                try:
+                    await jira.archive_issue(task_key, archive_subtasks=False)
+                    logger.info(f"Archived partially created replacement Task {task_key}")
+                except Exception as e:
+                    cleanup_errors.append(f"{task_key}: {e}")
+                    logger.warning(
+                        f"Failed to archive partially created replacement Task {task_key}: {e}"
+                    )
+
+            cleanup_suffix = (
+                f"; cleanup failures: {'; '.join(cleanup_errors)}" if cleanup_errors else ""
+            )
+            return {
+                **state,
+                "last_error": (
+                    f"Partial replacement Task creation failed for Epic {epic_key}: "
+                    f"{jira_error}{cleanup_suffix}"
+                ),
+                "current_node": "regenerate_epic_tasks",
+                "retry_count": state.get("retry_count", 0) + 1,
+                "revision_requested": False,
+                "feedback_comment": None,
+                "current_epic_key": None,
+            }
+
+        # Archive only after replacement tasks exist, so a bad generation cannot
+        # leave the target Epic with no implementation tasks.
+        for task_key in epic_task_keys:
+            try:
+                await jira.archive_issue(task_key, archive_subtasks=False)
+                logger.info(f"Archived Task {task_key}")
+            except Exception as e:
+                logger.warning(f"Failed to archive Task {task_key}: {e}")
+
+        all_task_keys = remaining_task_keys + new_task_keys
+        logger.info(f"Regenerated {len(new_task_keys)} tasks for Epic {epic_key} on {ticket_key}")
+
+        return update_state_timestamp(
+            {
+                **state,
+                "task_keys": all_task_keys,
+                "tasks_by_repo": remaining_tasks_by_repo,
+                "feedback_comment": None,
+                "revision_requested": False,
+                "current_epic_key": None,
+                "current_node": "task_approval_gate",
+                "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Epic task regeneration failed for {epic_key} on {ticket_key}: {e}")
+        from forge.workflow.nodes.error_handler import notify_error
+
+        await notify_error(state, str(e), "regenerate_epic_tasks")
+        return {
+            **state,
+            "last_error": str(e),
+            "current_node": "regenerate_epic_tasks",
+            "retry_count": state.get("retry_count", 0) + 1,
+            # Clear revision flags so task_approval_gate returns END instead of looping
+            "revision_requested": False,
+            "feedback_comment": None,
+            "current_epic_key": None,
+        }
+    finally:
+        await jira.close()
+        await agent.close()
 
 
 async def update_single_task(state: WorkflowState) -> WorkflowState:

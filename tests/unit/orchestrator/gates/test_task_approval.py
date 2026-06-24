@@ -87,14 +87,36 @@ class TestRouteTaskApproval:
         assert result == "update_single_task"
 
     def test_routes_to_regenerate_all_on_epic_sourced_rejection(self, task_pending_state):
-        """Epic-sourced task feedback uses full task regeneration."""
+        """Epic-sourced task feedback routes to regenerate_epic_tasks, not all tasks."""
         task_pending_state["current_epic_key"] = "TEST-124"
         task_pending_state["feedback_comment"] = "Revise the tasks for this epic."
         task_pending_state["revision_requested"] = True
 
         result = route_task_approval(task_pending_state)
 
+        assert result == "regenerate_epic_tasks"
+
+    def test_feature_level_rejection_still_regenerates_all(self, task_pending_state):
+        """Feature-level feedback (no epic key) still routes to regenerate_all_tasks."""
+        task_pending_state["current_epic_key"] = None
+        task_pending_state["feedback_comment"] = "The whole task breakdown is wrong."
+        task_pending_state["revision_requested"] = True
+
+        result = route_task_approval(task_pending_state)
+
         assert result == "regenerate_all_tasks"
+
+    def test_epic_rejection_with_empty_body_routes_to_regenerate_epic_tasks(
+        self, task_pending_state
+    ):
+        """Empty-body '!' on an Epic must not fall through to task_router (approval)."""
+        task_pending_state["current_epic_key"] = "TEST-124"
+        task_pending_state["feedback_comment"] = ""
+        task_pending_state["revision_requested"] = True
+
+        result = route_task_approval(task_pending_state)
+
+        assert result == "regenerate_epic_tasks"
 
     def test_routes_to_end_when_pending(self, task_pending_state):
         """Pending Tasks without feedback routes to END."""

@@ -720,6 +720,7 @@ class OrchestratorWorker:
                         "task_approval_gate",
                         "generate_tasks",
                         "regenerate_all_tasks",
+                        "regenerate_epic_tasks",
                         "update_single_task",
                     )
 
@@ -987,6 +988,8 @@ class OrchestratorWorker:
                 updated_state["revision_requested"] = True
                 updated_state["feedback_comment"] = "Regeneration requested via retry."
                 updated_state["retry_count"] = 0
+                updated_state["current_epic_key"] = None
+                updated_state["current_task_key"] = None
                 # current_node remains the gate so the graph can correctly route out of it
             else:
                 safe_prev_error = redact_secrets(prev_error) if prev_error else None
@@ -1167,6 +1170,7 @@ class OrchestratorWorker:
             "task_approval_gate": "the tasks",
             "generate_tasks": "the tasks",
             "regenerate_all_tasks": "the tasks",
+            "regenerate_epic_tasks": "the tasks",
             "update_single_task": "the task",
             "human_review_gate": "the implementation review",
         }

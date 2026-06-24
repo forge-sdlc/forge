@@ -1,8 +1,20 @@
 """Tests for FeatureWorkflow."""
 
 
+from langgraph.graph import END
+
 from forge.models.workflow import TicketType
-from forge.workflow.feature.graph import route_by_ticket_type
+from forge.workflow.feature.graph import (
+    _route_after_epic_regeneration,
+    _route_after_epic_task_regeneration,
+    _route_after_prd_regeneration,
+    _route_after_single_epic_update,
+    _route_after_single_task_update,
+    _route_after_spec_regeneration,
+    _route_after_task_regeneration,
+    build_feature_graph,
+    route_by_ticket_type,
+)
 
 
 class TestFeatureWorkflow:
@@ -166,3 +178,178 @@ class TestFeatureWorkflow:
         }
 
         assert route_by_ticket_type(state) == "implement_task"
+
+    def test_resume_regenerate_epic_tasks_stays_on_regeneration_node(self):
+        """Retrying epic-level task regeneration should not restart the workflow."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "regenerate_epic_tasks",
+        }
+
+        assert route_by_ticket_type(state) == "regenerate_epic_tasks"
+
+    def test_resume_setup_workspace_stays_on_setup_node(self):
+        """Retrying setup should not reset repo progress through task_router."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "setup_workspace",
+        }
+
+        assert route_by_ticket_type(state) == "setup_workspace"
+
+    def test_resume_create_pr_stays_on_create_pr_node(self):
+        """Retrying PR creation should not reset repo progress through task_router."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "create_pr",
+        }
+
+        assert route_by_ticket_type(state) == "create_pr"
+
+    def test_resume_teardown_workspace_stays_on_teardown_node(self):
+        """Retrying teardown should not reset repo progress through task_router."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "teardown_workspace",
+        }
+
+        assert route_by_ticket_type(state) == "teardown_workspace"
+
+    def test_resume_feature_terminal_chain_stays_on_terminal_node(self):
+        """Feature terminal-chain nodes are feature-specific resume targets."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "complete_tasks",
+        }
+
+        assert route_by_ticket_type(state) == "complete_tasks"
+
+    def test_resume_aggregate_epic_status_stays_on_node(self):
+        """aggregate_epic_status resumes at itself, not END."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "aggregate_epic_status",
+        }
+
+        assert route_by_ticket_type(state) == "aggregate_epic_status"
+
+    def test_resume_aggregate_feature_status_stays_on_node(self):
+        """aggregate_feature_status resumes at itself, not END."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "aggregate_feature_status",
+        }
+
+        assert route_by_ticket_type(state) == "aggregate_feature_status"
+
+    def test_resume_blocked_routes_to_create_pr(self):
+        """Retrying from blocked state should resume at create_pr."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "blocked",
+        }
+
+        assert route_by_ticket_type(state) == "create_pr"
+
+    def test_failed_regenerate_epic_tasks_preserves_retry_node(self):
+        """Failed epic-level task regeneration should not re-enter the approval gate."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "regenerate_epic_tasks",
+            "last_error": "No replacement Tasks generated",
+        }
+
+        assert _route_after_epic_task_regeneration(state) == END
+
+    def test_successful_regenerate_epic_tasks_returns_to_task_approval_gate(self):
+        """Successful epic-level task regeneration returns to task approval."""
+        state = {
+            "ticket_key": "TEST-123",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "task_approval_gate",
+            "last_error": None,
+        }
+
+        assert _route_after_epic_task_regeneration(state) == "task_approval_gate"
+
+    def test_failed_prd_regeneration_stops_current_invocation(self):
+        state = {"current_node": "regenerate_prd", "last_error": "agent failed"}
+
+        assert _route_after_prd_regeneration(state) == END
+
+    def test_successful_prd_regeneration_returns_to_gate(self):
+        state = {"current_node": "prd_approval_gate", "last_error": None}
+
+        assert _route_after_prd_regeneration(state) == "prd_approval_gate"
+
+    def test_failed_spec_regeneration_stops_current_invocation(self):
+        state = {"current_node": "regenerate_spec", "last_error": "agent failed"}
+
+        assert _route_after_spec_regeneration(state) == END
+
+    def test_successful_spec_regeneration_returns_to_gate(self):
+        state = {"current_node": "spec_approval_gate", "last_error": None}
+
+        assert _route_after_spec_regeneration(state) == "spec_approval_gate"
+
+    def test_failed_full_epic_regeneration_stops_current_invocation(self):
+        state = {"current_node": "decompose_epics", "last_error": "jira failed"}
+
+        assert _route_after_epic_regeneration(state) == END
+
+    def test_successful_full_epic_regeneration_returns_to_gate(self):
+        state = {"current_node": "plan_approval_gate", "last_error": None}
+
+        assert _route_after_epic_regeneration(state) == "plan_approval_gate"
+
+    def test_failed_single_epic_update_stops_current_invocation(self):
+        state = {"current_node": "update_single_epic", "last_error": "jira failed"}
+
+        assert _route_after_single_epic_update(state) == END
+
+    def test_successful_single_epic_update_returns_to_gate(self):
+        state = {"current_node": "plan_approval_gate", "last_error": None}
+
+        assert _route_after_single_epic_update(state) == "plan_approval_gate"
+
+    def test_failed_full_task_regeneration_stops_current_invocation(self):
+        state = {"current_node": "generate_tasks", "last_error": "jira failed"}
+
+        assert _route_after_task_regeneration(state) == END
+
+    def test_successful_full_task_regeneration_returns_to_gate(self):
+        state = {"current_node": "task_approval_gate", "last_error": None}
+
+        assert _route_after_task_regeneration(state) == "task_approval_gate"
+
+    def test_failed_single_task_update_stops_current_invocation(self):
+        state = {"current_node": "update_single_task", "last_error": "jira failed"}
+
+        assert _route_after_single_task_update(state) == END
+
+    def test_successful_single_task_update_returns_to_gate(self):
+        state = {"current_node": "task_approval_gate", "last_error": None}
+
+        assert _route_after_single_task_update(state) == "task_approval_gate"
+
+    def test_rebase_can_return_to_post_pr_nodes(self):
+        graph = build_feature_graph()
+        compiled = graph.compile()
+        targets = {e.target for e in compiled.get_graph().edges if e.source == "rebase_pr"}
+
+        assert {
+            "wait_for_ci_gate",
+            "implement_review",
+            "review_response_gate",
+            "create_pr",
+            "teardown_workspace",
+        }.issubset(targets)
