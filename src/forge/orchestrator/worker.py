@@ -27,6 +27,7 @@ from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
 from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
+from forge.utils.redaction import redact_secrets
 from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
@@ -1268,7 +1269,8 @@ class OrchestratorWorker:
 
         try:
             jira = JiraClient()
-            error_preview = error[:200] if error else "Unknown error"
+            safe_error = redact_secrets(error) if error else "Unknown error"
+            error_preview = safe_error[:200]
             comment = (
                 f"*Forge workflow stopped with error:*\n\n"
                 f"{{code}}{error_preview}{{code}}\n\n"

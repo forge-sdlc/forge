@@ -266,6 +266,54 @@ class TestJiraClientArchiveIssue:
         )
 
 
+class TestJiraClientErrorComments:
+    """Tests for error comment safety."""
+
+    @pytest.fixture
+    def mock_client(self):
+        """Create client with mocked settings."""
+        with patch("forge.integrations.jira.client.get_settings") as mock_settings:
+            mock_settings.return_value.jira_base_url = "https://test.atlassian.net"
+            mock_settings.return_value.jira_api_token = MagicMock()
+            mock_settings.return_value.jira_api_token.get_secret_value.return_value = "token"
+            mock_settings.return_value.jira_user_email = "test@example.com"
+
+            client = JiraClient()
+            return client
+
+    @pytest.mark.asyncio
+    async def test_add_error_comment_redacts_authenticated_git_urls(self, mock_client):
+        """Error comments must not include GitHub tokens from git command errors."""
+        token = "gh" + "p_" + "abcdefghijklmnopqrstuvwxyz123456"
+        raw_url = f"https://x-access-token:{token}@github.com/org/repo.git"
+        error_message = f"Command '['git', 'clone', '{raw_url}']' failed"
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "id": "10000",
+            "body": "ok",
+            "author": {"accountId": "bot", "displayName": "Bot"},
+        }
+
+        with patch.object(mock_client, "_get_client") as mock_get_client:
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_http
+
+            await mock_client.add_error_comment(
+                issue_key="TEST-123",
+                error_message=error_message,
+                node_name="setup_workspace",
+            )
+
+        body = mock_http.post.await_args.kwargs["json"]["body"]
+        posted_text = str(body)
+        assert "ghp_" not in posted_text
+        assert raw_url not in posted_text
+        assert "https://[REDACTED]@github.com/org/repo.git" in posted_text
+
+
 class TestJiraClientADF:
     """Tests for ADF conversion."""
 
