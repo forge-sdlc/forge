@@ -1133,12 +1133,12 @@ class OrchestratorWorker:
 
         if signal_type == "question":
             message = (
-                f"Forge received your question about {stage}{source_suffix} "
+                f"❓ Forge received your question about {stage}{source_suffix} "
                 "and is preparing an answer."
             )
         else:
             message = (
-                f"Forge received your revision request for {stage}{source_suffix} "
+                f"♻️ Forge received your revision request for {stage}{source_suffix} "
                 "and is regenerating the artifact."
             )
 
