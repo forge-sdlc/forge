@@ -24,14 +24,13 @@ _SHARED_RESUME_MAP: dict[str, str] = {
     "human_review_gate": "human_review_gate",
     "implement_review": "implement_review",
     "review_response_gate": "review_response_gate",
+    "wait_for_ci_gate": "wait_for_ci_gate",
     "ci_evaluator": "ci_evaluator",
     "attempt_ci_fix": "ci_evaluator",
     "rebase_pr": "rebase_pr",
 }
 
-_TERMINAL_NODES: frozenset[str] = frozenset(
-    {"complete", "complete_tasks", "aggregate_feature_status", "aggregate_epic_status"}
-)
+_TERMINAL_NODES: frozenset[str] = frozenset({"complete"})
 
 
 def resolve_shared_resume_node(current_node: str) -> str | None:

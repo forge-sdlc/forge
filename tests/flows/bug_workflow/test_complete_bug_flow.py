@@ -20,9 +20,9 @@ from forge.workflow.bug.graph import (
     _route_human_review_bug,
     route_entry,
 )
+from forge.workflow.bug.state import create_initial_bug_state
 from forge.workflow.nodes.plan_bug_fix import route_plan_approval
 from forge.workflow.nodes.rca_option_gate import route_rca_option
-from forge.workflow.bug.state import create_initial_bug_state
 from tests.fixtures.workflow_states import (
     STATE_BUG_PLAN_PENDING,
     STATE_RCA_OPTION_PENDING,
@@ -144,7 +144,7 @@ class TestBugWorkflowResumeRouting:
         ("teardown_workspace", "teardown_workspace"),
         ("ci_evaluator", "ci_evaluator"),
         ("attempt_ci_fix", "ci_evaluator"),
-        ("wait_for_ci_gate", "ci_evaluator"),  # attempt_ci_fix sets this; must not restart
+        ("wait_for_ci_gate", "wait_for_ci_gate"),
         ("local_review", "local_review"),
         ("ai_review", "human_review_gate"),
         ("human_review_gate", "human_review_gate"),
@@ -762,19 +762,19 @@ class TestRouteAfterTeardown:
         )
         assert _route_after_teardown(state) == "setup_workspace"
 
-    def test_all_repos_done_routes_to_ci_evaluator(self):
+    def test_all_repos_done_routes_to_wait_for_ci_gate(self):
         state = make_workflow_state(
             ticket_key="BUG-TD2", ticket_type=TicketType.BUG, current_node="teardown_workspace",
             repos_to_process=["org/a"], repos_completed=["org/a"],
         )
-        assert _route_after_teardown(state) == "ci_evaluator"
+        assert _route_after_teardown(state) == "wait_for_ci_gate"
 
-    def test_empty_repos_routes_to_ci_evaluator(self):
+    def test_empty_repos_routes_to_wait_for_ci_gate(self):
         state = make_workflow_state(
             ticket_key="BUG-TD3", ticket_type=TicketType.BUG, current_node="teardown_workspace",
             repos_to_process=[], repos_completed=[],
         )
-        assert _route_after_teardown(state) == "ci_evaluator"
+        assert _route_after_teardown(state) == "wait_for_ci_gate"
 
     def test_multiple_remaining_repos_loops(self):
         state = make_workflow_state(

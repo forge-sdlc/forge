@@ -164,11 +164,10 @@ async def _run_plan_container(
     except Exception as e:
         logger.error(f"_run_plan_container ({prompt_name}) failed for {ticket_key}: {e}")
         new_retry = retry_count + 1
-        next_node = "escalate_blocked" if new_retry >= _MAX_PLAN_RETRIES else retry_node
         return {
             **state,
             "last_error": str(e),
-            "current_node": next_node,
+            "current_node": retry_node,
             "retry_count": new_retry,
         }
 
@@ -285,10 +284,17 @@ async def decompose_plan(state: BugState) -> BugState:
             if not repos:
                 logger.warning(
                     f"No repo: tags in plan and no project repos configured for "
-                    f"{ticket_key} — skipping task creation"
+                    f"{ticket_key} — cannot start implementation"
                 )
                 return update_state_timestamp(
-                    {**state, "current_node": "setup_workspace", "last_error": None}
+                    {
+                        **state,
+                        "current_node": "decompose_plan",
+                        "last_error": (
+                            "No repositories found for bug fix implementation. "
+                            "Add repo:owner/repo tags to the plan or configure forge.repos."
+                        ),
+                    }
                 )
 
         # Idempotency: check existing Relates links for tasks already created.
@@ -364,7 +370,8 @@ async def decompose_plan(state: BugState) -> BugState:
         return {
             **state,
             "last_error": str(e),
-            "current_node": "escalate_blocked",
+            "current_node": "decompose_plan",
+            "retry_count": state.get("retry_count", 0) + 1,
         }
 
     finally:

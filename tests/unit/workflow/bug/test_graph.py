@@ -6,8 +6,11 @@ from langgraph.graph import END
 from forge.models.workflow import TicketType
 from forge.workflow.bug.graph import (
     _route_after_answer_bug,
+    _route_after_decompose_plan,
     _route_after_local_review,
+    _route_after_plan_bug_fix,
     _route_after_reflect_rca,
+    _route_after_regenerate_plan,
     _route_after_triage_check,
     _route_human_review_bug,
     build_bug_graph,
@@ -61,13 +64,16 @@ class TestRouteEntry:
         ("teardown_workspace", "teardown_workspace"),
         ("ci_evaluator", "ci_evaluator"),
         ("attempt_ci_fix", "ci_evaluator"),
-        ("wait_for_ci_gate", "ci_evaluator"),
+        ("wait_for_ci_gate", "wait_for_ci_gate"),
         ("ai_review", "human_review_gate"),
         ("human_review_gate", "human_review_gate"),
         ("implement_review", "implement_review"),
         ("review_response_gate", "review_response_gate"),
         ("escalate_blocked", "escalate_blocked"),
         ("complete", END),
+        ("complete_tasks", END),
+        ("aggregate_epic_status", END),
+        ("aggregate_feature_status", END),
     ])
     def test_route_entry_mapping(self, node, expected):
         """route_entry maps each current_node to the correct resume target."""
@@ -198,6 +204,58 @@ class TestAnswerQuestionRouting:
         assert _route_after_answer_bug(state) == "rca_option_gate"
 
 
+class TestPlanRouting:
+    """Planning nodes route based on their returned current_node."""
+
+    def test_plan_bug_fix_success_routes_to_approval(self):
+        state = _bug_state(current_node="plan_approval_gate", last_error=None)
+
+        assert _route_after_plan_bug_fix(state) == "plan_approval_gate"
+
+    def test_plan_bug_fix_failure_retries_same_node(self):
+        state = _bug_state(current_node="plan_bug_fix", last_error="container failed")
+
+        assert _route_after_plan_bug_fix(state) == "plan_bug_fix"
+
+    def test_plan_bug_fix_retry_cap_routes_to_blocked(self):
+        state = _bug_state(
+            current_node="plan_bug_fix",
+            last_error="container failed",
+            retry_count=3,
+        )
+
+        assert _route_after_plan_bug_fix(state) == "escalate_blocked"
+
+    def test_regenerate_plan_success_routes_to_approval(self):
+        state = _bug_state(current_node="plan_approval_gate", last_error=None)
+
+        assert _route_after_regenerate_plan(state) == "plan_approval_gate"
+
+    def test_regenerate_plan_failure_retries_same_node(self):
+        state = _bug_state(current_node="regenerate_plan", last_error="container failed")
+
+        assert _route_after_regenerate_plan(state) == "regenerate_plan"
+
+    def test_regenerate_plan_retry_cap_routes_to_blocked(self):
+        state = _bug_state(
+            current_node="regenerate_plan",
+            last_error="container failed",
+            retry_count=3,
+        )
+
+        assert _route_after_regenerate_plan(state) == "escalate_blocked"
+
+    def test_decompose_plan_success_routes_to_setup_workspace(self):
+        state = _bug_state(current_node="setup_workspace", last_error=None)
+
+        assert _route_after_decompose_plan(state) == "setup_workspace"
+
+    def test_decompose_plan_failure_routes_to_blocked(self):
+        state = _bug_state(current_node="decompose_plan", last_error="No repositories found")
+
+        assert _route_after_decompose_plan(state) == "escalate_blocked"
+
+
 class TestLocalReviewRouting:
     """_route_after_local_review routes based on qualitative verdict."""
 
@@ -260,3 +318,49 @@ class TestGraphCompilation:
         graph = build_bug_graph()
         compiled = graph.compile()
         assert "post_merge_summary" in compiled.nodes
+
+    def test_ci_fix_routes_through_wait_for_ci_gate(self):
+        graph = build_bug_graph()
+        compiled = graph.compile()
+        targets = {e.target for e in compiled.get_graph().edges if e.source == "attempt_ci_fix"}
+
+        assert "wait_for_ci_gate" in targets
+
+    def test_review_fix_routes_through_wait_for_ci_gate(self):
+        graph = build_bug_graph()
+        compiled = graph.compile()
+        targets = {e.target for e in compiled.get_graph().edges if e.source == "implement_review"}
+
+        assert "wait_for_ci_gate" in targets
+
+    def test_wait_for_ci_gate_paused_routes_to_end(self):
+        graph = build_bug_graph()
+        compiled = graph.compile()
+        ci_gate_edges = compiled.get_graph().edges
+        targets = {e.target for e in ci_gate_edges if e.source == "wait_for_ci_gate"}
+        assert END in targets
+
+    def test_wait_for_ci_gate_not_paused_routes_to_ci_evaluator(self):
+        graph = build_bug_graph()
+        compiled = graph.compile()
+        targets = {e.target for e in compiled.get_graph().edges if e.source == "wait_for_ci_gate"}
+        assert "ci_evaluator" in targets
+
+    def test_attempt_ci_fix_escalates_on_self_referential_failure(self):
+        graph = build_bug_graph()
+        compiled = graph.compile()
+        targets = {e.target for e in compiled.get_graph().edges if e.source == "attempt_ci_fix"}
+        assert "escalate_blocked" in targets
+
+    def test_rebase_can_return_to_post_pr_nodes(self):
+        graph = build_bug_graph()
+        compiled = graph.compile()
+        targets = {e.target for e in compiled.get_graph().edges if e.source == "rebase_pr"}
+
+        assert {
+            "wait_for_ci_gate",
+            "implement_review",
+            "review_response_gate",
+            "create_pr",
+            "teardown_workspace",
+        }.issubset(targets)

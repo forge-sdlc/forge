@@ -295,7 +295,7 @@ class OrchestratorWorker:
                 # the workflow is at a terminal state without an explicit retry signal.
                 # In that case just persist the state update and stop.
                 # and stop — don't try to invoke a finished graph.
-                terminal_nodes = ("complete", "complete_tasks", "aggregate_feature_status")
+                terminal_nodes = ("complete",)
                 is_terminal_or_blocked = updated_values.get(
                     "current_node"
                 ) in terminal_nodes or updated_values.get("is_blocked", False)
@@ -950,7 +950,7 @@ class OrchestratorWorker:
         was_errored = _is_workflow_errored(current_state)
 
         # Check if workflow is at a terminal state (complete)
-        terminal_states = ("complete", "complete_tasks", "aggregate_feature_status")
+        terminal_states = ("complete",)
         is_terminal = current_node in terminal_states
 
         if is_retry:
