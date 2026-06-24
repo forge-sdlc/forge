@@ -12,6 +12,7 @@ from forge.config import Settings, get_settings
 from forge.integrations.jira.models import JiraComment, JiraIssue
 from forge.models.workflow import ForgeLabel
 from forge.skills.models import SkillEntry
+from forge.utils.redaction import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -611,6 +612,8 @@ class JiraClient:
                     )
                     mention_nodes.append({"type": "text", "text": " "})
 
+        safe_error_message = redact_secrets(error_message)
+
         # Build the error message content
         error_paragraph: list[dict[str, Any]] = [
             {"type": "text", "text": "Workflow failed at ", "marks": []},
@@ -619,7 +622,7 @@ class JiraClient:
                 "text": node_name,
                 "marks": [{"type": "strong"}],
             },
-            {"type": "text", "text": f": {error_message}"},
+            {"type": "text", "text": f": {safe_error_message}"},
         ]
 
         adf_content: dict[str, Any] = {
