@@ -947,14 +947,39 @@ class OrchestratorWorker:
                     await jira.set_workflow_label(message.ticket_key, ForgeLabel.SPEC_APPROVED)
                     spec_content = current_state.get("spec_content", "")
                     if spec_content:
-                        await jira.add_structured_comment(
-                            message.ticket_key,
-                            "Technical Specification (Approved)",
-                            spec_content,
-                            comment_type="spec",
-                        )
+                        settings = get_settings()
+                        if settings.jira_store_in_comments:
+                            await jira.add_structured_comment(
+                                message.ticket_key,
+                                "Technical Specification (Approved)",
+                                spec_content,
+                                comment_type="spec",
+                            )
+                        elif settings.jira_spec_custom_field:
+                            await jira.update_custom_field(
+                                message.ticket_key,
+                                settings.jira_spec_custom_field,
+                                spec_content,
+                            )
+                        else:
+                            old_filename = f"{message.ticket_key}-spec.md"
+                            deleted = await jira.delete_attachments_by_name(
+                                message.ticket_key, old_filename
+                            )
+                            if deleted:
+                                logger.info(
+                                    f"Deleted {deleted} old spec attachment(s) for "
+                                    f"{message.ticket_key}"
+                                )
+                            await jira.add_attachment(
+                                message.ticket_key,
+                                filename=old_filename,
+                                content=spec_content,
+                                content_type="text/markdown",
+                            )
                         logger.info(
-                            f"Copied approved spec to Jira comment for {message.ticket_key}"
+                            f"Copied approved spec to configured Jira storage for "
+                            f"{message.ticket_key}"
                         )
                 finally:
                     await jira.close()

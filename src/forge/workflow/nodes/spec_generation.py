@@ -12,6 +12,7 @@ from forge.models.workflow import ForgeLabel
 from forge.orchestrator.checkpointer import set_pr_ticket_index
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.prd_generation import (
+    _normalize_proposals_path,
     _resolve_prd_proposals_repo,
     _resolve_proposals_path,
 )
@@ -32,6 +33,7 @@ async def _create_spec_proposal_pr(
     """Create a PR with the spec in the enhancement proposals repo."""
     owner, repo = proposals_repo.split("/", 1)
     branch = f"forge/spec/{ticket_key.lower()}"
+    proposals_path = _normalize_proposals_path(proposals_path)
     file_path = "/".join(filter(None, [proposals_path, ticket_key, "design.md"]))
 
     gh = GitHubClient()

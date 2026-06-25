@@ -13,6 +13,35 @@ from forge.workflow.utils import update_state_timestamp
 logger = logging.getLogger(__name__)
 
 
+def _artifact_pr_target(state: WorkflowState, artifact_type: str) -> tuple[str, int] | None:
+    """Return the proposals PR target for an artifact, if review is on GitHub."""
+    if artifact_type == "prd" and state.get("prd_pr_number") and state.get("prd_pr_repo"):
+        return state["prd_pr_repo"], state["prd_pr_number"]
+    if artifact_type == "spec" and state.get("spec_pr_number") and state.get("spec_pr_repo"):
+        return state["spec_pr_repo"], state["spec_pr_number"]
+    return None
+
+
+async def _post_qa_response(
+    jira: JiraClient,
+    ticket_key: str,
+    state: WorkflowState,
+    artifact_type: str,
+    body: str,
+) -> None:
+    pr_target = _artifact_pr_target(state, artifact_type)
+    if pr_target:
+        repo_full, pr_number = pr_target
+        owner, repo_name = repo_full.split("/", 1)
+        gh = GitHubClient()
+        try:
+            await gh.create_issue_comment(owner, repo_name, pr_number, body)
+        finally:
+            await gh.close()
+    else:
+        await jira.add_comment(ticket_key, body)
+
+
 def extract_question_text(comment: str) -> str:
     """Extract the actual question from a comment with Q&A prefix.
 
@@ -88,17 +117,7 @@ async def answer_question(state: WorkflowState) -> WorkflowState:
 
         # Post answer to the right channel
         formatted_answer = f"*Q: {question}*\n\n{answer}"
-        if state.get("prd_pr_number") and artifact_type == "prd":
-            owner, repo_name = state["prd_pr_repo"].split("/", 1)
-            gh = GitHubClient()
-            try:
-                await gh.create_issue_comment(
-                    owner, repo_name, state["prd_pr_number"], formatted_answer
-                )
-            finally:
-                await gh.close()
-        else:
-            await jira.add_comment(ticket_key, formatted_answer)
+        await _post_qa_response(jira, ticket_key, state, artifact_type, formatted_answer)
 
         # Record in Q&A history
         qa_history = list(state.get("qa_history", []))
@@ -133,17 +152,7 @@ async def answer_question(state: WorkflowState) -> WorkflowState:
                 f"I wasn't able to answer that question. Error: {e}\n\n"
                 "Please try rephrasing or ask a different question."
             )
-            if state.get("prd_pr_number") and artifact_type == "prd":
-                owner, repo_name = state["prd_pr_repo"].split("/", 1)
-                gh = GitHubClient()
-                try:
-                    await gh.create_issue_comment(
-                        owner, repo_name, state["prd_pr_number"], error_msg
-                    )
-                finally:
-                    await gh.close()
-            else:
-                await jira.add_comment(ticket_key, error_msg)
+            await _post_qa_response(jira, ticket_key, state, artifact_type, error_msg)
 
         return update_state_timestamp(
             {

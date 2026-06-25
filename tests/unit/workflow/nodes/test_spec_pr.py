@@ -96,7 +96,7 @@ class TestCreateSpecProposalPr:
                 spec_content="# My Spec",
                 summary="My Feature",
                 proposals_repo="org/proposals",
-                proposals_path="enhancements",
+                proposals_path="/enhancements/",
             )
 
         assert result["spec_pr_file_path"] == "enhancements/TEST-456/design.md"
