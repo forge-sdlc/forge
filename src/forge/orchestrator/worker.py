@@ -1150,7 +1150,7 @@ class OrchestratorWorker:
                 updated_state["revision_requested"] = False
                 updated_state["feedback_comment"] = None
                 updated_state["retry_count"] = 0
-                updated_state["ci_fix_attempts"] = 0
+                updated_state["ci_fix_attempt"] = 0
                 updated_state["context"] = {
                     **updated_state.get("context", {}),
                     "force_fresh_invoke": True,

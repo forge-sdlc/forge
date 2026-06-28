@@ -45,9 +45,8 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
     """
     ticket_key = state["ticket_key"]
     pr_urls = state.get("pr_urls", [])
-    ci_fix_attempts = state.get("ci_fix_attempts", 0)
-    current_attempt = state.get("current_attempt", 0)
-    max_attempts = state.get("max_attempts", 5)
+    ci_fix_attempt = state.get("ci_fix_attempt", 0)
+    ci_fix_max = state.get("ci_fix_max_attempts", 5)
     settings = get_settings()
 
     if not pr_urls:
@@ -157,7 +156,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                     "ci_status": "passed",
                     "current_node": "human_review_gate",
                     "last_error": None,
-                    "current_attempt": 0,  # Reset attempt counter on success
+                    "ci_fix_attempt": 0,
                 }
             )
 
@@ -189,45 +188,27 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
             )
 
         # CI failed - check if we can retry
-        max_retries = settings.ci_fix_max_retries
-
-        # Validate current_attempt doesn't exceed max_attempts
-        if current_attempt >= max_attempts:
-            logger.warning(f"CI fix attempt limit ({max_attempts}) reached for {ticket_key}")
+        if ci_fix_attempt >= ci_fix_max:
+            logger.warning(f"CI fix attempt limit ({ci_fix_max}) reached for {ticket_key}")
             record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="exhausted")
             return update_state_timestamp(
                 {
                     **state,
                     "ci_status": "failed",
                     "ci_failed_checks": failed_checks,
-                    "current_node": "ci_evaluator",  # preserved so retry resumes here
+                    "current_node": "ci_evaluator",
                     "last_error": "CI fix attempt limit reached",
                 }
             )
 
-        if ci_fix_attempts >= max_retries:
-            logger.warning(f"CI fix retry limit ({max_retries}) reached for {ticket_key}")
-            record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="exhausted")
-            return update_state_timestamp(
-                {
-                    **state,
-                    "ci_status": "failed",
-                    "ci_failed_checks": failed_checks,
-                    "current_node": "ci_evaluator",  # preserved so retry resumes here
-                    "last_error": "CI fix retry limit reached",
-                }
-            )
-
-        # Increment current_attempt before attempting fix
-        next_attempt = current_attempt + 1
-        logger.info(f"CI failed for {ticket_key}, attempt {next_attempt}/{max_attempts}")
+        next_attempt = ci_fix_attempt + 1
+        logger.info(f"CI failed for {ticket_key}, attempt {next_attempt}/{ci_fix_max}")
         return update_state_timestamp(
             {
                 **state,
                 "ci_status": "fixing",
                 "ci_failed_checks": failed_checks,
-                "ci_fix_attempts": ci_fix_attempts + 1,
-                "current_attempt": next_attempt,
+                "ci_fix_attempt": next_attempt,
                 "current_node": "attempt_ci_fix",
             }
         )
@@ -275,26 +256,20 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     logger.info(f"Attempting CI fix for {ticket_key}")
 
     # Post status comment to feature ticket at start of CI fix attempt
-    current_attempt = state.get("current_attempt")
-    max_attempts = state.get("max_attempts")
+    ci_fix_attempt = state.get("ci_fix_attempt", 0)
+    ci_fix_max = state.get("ci_fix_max_attempts", 5)
 
-    if current_attempt is not None and max_attempts is not None:
-        jira = JiraClient()
-        try:
-            message = f"🔧 CI checks failed. Analyzing failure and attempting fix ({current_attempt}/{max_attempts})."
-            await post_status_comment(jira, ticket_key, message)
-        finally:
-            await jira.close()
-    else:
-        logger.error(
-            f"CI fix attempt values unavailable for {ticket_key}: "
-            f"current_attempt={current_attempt}, max_attempts={max_attempts}"
-        )
+    jira = JiraClient()
+    try:
+        message = f"🔧 CI checks failed. Analyzing failure and attempting fix ({ci_fix_attempt}/{ci_fix_max})."
+        await post_status_comment(jira, ticket_key, message)
+    finally:
+        await jira.close()
 
     settings = get_settings()
     fork_owner = state.get("fork_owner", "")
     fork_repo = state.get("fork_repo", "")
-    attempt = state.get("ci_fix_attempts", 1)
+    attempt = ci_fix_attempt
 
     try:
         workspace_path, _ = prepare_workspace(state)
@@ -470,10 +445,10 @@ async def wait_for_ci_gate(state: WorkflowState) -> WorkflowState:
         Updated state with is_paused=True.
     """
     ticket_key = state["ticket_key"]
-    ci_fix_attempts = state.get("ci_fix_attempts", 0)
+    ci_fix_attempt = state.get("ci_fix_attempt", 0)
 
     # Detect initial entry (after PR creation) vs re-entry (after CI fix)
-    is_initial_entry = ci_fix_attempts == 0
+    is_initial_entry = ci_fix_attempt == 0
 
     if is_initial_entry:
         # Post status comment and update labels on initial entry
@@ -501,7 +476,7 @@ async def wait_for_ci_gate(state: WorkflowState) -> WorkflowState:
         logger.info(f"Pausing {ticket_key} after PR creation, waiting for GitHub CI webhook")
     else:
         logger.info(
-            f"Pausing {ticket_key} after CI fix attempt {ci_fix_attempts}, "
+            f"Pausing {ticket_key} after CI fix attempt {ci_fix_attempt}, "
             "waiting for GitHub CI webhook"
         )
 
@@ -529,7 +504,7 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
         Updated state with ticket transitioned to Blocked.
     """
     ticket_key = state["ticket_key"]
-    ci_fix_attempts = state.get("ci_fix_attempts", 0)
+    ci_fix_attempt = state.get("ci_fix_attempt", 0)
     failed_checks = state.get("ci_failed_checks", [])
     last_error = state.get("last_error", "")
     current_node = state.get("current_node", "")
@@ -544,7 +519,7 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
             # CI failure scenario
             check_names = [c.get("name", "Unknown") for c in failed_checks]
             error_msg = (
-                f"CI fixes exhausted after {ci_fix_attempts} attempts. "
+                f"CI fixes exhausted after {ci_fix_attempt} attempts. "
                 f"Failed checks: {', '.join(check_names)}. "
                 "Manual intervention required."
             )

@@ -41,7 +41,7 @@ class TestPRCreationStatusCommentsTS006:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 123
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             result = await wait_for_ci_gate(state)
@@ -67,7 +67,7 @@ class TestPRCreationStatusCommentsTS006:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 123
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             await wait_for_ci_gate(state)
@@ -89,7 +89,7 @@ class TestPRCreationStatusCommentsTS006:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 123
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             await wait_for_ci_gate(state)
@@ -113,7 +113,7 @@ class TestPRCreationStatusCommentsTS006:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 123
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             await wait_for_ci_gate(state)
@@ -137,7 +137,7 @@ class TestPRCreationStatusCommentsTS014:
         )
         # PR number is None
         state["current_pr_number"] = None
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             result = await wait_for_ci_gate(state)
@@ -163,7 +163,7 @@ class TestPRCreationStatusCommentsTS014:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = None
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             await wait_for_ci_gate(state)
@@ -190,7 +190,7 @@ class TestPRCreationErrorHandling:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 456
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             result = await wait_for_ci_gate(state)
@@ -215,7 +215,7 @@ class TestPRCreationErrorHandling:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 456
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             result = await wait_for_ci_gate(state)
@@ -240,7 +240,7 @@ class TestPRCreationErrorHandling:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 456
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             result = await wait_for_ci_gate(state)
@@ -267,7 +267,7 @@ class TestPRCreationErrorHandling:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 456
-        state["ci_fix_attempts"] = 0  # Initial entry
+        state["ci_fix_attempt"] = 0  # Initial entry
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             await wait_for_ci_gate(state)
@@ -290,7 +290,7 @@ class TestCIFixReentryNoStatusUpdate:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 789
-        state["ci_fix_attempts"] = 1  # Re-entry after CI fix
+        state["ci_fix_attempt"] = 1  # Re-entry after CI fix
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             result = await wait_for_ci_gate(state)
@@ -316,7 +316,7 @@ class TestCIFixReentryNoStatusUpdate:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 789
-        state["ci_fix_attempts"] = 3  # Multiple re-entries
+        state["ci_fix_attempt"] = 3  # Multiple re-entries
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             result = await wait_for_ci_gate(state)

@@ -10,7 +10,7 @@ from tests.fixtures.workflow_states import make_workflow_state
 def state_at_ci():
     return make_workflow_state(
         current_node="ci_evaluator",
-        ci_fix_attempts=5,
+        ci_fix_attempt=5,
         ci_failed_checks=[{"name": "tests", "conclusion": "failure"}],
         last_error="CI exhausted",
     )

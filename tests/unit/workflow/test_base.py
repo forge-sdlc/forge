@@ -76,7 +76,7 @@ class TestCIIntegrationState:
 
         assert "ci_status" in hints
         assert "ci_failed_checks" in hints
-        assert "ci_fix_attempts" in hints
+        assert "ci_fix_attempt" in hints
 
 
 class TestReviewIntegrationState:

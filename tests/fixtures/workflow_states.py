@@ -44,7 +44,7 @@ _BASE_STATE: WorkflowState = {
     "parallel_branch_id": None,
     "parallel_total_branches": None,
     "ci_failed_checks": [],
-    "ci_fix_attempts": 0,
+    "ci_fix_attempt": 0,
     "ai_review_status": None,
     "ai_review_results": [],
     "human_review_status": None,
@@ -174,7 +174,7 @@ STATE_CI_FAILED: WorkflowState = {
     **deepcopy(STATE_PR_CREATED),
     "current_node": "attempt_ci_fix",
     "ci_status": "failed",
-    "ci_fix_attempts": 1,
+    "ci_fix_attempt": 1,
     "ci_failed_checks": [
         {
             "name": "CI / Tests",

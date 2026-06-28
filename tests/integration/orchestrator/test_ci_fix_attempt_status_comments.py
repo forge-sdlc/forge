@@ -64,8 +64,8 @@ class TestCIFixAttemptStatusCommentsTS007:
             }
         ]
         state["workspace_path"] = "/tmp/test-workspace"
-        state["current_attempt"] = 1
-        state["max_attempts"] = 3
+        state["ci_fix_attempt"] = 1
+        state["ci_fix_max_attempts"] = 3
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
@@ -111,8 +111,8 @@ class TestCIFixAttemptStatusCommentsTS007:
             }
         ]
         state["workspace_path"] = "/tmp/test-workspace"
-        state["current_attempt"] = 2
-        state["max_attempts"] = 3
+        state["ci_fix_attempt"] = 2
+        state["ci_fix_max_attempts"] = 3
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
@@ -155,8 +155,8 @@ class TestCIFixAttemptStatusCommentsTS007:
             }
         ]
         state["workspace_path"] = "/tmp/test-workspace"
-        state["current_attempt"] = 3
-        state["max_attempts"] = 3
+        state["ci_fix_attempt"] = 3
+        state["ci_fix_max_attempts"] = 3
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
@@ -199,8 +199,8 @@ class TestCIFixAttemptStatusCommentsTS007:
             }
         ]
         state["workspace_path"] = "/tmp/test-workspace"
-        state["current_attempt"] = 1
-        state["max_attempts"] = 5
+        state["ci_fix_attempt"] = 1
+        state["ci_fix_max_attempts"] = 5
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
@@ -256,11 +256,11 @@ class TestCIFixAttemptCommentCounts:
             }
         ]
         base_state["workspace_path"] = "/tmp/test-workspace"
-        base_state["max_attempts"] = 3
+        base_state["ci_fix_max_attempts"] = 3
 
         # Simulate three attempts
         for attempt in [1, 2, 3]:
-            state = {**base_state, "current_attempt": attempt}
+            state = {**base_state, "ci_fix_attempt": attempt}
             
             with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
                 with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
@@ -303,8 +303,8 @@ class TestCIFixAttemptCommentCounts:
             }
         ]
         state["workspace_path"] = "/tmp/test-workspace"
-        state["current_attempt"] = 2
-        state["max_attempts"] = 5
+        state["ci_fix_attempt"] = 2
+        state["ci_fix_max_attempts"] = 5
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
@@ -323,148 +323,6 @@ class TestCIFixAttemptCommentCounts:
         assert mock_jira.add_comment.call_count == 1
         comment_call = mock_jira.add_comment.call_args
         assert comment_call[0][1] == "🔧 CI checks failed. Analyzing failure and attempting fix (2/5)."
-
-
-class TestCIFixAttemptEdgeCases:
-    """Test edge cases for CI fix attempt status comments."""
-
-    @pytest.mark.asyncio
-    async def test_missing_current_attempt_logs_error_skips_comment(self, caplog):
-        """Verify missing current_attempt logs error and skips comment posting."""
-        mock_jira = create_mock_jira_client()
-        mock_runner = create_mock_container_runner()
-        mock_github = create_mock_github_client()
-
-        state = create_initial_feature_state(
-            ticket_key="FEAT-306",
-            current_repo="owner/test-repo",
-            task_keys=["TASK-001"],
-        )
-        state["ci_failed_checks"] = [
-            {
-                "pr_url": "https://github.com/owner/test-repo/pull/1",
-                "name": "test-check",
-                "conclusion": "failure",
-                "output": {},
-                "log_url": "https://github.com/owner/test-repo/runs/1",
-            }
-        ]
-        state["workspace_path"] = "/tmp/test-workspace"
-        # current_attempt is None (missing)
-        state["current_attempt"] = None
-        state["max_attempts"] = 3
-
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
-                with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
-                    with patch("forge.workflow.nodes.ci_evaluator.prepare_workspace") as mock_prepare:
-                        mock_prepare.return_value = (Path("/tmp/test-workspace"), None)
-                        with patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", AsyncMock()):
-                            with patch("forge.workflow.nodes.ci_evaluator._collect_error_info", return_value="errors"):
-                                with patch("forge.workflow.nodes.ci_evaluator.load_prompt", return_value="prompt"):
-                                    with patch("pathlib.Path.mkdir"):
-                                        with patch("pathlib.Path.write_text"):
-                                            with patch("pathlib.Path.exists", return_value=False):
-                                                await attempt_ci_fix(state)
-
-        # Verify no comment posted
-        assert mock_jira.add_comment.call_count == 0
-        # Verify JiraClient still closed (even though comment wasn't posted)
-        assert mock_jira.close.call_count == 1
-        # Verify error logged
-        assert any("CI fix attempt values unavailable" in record.message for record in caplog.records)
-        assert any("current_attempt=None" in record.message for record in caplog.records)
-
-    @pytest.mark.asyncio
-    async def test_missing_max_attempts_logs_error_skips_comment(self, caplog):
-        """Verify missing max_attempts logs error and skips comment posting."""
-        mock_jira = create_mock_jira_client()
-        mock_runner = create_mock_container_runner()
-        mock_github = create_mock_github_client()
-
-        state = create_initial_feature_state(
-            ticket_key="FEAT-307",
-            current_repo="owner/test-repo",
-            task_keys=["TASK-001"],
-        )
-        state["ci_failed_checks"] = [
-            {
-                "pr_url": "https://github.com/owner/test-repo/pull/1",
-                "name": "test-check",
-                "conclusion": "failure",
-                "output": {},
-                "log_url": "https://github.com/owner/test-repo/runs/1",
-            }
-        ]
-        state["workspace_path"] = "/tmp/test-workspace"
-        state["current_attempt"] = 1
-        # max_attempts is None (missing)
-        state["max_attempts"] = None
-
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
-                with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
-                    with patch("forge.workflow.nodes.ci_evaluator.prepare_workspace") as mock_prepare:
-                        mock_prepare.return_value = (Path("/tmp/test-workspace"), None)
-                        with patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", AsyncMock()):
-                            with patch("forge.workflow.nodes.ci_evaluator._collect_error_info", return_value="errors"):
-                                with patch("forge.workflow.nodes.ci_evaluator.load_prompt", return_value="prompt"):
-                                    with patch("pathlib.Path.mkdir"):
-                                        with patch("pathlib.Path.write_text"):
-                                            with patch("pathlib.Path.exists", return_value=False):
-                                                await attempt_ci_fix(state)
-
-        # Verify no comment posted
-        assert mock_jira.add_comment.call_count == 0
-        # Verify error logged
-        assert any("CI fix attempt values unavailable" in record.message for record in caplog.records)
-        assert any("max_attempts=None" in record.message for record in caplog.records)
-
-    @pytest.mark.asyncio
-    async def test_workflow_continues_when_both_values_missing(self, caplog):
-        """Verify workflow continues when both current_attempt and max_attempts are missing."""
-        mock_jira = create_mock_jira_client()
-        mock_runner = create_mock_container_runner()
-        mock_github = create_mock_github_client()
-
-        state = create_initial_feature_state(
-            ticket_key="FEAT-308",
-            current_repo="owner/test-repo",
-            task_keys=["TASK-001"],
-        )
-        state["ci_failed_checks"] = [
-            {
-                "pr_url": "https://github.com/owner/test-repo/pull/1",
-                "name": "test-check",
-                "conclusion": "failure",
-                "output": {},
-                "log_url": "https://github.com/owner/test-repo/runs/1",
-            }
-        ]
-        state["workspace_path"] = "/tmp/test-workspace"
-        # Both values missing
-        state["current_attempt"] = None
-        state["max_attempts"] = None
-
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
-                with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
-                    with patch("forge.workflow.nodes.ci_evaluator.prepare_workspace") as mock_prepare:
-                        mock_prepare.return_value = (Path("/tmp/test-workspace"), None)
-                        with patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", AsyncMock()):
-                            with patch("forge.workflow.nodes.ci_evaluator._collect_error_info", return_value="errors"):
-                                with patch("forge.workflow.nodes.ci_evaluator.load_prompt", return_value="prompt"):
-                                    with patch("pathlib.Path.mkdir"):
-                                        with patch("pathlib.Path.write_text"):
-                                            with patch("pathlib.Path.exists", return_value=False):
-                                                result = await attempt_ci_fix(state)
-
-        # Verify workflow continues (doesn't crash)
-        assert result is not None
-        # Verify no comment posted
-        assert mock_jira.add_comment.call_count == 0
-        # Verify error logged
-        assert any("CI fix attempt values unavailable" in record.message for record in caplog.records)
 
 
 class TestCIFixAttemptErrorHandling:
@@ -495,8 +353,8 @@ class TestCIFixAttemptErrorHandling:
             }
         ]
         state["workspace_path"] = "/tmp/test-workspace"
-        state["current_attempt"] = 1
-        state["max_attempts"] = 3
+        state["ci_fix_attempt"] = 1
+        state["ci_fix_max_attempts"] = 3
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
@@ -541,8 +399,8 @@ class TestCIFixAttemptErrorHandling:
             }
         ]
         state["workspace_path"] = "/tmp/test-workspace"
-        state["current_attempt"] = 1
-        state["max_attempts"] = 3
+        state["ci_fix_attempt"] = 1
+        state["ci_fix_max_attempts"] = 3
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
@@ -572,8 +430,8 @@ class TestCIFixAttemptErrorHandling:
         )
         # No failed checks
         state["ci_failed_checks"] = []
-        state["current_attempt"] = 1
-        state["max_attempts"] = 3
+        state["ci_fix_attempt"] = 1
+        state["ci_fix_max_attempts"] = 3
 
         result = await attempt_ci_fix(state)
 

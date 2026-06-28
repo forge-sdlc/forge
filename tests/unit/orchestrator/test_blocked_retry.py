@@ -123,7 +123,7 @@ class TestRetryHandlerClearsBlockedState:
             "is_paused": False,
             "is_blocked": True,
             "last_error": "CI exhausted after 5 attempts",
-            "ci_fix_attempts": 5,
+            "ci_fix_attempt": 5,
             "retry_count": 0,
             "revision_requested": False,
             "feedback_comment": None,
@@ -138,14 +138,14 @@ class TestRetryHandlerClearsBlockedState:
 
     @pytest.mark.asyncio
     async def test_retry_resets_ci_fix_attempts_unconditionally(self, worker, base_message):
-        """forge:retry resets ci_fix_attempts=0 regardless of current_node."""
+        """forge:retry resets ci_fix_attempt=0 regardless of current_node."""
         blocked_state = {
             "ticket_key": "TEST-123",
             "current_node": "setup_workspace",  # not ci_evaluator
             "is_paused": False,
             "is_blocked": True,
             "last_error": "Clone failed",
-            "ci_fix_attempts": 3,
+            "ci_fix_attempt": 3,
             "retry_count": 0,
             "revision_requested": False,
             "feedback_comment": None,
@@ -156,7 +156,7 @@ class TestRetryHandlerClearsBlockedState:
             _make_retry_message(base_message), blocked_state
         )
 
-        assert result.get("ci_fix_attempts") == 0
+        assert result.get("ci_fix_attempt") == 0
 
     @pytest.mark.asyncio
     async def test_retry_clears_last_error(self, worker, base_message):
@@ -167,7 +167,7 @@ class TestRetryHandlerClearsBlockedState:
             "is_paused": False,
             "is_blocked": True,
             "last_error": "CI exhausted",
-            "ci_fix_attempts": 5,
+            "ci_fix_attempt": 5,
             "retry_count": 0,
             "revision_requested": False,
             "feedback_comment": None,
@@ -189,7 +189,7 @@ class TestRetryHandlerClearsBlockedState:
             "is_paused": False,
             "is_blocked": True,
             "last_error": "CI exhausted",
-            "ci_fix_attempts": 5,
+            "ci_fix_attempt": 5,
             "retry_count": 0,
             "revision_requested": False,
             "feedback_comment": None,
@@ -211,7 +211,7 @@ class TestRetryHandlerClearsBlockedState:
             "is_paused": True,
             "is_blocked": True,
             "last_error": "Implementation failed",
-            "ci_fix_attempts": 0,
+            "ci_fix_attempt": 0,
             "retry_count": 0,
             "revision_requested": False,
             "feedback_comment": None,
@@ -237,7 +237,7 @@ class TestRetryOnStuckNonTerminalNode:
             "is_paused": False,
             "is_blocked": False,
             "last_error": None,
-            "ci_fix_attempts": 0,
+            "ci_fix_attempt": 0,
             "retry_count": 0,
             "revision_requested": False,
             "feedback_comment": None,
@@ -265,7 +265,7 @@ class TestRetryOnHappyPathTerminalPostsComment:
             "is_paused": False,
             "is_blocked": False,
             "last_error": None,
-            "ci_fix_attempts": 0,
+            "ci_fix_attempt": 0,
             "retry_count": 0,
             "revision_requested": False,
             "feedback_comment": None,

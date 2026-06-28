@@ -17,7 +17,7 @@ class TestEscalationPreservesNode:
         state = make_workflow_state(
             current_node="ci_evaluator",
             ci_status="failed",
-            ci_fix_attempts=5,
+            ci_fix_attempt=5,
             last_error="CI fix exhausted after 5 attempts",
         )
         # Simulate what escalate_to_blocked does (sets blocked flag, keeps node)
@@ -111,13 +111,13 @@ class TestRetryClearsBlockedState:
             last_error="CI exhausted",
         )
         state["is_blocked"] = True
-        state["ci_fix_attempts"] = 5
+        state["ci_fix_attempt"] = 5
 
         # Simulate what the worker retry handler does
         state["is_blocked"] = False
         state["last_error"] = None
         state["retry_count"] = 0
-        state["ci_fix_attempts"] = 0
+        state["ci_fix_attempt"] = 0
 
         assert state["is_blocked"] is False
 
@@ -139,14 +139,14 @@ class TestRetryClearsBlockedState:
         """Retry resets ci_fix_attempts so CI fix can run its full budget again."""
         state = make_workflow_state(
             current_node="ci_evaluator",
-            ci_fix_attempts=5,
+            ci_fix_attempt=5,
         )
         state["is_blocked"] = True
 
         state["is_blocked"] = False
-        state["ci_fix_attempts"] = 0
+        state["ci_fix_attempt"] = 0
 
-        assert state["ci_fix_attempts"] == 0
+        assert state["ci_fix_attempt"] == 0
 
     def test_retry_preserves_current_node_for_resume(self):
         """Retry clears error flags but does NOT overwrite current_node."""

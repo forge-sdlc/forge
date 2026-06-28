@@ -65,32 +65,32 @@ class TestCIFixAttemptTracking:
         """State carries attempt count that starts at 1 on first failure."""
         state = deepcopy(STATE_CI_FAILED)
 
-        assert state["ci_fix_attempts"] == 1
+        assert state["ci_fix_attempt"] == 1
 
     def test_fix_attempt_counter_increments(self):
         """Each fix cycle must increment ci_fix_attempts."""
         state = deepcopy(STATE_CI_FAILED)
-        initial = state["ci_fix_attempts"]
+        initial = state["ci_fix_attempt"]
 
-        state["ci_fix_attempts"] += 1
+        state["ci_fix_attempt"] += 1
 
-        assert state["ci_fix_attempts"] == initial + 1
+        assert state["ci_fix_attempt"] == initial + 1
 
     def test_fix_attempts_preserved_across_wait_gate(self):
         """Attempt counter survives the wait-for-CI-gate pause."""
         state = make_workflow_state(
             current_node="wait_for_ci_gate",
-            ci_fix_attempts=3,
+            ci_fix_attempt=3,
             ci_status="fixing",
         )
 
-        assert state["ci_fix_attempts"] == 3
+        assert state["ci_fix_attempt"] == 3
 
     def test_max_retries_exhausted_state(self):
         """At max retries the ci_status is no longer 'fixing'."""
         state = make_workflow_state(
             current_node="ci_evaluator",
-            ci_fix_attempts=5,
+            ci_fix_attempt=5,
             ci_status="failed",  # evaluator sets this when retries exhausted
         )
 
@@ -112,7 +112,7 @@ class TestCIFixStateMachineScenarios:
         state = make_workflow_state(
             current_node="ci_evaluator",
             ci_status="fixing",
-            ci_fix_attempts=1,
+            ci_fix_attempt=1,
             ci_failed_checks=[{"name": "tests", "conclusion": "failure"}],
             current_pr_number=42,
         )
@@ -122,7 +122,7 @@ class TestCIFixStateMachineScenarios:
         # After fix is applied and pushed, workflow waits for new CI results
         state["current_node"] = "wait_for_ci_gate"
         state["ci_status"] = "pending"
-        state["ci_fix_attempts"] = 1
+        state["ci_fix_attempt"] = 1
 
         assert _route_ci_evaluation(state) == END
 
@@ -143,7 +143,7 @@ class TestCIFixStateMachineScenarios:
             state = make_workflow_state(
                 current_node="ci_evaluator",
                 ci_status="fixing",
-                ci_fix_attempts=attempt,
+                ci_fix_attempt=attempt,
             )
             assert _route_ci_evaluation(state) == "attempt_ci_fix"
 
@@ -161,7 +161,7 @@ class TestCIFixStateMachineScenarios:
         state = make_workflow_state(
             current_node="ci_evaluator",
             ci_status="failed",     # evaluator sets 'failed' after exhaustion
-            ci_fix_attempts=5,
+            ci_fix_attempt=5,
             ci_failed_checks=[{"name": "lint", "conclusion": "failure"}],
         )
 
@@ -174,7 +174,7 @@ class TestCIFixStateMachineScenarios:
         state = make_workflow_state(
             current_node="ci_evaluator",
             ci_status="passed",
-            ci_fix_attempts=0,
+            ci_fix_attempt=0,
         )
 
         assert _route_ci_evaluation(state) == "human_review_gate"
