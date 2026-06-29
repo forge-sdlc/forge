@@ -29,16 +29,17 @@ Previous tasks in this workflow: {previous_task_keys}
 2. Read and understand the existing codebase structure
 3. Read repository guidance when present, including `AGENTS.md`, `CLAUDE.md`, `.claude/AGENTS.md`, `.claude/CLAUDE.md`, `README.md`, `CONTRIBUTING.md`, `Makefile`, language-specific project files, docs, and repo-local skills or agent instructions
 4. Identify and follow repository standards for architecture, naming, error handling, testing, generated files, documentation, and local agent workflow
-5. Implement the task following the repository's coding standards
-6. Write clean, well-documented code
-7. Run targeted validation to verify your changes (see Build Validation Guidelines)
-8. **Regenerate any derived files** if you modified types or interfaces (see Code Generation Guidelines)
-9. **Lint and format your changes** before committing (see Lint & Format Guidelines)
-10. **REQUIRED: Update `.forge/handoff.md`** (see Handoff Update section below)
-11. Commit your implementation with a descriptive message
-12. Do NOT push to git - only commit your changes locally
+5. Start from the files, nearby code patterns, and tests named by the task or discovered in the repo; broaden investigation as needed to implement safely and satisfy acceptance criteria
+6. Implement the task following the repository's coding standards
+7. Write clean, well-documented code
+8. Run targeted validation to verify your changes (see Build Validation Guidelines)
+9. **Regenerate any derived files** if you modified types or interfaces (see Code Generation Guidelines)
+10. **Lint and format your changes** before committing (see Lint & Format Guidelines)
+11. **REQUIRED: Update `.forge/handoff.md`** (see Handoff Update section below)
+12. Commit your implementation with a descriptive message
+13. Do NOT push to git - only commit your changes locally
 
-**IMPORTANT**: Step 10 (handoff update) is REQUIRED even if the task fails. Always document what you attempted and any blockers encountered.
+**IMPORTANT**: Step 11 (handoff update) is REQUIRED even if the task fails. Always document what you attempted and any blockers encountered.
 
 ## Git Commit Rules
 

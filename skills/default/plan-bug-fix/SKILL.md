@@ -17,6 +17,8 @@ Before writing the plan:
 4. Confirm every planned file, function, class, test location, and command against the codebase or repository guidance.
 5. Prefer existing abstractions and helpers over new patterns.
 
+Prefer codebase exploration focused on the failing behavior, selected fix approach, and nearby tests. Broaden the search when needed to understand the fix safely. Do not inspect project-management metadata such as unrelated branches, open issues, pull requests, milestones, or release boards unless the RCA or selected fix approach explicitly asks for them.
+
 If you cannot inspect the relevant repository, do not guess file paths, symbols, test commands, or implementation standards. Make the access problem explicit in the plan so implementation does not proceed from invented details.
 
 ## What the Plan Must Cover
@@ -33,7 +35,9 @@ If you cannot inspect the relevant repository, do not guess file paths, symbols,
 
 6. **Repository standards** — the plan must follow standards discovered from repository guidance and existing implementation patterns. If a deviation is required, explain why.
 
-7. **Ordering-sensitive operations** — after drafting all code changes, scan each function and block in the plan for pairs of operations where order matters because of non-obvious side effects. For each, write an entry under a top-level `## Ordering Invariants` heading with three fields:
+7. **Existing patterns** — the plan should use nearby code and test patterns instead of guessing from path names alone. New tests should follow adjacent test layout when the repo establishes one.
+
+8. **Ordering-sensitive operations** — after drafting all code changes, scan each function and block in the plan for pairs of operations where order matters because of non-obvious side effects. For each, write an entry under a top-level `## Ordering Invariants` heading with three fields:
    - **What**: the two operations and their required order (e.g. `` `A()` → `B()` ``)
    - **Why**: the side effect or dependency that makes the order matter
    - **Breaks if reversed**: the concrete failure mode

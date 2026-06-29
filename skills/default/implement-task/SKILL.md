@@ -22,7 +22,8 @@ Implement code changes following Task specifications and project standards.
 3. **Test Coverage**: Include tests for new functionality
 4. **Clean Code**: Self-documenting, well-structured code
 5. **No Scope Creep**: Don't fix unrelated issues
-6. **Ordering invariants**: Before committing, read the plan's `## Ordering Invariants` section. For each entry, locate the relevant calls in your implementation and confirm the stated order is preserved. If the section says "None identified.", skip this step.
+6. **Focused investigation**: Start from the files, nearby code patterns, and tests identified by the Task. Broaden investigation as needed to implement safely and satisfy acceptance criteria.
+7. **Ordering invariants**: Before committing, read the plan's `## Ordering Invariants` section. For each entry, locate the relevant calls in your implementation and confirm the stated order is preserved. If the section says "None identified.", skip this step.
 
 ## File Change Format
 

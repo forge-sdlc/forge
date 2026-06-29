@@ -133,8 +133,67 @@ class TestDecomposeEpicsPrompt:
         assert "CLAUDE.md" in result
         assert "repository standards" in result
         assert "test runner" in result
+        assert "Prefer targeted codebase exploration" in result
+        assert "relevant guidance, code, and nearby tests" in result
+        assert "nearby code patterns" in result
+        assert "instead of broadening into unrelated repo areas" in result
+        assert "Broaden the search when needed" in result
+        assert "unrelated branches, open issues, pull requests" in result
         assert "Do not invent generic paths" in result
         assert "repo grounding failed" in result
+
+
+class TestPlanningPromptGrounding:
+    """Tests for planning prompt repository grounding guardrails."""
+
+    def test_generate_tasks_preserves_bounded_repo_grounding(self):
+        """Task generation should preserve grounded paths without full repo rediscovery."""
+        result = load_prompt(
+            "generate-tasks",
+            spec_content="Spec content",
+            epic_summary="Epic summary",
+            epic_plan="Plan content",
+            sibling_epics_section="None",
+            existing_tasks_section="None",
+        )
+
+        assert "Prefer additional codebase exploration only for missing implementation details" in result
+        assert "broaden the search when needed" in result
+        assert "unrelated branches, open issues, pull requests" in result
+        assert "nearby source/test patterns" in result
+        assert "follow nearby source/test patterns" in result
+
+    def test_bug_plan_prompts_bound_repo_reinspection(self):
+        """Bug planning and revision should bound repo inspection to relevant details."""
+        plan_prompt = load_prompt(
+            "plan-bug-fix",
+            ticket_key="BUG-1",
+            bug_summary="Bug summary",
+            rca_content="RCA",
+            fix_approach_title="Fix",
+            fix_approach_description="Description",
+            fix_approach_tradeoffs="Tradeoffs",
+            known_repos="acme/backend",
+        )
+        regenerate_prompt = load_prompt(
+            "regenerate-plan",
+            ticket_key="BUG-1",
+            bug_summary="Bug summary",
+            rca_content="RCA",
+            fix_approach_title="Fix",
+            fix_approach_description="Description",
+            fix_approach_tradeoffs="Tradeoffs",
+            original_plan="Original",
+            feedback_comment="Feedback",
+            known_repos="acme/backend",
+        )
+
+        assert "Prefer codebase exploration focused" in plan_prompt
+        assert "unrelated branches, open issues, pull requests" in plan_prompt
+        assert "guessing from path names alone" in plan_prompt
+        assert "Prefer focused codebase re-inspection" in regenerate_prompt
+        assert "unrelated branches, open issues, pull requests" in regenerate_prompt
+        assert "nearby source and test patterns" in regenerate_prompt
 
 
 class TestVersionManagement:

@@ -30,9 +30,13 @@ For each target repository listed in the prompt:
 5. Identify repository standards for architecture, naming, testing, packaging, documentation, and local agent workflow from guidance files and existing implementation patterns.
 6. Use existing paths, naming conventions, abstractions, and repository standards whenever possible.
 
+Prefer targeted codebase exploration. Start with repository-level guidance and structure files, then look at code and tests directly related to the requested feature. Broaden the search when needed to understand the change safely. Avoid exhaustively reading unrelated packages or repeating the same repository survey for each Epic. Do not inspect project-management metadata such as unrelated branches, open issues, pull requests, milestones, or release boards unless the specification explicitly asks for them.
+
 Implementation plans must reference real repository paths discovered during inspection. If a file is new, place it in an existing directory that matches the repository's conventions. Do not invent generic paths such as `pkg/...`, `src/...`, or framework-specific directories unless the repository inspection shows that those paths exist.
 
 Implementation plans must also follow repository standards discovered during inspection. Do not propose a new framework, test runner, directory layout, service boundary, agent convention, or documentation style when the repository already establishes a relevant standard. If the requested change requires deviating from a repository standard, call out the reason explicitly in the plan.
+
+Use existing paths together with nearby code patterns to avoid guessing where the change belongs. When a new file is needed, prefer the nearest established source and test layout. If the right location is unclear after checking the relevant area, note the uncertainty instead of broadening into unrelated repo areas.
 
 If repository inspection is unavailable or fails, do not guess implementation paths. Surface the repository grounding failure clearly so downstream planning does not proceed from invented architecture.
 
@@ -71,6 +75,8 @@ Before returning the Epic breakdown:
 - [ ] Key files/components use real repository paths, or new paths are explicitly marked and justified
 - [ ] Repository guidance files were considered when available
 - [ ] Proposed architecture, tests, docs, and workflow conventions follow discovered repository standards
+- [ ] Technical approach follows relevant existing code patterns
+- [ ] Repository inspection focused on relevant guidance, code, and nearby tests
 - [ ] Complexity estimates provided
 - [ ] Acceptance criteria are verifiable
 - [ ] Implementation is phased logically

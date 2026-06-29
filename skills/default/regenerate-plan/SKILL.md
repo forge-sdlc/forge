@@ -17,8 +17,12 @@ You have produced an implementation plan that the engineering team has reviewed.
 
 4. **Re-verify file paths and function names** if the feedback raises doubts about them.
 
-5. **Follow repository standards** discovered from guidance files and existing implementation patterns. If feedback requests a deviation from a repository standard, explain why the revised plan accepts or rejects that deviation.
+5. **Prefer focused codebase re-inspection** of details the feedback changes or questions. Reuse grounded details from the original plan when they remain valid, and broaden the search when needed to revise safely. Do not inspect project-management metadata such as unrelated branches, open issues, pull requests, milestones, or release boards unless the feedback explicitly asks for them.
 
-6. **Keep `repo:<owner>/<name>` tags** for repositories whose scope is unchanged. Update or add tags if the feedback changes the repository scope.
+6. **Follow repository standards** discovered from guidance files and existing implementation patterns. If feedback requests a deviation from a repository standard, explain why the revised plan accepts or rejects that deviation.
 
-7. **Write the revised plan to `.forge/plan.md`** in the same structured Markdown format. Do not write any other files. Do not commit.
+7. **Preserve nearby patterns** — revised files and tests should stay aligned with nearby source and test patterns unless feedback justifies a change.
+
+8. **Keep `repo:<owner>/<name>` tags** for repositories whose scope is unchanged. Update or add tags if the feedback changes the repository scope.
+
+9. **Write the revised plan to `.forge/plan.md`** in the same structured Markdown format. Do not write any other files. Do not commit.
