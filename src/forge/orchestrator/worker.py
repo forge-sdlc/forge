@@ -1277,6 +1277,11 @@ class OrchestratorWorker:
             if source_ticket_key and source_ticket_key != ticket_key
             else ""
         )
+        comment_target_key = (
+            source_ticket_key
+            if source_ticket_key and source_ticket_key != ticket_key
+            else ticket_key
+        )
 
         if signal_type == "question":
             message = (
@@ -1292,11 +1297,11 @@ class OrchestratorWorker:
         try:
             jira = JiraClient()
             try:
-                await post_status_comment(jira, ticket_key, message)
+                await post_status_comment(jira, comment_target_key, message)
             finally:
                 await jira.close()
         except Exception as e:
-            logger.warning(f"Failed to post resume acknowledgement to {ticket_key}: {e}")
+            logger.warning(f"Failed to post resume acknowledgement to {comment_target_key}: {e}")
 
     @staticmethod
     def _stage_label_for_node(current_node: str) -> str:
