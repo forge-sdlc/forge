@@ -119,20 +119,71 @@ class JiraIssue:
         if not isinstance(adf, dict):
             return str(adf) if adf else ""
 
-        content = adf.get("content", [])
-        texts = []
+        # Jira does not provide a supported ADF-to-Markdown endpoint. Keep this
+        # extractor local and conservative so workflow prompts receive readable
+        # issue text without taking a dependency on an under-supported converter.
+        # Add unsupported ADF nodes here with focused JiraIssue regression tests.
+        # If a node cannot be parsed, preserve its raw representation instead of
+        # dropping issue content from workflow prompts.
+        def inline_text(nodes: list[dict[str, Any]]) -> str:
+            parts = []
+            for child in nodes:
+                child_type = child.get("type")
+                if child_type == "text":
+                    parts.append(child.get("text", ""))
+                elif child_type == "hardBreak":
+                    parts.append("\n")
+                else:
+                    parts.append("\n".join(extract_blocks(child)))
+            return "".join(parts)
 
-        for node in content:
-            if node.get("type") == "paragraph":
-                para_texts = []
-                for child in node.get("content", []):
-                    if child.get("type") == "text":
-                        para_texts.append(child.get("text", ""))
-                texts.append("".join(para_texts))
-            elif node.get("type") == "text":
-                texts.append(node.get("text", ""))
+        def extract_blocks(node: dict[str, Any]) -> list[str]:
+            node_type = node.get("type")
+            content = node.get("content", [])
 
-        return "\n\n".join(texts)
+            if node_type == "doc":
+                return extract_children(content)
+            if node_type == "paragraph":
+                text = inline_text(content).strip()
+                return [text] if text else []
+            if node_type == "heading":
+                text = inline_text(content).strip()
+                if not text:
+                    return []
+                level = node.get("attrs", {}).get("level", 1)
+                return [f"{'#' * int(level)} {text}"]
+            if node_type == "text":
+                text = node.get("text", "")
+                return [text] if text else []
+            if node_type == "codeBlock":
+                text = inline_text(content)
+                language = node.get("attrs", {}).get("language", "")
+                fence = f"```{language}".rstrip()
+                return [f"{fence}\n{text}\n```"]
+            if node_type in ("bulletList", "orderedList"):
+                items = []
+                for index, item in enumerate(content, start=1):
+                    item_text = "\n".join(extract_blocks(item)).strip()
+                    if item_text:
+                        prefix = f"{index}. " if node_type == "orderedList" else "- "
+                        items.append(prefix + item_text.replace("\n", "\n  "))
+                return items
+            if node_type == "listItem":
+                return extract_children(content)
+            if node_type == "rule":
+                return ["---"]
+
+            blocks = extract_children(content)
+            return blocks or [str(node)]
+
+        def extract_children(nodes: list[dict[str, Any]]) -> list[str]:
+            blocks = []
+            for child in nodes:
+                blocks.extend(extract_blocks(child))
+            return [block for block in blocks if block]
+
+        blocks = extract_blocks(adf)
+        return "\n\n".join(blocks) if blocks else str(adf)
 
 
 @dataclass

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.integrations.jira.client import JiraClient, MissingProjectConfig
+from forge.integrations.jira.models import JiraIssue
 from forge.models.workflow import ForgeLabel
 
 
@@ -364,6 +365,65 @@ class TestJiraClientADF:
 
         # Should have paragraph with inline marks
         assert adf["content"][0]["type"] == "paragraph"
+
+    def test_issue_description_extracts_epic_plan_blocks(self):
+        """Epic plan descriptions survive the markdown to ADF to JiraIssue round trip."""
+        plan = """# Task Takeover Routing
+
+- Keep workflow identity in TaskTakeoverWorkflow.matches().
+- Preserve forge:managed and add a separate trigger label.
+
+```python
+def matches(issue):
+    return True
+```"""
+        adf = JiraClient._text_to_adf(plan)
+
+        issue = JiraIssue.from_api_response(
+            {
+                "key": "AISOS-1981",
+                "id": "10001",
+                "fields": {
+                    "summary": "Task Takeover Routing",
+                    "description": adf,
+                    "status": {"name": "To Do"},
+                    "issuetype": {"name": "Epic"},
+                },
+            }
+        )
+
+        assert "# Task Takeover Routing" in issue.description
+        assert "- Keep workflow identity" in issue.description
+        assert "- Preserve forge:managed" in issue.description
+        assert "```python" in issue.description
+        assert "def matches(issue):" in issue.description
+
+    def test_issue_description_preserves_unparsed_adf_node(self):
+        """Unknown ADF nodes should not disappear from issue descriptions."""
+        issue = JiraIssue.from_api_response(
+            {
+                "key": "AISOS-1981",
+                "id": "10001",
+                "fields": {
+                    "summary": "Unknown node",
+                    "description": {
+                        "type": "doc",
+                        "version": 1,
+                        "content": [
+                            {
+                                "type": "unsupportedWidget",
+                                "attrs": {"payload": "important raw context"},
+                            }
+                        ],
+                    },
+                    "status": {"name": "To Do"},
+                    "issuetype": {"name": "Epic"},
+                },
+            }
+        )
+
+        assert "unsupportedWidget" in issue.description
+        assert "important raw context" in issue.description
 
 
 @pytest.fixture
