@@ -235,12 +235,13 @@ async def reflect_rca(state: BugState) -> BugState:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace_path = Path(tmpdir)
             runner = ContainerRunner(settings)
+            task_key = f"{ticket_key}-reflect"
             result = await runner.run(
                 workspace_path=workspace_path,
                 task_summary=f"RCA reflection for {ticket_key}",
                 task_description=task_description,
                 ticket_key=ticket_key,
-                task_key=f"{ticket_key}-reflect",
+                task_key=task_key,
             )
 
             if not result.success:
@@ -248,7 +249,7 @@ async def reflect_rca(state: BugState) -> BugState:
                     f"Reflection container failed with exit_code={result.exit_code}: {result.stderr}"
                 )
 
-            verdict = result.stdout.strip()
+            verdict = _extract_reflection_verdict(workspace_path, task_key, result.stdout)
 
         if verdict.upper().strip() == "VALID":
             return update_state_timestamp(
@@ -300,3 +301,45 @@ async def reflect_rca(state: BugState) -> BugState:
 
     finally:
         await jira.close()
+
+
+def _extract_reflection_verdict(workspace_path: Path, task_key: str, stdout: str) -> str:
+    """Read the reflector's final assistant message, falling back to stdout.
+
+    Container stdout contains entrypoint logs. The entrypoint saves the actual
+    Deep Agents conversation to ``.forge/history/{task_key}.json``; for RCA
+    reflection that final assistant message is the verdict we care about.
+    """
+    history_file = workspace_path / ".forge" / "history" / f"{task_key}.json"
+    if history_file.exists():
+        try:
+            history = json.loads(history_file.read_text())
+            messages = history.get("messages", [])
+            for message in reversed(messages):
+                role = str(message.get("role", "")).lower()
+                if role not in {"ai", "assistant"}:
+                    continue
+                content = _stringify_message_content(message.get("content", ""))
+                if content.strip():
+                    return content.strip()
+        except Exception as e:
+            logger.warning(f"Could not read reflection history {history_file}: {e}")
+
+    return (stdout or "").strip()
+
+
+def _stringify_message_content(content: object) -> str:
+    """Convert LangChain message content variants into plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if text:
+                    parts.append(str(text))
+        return "\n".join(parts)
+    return str(content)

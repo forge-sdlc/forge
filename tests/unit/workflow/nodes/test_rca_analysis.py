@@ -375,6 +375,41 @@ class TestReflectRca:
         assert result["current_node"] == "rca_option_gate"
 
     @pytest.mark.asyncio
+    async def test_reflection_uses_history_final_ai_message_over_stdout_logs(self, rca_state):
+        """Container logs on stdout should not hide a VALID final agent response."""
+        mock_jira = _make_mock_jira()
+
+        class _HistoryRunner:
+            async def run(self, workspace_path, **_kwargs):
+                history_dir = workspace_path / ".forge" / "history"
+                history_dir.mkdir(parents=True, exist_ok=True)
+                (history_dir / "BUG-123-reflect.json").write_text(json.dumps({
+                    "messages": [
+                        {"role": "human", "content": "Review this RCA"},
+                        {"role": "ai", "content": "VALID"},
+                    ],
+                }))
+                result = MagicMock()
+                result.success = True
+                result.exit_code = 0
+                result.stdout = (
+                    "2026-06-30 [INFO] Implementing task: RCA reflection for BUG-123\n"
+                    "2026-06-30 [INFO] Agent completed task execution\n"
+                    "2026-06-30 [INFO] Task completed successfully\n"
+                )
+                result.stderr = ""
+                return result
+
+        with (
+            patch("forge.workflow.nodes.rca_analysis.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.nodes.rca_analysis.ContainerRunner", return_value=_HistoryRunner()),
+        ):
+            result = await reflect_rca(rca_state)
+
+        assert result["current_node"] == "rca_option_gate"
+        assert result["reflection_count"] == 0
+
+    @pytest.mark.asyncio
     async def test_valid_output_does_not_change_reflection_count(self, rca_state):
         """reflection_count is not incremented on VALID output."""
         rca_state["reflection_count"] = 2  # Start non-zero so the assertion is meaningful
@@ -497,7 +532,7 @@ class TestReflectRca:
         mock_jira = _make_mock_jira()
 
         class _FailingRunner:
-            async def run(self, workspace_path, **_kwargs):
+            async def run(self, _workspace_path, **_kwargs):
                 result = MagicMock()
                 result.success = False
                 result.exit_code = 1
