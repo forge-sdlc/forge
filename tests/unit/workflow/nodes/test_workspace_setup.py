@@ -8,7 +8,7 @@ import pytest
 
 from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import create_initial_feature_state
-from forge.workflow.nodes.workspace_setup import setup_workspace
+from forge.workflow.nodes.workspace_setup import prepare_workspace, setup_workspace
 
 
 def create_mock_jira_client():
@@ -239,3 +239,45 @@ class TestWorkspaceSetupErrorHandling:
         # Verify workspace setup continued successfully
         assert result["workspace_path"] == str(Path("/tmp/test-workspace"))
         mock_jira.close.assert_called_once()
+
+
+class TestPrepareWorkspaceRecovery:
+    """Tests for prepare_workspace workspace sync/recreation behavior."""
+
+    def test_sync_failure_recreates_workspace_from_fork(self, tmp_path):
+        """A workspace that cannot sync is deleted and cloned fresh from the fork."""
+        workspace_path = tmp_path / "forge-TEST-123-org-repo"
+        workspace_path.mkdir()
+        stale_file = workspace_path / "stale.txt"
+        stale_file.write_text("dirty")
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-123",
+            current_repo="org/repo",
+            workspace_path=str(workspace_path),
+            fork_owner="forge-bot",
+            fork_repo="repo",
+            context={"branch_name": "forge/test-123"},
+        )
+
+        old_git = MagicMock()
+        old_git.pull_rebase.side_effect = RuntimeError("any workspace sync failure")
+        new_git = MagicMock()
+        settings = MagicMock(workspace_base_dir=str(tmp_path))
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.get_settings", return_value=settings),
+            patch(
+                "forge.workflow.nodes.workspace_setup.GitOperations",
+                side_effect=[old_git, new_git],
+            ),
+        ):
+            result_path, result_git = prepare_workspace(state)
+
+        assert result_path == str(workspace_path)
+        assert result_git is new_git
+        assert not stale_file.exists()
+        old_git.pull_rebase.assert_called_once_with(remote="fork")
+        new_git.clone.assert_called_once()
+        new_git.add_fork_remote.assert_called_once_with("forge-bot", "repo")
+        new_git.checkout_branch.assert_called_once_with("forge/test-123", remote="fork")

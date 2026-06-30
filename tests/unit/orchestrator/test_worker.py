@@ -256,6 +256,34 @@ class TestQuestionDetection:
         assert result["is_paused"] is False
 
     @pytest.mark.asyncio
+    async def test_auto_retry_cap_marks_workflow_blocked_once(
+        self,
+        worker: OrchestratorWorker,
+        base_message: QueueMessage,
+        base_state: dict,
+    ):
+        """Errored workflows stop auto-resuming once retry_count reaches the cap."""
+        state = {
+            **base_state,
+            "current_node": "implement_review",
+            "is_paused": False,
+            "last_error": "cannot rebase dirty workspace",
+            "retry_count": 3,
+            "is_blocked": False,
+        }
+
+        with patch.object(worker, "_post_terminal_error_comment", new_callable=AsyncMock) as post:
+            result = await worker._handle_resume_event(base_message, state)
+
+        assert result["current_node"] == "implement_review"
+        assert result["retry_count"] == 3
+        assert result["last_error"] == "cannot rebase dirty workspace"
+        assert result["is_paused"] is True
+        assert result["is_blocked"] is True
+        assert result["auto_retry_cap_notified"] is True
+        post.assert_awaited_once_with("TEST-123", "cannot rebase dirty workspace")
+
+    @pytest.mark.asyncio
     async def test_question_with_leading_whitespace(
         self, worker: OrchestratorWorker, base_message: QueueMessage, base_state: dict
     ):
