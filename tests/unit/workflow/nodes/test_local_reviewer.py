@@ -366,3 +366,69 @@ class TestLocalReviewFeature:
             "qualitative_retry_count" not in result or result.get("qualitative_retry_count") is None
         )
         assert "local_review_verdict" not in result or result.get("local_review_verdict") is None
+
+
+class TestLocalReviewStepName:
+    """Tests for step_name propagation to ContainerRunner."""
+
+    @pytest.mark.asyncio
+    async def test_bug_review_passes_step_name_local_review(self, base_bug_review_state):
+        """Bug qualitative review passes step_name='local_review' to ContainerRunner."""
+        captured_kwargs = []
+
+        class _CapturingRunner:
+            async def run(self, **kwargs):
+                captured_kwargs.append(kwargs)
+                result = MagicMock()
+                result.success = True
+                result.exit_code = 0
+                result.stdout = "verdict: adequate\n\nfeedback: Good."
+                result.stderr = ""
+                return result
+
+        mock_git = _make_mock_git()
+        mock_workspace = MagicMock()
+
+        with (
+            patch(
+                "forge.workflow.nodes.local_reviewer.ContainerRunner",
+                return_value=_CapturingRunner(),
+            ),
+            patch("forge.workflow.nodes.local_reviewer.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.local_reviewer.Workspace", return_value=mock_workspace),
+        ):
+            await local_review_changes(base_bug_review_state)
+
+        assert captured_kwargs, "runner.run was not called"
+        assert captured_kwargs[0].get("step_name") == "local_review"
+
+    @pytest.mark.asyncio
+    async def test_feature_review_passes_step_name_local_review(self, base_feature_review_state):
+        """Feature review passes step_name='local_review' to ContainerRunner."""
+        captured_kwargs = []
+
+        class _CapturingRunner:
+            async def run(self, **kwargs):
+                captured_kwargs.append(kwargs)
+                result = MagicMock()
+                result.success = True
+                result.exit_code = 0
+                result.stdout = "No issues found."
+                result.stderr = ""
+                return result
+
+        mock_git = _make_mock_git()
+        mock_workspace = MagicMock()
+
+        with (
+            patch(
+                "forge.workflow.nodes.local_reviewer.ContainerRunner",
+                return_value=_CapturingRunner(),
+            ),
+            patch("forge.workflow.nodes.local_reviewer.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.local_reviewer.Workspace", return_value=mock_workspace),
+        ):
+            await local_review_changes(base_feature_review_state)
+
+        assert captured_kwargs, "runner.run was not called"
+        assert captured_kwargs[0].get("step_name") == "local_review"

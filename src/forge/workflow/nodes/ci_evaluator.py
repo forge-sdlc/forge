@@ -318,6 +318,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-ci-analyze",
             repo_name=state.get("current_repo", ""),
+            step_name="analyze_ci",
         )
 
         if not fix_plan_file.exists():
@@ -346,6 +347,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-ci-fix",
             repo_name=state.get("current_repo", ""),
+            step_name="fix_ci",
         )
 
         workspace = Workspace(

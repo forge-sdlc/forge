@@ -59,6 +59,7 @@ async def update_documentation(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-docs",
             repo_name=current_repo,
+            step_name="update_docs",
         )
 
         git = GitOperations(

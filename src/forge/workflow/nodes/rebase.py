@@ -155,6 +155,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-rebase",
             repo_name=current_repo,
+            step_name="rebase",
         )
 
         if result.exit_code != 0:

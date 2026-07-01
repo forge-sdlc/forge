@@ -96,6 +96,7 @@ async def analyze_bug(state: BugState) -> BugState:
                 task_description=task_description,
                 ticket_key=ticket_key,
                 task_key=f"{ticket_key}-analysis",
+                step_name="analyze_bug",
             )
 
             if not result.success:
@@ -242,6 +243,7 @@ async def reflect_rca(state: BugState) -> BugState:
                 task_description=task_description,
                 ticket_key=ticket_key,
                 task_key=task_key,
+                step_name="reflect_rca",
             )
 
             if not result.success:

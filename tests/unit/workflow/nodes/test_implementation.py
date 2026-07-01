@@ -56,7 +56,6 @@ def _make_successful_runner():
 
 
 class TestImplementTaskStartedComment:
-
     @pytest.mark.asyncio
     async def test_posts_comment_on_task_ticket_before_container(self):
         """A comment is posted on the task ticket (not parent) when implementation starts."""
@@ -143,7 +142,6 @@ class TestImplementTaskStartedComment:
 
 
 class TestImplementationNodeRouting:
-
     @pytest.mark.asyncio
     async def test_feature_missing_workspace_uses_feature_implementation_node(self):
         """Feature implementation failures must resume at implement_task."""
@@ -231,3 +229,33 @@ class TestImplementationNodeRouting:
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "container failed"
         assert result["retry_count"] == 1
+
+
+class TestImplementTaskStepName:
+    """Tests for step_name propagation to ContainerRunner."""
+
+    @pytest.mark.asyncio
+    async def test_passes_step_name_implement_task_to_runner(self):
+        """ContainerRunner.run() is called with step_name='implement_task'."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira()
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+        ):
+            await implement_task(_make_state())
+
+        # Verify step_name was passed
+        runner.run.assert_called_once()
+        call_kwargs = runner.run.call_args.kwargs
+        assert call_kwargs.get("step_name") == "implement_task"

@@ -138,6 +138,7 @@ async def _run_plan_container(
                 task_description=task_description,
                 ticket_key=ticket_key,
                 task_key=f"{ticket_key}-plan",
+                step_name="plan_bug_fix",
             )
 
             if not result.success:
