@@ -408,6 +408,85 @@ class ContainerRunner:
             process.kill()
             await process.wait()
 
+    def _sweep_review_cycles(
+        self,
+        workspace_path: Path,
+        step_name: str,
+        processed_files: set[str],
+        collected_cycles: list[ReviewCycleData],
+        recorder: ReviewCycleRecorder,
+    ) -> None:
+        """Synchronous post-execution sweep for missed review cycle files.
+
+        This method scans for any review_cycle_*.json files that may have been
+        missed during async polling, especially if the container exits quickly
+        after writing.
+
+        Args:
+            workspace_path: Path to the workspace root.
+            step_name: Name of the step for path organization.
+            processed_files: Set of file paths already processed by the poller.
+            collected_cycles: List to append newly found cycles to.
+            recorder: Recorder for logging/copying detected cycles.
+        """
+        cycle_dir = workspace_path / ".forge" / step_name
+        if not cycle_dir.exists():
+            return
+
+        # Find all review cycle files
+        all_files = sorted(cycle_dir.glob("review_cycle_*.json"))
+
+        missed_count = 0
+        for file_path in all_files:
+            file_key = str(file_path)
+
+            # Skip files already processed by the async poller
+            if file_key in processed_files:
+                continue
+
+            # This file was missed during polling - parse and collect it
+            try:
+                content = file_path.read_text(encoding="utf-8")
+                if not content.strip():
+                    logger.warning("Empty review cycle file during sweep: %s", file_path)
+                    continue
+
+                data = json.loads(content)
+                cycle_data = ReviewCycleData.from_dict(data, file_path=file_key)
+                collected_cycles.append(cycle_data)
+                missed_count += 1
+
+                # Record via recorder
+                recorder.record(_poller_to_recorder_cycle(cycle_data, step_name))
+                recorder.record_file(file_path)
+
+                # Emit Prometheus metrics
+                record_review_cycle(cycle_data.skill, step_name)
+                record_review_verdict(cycle_data.skill, step_name, cycle_data.verdict)
+                observe_review_duration(cycle_data.skill, step_name, cycle_data.elapsed_seconds)
+
+                logger.debug(
+                    "Sweep caught review cycle %d/%d for %s: %s",
+                    cycle_data.cycle,
+                    cycle_data.max_cycles,
+                    step_name,
+                    cycle_data.verdict,
+                )
+
+            except json.JSONDecodeError as e:
+                logger.warning("Failed to parse review cycle file %s: %s", file_path, e)
+            except (KeyError, TypeError) as e:
+                logger.warning("Invalid review cycle data in %s: %s", file_path, e)
+            except OSError as e:
+                logger.warning("Error reading review cycle file %s: %s", file_path, e)
+
+        if missed_count > 0:
+            logger.warning(
+                "Sweep caught %d review cycle file(s) missed during async polling for step %s",
+                missed_count,
+                step_name,
+            )
+
     async def _poll_review_cycles(
         self,
         poller: ReviewCyclePoller,
@@ -576,7 +655,7 @@ class ContainerRunner:
                         await polling_task
                     logger.debug("Review polling task stopped")
 
-                    # Do one final poll to catch any remaining files
+                    # Do one final async poll to catch any remaining files
                     final_cycles = await poller.poll_once()
                     for cycle in final_cycles:
                         collected_cycles.append(cycle)
@@ -588,6 +667,17 @@ class ContainerRunner:
                         observe_review_duration(
                             cycle.skill, poller.step_name, cycle.elapsed_seconds
                         )
+
+                    # Synchronous sweep for any files missed during async polling
+                    # This catches files written just before container exit that may
+                    # not have been detected by the async poller
+                    self._sweep_review_cycles(
+                        workspace_path=workspace_path,
+                        step_name=step_name,
+                        processed_files=poller._processed_files,
+                        collected_cycles=collected_cycles,
+                        recorder=recorder,
+                    )
 
             exit_code = process.returncode or 0
             stdout_str = stdout.decode("utf-8", errors="replace")

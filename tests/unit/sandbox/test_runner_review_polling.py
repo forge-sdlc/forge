@@ -700,3 +700,504 @@ class AsyncIteratorMock:
             self.index += 1
             return item
         raise StopAsyncIteration
+
+
+# ---------------------------------------------------------------------------
+# _sweep_review_cycles() tests
+# ---------------------------------------------------------------------------
+
+
+class TestSweepReviewCycles:
+    """Tests for the _sweep_review_cycles() post-execution sweep."""
+
+    def test_sweep_finds_missed_file(self, tmp_path: Path, caplog):
+        """Test that sweep catches files missed during async polling."""
+        import json
+        import logging
+
+        runner = _runner_without_init()
+
+        # Create a review cycle file that was NOT processed by the poller
+        step_name = "implement_task"
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+
+        cycle_data = {
+            "cycle": 1,
+            "max_cycles": 3,
+            "verdict": "approved",
+            "feedback": "Looks good",
+            "skill": "local-review",
+            "elapsed_seconds": 5.5,
+            "timestamp": "2024-01-15T10:30:00Z",
+        }
+        cycle_file = cycle_dir / "review_cycle_1.json"
+        cycle_file.write_text(json.dumps(cycle_data))
+
+        # Empty processed files set - nothing was caught during polling
+        processed_files: set[str] = set()
+        collected_cycles: list[ReviewCycleData] = []
+
+        # Mock recorder
+        mock_recorder = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            runner._sweep_review_cycles(
+                workspace_path=tmp_path,
+                step_name=step_name,
+                processed_files=processed_files,
+                collected_cycles=collected_cycles,
+                recorder=mock_recorder,
+            )
+
+        # Should have found the missed file
+        assert len(collected_cycles) == 1
+        assert collected_cycles[0].cycle == 1
+        assert collected_cycles[0].verdict == "approved"
+        assert collected_cycles[0].skill == "local-review"
+
+        # Should log a warning about missed files
+        assert "Sweep caught 1 review cycle file(s) missed" in caplog.text
+        assert step_name in caplog.text
+
+    def test_sweep_deduplicates_against_processed_files(self, tmp_path: Path):
+        """Test that sweep skips files already processed by async poller."""
+        import json
+
+        runner = _runner_without_init()
+
+        step_name = "implement_task"
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+
+        # Create two cycle files
+        for i in [1, 2]:
+            cycle_data = {
+                "cycle": i,
+                "max_cycles": 3,
+                "verdict": "approved",
+                "feedback": f"Review {i}",
+                "skill": "local-review",
+                "elapsed_seconds": float(i),
+                "timestamp": f"2024-01-15T10:3{i}:00Z",
+            }
+            cycle_file = cycle_dir / f"review_cycle_{i}.json"
+            cycle_file.write_text(json.dumps(cycle_data))
+
+        # Simulate that cycle_1 was already processed
+        cycle_1_path = str(cycle_dir / "review_cycle_1.json")
+        processed_files: set[str] = {cycle_1_path}
+        collected_cycles: list[ReviewCycleData] = []
+
+        mock_recorder = MagicMock()
+
+        runner._sweep_review_cycles(
+            workspace_path=tmp_path,
+            step_name=step_name,
+            processed_files=processed_files,
+            collected_cycles=collected_cycles,
+            recorder=mock_recorder,
+        )
+
+        # Should only find cycle_2 (cycle_1 was already processed)
+        assert len(collected_cycles) == 1
+        assert collected_cycles[0].cycle == 2
+
+    def test_sweep_no_warning_when_no_missed_files(self, tmp_path: Path, caplog):
+        """Test that no warning is logged when all files were already processed."""
+        import json
+        import logging
+
+        runner = _runner_without_init()
+
+        step_name = "implement_task"
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+
+        cycle_data = {
+            "cycle": 1,
+            "max_cycles": 3,
+            "verdict": "approved",
+            "feedback": "",
+            "skill": "local-review",
+            "elapsed_seconds": 5.0,
+            "timestamp": "2024-01-15T10:30:00Z",
+        }
+        cycle_file = cycle_dir / "review_cycle_1.json"
+        cycle_file.write_text(json.dumps(cycle_data))
+
+        # File was already processed
+        processed_files: set[str] = {str(cycle_file)}
+        collected_cycles: list[ReviewCycleData] = []
+
+        mock_recorder = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            runner._sweep_review_cycles(
+                workspace_path=tmp_path,
+                step_name=step_name,
+                processed_files=processed_files,
+                collected_cycles=collected_cycles,
+                recorder=mock_recorder,
+            )
+
+        # Should not find any new files
+        assert len(collected_cycles) == 0
+
+        # Should not log warning about missed files
+        assert "Sweep caught" not in caplog.text
+
+    def test_sweep_handles_nonexistent_directory(self, tmp_path: Path):
+        """Test that sweep handles missing .forge/{step} directory gracefully."""
+        runner = _runner_without_init()
+
+        # Don't create the directory
+        processed_files: set[str] = set()
+        collected_cycles: list[ReviewCycleData] = []
+
+        mock_recorder = MagicMock()
+
+        # Should not raise
+        runner._sweep_review_cycles(
+            workspace_path=tmp_path,
+            step_name="nonexistent_step",
+            processed_files=processed_files,
+            collected_cycles=collected_cycles,
+            recorder=mock_recorder,
+        )
+
+        assert len(collected_cycles) == 0
+
+    def test_sweep_handles_invalid_json(self, tmp_path: Path, caplog):
+        """Test that sweep handles invalid JSON files gracefully."""
+        import logging
+
+        runner = _runner_without_init()
+
+        step_name = "implement_task"
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+
+        # Create an invalid JSON file
+        cycle_file = cycle_dir / "review_cycle_1.json"
+        cycle_file.write_text("not valid json {")
+
+        processed_files: set[str] = set()
+        collected_cycles: list[ReviewCycleData] = []
+
+        mock_recorder = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            runner._sweep_review_cycles(
+                workspace_path=tmp_path,
+                step_name=step_name,
+                processed_files=processed_files,
+                collected_cycles=collected_cycles,
+                recorder=mock_recorder,
+            )
+
+        # Should not have collected any cycles
+        assert len(collected_cycles) == 0
+
+        # Should log warning about parse failure
+        assert "Failed to parse review cycle file" in caplog.text
+
+    def test_sweep_handles_missing_required_fields(self, tmp_path: Path, caplog):
+        """Test that sweep handles JSON with missing required fields."""
+        import json
+        import logging
+
+        runner = _runner_without_init()
+
+        step_name = "implement_task"
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+
+        # Create JSON missing required fields
+        cycle_data = {"verdict": "approved", "feedback": "Missing fields"}
+        cycle_file = cycle_dir / "review_cycle_1.json"
+        cycle_file.write_text(json.dumps(cycle_data))
+
+        processed_files: set[str] = set()
+        collected_cycles: list[ReviewCycleData] = []
+
+        mock_recorder = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            runner._sweep_review_cycles(
+                workspace_path=tmp_path,
+                step_name=step_name,
+                processed_files=processed_files,
+                collected_cycles=collected_cycles,
+                recorder=mock_recorder,
+            )
+
+        # Should not have collected any cycles
+        assert len(collected_cycles) == 0
+
+        # Should log warning about invalid data
+        assert "Invalid review cycle data" in caplog.text
+
+    def test_sweep_handles_empty_file(self, tmp_path: Path, caplog):
+        """Test that sweep handles empty files gracefully."""
+        import logging
+
+        runner = _runner_without_init()
+
+        step_name = "implement_task"
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+
+        # Create an empty file
+        cycle_file = cycle_dir / "review_cycle_1.json"
+        cycle_file.write_text("")
+
+        processed_files: set[str] = set()
+        collected_cycles: list[ReviewCycleData] = []
+
+        mock_recorder = MagicMock()
+
+        with caplog.at_level(logging.WARNING):
+            runner._sweep_review_cycles(
+                workspace_path=tmp_path,
+                step_name=step_name,
+                processed_files=processed_files,
+                collected_cycles=collected_cycles,
+                recorder=mock_recorder,
+            )
+
+        # Should not have collected any cycles
+        assert len(collected_cycles) == 0
+
+        # Should log warning about empty file
+        assert "Empty review cycle file" in caplog.text
+
+    def test_sweep_emits_metrics(self, tmp_path: Path):
+        """Test that sweep emits Prometheus metrics for caught files."""
+        import json
+
+        runner = _runner_without_init()
+
+        step_name = "implement_task"
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+
+        cycle_data = {
+            "cycle": 1,
+            "max_cycles": 3,
+            "verdict": "rejected",
+            "feedback": "Needs work",
+            "skill": "local-review",
+            "elapsed_seconds": 8.5,
+            "timestamp": "2024-01-15T10:30:00Z",
+        }
+        cycle_file = cycle_dir / "review_cycle_1.json"
+        cycle_file.write_text(json.dumps(cycle_data))
+
+        processed_files: set[str] = set()
+        collected_cycles: list[ReviewCycleData] = []
+
+        mock_recorder = MagicMock()
+
+        with (
+            patch("forge.sandbox.runner.record_review_cycle") as mock_cycle,
+            patch("forge.sandbox.runner.record_review_verdict") as mock_verdict,
+            patch("forge.sandbox.runner.observe_review_duration") as mock_duration,
+        ):
+            runner._sweep_review_cycles(
+                workspace_path=tmp_path,
+                step_name=step_name,
+                processed_files=processed_files,
+                collected_cycles=collected_cycles,
+                recorder=mock_recorder,
+            )
+
+        # Verify metrics were emitted
+        mock_cycle.assert_called_once_with("local-review", step_name)
+        mock_verdict.assert_called_once_with("local-review", step_name, "rejected")
+        mock_duration.assert_called_once_with("local-review", step_name, 8.5)
+
+    def test_sweep_records_via_recorder(self, tmp_path: Path):
+        """Test that sweep uses recorder to record and copy files."""
+        import json
+
+        runner = _runner_without_init()
+
+        step_name = "implement_task"
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+
+        cycle_data = {
+            "cycle": 1,
+            "max_cycles": 3,
+            "verdict": "approved",
+            "feedback": "",
+            "skill": "local-review",
+            "elapsed_seconds": 5.0,
+            "timestamp": "2024-01-15T10:30:00Z",
+        }
+        cycle_file = cycle_dir / "review_cycle_1.json"
+        cycle_file.write_text(json.dumps(cycle_data))
+
+        processed_files: set[str] = set()
+        collected_cycles: list[ReviewCycleData] = []
+
+        mock_recorder = MagicMock()
+
+        runner._sweep_review_cycles(
+            workspace_path=tmp_path,
+            step_name=step_name,
+            processed_files=processed_files,
+            collected_cycles=collected_cycles,
+            recorder=mock_recorder,
+        )
+
+        # Verify recorder methods were called
+        mock_recorder.record.assert_called_once()
+        mock_recorder.record_file.assert_called_once_with(cycle_file)
+
+
+class TestSweepIntegrationWithRun:
+    """Tests for sweep integration with ContainerRunner.run()."""
+
+    @pytest.mark.asyncio
+    async def test_fast_exit_files_caught_by_sweep(self, tmp_path: Path, caplog):
+        """Test that files written just before container exit are caught by sweep."""
+        import json
+        import logging
+
+        runner = _runner_without_init()
+        runner.settings = MagicMock()
+        runner.settings.container_image = "test:latest"
+        runner.settings.container_timeout = 60
+        runner.settings.container_memory = "1g"
+        runner.settings.container_cpus = "1"
+        runner.settings.container_keep = False
+        runner.settings.auto_review_poll_interval = 1.0
+        runner.settings.auto_review_record_polled_files = "log"
+
+        mock_process = MagicMock()
+        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
+        mock_process.returncode = 0
+
+        step_name = "implement_task"
+
+        # Create a file that simulates being written just before container exit
+        # (not caught by async polling)
+        cycle_dir = tmp_path / ".forge" / step_name
+        cycle_dir.mkdir(parents=True)
+        cycle_data = {
+            "cycle": 1,
+            "max_cycles": 3,
+            "verdict": "approved",
+            "feedback": "Fast exit",
+            "skill": "fast-review",
+            "elapsed_seconds": 1.0,
+            "timestamp": "2024-01-15T10:30:00Z",
+        }
+        cycle_file = cycle_dir / "review_cycle_1.json"
+        cycle_file.write_text(json.dumps(cycle_data))
+
+        def create_poller(**kwargs):
+            mock_poller = MagicMock()
+            # Poller returns no files during polling and poll_once
+            # (simulating fast exit where files are written after polling stops)
+            mock_poller.poll = MagicMock(return_value=AsyncIteratorMock([]))
+            mock_poller.poll_once = AsyncMock(return_value=[])
+            mock_poller.stop = MagicMock()
+            mock_poller.step_name = kwargs.get("step_name", "")
+            # Empty processed files - nothing was caught during async polling
+            mock_poller._processed_files = set()
+            return mock_poller
+
+        with (
+            patch.object(runner, "_build_container_name", return_value="test-container"),
+            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
+            patch(
+                "forge.sandbox.runner.asyncio.create_subprocess_exec",
+                return_value=mock_process,
+            ),
+            patch(
+                "forge.sandbox.runner.ReviewCyclePoller",
+                side_effect=create_poller,
+            ),
+            patch("forge.sandbox.runner.ReviewCycleRecorder") as mock_recorder_class,
+            patch("forge.sandbox.runner.record_review_cycle"),
+            patch("forge.sandbox.runner.record_review_verdict"),
+            patch("forge.sandbox.runner.observe_review_duration"),
+            caplog.at_level(logging.WARNING),
+        ):
+            mock_recorder = MagicMock()
+            mock_recorder_class.return_value = mock_recorder
+
+            result = await runner.run(
+                workspace_path=tmp_path,
+                task_summary="Test task",
+                task_description="Test description",
+                step_name=step_name,
+            )
+
+        # The sweep should have caught the file
+        assert len(result.review_cycles) == 1
+        assert result.review_cycles[0].verdict == "approved"
+        assert result.review_cycles[0].skill == "fast-review"
+
+        # Should log warning about missed files
+        assert "Sweep caught 1 review cycle file(s) missed" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_sweep_runs_after_async_polling(self, tmp_path: Path):
+        """Test that sweep is called after container exits."""
+        runner = _runner_without_init()
+        runner.settings = MagicMock()
+        runner.settings.container_image = "test:latest"
+        runner.settings.container_timeout = 60
+        runner.settings.container_memory = "1g"
+        runner.settings.container_cpus = "1"
+        runner.settings.container_keep = False
+        runner.settings.auto_review_poll_interval = 1.0
+        runner.settings.auto_review_record_polled_files = None
+
+        mock_process = MagicMock()
+        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
+        mock_process.returncode = 0
+
+        sweep_called = False
+        original_sweep = runner._sweep_review_cycles
+
+        def mock_sweep(*args, **kwargs):
+            nonlocal sweep_called
+            sweep_called = True
+            return original_sweep(*args, **kwargs)
+
+        def create_poller(**kwargs):
+            mock_poller = MagicMock()
+            mock_poller.poll = MagicMock(return_value=AsyncIteratorMock([]))
+            mock_poller.poll_once = AsyncMock(return_value=[])
+            mock_poller.stop = MagicMock()
+            mock_poller.step_name = kwargs.get("step_name", "")
+            mock_poller._processed_files = set()
+            return mock_poller
+
+        with (
+            patch.object(runner, "_build_container_name", return_value="test-container"),
+            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
+            patch(
+                "forge.sandbox.runner.asyncio.create_subprocess_exec",
+                return_value=mock_process,
+            ),
+            patch(
+                "forge.sandbox.runner.ReviewCyclePoller",
+                side_effect=create_poller,
+            ),
+            patch("forge.sandbox.runner.ReviewCycleRecorder"),
+            patch.object(runner, "_sweep_review_cycles", side_effect=mock_sweep),
+        ):
+            await runner.run(
+                workspace_path=tmp_path,
+                task_summary="Test task",
+                task_description="Test description",
+                step_name="implement_task",
+            )
+
+        assert sweep_called is True
