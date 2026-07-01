@@ -7,6 +7,7 @@ This module provides core data structures used by the review loop engine:
 - Verdict: Enum for review outcomes (APPROVED/REJECTED)
 - parse_review_config: Parser for review.md YAML frontmatter
 - detect_review_md: Locates review.md with project override precedence
+- parse_verdict: Extracts verdict and feedback from review output text
 """
 
 import logging
@@ -215,3 +216,44 @@ def detect_review_md(skill_name: str, ticket_key: str, skills_base: Path) -> Pat
         ticket_key,
     )
     return None
+
+
+def parse_verdict(output_text: str) -> tuple[Verdict, str]:
+    """Extract verdict and feedback from review output text.
+
+    Performs case-insensitive search for "APPROVED" and "REJECTED" markers.
+    When both markers are present, the first occurrence wins (checks APPROVED first).
+
+    Args:
+        output_text: The raw output text from the review process.
+
+    Returns:
+        Tuple of (Verdict, feedback_string):
+        - (Verdict.APPROVED, "") when APPROVED marker is found first
+        - (Verdict.REJECTED, feedback) when REJECTED marker is found first,
+          where feedback is the text following the marker
+        - (Verdict.REJECTED, "Verdict could not be parsed") when neither marker found
+    """
+    # Normalize for case-insensitive matching
+    text_upper = output_text.upper()
+
+    # Find positions of both markers (case-insensitive)
+    approved_pos = text_upper.find("APPROVED")
+    rejected_pos = text_upper.find("REJECTED")
+
+    # Neither marker found
+    if approved_pos == -1 and rejected_pos == -1:
+        return (Verdict.REJECTED, "Verdict could not be parsed")
+
+    # Determine which marker comes first
+    # If APPROVED found and (REJECTED not found OR APPROVED comes first)
+    if approved_pos != -1 and (rejected_pos == -1 or approved_pos < rejected_pos):
+        return (Verdict.APPROVED, "")
+
+    # REJECTED marker found first (or only REJECTED found)
+    # Extract feedback from text following the REJECTED marker
+    # Skip past "REJECTED" keyword (8 characters)
+    feedback_start = rejected_pos + len("REJECTED")
+    feedback = output_text[feedback_start:].strip()
+
+    return (Verdict.REJECTED, feedback)

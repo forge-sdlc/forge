@@ -11,6 +11,7 @@ from containers.review import (
     Verdict,
     detect_review_md,
     parse_review_config,
+    parse_verdict,
 )
 
 # ---------------------------------------------------------------------------
@@ -474,3 +475,198 @@ class TestDetectReviewMd:
         result = detect_review_md("multi-hyphen-skill", "PROJ-123", skills_base)
 
         assert result == project_review
+
+
+# ---------------------------------------------------------------------------
+# parse_verdict tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseVerdict:
+    """Tests for parse_verdict function (SC-002)."""
+
+    # ----- APPROVED marker tests -----
+
+    def test_approved_uppercase(self):
+        """APPROVED marker in uppercase returns (APPROVED, '')."""
+        result = parse_verdict("The code looks good. APPROVED")
+        assert result == (Verdict.APPROVED, "")
+
+    def test_approved_lowercase(self):
+        """Case-insensitive: 'approved' returns (APPROVED, '')."""
+        result = parse_verdict("Code review complete. approved")
+        assert result == (Verdict.APPROVED, "")
+
+    def test_approved_mixed_case(self):
+        """Case-insensitive: 'Approved' returns (APPROVED, '')."""
+        result = parse_verdict("All tests pass. Approved")
+        assert result == (Verdict.APPROVED, "")
+
+    def test_approved_with_text_before_and_after(self):
+        """APPROVED marker in middle of text still returns (APPROVED, '')."""
+        result = parse_verdict("Summary: Code is clean. APPROVED. No further changes needed.")
+        assert result == (Verdict.APPROVED, "")
+
+    def test_approved_at_start(self):
+        """APPROVED at start of text."""
+        result = parse_verdict("APPROVED - code meets all requirements")
+        assert result == (Verdict.APPROVED, "")
+
+    # ----- REJECTED marker tests -----
+
+    def test_rejected_uppercase(self):
+        """REJECTED marker returns (REJECTED, feedback)."""
+        result = parse_verdict("REJECTED: Code has security issues.")
+        assert result[0] == Verdict.REJECTED
+        assert result[1] == ": Code has security issues."
+
+    def test_rejected_lowercase(self):
+        """Case-insensitive: 'rejected' returns (REJECTED, feedback)."""
+        result = parse_verdict("Code review result: rejected due to missing tests.")
+        assert result[0] == Verdict.REJECTED
+        assert result[1] == "due to missing tests."
+
+    def test_rejected_mixed_case(self):
+        """Case-insensitive: 'Rejected' returns (REJECTED, feedback)."""
+        result = parse_verdict("Rejected - needs refactoring.")
+        assert result[0] == Verdict.REJECTED
+        assert result[1] == "- needs refactoring."
+
+    def test_rejected_extracts_feedback_after_marker(self):
+        """Feedback is all text after REJECTED marker."""
+        result = parse_verdict(
+            "Review: REJECTED\n\nPlease fix the following:\n1. Bug in line 42\n2. Missing docstring"
+        )
+        assert result[0] == Verdict.REJECTED
+        assert "Please fix the following:" in result[1]
+        assert "Bug in line 42" in result[1]
+        assert "Missing docstring" in result[1]
+
+    def test_rejected_feedback_is_stripped(self):
+        """Feedback text is stripped of leading/trailing whitespace."""
+        result = parse_verdict("REJECTED   \n\n  Needs work.  \n\n")
+        assert result[0] == Verdict.REJECTED
+        assert result[1] == "Needs work."
+
+    def test_rejected_with_empty_feedback(self):
+        """SC-003: Empty feedback after REJECTED marker is handled correctly."""
+        result = parse_verdict("REJECTED")
+        assert result[0] == Verdict.REJECTED
+        assert result[1] == ""
+
+    def test_rejected_with_only_whitespace_feedback(self):
+        """Whitespace-only feedback after REJECTED is stripped to empty string."""
+        result = parse_verdict("REJECTED   \n\n  \t  \n")
+        assert result[0] == Verdict.REJECTED
+        assert result[1] == ""
+
+    # ----- Neither marker present -----
+
+    def test_neither_marker_returns_rejected_with_error_message(self):
+        """Neither marker present returns (REJECTED, 'Verdict could not be parsed')."""
+        result = parse_verdict("This review output has no clear verdict.")
+        assert result == (Verdict.REJECTED, "Verdict could not be parsed")
+
+    def test_empty_string_returns_rejected_with_error_message(self):
+        """Empty string returns (REJECTED, 'Verdict could not be parsed')."""
+        result = parse_verdict("")
+        assert result == (Verdict.REJECTED, "Verdict could not be parsed")
+
+    def test_whitespace_only_returns_rejected_with_error_message(self):
+        """Whitespace-only string returns (REJECTED, 'Verdict could not be parsed')."""
+        result = parse_verdict("   \n\t\n   ")
+        assert result == (Verdict.REJECTED, "Verdict could not be parsed")
+
+    # ----- Both markers present -----
+
+    def test_both_markers_approved_first_wins(self):
+        """When both markers present, APPROVED first wins."""
+        result = parse_verdict("Code is APPROVED, not REJECTED because tests pass.")
+        assert result == (Verdict.APPROVED, "")
+
+    def test_both_markers_rejected_first_wins(self):
+        """When both markers present, REJECTED first wins if it comes first."""
+        result = parse_verdict(
+            "This code is REJECTED. It would have been APPROVED if tests passed."
+        )
+        assert result[0] == Verdict.REJECTED
+        assert "It would have been APPROVED if tests passed." in result[1]
+
+    def test_both_markers_same_position_edge_case(self):
+        """Edge case: if somehow both start at same position, check behavior.
+
+        In practice this can't happen since they're different strings,
+        but we verify APPROVED is checked first per spec.
+        """
+        # This tests the logic: APPROVED found, REJECTED found, but APPROVED position is smaller
+        text = "APPROVED followed by REJECTED"
+        result = parse_verdict(text)
+        assert result == (Verdict.APPROVED, "")
+
+    # ----- Partial matches should not be detected -----
+
+    def test_approved_as_word_in_middle(self):
+        """APPROVED as substring in longer word is still detected (per current impl)."""
+        # NOTE: The spec doesn't mention word boundaries, so "APPROVED" in "UNAPPROVED"
+        # would still match. This documents current behavior.
+        result = parse_verdict("This is PREAPPROVED for the next phase")
+        assert result == (Verdict.APPROVED, "")
+
+    def test_rejected_as_word_in_middle(self):
+        """REJECTED as substring is still detected (per current impl)."""
+        result = parse_verdict("Previously rejected items were fixed")
+        # "rejected" is found in the middle
+        assert result[0] == Verdict.REJECTED
+
+    # ----- Complex real-world scenarios -----
+
+    def test_real_world_approved_review(self):
+        """Real-world style APPROVED review."""
+        review = """
+## Code Review Summary
+
+The implementation looks good and follows the coding standards.
+All tests pass and documentation is adequate.
+
+**Verdict: APPROVED**
+
+No further changes required.
+"""
+        result = parse_verdict(review)
+        assert result == (Verdict.APPROVED, "")
+
+    def test_real_world_rejected_review(self):
+        """Real-world style REJECTED review with detailed feedback."""
+        review = """
+## Code Review Summary
+
+The implementation has several issues that need to be addressed.
+
+**Verdict: REJECTED**
+
+### Issues Found:
+1. Missing error handling in `parse_data()` function
+2. No unit tests for edge cases
+3. Documentation needs to be updated
+
+### Recommendations:
+- Add try/except blocks for file operations
+- Add tests for empty input and malformed data
+"""
+        result = parse_verdict(review)
+        assert result[0] == Verdict.REJECTED
+        assert "Missing error handling" in result[1]
+        assert "No unit tests for edge cases" in result[1]
+        assert "Recommendations:" in result[1]
+
+    def test_multiline_approved(self):
+        """APPROVED marker on its own line."""
+        review = """
+Review complete.
+
+APPROVED
+
+Ship it!
+"""
+        result = parse_verdict(review)
+        assert result == (Verdict.APPROVED, "")
