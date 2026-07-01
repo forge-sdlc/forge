@@ -335,6 +335,15 @@ class Settings(BaseSettings):
         default=5.0,
         description="Polling interval in seconds for detecting review cycle files during container execution",
     )
+    auto_review_record_polled_files: Literal["log", "copy"] | None = Field(
+        default=None,
+        description=(
+            "Recording mode for polled review cycle files. "
+            "'log' logs cycle data at INFO level. "
+            "'copy' copies files to {recording_dir}/{step-name}/review_cycle_*.json. "
+            "None disables recording."
+        ),
+    )
 
     # Queue Consumer Configuration
     queue_max_concurrent_tasks: int = Field(

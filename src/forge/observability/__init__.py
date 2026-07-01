@@ -14,6 +14,10 @@ from forge.observability.review_poller import (
     ReviewCycleData,
     ReviewCyclePoller,
 )
+from forge.observability.review_recorder import (
+    ReviewCycleData as RecorderReviewCycleData,
+    ReviewCycleRecorder,
+)
 
 __all__ = [
     "configure_tracing",
@@ -24,4 +28,6 @@ __all__ = [
     "set_correlation_id",
     "ReviewCycleData",
     "ReviewCyclePoller",
+    "RecorderReviewCycleData",
+    "ReviewCycleRecorder",
 ]
