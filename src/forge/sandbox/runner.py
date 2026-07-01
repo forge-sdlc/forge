@@ -13,18 +13,62 @@ to implement tasks with full tool access.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import shutil
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
+from forge.api.routes.metrics import (
+    observe_review_duration,
+    record_review_cycle,
+    record_review_verdict,
+)
 from forge.config import Settings, get_settings
+from forge.observability import (
+    RecorderReviewCycleData,
+    ReviewCycleData,
+    ReviewCyclePoller,
+    ReviewCycleRecorder,
+)
 from forge.prompts import load_prompt
 from forge.skills.resolver import resolve_skill_paths
 
 logger = logging.getLogger(__name__)
+
+
+def _poller_to_recorder_cycle(
+    poller_cycle: ReviewCycleData, _step_name: str
+) -> RecorderReviewCycleData:
+    """Convert poller's ReviewCycleData to recorder's format.
+
+    Args:
+        poller_cycle: ReviewCycleData from the poller (has string timestamp).
+        step_name: The workflow step name for context.
+
+    Returns:
+        RecorderReviewCycleData suitable for the recorder (has datetime timestamp).
+    """
+    # Parse ISO 8601 timestamp string to datetime
+    try:
+        timestamp = datetime.fromisoformat(poller_cycle.timestamp.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        # Fallback to now if parsing fails
+        timestamp = datetime.now()
+
+    return RecorderReviewCycleData(
+        cycle=poller_cycle.cycle,
+        max_cycles=poller_cycle.max_cycles,
+        verdict=poller_cycle.verdict,
+        feedback=poller_cycle.feedback,
+        skill=poller_cycle.skill,
+        elapsed_seconds=poller_cycle.elapsed_seconds,
+        timestamp=timestamp,
+    )
+
 
 # Default container image (can be overridden via CONTAINER_IMAGE env var)
 # Use localhost/ prefix to avoid podman short-name resolution prompts
@@ -47,6 +91,7 @@ class ContainerResult:
     stderr: str
     tests_passed: bool | None = None  # None if tests were skipped
     error_message: str | None = None
+    review_cycles: list[ReviewCycleData] = field(default_factory=list)
 
     @property
     def tests_failed(self) -> bool:
@@ -363,6 +408,57 @@ class ContainerRunner:
             process.kill()
             await process.wait()
 
+    async def _poll_review_cycles(
+        self,
+        poller: ReviewCyclePoller,
+        recorder: ReviewCycleRecorder,
+        collected_cycles: list[ReviewCycleData],
+    ) -> None:
+        """Background task to poll for review cycle files during container execution.
+
+        This task polls the workspace for review_cycle_*.json files and:
+        - Collects detected ReviewCycleData into the provided list
+        - Records cycles via the recorder (log or copy mode)
+        - Emits Prometheus metrics for observability
+
+        Args:
+            poller: The ReviewCyclePoller instance to use for polling.
+            recorder: The ReviewCycleRecorder for recording cycles.
+            collected_cycles: List to aggregate detected cycles into.
+        """
+        try:
+            async for new_cycles in poller.poll():
+                for cycle in new_cycles:
+                    collected_cycles.append(cycle)
+
+                    # Record cycle via recorder (handles log/copy modes)
+                    recorder.record(
+                        # Convert poller's ReviewCycleData to recorder's format
+                        # (using to_dict style conversion)
+                        _poller_to_recorder_cycle(cycle, poller.step_name)
+                    )
+
+                    # Copy file if in copy mode
+                    if cycle.file_path:
+                        recorder.record_file(Path(cycle.file_path))
+
+                    # Emit Prometheus metrics
+                    record_review_cycle(cycle.skill, poller.step_name)
+                    record_review_verdict(cycle.skill, poller.step_name, cycle.verdict)
+                    observe_review_duration(cycle.skill, poller.step_name, cycle.elapsed_seconds)
+
+                    logger.debug(
+                        "Review cycle %d/%d for %s: %s",
+                        cycle.cycle,
+                        cycle.max_cycles,
+                        poller.step_name,
+                        cycle.verdict,
+                    )
+        except asyncio.CancelledError:
+            # Clean exit on cancellation
+            logger.debug("Review polling task cancelled")
+            raise
+
     async def run(
         self,
         workspace_path: Path,
@@ -373,6 +469,7 @@ class ContainerRunner:
         task_key: str | None = None,
         repo_name: str | None = None,
         previous_task_keys: list[str] | None = None,
+        step_name: str | None = None,
     ) -> ContainerResult:
         """Run a task in a container sandbox.
 
@@ -385,9 +482,12 @@ class ContainerRunner:
             task_key: Jira task key being implemented.
             repo_name: Repository name (e.g., "owner/repo") for container naming.
             previous_task_keys: List of previously implemented task keys for handoff context.
+            step_name: Workflow step name (e.g., "implement_task", "local_review")
+                for organizing review cycle files under .forge/{step-name}/.
+                If not provided, review polling is disabled.
 
         Returns:
-            ContainerResult with execution status and logs.
+            ContainerResult with execution status, logs, and review_cycles.
         """
         config = config or self._default_config()
 
@@ -402,6 +502,10 @@ class ContainerRunner:
             "previous_task_keys": previous_task_keys or [],
         }
         task_file.write_text(json.dumps(task_data, indent=2))
+
+        # List to collect review cycles detected during execution
+        collected_cycles: list[ReviewCycleData] = []
+        polling_task: asyncio.Task | None = None
 
         try:
             # Build container name and command
@@ -420,6 +524,27 @@ class ContainerRunner:
                 stderr=asyncio.subprocess.PIPE,
             )
 
+            # Start review polling background task if step_name is provided
+            if step_name:
+                poller = ReviewCyclePoller(
+                    workspace_path=workspace_path,
+                    step_name=step_name,
+                    settings=self.settings,
+                )
+                # Note: recording_dir is not currently configurable.
+                # For copy mode, the recorder needs a recording_dir, so we use
+                # log mode only unless copy mode is explicitly needed in the future.
+                record_mode = self.settings.auto_review_record_polled_files
+                recorder = ReviewCycleRecorder(
+                    step_name=step_name,
+                    mode=record_mode if record_mode != "copy" else "log",
+                    recording_dir=None,
+                )
+                polling_task = asyncio.create_task(
+                    self._poll_review_cycles(poller, recorder, collected_cycles)
+                )
+                logger.debug(f"Started review polling for step: {step_name}")
+
             try:
                 stdout, stderr = await asyncio.wait_for(
                     process.communicate(),
@@ -434,11 +559,35 @@ class ContainerRunner:
                     stdout="",
                     stderr="Container execution timed out",
                     error_message="Timeout exceeded",
+                    review_cycles=collected_cycles,
                 )
             except asyncio.CancelledError:
                 logger.warning(f"Container execution cancelled, stopping {container_name}")
                 await self._stop_timed_out_container(container_name, process)
                 raise  # Re-raise CancelledError
+            finally:
+                # Stop and clean up polling task
+                if polling_task:
+                    # Stop the poller
+                    poller.stop()
+                    # Cancel the polling task
+                    polling_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await polling_task
+                    logger.debug("Review polling task stopped")
+
+                    # Do one final poll to catch any remaining files
+                    final_cycles = await poller.poll_once()
+                    for cycle in final_cycles:
+                        collected_cycles.append(cycle)
+                        recorder.record(_poller_to_recorder_cycle(cycle, poller.step_name))
+                        if cycle.file_path:
+                            recorder.record_file(Path(cycle.file_path))
+                        record_review_cycle(cycle.skill, poller.step_name)
+                        record_review_verdict(cycle.skill, poller.step_name, cycle.verdict)
+                        observe_review_duration(
+                            cycle.skill, poller.step_name, cycle.elapsed_seconds
+                        )
 
             exit_code = process.returncode or 0
             stdout_str = stdout.decode("utf-8", errors="replace")
@@ -474,6 +623,7 @@ class ContainerRunner:
                     stdout=stdout_str,
                     stderr=stderr_str,
                     tests_passed=True,
+                    review_cycles=collected_cycles,
                 )
             elif exit_code == EXIT_TESTS_FAILED:
                 return ContainerResult(
@@ -483,6 +633,7 @@ class ContainerRunner:
                     stderr=stderr_str,
                     tests_passed=False,
                     error_message="Tests failed after max retries",
+                    review_cycles=collected_cycles,
                 )
             else:
                 return ContainerResult(
@@ -491,6 +642,7 @@ class ContainerRunner:
                     stdout=stdout_str,
                     stderr=stderr_str,
                     error_message=f"Task failed with exit code {exit_code}",
+                    review_cycles=collected_cycles,
                 )
 
         finally:
