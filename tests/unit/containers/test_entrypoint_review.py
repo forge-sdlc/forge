@@ -617,3 +617,173 @@ class TestMainReviewLoopIntegration:
             assert exc_info.value.code == 0
             # Should have called asyncio.run twice: once for run_agent_task, once for run_review_loop
             assert asyncio_call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Test _print_review_progress (SC-011)
+# ---------------------------------------------------------------------------
+
+
+class TestPrintReviewProgress:
+    """Tests for terminal progress display in local mode (SC-011)."""
+
+    def test_prints_progress_when_tty(self, capsys):
+        """Test progress is printed when stdout is a TTY."""
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
+
+        with patch("entrypoint._IS_TTY", True):
+            # Need to reload the function to pick up the mocked _IS_TTY
+            import importlib
+
+            import entrypoint
+
+            importlib.reload(entrypoint)
+
+            # Re-patch after reload
+            with patch.object(entrypoint, "_IS_TTY", True):
+                entrypoint._print_review_progress(1, 3, "rejected", "Missing tests")
+
+                captured = capsys.readouterr()
+                assert "Review cycle 1/3: REJECTED - Missing tests" in captured.out
+
+    def test_no_output_when_not_tty(self, capsys):
+        """Test no output when stdout is not a TTY."""
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
+
+        import importlib
+
+        import entrypoint
+
+        importlib.reload(entrypoint)
+
+        with patch.object(entrypoint, "_IS_TTY", False):
+            entrypoint._print_review_progress(1, 3, "rejected", "Missing tests")
+
+            captured = capsys.readouterr()
+            assert captured.out == ""
+
+    def test_feedback_truncated_at_200_chars(self, capsys):
+        """Test that feedback is truncated to 200 characters with ellipsis."""
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
+
+        import importlib
+
+        import entrypoint
+
+        importlib.reload(entrypoint)
+
+        long_feedback = "x" * 300  # 300 characters
+
+        with patch.object(entrypoint, "_IS_TTY", True):
+            entrypoint._print_review_progress(2, 5, "rejected", long_feedback)
+
+            captured = capsys.readouterr()
+            # Should have 200 chars + "..."
+            assert "x" * 200 + "..." in captured.out
+            # Should NOT have 201 x's
+            assert "x" * 201 not in captured.out
+
+    def test_feedback_not_truncated_when_under_200(self, capsys):
+        """Test that feedback under 200 chars is not truncated."""
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
+
+        import importlib
+
+        import entrypoint
+
+        importlib.reload(entrypoint)
+
+        short_feedback = "Fix the error handling in function xyz"
+
+        with patch.object(entrypoint, "_IS_TTY", True):
+            entrypoint._print_review_progress(1, 3, "rejected", short_feedback)
+
+            captured = capsys.readouterr()
+            assert short_feedback in captured.out
+            assert "..." not in captured.out
+
+    def test_verdict_uppercased(self, capsys):
+        """Test that verdict is uppercased in output."""
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
+
+        import importlib
+
+        import entrypoint
+
+        importlib.reload(entrypoint)
+
+        with patch.object(entrypoint, "_IS_TTY", True):
+            entrypoint._print_review_progress(1, 3, "approved", "")
+
+            captured = capsys.readouterr()
+            assert "APPROVED" in captured.out
+            assert "approved" not in captured.out
+
+    def test_no_feedback_shows_just_verdict(self, capsys):
+        """Test that empty feedback shows just the verdict without dash."""
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
+
+        import importlib
+
+        import entrypoint
+
+        importlib.reload(entrypoint)
+
+        with patch.object(entrypoint, "_IS_TTY", True):
+            entrypoint._print_review_progress(3, 3, "approved", "")
+
+            captured = capsys.readouterr()
+            assert "Review cycle 3/3: APPROVED" in captured.out
+            assert " - " not in captured.out
+
+    def test_format_matches_spec(self, capsys):
+        """Test output format matches spec: 'Review cycle N/M: VERDICT - feedback'."""
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
+
+        import importlib
+
+        import entrypoint
+
+        importlib.reload(entrypoint)
+
+        with patch.object(entrypoint, "_IS_TTY", True):
+            entrypoint._print_review_progress(1, 3, "rejected", "Please add error handling")
+
+            captured = capsys.readouterr()
+            expected = "Review cycle 1/3: REJECTED - Please add error handling\n"
+            assert captured.out == expected
+
+    def test_feedback_exactly_200_chars_not_truncated(self, capsys):
+        """Test that feedback exactly 200 chars is not truncated."""
+        import sys
+
+        sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
+
+        import importlib
+
+        import entrypoint
+
+        importlib.reload(entrypoint)
+
+        exact_feedback = "y" * 200
+
+        with patch.object(entrypoint, "_IS_TTY", True):
+            entrypoint._print_review_progress(1, 2, "rejected", exact_feedback)
+
+            captured = capsys.readouterr()
+            assert exact_feedback in captured.out
+            assert "..." not in captured.out

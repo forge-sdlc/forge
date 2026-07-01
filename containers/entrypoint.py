@@ -42,6 +42,47 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# TTY detection for terminal progress display
+_IS_TTY = sys.stdout.isatty()
+
+
+def _print_review_progress(
+    cycle: int,
+    max_cycles: int,
+    verdict: str,
+    feedback: str,
+) -> None:
+    """Print review cycle progress to terminal (TTY only).
+
+    Displays progress in format: "Review cycle N/M: VERDICT - [truncated feedback]"
+    Only prints when stdout is a TTY (local/terminal mode).
+
+    Args:
+        cycle: Current cycle number (1-indexed).
+        max_cycles: Maximum cycles allowed.
+        verdict: Review verdict (e.g., "approved", "rejected").
+        feedback: Reviewer feedback text to truncate.
+    """
+    if not _IS_TTY:
+        return
+
+    # Build progress message
+    verdict_upper = verdict.upper()
+    message = f"Review cycle {cycle}/{max_cycles}: {verdict_upper}"
+
+    # Append truncated feedback for rejections
+    if feedback:
+        max_feedback_len = 200
+        if len(feedback) > max_feedback_len:
+            truncated = feedback[:max_feedback_len] + "..."
+        else:
+            truncated = feedback
+        message = f"{message} - {truncated}"
+
+    # Print immediately (flush ensures display within 1 second of call)
+    print(message, flush=True)
+
+
 # Enable LangChain debug/verbose mode if requested
 if os.environ.get("LANGCHAIN_VERBOSE", "").lower() in ("true", "1", "yes"):
     try:
@@ -765,6 +806,9 @@ async def run_review_loop(
         verdict, feedback = parse_verdict(reviewer_output)
         elapsed = time.perf_counter() - cycle_start
         timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        # Display terminal progress immediately (SC-011)
+        _print_review_progress(cycle, max_retries, verdict, feedback)
 
         logger.info(f"Review verdict: {verdict}, elapsed: {elapsed:.2f}s")
         if feedback:
