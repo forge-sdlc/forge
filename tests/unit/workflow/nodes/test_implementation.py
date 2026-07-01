@@ -141,6 +141,47 @@ class TestImplementTaskStartedComment:
         assert result["last_error"] is None
         assert "TASK-456" in result["implemented_tasks"]
 
+    @pytest.mark.asyncio
+    async def test_passes_trace_context_to_container_runner(self):
+        """Container traces receive workflow fields for configured labels."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Fix null pointer in AuthService")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-99",
+                    ticket_type=TicketType.FEATURE,
+                    current_repo="acme/backend",
+                    current_task_key="TASK-100",
+                    tasks_by_repo={"acme/backend": ["TASK-100"]},
+                )
+            )
+
+        trace_context = runner.run.call_args.kwargs["trace_context"]
+        assert trace_context == {
+            "ticket_key": "FEAT-99",
+            "ticket_type": TicketType.FEATURE,
+            "current_node": "implement_task",
+            "current_repo": "acme/backend",
+            "repo": "acme/backend",
+            "current_pr_number": None,
+            "pr_number": None,
+            "retry_count": 0,
+        }
+
 
 class TestImplementationNodeRouting:
 

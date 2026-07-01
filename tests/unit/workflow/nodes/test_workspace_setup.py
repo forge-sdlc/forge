@@ -1,6 +1,7 @@
 """Integration tests for workspace setup node - Jira status updates."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -103,6 +104,43 @@ class TestWorkspaceSetupStatusComment:
 
         # Verify workspace was set up
         assert result["workspace_path"] == str(Path("/tmp/test-workspace"))
+
+    @pytest.mark.asyncio
+    async def test_workspace_setup_uses_local_git_exclude_for_forge_dir(self, tmp_path):
+        """Forge internals should be ignored without modifying tracked .gitignore."""
+        workspace_path = tmp_path / "repo"
+        (workspace_path / ".git" / "info").mkdir(parents=True)
+        (workspace_path / ".gitignore").write_text("*.log\n")
+        workspace = SimpleNamespace(
+            path=workspace_path,
+            branch_name="feature/TEST-123",
+        )
+        manager = MagicMock()
+        manager.create_workspace.return_value = workspace
+        mock_jira = create_mock_jira_client()
+        mock_git = create_mock_git_operations()
+        mock_guardrails_loader = create_mock_guardrails_loader()
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-123",
+            current_repo="owner/my-repo",
+            task_keys=[],
+        )
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.JiraClient", return_value=mock_jira),
+            patch(
+                "forge.workflow.nodes.workspace_setup.get_workspace_manager",
+                return_value=manager,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+        ):
+            await setup_workspace(state)
+
+        assert (workspace_path / ".forge" / "history").is_dir()
+        assert (workspace_path / ".gitignore").read_text() == "*.log\n"
+        assert ".forge/" in (workspace_path / ".git" / "info" / "exclude").read_text()
 
     @pytest.mark.asyncio
     async def test_workspace_setup_handles_missing_repo_name(self):

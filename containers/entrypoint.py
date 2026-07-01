@@ -194,9 +194,18 @@ def configure_git() -> None:
 def git_commit(workspace: Path, message: str) -> bool:
     """Stage all changes and create a commit."""
     try:
+        # Keep Forge handoff/history files local even if ignore setup is missing
+        # or an earlier run accidentally staged them.
+        subprocess.run(
+            ["git", "rm", "-r", "--cached", "--ignore-unmatch", ".forge"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+        )
+
         # Stage all changes
         result = subprocess.run(
-            ["git", "add", "-A"],
+            ["git", "add", "-A", "--", ".", ":!.forge", ":!.forge/**"],
             cwd=workspace,
             capture_output=True,
             text=True,
@@ -285,6 +294,35 @@ def build_system_prompt(
     )
 
 
+def resolve_container_trace_fields(trace_state: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """Resolve Langfuse tags/metadata from container env without full app settings."""
+    try:
+        from forge.integrations.langfuse.fields import (
+            parse_trace_fields,
+            resolve_field,
+        )
+    except Exception as e:
+        logger.debug(f"Trace field resolution unavailable: {e}")
+        return [], {}
+
+    tags: list[str] = []
+    for field in parse_trace_fields(os.environ.get("LANGFUSE_TRACE_TAGS", ""), allow_tags=True):
+        value = resolve_field(field, trace_state)
+        if value:
+            tags.append(value)
+
+    metadata: dict[str, Any] = {}
+    for field in parse_trace_fields(
+        os.environ.get("LANGFUSE_TRACE_METADATA", ""),
+        allow_tags=False,
+    ):
+        value = resolve_field(field, trace_state)
+        if value is not None:
+            metadata[field.value] = value
+
+    return tags, metadata
+
+
 async def run_agent_task(
     workspace: Path,
     task_key: str,
@@ -292,6 +330,7 @@ async def run_agent_task(
     task_description: str,
     guardrails: str,
     previous_task_keys: list[str] | None = None,
+    trace_context: dict[str, Any] | None = None,
 ) -> bool:
     """Run Deep Agents to implement the task.
 
@@ -302,6 +341,7 @@ async def run_agent_task(
         task_description: Detailed task description.
         guardrails: Repository guidelines.
         previous_task_keys: List of previously implemented task keys for handoff context.
+        trace_context: Workflow fields forwarded to Langfuse only.
     """
     # Support both new (LLM_MODEL) and legacy (CLAUDE_MODEL) env var names
     model_name = os.environ.get("LLM_MODEL") or os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5@20250929")
@@ -336,6 +376,11 @@ async def run_agent_task(
         system_prompt = build_system_prompt(
             workspace, task_key, task_summary, task_description, guardrails, previous_task_keys
         )
+        trace_state = {
+            **(trace_context or {}),
+            "system_prompt_length": len(system_prompt),
+            "llm_model": model_name,
+        }
 
         # Determine model type (Gemini vs Claude)
         is_gemini = model_name.lower().startswith(("gemini", "models/gemini"))
@@ -448,10 +493,13 @@ async def run_agent_task(
         }
 
         if langfuse_enabled:
+            trace_tags, trace_metadata = resolve_container_trace_fields(trace_state)
+            tags = ["forge-container", "task-implementation", *trace_tags]
+            metadata = {"task_summary": task_summary, **trace_metadata}
             with propagate_attributes(
                 session_id=task_key,
-                tags=["forge-container", "task-implementation"],
-                metadata={"task_summary": task_summary},
+                tags=tags,
+                metadata=metadata,
             ):
                 result = await agent.ainvoke(initial_message, config=config)
         else:
@@ -535,6 +583,7 @@ def main():
 
     # Load task details
     previous_task_keys: list[str] = []
+    trace_context: dict[str, Any] = {}
     task_key: str = "UNKNOWN"
     if args.task_file:
         if not args.task_file.exists():
@@ -546,6 +595,8 @@ def main():
         task_summary = task_data.get("summary", "")
         task_description = task_data.get("description", "")
         previous_task_keys = task_data.get("previous_task_keys", [])
+        raw_trace_context = task_data.get("trace_context", {})
+        trace_context = raw_trace_context if isinstance(raw_trace_context, dict) else {}
     elif args.task_summary and args.task_description:
         task_summary = args.task_summary
         task_description = args.task_description
@@ -583,7 +634,13 @@ def main():
     # - Committing changes when ready
     if not asyncio.run(
         run_agent_task(
-            workspace, task_key, task_summary, task_description, guardrails, previous_task_keys
+            workspace,
+            task_key,
+            task_summary,
+            task_description,
+            guardrails,
+            previous_task_keys,
+            trace_context,
         )
     ):
         logger.error("Task implementation failed")

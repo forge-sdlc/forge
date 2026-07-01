@@ -212,17 +212,16 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         forge_dir.mkdir(exist_ok=True)
         (forge_dir / "history").mkdir(exist_ok=True)
 
-        # Ensure .forge/ is in .gitignore to prevent accidental commits
-        gitignore_path = workspace.path / ".gitignore"
-        if gitignore_path.exists():
-            content = gitignore_path.read_text()
-            if ".forge" not in content:
-                if not content.endswith("\n"):
-                    content += "\n"
-                content += "\n# Forge workflow state (do not commit)\n.forge/\n"
-                gitignore_path.write_text(content)
-        else:
-            gitignore_path.write_text("# Forge workflow state (do not commit)\n.forge/\n")
+        # Keep Forge handoff files local to this clone without modifying the
+        # target repository's tracked .gitignore.
+        exclude_path = workspace.path / ".git" / "info" / "exclude"
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+        exclude_content = exclude_path.read_text() if exclude_path.exists() else ""
+        if ".forge/" not in exclude_content:
+            if exclude_content and not exclude_content.endswith("\n"):
+                exclude_content += "\n"
+            exclude_content += "\n# Forge workflow state (do not commit)\n.forge/\n"
+            exclude_path.write_text(exclude_content)
 
         logger.info("Created .forge directory for task handoff")
 

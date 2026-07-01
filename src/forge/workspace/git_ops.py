@@ -207,8 +207,9 @@ class GitOperations:
         logger.info(f"Checked out branch {branch}")
 
     def stage_all(self) -> None:
-        """Stage all changes."""
-        self._run_git("add", "-A")
+        """Stage all user-facing changes, excluding Forge internal files."""
+        self._run_git("rm", "-r", "--cached", "--ignore-unmatch", ".forge", check=False)
+        self._run_git("add", "-A", "--", ".", ":!.forge", ":!.forge/**")
 
     def stage_files(self, *files: str) -> None:
         """Stage specific files.

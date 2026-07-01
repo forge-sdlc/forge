@@ -58,3 +58,27 @@ def test_git_error_constructor_redacts_tokens():
 
     assert "ghp_" not in str(error)
     assert "https://[REDACTED]@github.com/org/repo.git" in str(error)
+
+
+def test_stage_all_excludes_forge_internal_directory(tmp_path):
+    git = _git_ops(tmp_path)
+
+    with patch.object(git, "_run_git") as run_git:
+        git.stage_all()
+
+    assert run_git.call_args_list[0].args == (
+        "rm",
+        "-r",
+        "--cached",
+        "--ignore-unmatch",
+        ".forge",
+    )
+    assert run_git.call_args_list[0].kwargs == {"check": False}
+    assert run_git.call_args_list[1].args == (
+        "add",
+        "-A",
+        "--",
+        ".",
+        ":!.forge",
+        ":!.forge/**",
+    )

@@ -19,6 +19,7 @@ import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from forge.config import Settings, get_settings
 from forge.prompts import load_prompt
@@ -149,6 +150,8 @@ class ContainerRunner:
             env["LANGFUSE_PUBLIC_KEY"] = self.settings.langfuse_public_key
             env["LANGFUSE_SECRET_KEY"] = self.settings.langfuse_secret_key.get_secret_value()
             env["LANGFUSE_HOST"] = self.settings.langfuse_host
+            env["LANGFUSE_TRACE_TAGS"] = self.settings.langfuse_trace_tags
+            env["LANGFUSE_TRACE_METADATA"] = self.settings.langfuse_trace_metadata
             logger.debug("Container Langfuse tracing enabled")
 
         # Pass system prompt template (unformatted - entrypoint will interpolate)
@@ -373,6 +376,7 @@ class ContainerRunner:
         task_key: str | None = None,
         repo_name: str | None = None,
         previous_task_keys: list[str] | None = None,
+        trace_context: dict[str, Any] | None = None,
     ) -> ContainerResult:
         """Run a task in a container sandbox.
 
@@ -385,6 +389,7 @@ class ContainerRunner:
             task_key: Jira task key being implemented.
             repo_name: Repository name (e.g., "owner/repo") for container naming.
             previous_task_keys: List of previously implemented task keys for handoff context.
+            trace_context: Workflow fields forwarded to Langfuse only.
 
         Returns:
             ContainerResult with execution status and logs.
@@ -400,6 +405,7 @@ class ContainerRunner:
             "summary": task_summary,
             "description": task_description,
             "previous_task_keys": previous_task_keys or [],
+            "trace_context": trace_context or {},
         }
         task_file.write_text(json.dumps(task_data, indent=2))
 

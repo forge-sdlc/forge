@@ -92,9 +92,6 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
                     f"Uncommitted changes found after all tasks for {ticket_key} — "
                     "committing as fallback"
                 )
-                # Remove the .forge/ entry setup_workspace injected into .gitignore
-                # so we don't pollute the repo's gitignore with Forge internals.
-                _clean_forge_gitignore(Path(workspace_path))
                 git.stage_all()
                 git.commit(f"[{ticket_key}] chore: commit uncommitted changes after implementation")
 
@@ -149,6 +146,11 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             task_key=current_task,
             repo_name=current_repo,
             previous_task_keys=implemented_tasks,
+            trace_context=_build_implementation_trace_context(
+                state,
+                implementation_node=implementation_node,
+                current_repo=current_repo,
+            ),
         )
 
         if result.success:
@@ -201,33 +203,23 @@ def _implementation_node_name(state: WorkflowState) -> str:
     return "implement_bug_fix" if state.get("ticket_type") == TicketType.BUG else "implement_task"
 
 
-def _clean_forge_gitignore(workspace_path: Path) -> None:
-    """Remove the .forge/ entry that setup_workspace injected into .gitignore.
-
-    setup_workspace adds a .forge/ exclusion to prevent accidental commits of
-    workflow state. Before the fallback commit we strip it out so the target
-    repo's .gitignore isn't polluted with Forge-internal entries.
-    """
-    gitignore_path = workspace_path / ".gitignore"
-    if not gitignore_path.exists():
-        return
-
-    content = gitignore_path.read_text()
-    if ".forge" not in content:
-        return
-
-    cleaned = (
-        "\n".join(
-            line
-            for line in content.splitlines()
-            if ".forge" not in line and "Forge workflow state" not in line
-        ).rstrip("\n")
-        + "\n"
-    )
-
-    if cleaned != content:
-        gitignore_path.write_text(cleaned)
-        logger.debug("Removed .forge/ entry from .gitignore before fallback commit")
+def _build_implementation_trace_context(
+    state: WorkflowState,
+    *,
+    implementation_node: str,
+    current_repo: str,
+) -> dict[str, object]:
+    """Build trace-only fields for the container's Langfuse labels/metadata."""
+    return {
+        "ticket_key": state.get("ticket_key"),
+        "ticket_type": state.get("ticket_type"),
+        "current_node": implementation_node,
+        "current_repo": current_repo,
+        "repo": current_repo,
+        "current_pr_number": state.get("current_pr_number"),
+        "pr_number": state.get("current_pr_number"),
+        "retry_count": state.get("retry_count"),
+    }
 
 
 def _build_task_description(
