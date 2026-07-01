@@ -50,6 +50,8 @@ Drives the code implementation agent running inside an ephemeral container.
 
 **Scope:** Given a task file at `.forge/task.json`, implement the code, run tests, and commit. No external network access.
 
+**Auto-review:** Includes `review.md` that checks test coverage, error handling, documentation, and debug code before PR creation. See [Auto-Review Guide](../guide/auto-review.md).
+
 ---
 
 ### `local-code-review`
@@ -57,6 +59,8 @@ Drives the code implementation agent running inside an ephemeral container.
 Reviews the implementation diff against `main` before PR creation.
 
 **Focus:** Breaking changes, test failures, security issues, and spec mismatches. Up to 2 fix passes.
+
+**Auto-review:** Includes `review.md` that validates test suite execution and checks for breaking changes, security issues, and spec alignment. See [Auto-Review Guide](../guide/auto-review.md).
 
 ---
 

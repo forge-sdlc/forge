@@ -102,6 +102,22 @@ Write `.forge/fix-plan.md` with:
 3. Proposed fix approach
 ```
 
+## Auto-Review
+
+Skills can include a `review.md` file alongside `SKILL.md` to enable automatic quality gates. When present, Forge spawns a reviewer agent after the skill completes, evaluating the output against criteria you define.
+
+```
+skills/
+└── myteam/
+    └── implement-task/
+        ├── SKILL.md
+        └── review.md      ← reviewer instructions
+```
+
+The reviewer issues APPROVED or REJECTED verdicts. On rejection, the skill re-runs with feedback injected — up to `max_retries` attempts (default: 3).
+
+See the [Auto-Review Guide](../guide/auto-review.md) for configuration options and writing effective review instructions.
+
 ## Using your skills with Forge
 
 See [Customize Forge for your project](../dev/contributing.md#customize-forge-for-your-project) for how to point a Jira project at your skills repo using `forge project-setup` and the skill installer.

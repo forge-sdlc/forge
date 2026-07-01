@@ -40,7 +40,8 @@ skills/
 │   └── review-code/
 └── {project}/            # Per-project overrides (Jira key, lowercase)
     └── {skill-name}/
-        └── SKILL.md
+        ├── SKILL.md
+        └── review.md     # Optional auto-review config
 ```
 
 ## Available Skills
@@ -58,6 +59,12 @@ skills/
 | `implement-review` | Post-PR-review fix pass |
 | `review-code` | AI PR review against spec |
 | `analyze-bug` | Bug RCA generation |
+
+### Optional Files
+
+| File | Purpose |
+|------|---------|
+| `review.md` | Auto-review configuration — when present, Forge spawns a reviewer agent after skill execution. See [Auto-Review Guide](../guide/auto-review.md). |
 
 ## The Primary Way to Contribute
 
