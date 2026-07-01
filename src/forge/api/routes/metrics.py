@@ -122,6 +122,26 @@ EXTERNAL_API_ERRORS = Counter(
     ["service", "operation", "error_type"],
 )
 
+# Review cycle metrics
+REVIEW_CYCLES = Counter(
+    "forge_review_cycles_total",
+    "Total review cycles detected",
+    ["skill", "step"],
+)
+
+REVIEW_VERDICTS = Counter(
+    "forge_review_verdicts_total",
+    "Review verdicts by outcome",
+    ["skill", "step", "verdict"],  # verdict: approved, rejected
+)
+
+REVIEW_DURATION = Histogram(
+    "forge_review_duration_seconds",
+    "Review cycle duration",
+    ["skill", "step"],
+    buckets=[1, 5, 10, 30, 60, 120, 300, 600],  # Same as AGENT_DURATION
+)
+
 
 @router.get("/metrics")
 async def metrics() -> Response:
@@ -232,3 +252,35 @@ def record_external_api_error(service: str, operation: str, error_type: str) -> 
         error_type: Type of error (timeout, rate_limit, auth, etc.).
     """
     EXTERNAL_API_ERRORS.labels(service=service, operation=operation, error_type=error_type).inc()
+
+
+def record_review_cycle(skill: str, step: str) -> None:
+    """Record a review cycle detected.
+
+    Args:
+        skill: Skill name (e.g., implement-task, fix-ci).
+        step: Workflow step name.
+    """
+    REVIEW_CYCLES.labels(skill=skill, step=step).inc()
+
+
+def record_review_verdict(skill: str, step: str, verdict: str) -> None:
+    """Record a review verdict.
+
+    Args:
+        skill: Skill name (e.g., implement-task, fix-ci).
+        step: Workflow step name.
+        verdict: Verdict outcome (approved, rejected).
+    """
+    REVIEW_VERDICTS.labels(skill=skill, step=step, verdict=verdict).inc()
+
+
+def observe_review_duration(skill: str, step: str, duration: float) -> None:
+    """Record review cycle duration.
+
+    Args:
+        skill: Skill name (e.g., implement-task, fix-ci).
+        step: Workflow step name.
+        duration: Duration in seconds.
+    """
+    REVIEW_DURATION.labels(skill=skill, step=step).observe(duration)
