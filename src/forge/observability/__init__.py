@@ -18,6 +18,10 @@ from forge.observability.review_recorder import (
     ReviewCycleData as RecorderReviewCycleData,
     ReviewCycleRecorder,
 )
+from forge.observability.review_notifier import (
+    ReviewJiraNotifier,
+    NotifyResult,
+)
 
 __all__ = [
     "configure_tracing",
@@ -30,4 +34,6 @@ __all__ = [
     "ReviewCyclePoller",
     "RecorderReviewCycleData",
     "ReviewCycleRecorder",
+    "ReviewJiraNotifier",
+    "NotifyResult",
 ]
