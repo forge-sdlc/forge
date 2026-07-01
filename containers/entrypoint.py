@@ -19,8 +19,19 @@ import logging
 import os
 import subprocess
 import sys
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from review import (
+    ReviewCycleData,
+    Verdict,
+    detect_review_md,
+    parse_review_config,
+    parse_verdict,
+    write_cycle_file,
+)
 
 # Configure logging
 log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
@@ -35,6 +46,7 @@ logger = logging.getLogger(__name__)
 if os.environ.get("LANGCHAIN_VERBOSE", "").lower() in ("true", "1", "yes"):
     try:
         from langchain_core.globals import set_debug, set_verbose
+
         set_verbose(True)
         set_debug(True)
         logger.info("LangChain verbose/debug mode enabled")
@@ -304,7 +316,9 @@ async def run_agent_task(
         previous_task_keys: List of previously implemented task keys for handoff context.
     """
     # Support both new (LLM_MODEL) and legacy (CLAUDE_MODEL) env var names
-    model_name = os.environ.get("LLM_MODEL") or os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5@20250929")
+    model_name = os.environ.get("LLM_MODEL") or os.environ.get(
+        "CLAUDE_MODEL", "claude-sonnet-4-5@20250929"
+    )
     logger.info(f"Implementing task: {task_summary}")
     logger.info(f"Model: {model_name}")
 
@@ -442,9 +456,7 @@ async def run_agent_task(
 
         # Run the agent (with Langfuse session context if enabled)
         initial_message = {
-            "messages": [
-                {"role": "user", "content": f"Implement this task:\n\n{task_description}"}
-            ]
+            "messages": [{"role": "user", "content": f"Implement this task:\n\n{task_description}"}]
         }
 
         if langfuse_enabled:
@@ -502,6 +514,302 @@ async def run_agent_task(
         return False
 
 
+async def run_reviewer_agent(
+    workspace: Path,
+    review_instructions: str,
+    task_key: str,
+) -> str:
+    """Run reviewer agent with review.md instructions.
+
+    Args:
+        workspace: Path to the workspace directory.
+        review_instructions: Instructions from review.md body.
+        task_key: Jira task key for tracing.
+
+    Returns:
+        The reviewer agent's output text.
+    """
+    # Support both new (LLM_MODEL) and legacy (CLAUDE_MODEL) env var names
+    model_name = os.environ.get("LLM_MODEL") or os.environ.get(
+        "CLAUDE_MODEL", "claude-sonnet-4-5@20250929"
+    )
+    logger.info(f"Running reviewer agent for {task_key}")
+    logger.info(f"Model: {model_name}")
+
+    from deepagents import create_deep_agent
+    from deepagents.backends import LocalShellBackend
+
+    # Check for API credentials
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    vertex_project = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID")
+
+    if not api_key and not vertex_project:
+        raise RuntimeError(
+            "No API credentials found (ANTHROPIC_API_KEY or ANTHROPIC_VERTEX_PROJECT_ID)"
+        )
+
+    # Create the agent with local shell backend (read-only access for review)
+    backend = LocalShellBackend(
+        root_dir=str(workspace),
+        inherit_env=True,
+        virtual_mode=False,
+        timeout=300,  # 5 minutes for review
+    )
+
+    # Build reviewer system prompt
+    system_prompt = f"""You are a code reviewer agent. Your job is to review the implementation and provide a verdict.
+
+## Review Instructions
+{review_instructions}
+
+## Verdict Format
+After reviewing the code, you MUST output your verdict as either:
+- APPROVED - if the implementation meets all requirements
+- REJECTED - followed by your feedback if the implementation needs changes
+
+Example outputs:
+- "The implementation looks good. APPROVED"
+- "REJECTED: The function is missing error handling. Please add try/except blocks."
+
+Be specific in your feedback if rejecting."""
+
+    # Determine model type (Gemini vs Claude)
+    is_gemini = model_name.lower().startswith(("gemini", "models/gemini"))
+
+    # Get max tokens from env (default 8192 for review)
+    max_tokens = int(os.environ.get("LLM_MAX_TOKENS", "8192"))
+
+    if vertex_project:
+        if is_gemini:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+
+            model = ChatGoogleGenerativeAI(
+                model=model_name,
+                project=vertex_project,
+                location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
+                vertexai=True,
+                max_output_tokens=max_tokens,
+            )
+        else:
+            from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+
+            model = ChatAnthropicVertex(
+                model_name=model_name,
+                project=vertex_project,
+                location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
+                max_tokens=max_tokens,
+            )
+    else:
+        if is_gemini:
+            raise RuntimeError(f"Gemini model '{model_name}' requires Vertex AI credentials")
+
+        from langchain_anthropic import ChatAnthropic
+
+        model = ChatAnthropic(
+            model=model_name,
+            api_key=api_key,
+            max_tokens=max_tokens,
+        )
+
+    # Create reviewer agent (no skills needed for review)
+    agent = create_deep_agent(
+        model=model,
+        backend=backend,
+        system_prompt=system_prompt,
+    )
+
+    # Run the reviewer
+    initial_message = {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Please review the implementation in the workspace and provide your verdict.",
+            }
+        ]
+    }
+
+    result = await agent.ainvoke(initial_message)
+
+    # Extract output text from result
+    messages = result.get("messages", [])
+    if messages:
+        last_message = messages[-1]
+        content = getattr(last_message, "content", str(last_message))
+        return content if isinstance(content, str) else str(content)
+    return ""
+
+
+def load_conversation_history(workspace: Path, task_key: str) -> list[dict] | None:
+    """Load conversation history from .forge/history/{task_key}.json.
+
+    Args:
+        workspace: Path to the workspace directory.
+        task_key: Jira task key to load history for.
+
+    Returns:
+        List of message dicts or None if file doesn't exist.
+    """
+    history_file = workspace / ".forge" / "history" / f"{task_key}.json"
+    if not history_file.exists():
+        logger.warning(f"Conversation history not found: {history_file}")
+        return None
+
+    try:
+        history_data = json.loads(history_file.read_text())
+        return history_data.get("messages", [])
+    except Exception as e:
+        logger.warning(f"Failed to load conversation history: {e}")
+        return None
+
+
+async def run_worker_with_feedback(
+    workspace: Path,
+    task_key: str,
+    task_summary: str,
+    task_description: str,
+    guardrails: str,
+    feedback: str,
+    previous_task_keys: list[str] | None = None,
+) -> bool:
+    """Re-run worker agent with reviewer feedback injected.
+
+    Args:
+        workspace: Path to the workspace directory.
+        task_key: Jira task key being implemented.
+        task_summary: Short task summary.
+        task_description: Detailed task description.
+        guardrails: Repository guidelines.
+        feedback: Reviewer feedback to inject.
+        previous_task_keys: List of previously implemented task keys.
+
+    Returns:
+        True if agent completed successfully.
+    """
+    # Inject reviewer feedback section into task description
+    feedback_section = f"\n\n## Reviewer Feedback\n\n{feedback}\n"
+    enhanced_description = task_description + feedback_section
+
+    logger.info(f"Re-running worker with feedback for {task_key}")
+
+    # Load conversation history for context
+    history = load_conversation_history(workspace, task_key)
+    if history:
+        logger.info(f"Loaded {len(history)} messages from conversation history")
+
+    return await run_agent_task(
+        workspace=workspace,
+        task_key=task_key,
+        task_summary=task_summary,
+        task_description=enhanced_description,
+        guardrails=guardrails,
+        previous_task_keys=previous_task_keys,
+    )
+
+
+async def run_review_loop(
+    workspace: Path,
+    task_key: str,
+    task_summary: str,
+    task_description: str,
+    guardrails: str,
+    skill_name: str,
+    review_md_path: Path,
+    previous_task_keys: list[str] | None = None,
+) -> bool:
+    """Run the review loop after initial skill execution.
+
+    Args:
+        workspace: Path to the workspace directory.
+        task_key: Jira task key being implemented.
+        task_summary: Short task summary.
+        task_description: Detailed task description.
+        guardrails: Repository guidelines.
+        skill_name: Name of the skill being reviewed.
+        review_md_path: Path to the review.md file.
+        previous_task_keys: List of previously implemented task keys.
+
+    Returns:
+        True if review loop completed successfully (approved or max retries).
+    """
+    # Parse review configuration (SC-004, SC-005)
+    config = parse_review_config(review_md_path)
+    max_retries = config.max_retries
+    instructions = config.instructions
+
+    logger.info(f"Starting review loop for {skill_name} (max_retries={max_retries})")
+    logger.info(
+        f"Review instructions: {instructions[:200]}..."
+        if len(instructions) > 200
+        else f"Review instructions: {instructions}"
+    )
+
+    cycle = 0
+    while cycle < max_retries:
+        cycle += 1
+        cycle_start = time.perf_counter()
+        logger.info(f"Review cycle {cycle}/{max_retries}")
+
+        # Run reviewer agent (SC-001)
+        try:
+            reviewer_output = await run_reviewer_agent(
+                workspace=workspace,
+                review_instructions=instructions,
+                task_key=task_key,
+            )
+        except Exception as e:
+            logger.error(f"Reviewer agent failed: {e}")
+            # Treat reviewer failure as rejection
+            reviewer_output = f"REJECTED: Reviewer agent error: {e}"
+
+        # Parse verdict (SC-002)
+        verdict, feedback = parse_verdict(reviewer_output)
+        elapsed = time.perf_counter() - cycle_start
+        timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        logger.info(f"Review verdict: {verdict}, elapsed: {elapsed:.2f}s")
+        if feedback:
+            logger.info(
+                f"Feedback: {feedback[:200]}..." if len(feedback) > 200 else f"Feedback: {feedback}"
+            )
+
+        # Write cycle file (SC-007)
+        cycle_data = ReviewCycleData(
+            cycle=cycle,
+            max_cycles=max_retries,
+            verdict=verdict,
+            feedback=feedback,
+            skill=skill_name,
+            elapsed_seconds=elapsed,
+            timestamp=timestamp,
+        )
+        write_cycle_file(workspace, skill_name, cycle_data)
+
+        # On APPROVED: Exit loop successfully (SC-002)
+        if verdict == Verdict.APPROVED:
+            logger.info(f"Review approved on cycle {cycle}")
+            return True
+
+        # On REJECTED with retries remaining (SC-003)
+        if cycle < max_retries:
+            logger.info(f"Retrying with feedback (attempt {cycle + 1}/{max_retries})")
+            worker_success = await run_worker_with_feedback(
+                workspace=workspace,
+                task_key=task_key,
+                task_summary=task_summary,
+                task_description=task_description,
+                guardrails=guardrails,
+                feedback=feedback,
+                previous_task_keys=previous_task_keys,
+            )
+            if not worker_success:
+                logger.error(f"Worker retry failed on cycle {cycle}")
+                # Continue to next cycle anyway, let reviewer decide
+
+    # Max retries exhausted - exit with success (BR-005)
+    logger.warning(f"Review loop exhausted max_retries ({max_retries}) for {skill_name}")
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Forge container entrypoint for AI code implementation"
@@ -546,9 +854,11 @@ def main():
         task_summary = task_data.get("summary", "")
         task_description = task_data.get("description", "")
         previous_task_keys = task_data.get("previous_task_keys", [])
+        skill_name = task_data.get("skill_name", "")
     elif args.task_summary and args.task_description:
         task_summary = args.task_summary
         task_description = args.task_description
+        skill_name = ""
     else:
         logger.error(
             "Task details required: use --task-file or --task-summary + --task-description"
@@ -559,6 +869,10 @@ def main():
     if not workspace.exists():
         logger.error(f"Workspace not found: {workspace}")
         sys.exit(EXIT_CONFIG_ERROR)
+
+    # Get skill_name from env var if not in task data
+    if not skill_name:
+        skill_name = os.environ.get("FORGE_SKILL_NAME", "")
 
     # Configure git for commits
     configure_git()
@@ -589,16 +903,49 @@ def main():
         logger.error("Task implementation failed")
         sys.exit(EXIT_TASK_FAILED)
 
+    # Check for review.md and run review loop if it exists (SC-001, SC-010)
+    if skill_name:
+        # Skills are mounted at /skills/skill_0/, /skills/skill_1/, etc.
+        # Check all skill paths for the review.md
+        skills_base = Path("/skills")
+        review_md_path = detect_review_md(skill_name, task_key, skills_base)
+
+        if review_md_path:
+            logger.info(f"Found review.md at {review_md_path}, starting review loop")
+            if not asyncio.run(
+                run_review_loop(
+                    workspace=workspace,
+                    task_key=task_key,
+                    task_summary=task_summary,
+                    task_description=task_description,
+                    guardrails=guardrails,
+                    skill_name=skill_name,
+                    review_md_path=review_md_path,
+                    previous_task_keys=previous_task_keys,
+                )
+            ):
+                logger.error("Review loop failed")
+                sys.exit(EXIT_TASK_FAILED)
+        else:
+            logger.info(f"No review.md found for skill {skill_name}, skipping review loop")
+    else:
+        logger.info("No skill_name provided, skipping review loop")
+
     # Ensure changes are committed (agent should have done this, but as fallback).
     # Skip if workspace is not a git repo — analysis tasks (RCA, reflection) write
     # artifacts to .forge/ without needing a commit.
-    is_git_repo = subprocess.run(
-        ["git", "rev-parse", "--is-inside-work-tree"],
-        cwd=workspace,
-        capture_output=True,
-    ).returncode == 0
+    is_git_repo = (
+        subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=workspace,
+            capture_output=True,
+        ).returncode
+        == 0
+    )
     if is_git_repo:
-        fallback_message = f"[{task_key}] {task_summary}\n\nAuto-committed by Forge container fallback."
+        fallback_message = (
+            f"[{task_key}] {task_summary}\n\nAuto-committed by Forge container fallback."
+        )
         if not git_commit(workspace, fallback_message):
             logger.error("Failed to commit changes")
             sys.exit(EXIT_TASK_FAILED)
