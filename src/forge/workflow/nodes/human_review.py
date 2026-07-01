@@ -118,12 +118,16 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
     """
     ticket_key = state["ticket_key"]
     epic_keys = state.get("epic_keys", [])
+    implemented_tasks = state.get("implemented_tasks", [])
 
     logger.info(f"Aggregating Epic status for {ticket_key}")
 
     jira = JiraClient()
 
     try:
+        if not epic_keys:
+            epic_keys = await _derive_epic_keys_from_tasks(jira, implemented_tasks)
+
         all_epics_done = True
 
         for epic_key in epic_keys:
@@ -142,6 +146,7 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
             return update_state_timestamp(
                 {
                     **state,
+                    "epic_keys": epic_keys,
                     "epics_completed": True,
                     "current_node": "aggregate_feature_status",
                 }
@@ -248,3 +253,32 @@ async def _check_epic_completion(jira: JiraClient, epic_key: str) -> bool:
         logger.error(f"Failed to check Epic completion for {epic_key}: {e}")
         # On error, don't falsely report completion
         return False
+
+
+async def _derive_epic_keys_from_tasks(
+    jira: JiraClient,
+    task_keys: list[str],
+) -> list[str]:
+    """Derive Epic keys from implemented Task parents when state lost them."""
+    epic_keys: list[str] = []
+    seen: set[str] = set()
+
+    for task_key in task_keys:
+        try:
+            issue = await jira.get_issue(task_key)
+        except Exception as e:
+            logger.warning(f"Failed to fetch Task {task_key} while deriving Epics: {e}")
+            continue
+
+        if not issue.parent_key or issue.parent_key in seen:
+            continue
+
+        seen.add(issue.parent_key)
+        epic_keys.append(issue.parent_key)
+
+    if epic_keys:
+        logger.info(f"Derived Epic keys from implemented Tasks: {epic_keys}")
+    else:
+        logger.warning("No Epic keys available or derivable from implemented Tasks")
+
+    return epic_keys

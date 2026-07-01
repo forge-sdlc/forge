@@ -11,6 +11,7 @@ from forge.workflow.utils.jira_status import (
     remove_implementing_label,
     set_ci_pending_label,
     set_implementing_label,
+    set_review_pending_label,
     transition_tasks_to_in_progress,
 )
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
@@ -90,6 +91,7 @@ __all__ = [
     "set_error",
     "set_implementing_label",
     "set_paused",
+    "set_review_pending_label",
     "transition_tasks_to_in_progress",
     "update_state_timestamp",
 ]

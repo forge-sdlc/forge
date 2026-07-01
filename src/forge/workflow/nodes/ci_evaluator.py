@@ -22,6 +22,7 @@ from forge.workflow.utils.jira_status import (
     post_status_comment,
     remove_implementing_label,
     set_ci_pending_label,
+    set_review_pending_label,
 )
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
@@ -150,6 +151,11 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
 
         if all_passed:
             logger.info(f"All CI checks passed for {ticket_key}")
+            jira = JiraClient()
+            try:
+                await set_review_pending_label(jira, ticket_key)
+            finally:
+                await jira.close()
             return update_state_timestamp(
                 {
                     **state,

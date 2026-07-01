@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from forge.models.workflow import ForgeLabel
 from forge.workflow.nodes.ci_evaluator import evaluate_ci_status
 from forge.workflow.feature.state import FeatureState
 
@@ -283,14 +284,25 @@ class TestCIAttemptReset:
             }
         ]
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                result = await evaluate_ci_status(state)
+        jira = MagicMock()
+        jira.set_workflow_label = AsyncMock()
+        jira.close = AsyncMock()
+
+        with (
+            patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github),
+            patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=jira),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            result = await evaluate_ci_status(state)
 
         assert result["ci_fix_attempt"] == 0
         assert result["current_node"] == "human_review_gate"
         assert result["ci_status"] == "passed"
+        jira.set_workflow_label.assert_awaited_once_with(
+            "TEST-123",
+            ForgeLabel.TASK_REVIEW_PENDING,
+        )
 
     @pytest.mark.asyncio
     async def test_current_attempt_resets_on_workflow_completion(self):
@@ -417,5 +429,3 @@ class TestCIAttemptEdgeCases:
         assert result2["ci_fix_attempt"] == 1  # Unchanged
         assert result2["current_node"] == "ci_evaluator"
         assert result2["ci_status"] == "failed"
-
-

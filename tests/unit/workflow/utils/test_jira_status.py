@@ -10,6 +10,7 @@ from forge.models.workflow import ForgeLabel
 from forge.workflow.utils.jira_status import (
     post_status_comment,
     set_implementing_label,
+    set_review_pending_label,
     transition_tasks_to_in_progress,
 )
 
@@ -59,6 +60,35 @@ class TestPostStatusComment:
         # Verify error was logged
         assert any(
             "Failed to post status comment to TEST-789" in record.message
+            and record.levelname == "WARNING"
+            for record in caplog.records
+        )
+
+
+class TestSetReviewPendingLabel:
+    """Test cases for the set_review_pending_label function."""
+
+    @pytest.mark.asyncio
+    async def test_sets_review_pending_workflow_label(self) -> None:
+        mock_jira = MagicMock()
+        mock_jira.set_workflow_label = AsyncMock()
+
+        await set_review_pending_label(mock_jira, "TEST-123")
+
+        mock_jira.set_workflow_label.assert_called_once_with(
+            "TEST-123",
+            ForgeLabel.TASK_REVIEW_PENDING,
+        )
+
+    @pytest.mark.asyncio
+    async def test_set_review_pending_suppresses_api_failure(self, caplog) -> None:
+        mock_jira = MagicMock()
+        mock_jira.set_workflow_label = AsyncMock(side_effect=httpx.HTTPError("API error"))
+
+        await set_review_pending_label(mock_jira, "TEST-123")
+
+        assert any(
+            "Failed to set review-pending label on TEST-123" in record.message
             and record.levelname == "WARNING"
             for record in caplog.records
         )
