@@ -1,5 +1,6 @@
 """Unit tests for containers.review module."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from containers.review import (
     detect_review_md,
     parse_review_config,
     parse_verdict,
+    write_cycle_file,
 )
 
 # ---------------------------------------------------------------------------
@@ -670,3 +672,462 @@ Ship it!
 """
         result = parse_verdict(review)
         assert result == (Verdict.APPROVED, "")
+
+
+# ---------------------------------------------------------------------------
+# write_cycle_file tests
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCycleFile:
+    """Tests for write_cycle_file function (SC-007)."""
+
+    def test_creates_step_directory(self, tmp_path: Path):
+        """Creates .forge/{step_name}/ directory if it doesn't exist."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="local-code-review",
+            elapsed_seconds=15.5,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "implement", cycle_data)
+
+        step_dir = workspace / ".forge" / "implement"
+        assert step_dir.exists()
+        assert step_dir.is_dir()
+
+    def test_creates_nested_forge_and_step_directories(self, tmp_path: Path):
+        """Creates both .forge/ and step subdirectory when neither exists."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="code-review",
+            elapsed_seconds=10.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "my-step", cycle_data)
+
+        assert (workspace / ".forge").exists()
+        assert (workspace / ".forge" / "my-step").exists()
+
+    def test_writes_review_cycle_n_json(self, tmp_path: Path):
+        """File written to .forge/{step_name}/review_cycle_N.json."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=2,
+            max_cycles=5,
+            verdict="rejected",
+            feedback="Needs work",
+            skill="test-skill",
+            elapsed_seconds=20.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step-name", cycle_data)
+
+        output_file = workspace / ".forge" / "step-name" / "review_cycle_2.json"
+        assert output_file.exists()
+        assert output_file.is_file()
+
+    def test_json_contains_all_required_fields(self, tmp_path: Path):
+        """SC-007: JSON contains all ReviewCycleData fields."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="Looks good!",
+            skill="local-code-review",
+            elapsed_seconds=12.5,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "implement", cycle_data)
+
+        output_file = workspace / ".forge" / "implement" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["cycle"] == 1
+        assert data["max_cycles"] == 3
+        assert data["verdict"] == "approved"
+        assert data["feedback"] == "Looks good!"
+        assert data["skill"] == "local-code-review"
+        assert data["elapsed_seconds"] == 12.5
+        assert data["timestamp"] == "2024-01-15T10:30:00Z"
+
+    def test_timestamp_iso_8601_utc_format(self, tmp_path: Path):
+        """Timestamp is ISO 8601 UTC format."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        # ISO 8601 UTC timestamp
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-06-20T14:30:45Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        # Verify timestamp format preserved
+        assert data["timestamp"] == "2024-06-20T14:30:45Z"
+
+    def test_verdict_lowercase_approved(self, tmp_path: Path):
+        """Verdict is lowercase string 'approved'."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["verdict"] == "approved"
+        assert data["verdict"].islower()
+
+    def test_verdict_lowercase_rejected(self, tmp_path: Path):
+        """Verdict is lowercase string 'rejected'."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="rejected",
+            feedback="Fix the bugs",
+            skill="test",
+            elapsed_seconds=8.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["verdict"] == "rejected"
+        assert data["verdict"].islower()
+
+    def test_verdict_enum_converted_to_lowercase(self, tmp_path: Path):
+        """Verdict.APPROVED enum is converted to lowercase string."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict=Verdict.APPROVED,
+            feedback="",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["verdict"] == "approved"
+
+    def test_verdict_enum_rejected_converted_to_lowercase(self, tmp_path: Path):
+        """Verdict.REJECTED enum is converted to lowercase string."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict=Verdict.REJECTED,
+            feedback="Needs work",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["verdict"] == "rejected"
+
+    def test_multiple_cycles_written_separately(self, tmp_path: Path):
+        """Multiple cycles are written to separate files."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle1 = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="rejected",
+            feedback="First attempt needs work",
+            skill="code-review",
+            elapsed_seconds=10.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+        cycle2 = ReviewCycleData(
+            cycle=2,
+            max_cycles=3,
+            verdict="rejected",
+            feedback="Still has issues",
+            skill="code-review",
+            elapsed_seconds=12.0,
+            timestamp="2024-01-15T10:35:00Z",
+        )
+        cycle3 = ReviewCycleData(
+            cycle=3,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="code-review",
+            elapsed_seconds=8.0,
+            timestamp="2024-01-15T10:40:00Z",
+        )
+
+        write_cycle_file(workspace, "impl", cycle1)
+        write_cycle_file(workspace, "impl", cycle2)
+        write_cycle_file(workspace, "impl", cycle3)
+
+        # All three files should exist
+        assert (workspace / ".forge" / "impl" / "review_cycle_1.json").exists()
+        assert (workspace / ".forge" / "impl" / "review_cycle_2.json").exists()
+        assert (workspace / ".forge" / "impl" / "review_cycle_3.json").exists()
+
+        # Verify content of each
+        data1 = json.loads((workspace / ".forge" / "impl" / "review_cycle_1.json").read_text())
+        data2 = json.loads((workspace / ".forge" / "impl" / "review_cycle_2.json").read_text())
+        data3 = json.loads((workspace / ".forge" / "impl" / "review_cycle_3.json").read_text())
+
+        assert data1["verdict"] == "rejected"
+        assert data2["verdict"] == "rejected"
+        assert data3["verdict"] == "approved"
+
+    def test_json_format_is_pretty_printed(self, tmp_path: Path):
+        """JSON is formatted with indentation for readability."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        content = output_file.read_text(encoding="utf-8")
+
+        # Should have newlines (pretty printed)
+        assert "\n" in content
+        # Should have indentation
+        assert "  " in content
+
+    def test_overwrites_existing_file(self, tmp_path: Path):
+        """Overwrites existing cycle file if run again with same cycle number."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        # Write first version
+        cycle_data1 = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="rejected",
+            feedback="First feedback",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+        write_cycle_file(workspace, "step", cycle_data1)
+
+        # Overwrite with second version
+        cycle_data2 = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="Updated feedback",
+            skill="test",
+            elapsed_seconds=8.0,
+            timestamp="2024-01-15T10:35:00Z",
+        )
+        write_cycle_file(workspace, "step", cycle_data2)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        # Should have the updated values
+        assert data["verdict"] == "approved"
+        assert data["feedback"] == "Updated feedback"
+        assert data["elapsed_seconds"] == 8.0
+
+    def test_empty_feedback(self, tmp_path: Path):
+        """Empty feedback string is preserved."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["feedback"] == ""
+
+    def test_multiline_feedback(self, tmp_path: Path):
+        """Multiline feedback is preserved correctly."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        multiline_feedback = """Fix the following issues:
+1. Missing error handling
+2. No unit tests
+3. Documentation incomplete"""
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="rejected",
+            feedback=multiline_feedback,
+            skill="code-review",
+            elapsed_seconds=15.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["feedback"] == multiline_feedback
+        assert "1. Missing error handling" in data["feedback"]
+        assert "2. No unit tests" in data["feedback"]
+
+    def test_special_characters_in_feedback(self, tmp_path: Path):
+        """Special characters in feedback are handled correctly."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="rejected",
+            feedback='Fix "quotes", <tags>, and unicode: émoji 🎉',
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["feedback"] == 'Fix "quotes", <tags>, and unicode: émoji 🎉'
+
+    def test_elapsed_seconds_float_precision(self, tmp_path: Path):
+        """Float precision for elapsed_seconds is preserved."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="test",
+            elapsed_seconds=123.456789,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "step", cycle_data)
+
+        output_file = workspace / ".forge" / "step" / "review_cycle_1.json"
+        data = json.loads(output_file.read_text(encoding="utf-8"))
+
+        assert data["elapsed_seconds"] == 123.456789
+
+    def test_step_name_with_hyphens(self, tmp_path: Path):
+        """Step name with hyphens is handled correctly."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "local-code-review", cycle_data)
+
+        assert (workspace / ".forge" / "local-code-review" / "review_cycle_1.json").exists()
+
+    def test_step_name_with_underscores(self, tmp_path: Path):
+        """Step name with underscores is handled correctly."""
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+
+        cycle_data = ReviewCycleData(
+            cycle=1,
+            max_cycles=3,
+            verdict="approved",
+            feedback="",
+            skill="test",
+            elapsed_seconds=5.0,
+            timestamp="2024-01-15T10:30:00Z",
+        )
+
+        write_cycle_file(workspace, "my_step_name", cycle_data)
+
+        assert (workspace / ".forge" / "my_step_name" / "review_cycle_1.json").exists()

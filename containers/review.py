@@ -8,12 +8,14 @@ This module provides core data structures used by the review loop engine:
 - parse_review_config: Parser for review.md YAML frontmatter
 - detect_review_md: Locates review.md with project override precedence
 - parse_verdict: Extracts verdict and feedback from review output text
+- write_cycle_file: Writes review cycle data to JSON file
 """
 
+import json
 import logging
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 
@@ -257,3 +259,51 @@ def parse_verdict(output_text: str) -> tuple[Verdict, str]:
     feedback = output_text[feedback_start:].strip()
 
     return (Verdict.REJECTED, feedback)
+
+
+def write_cycle_file(workspace: Path, step_name: str, cycle_data: ReviewCycleData) -> None:
+    """Write review cycle data to a JSON file.
+
+    Creates the directory .forge/{step_name}/ if it doesn't exist,
+    and writes review_cycle_N.json where N is the cycle number.
+
+    The JSON file contains all ReviewCycleData fields with proper formatting:
+    - cycle: Current cycle number (1-indexed)
+    - max_cycles: Maximum cycles allowed
+    - verdict: Lowercase string ("approved" or "rejected")
+    - feedback: Reviewer feedback text
+    - skill: Name of the skill that performed the review
+    - elapsed_seconds: Time taken for this review cycle
+    - timestamp: ISO 8601 UTC format timestamp
+
+    Args:
+        workspace: Path to the workspace root directory.
+        step_name: Name of the step (used as subdirectory name).
+        cycle_data: ReviewCycleData instance to serialize.
+    """
+    # Create .forge/{step_name}/ directory if it doesn't exist
+    output_dir = workspace / ".forge" / step_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Build output path: .forge/{step_name}/review_cycle_N.json
+    output_file = output_dir / f"review_cycle_{cycle_data.cycle}.json"
+
+    # Convert dataclass to dict
+    data = asdict(cycle_data)
+
+    # Ensure verdict is lowercase string (handle Verdict enum or string)
+    verdict_value = data["verdict"]
+    if hasattr(verdict_value, "value"):
+        # It's a Verdict enum
+        data["verdict"] = verdict_value.value
+    else:
+        # It's already a string, ensure lowercase
+        data["verdict"] = str(verdict_value).lower()
+
+    # Write JSON with proper formatting (2-space indent for readability)
+    output_file.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+    logger.debug("Wrote review cycle file: %s", output_file)
