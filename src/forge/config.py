@@ -330,6 +330,12 @@ class Settings(BaseSettings):
         description="Container CPU limit",
     )
 
+    # Auto Review Configuration
+    auto_review_poll_interval: float = Field(
+        default=5.0,
+        description="Polling interval in seconds for detecting review cycle files during container execution",
+    )
+
     # Queue Consumer Configuration
     queue_max_concurrent_tasks: int = Field(
         default=20,

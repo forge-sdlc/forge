@@ -10,6 +10,10 @@ from forge.observability.context import (
     get_correlation_id,
     set_correlation_id,
 )
+from forge.observability.review_poller import (
+    ReviewCycleData,
+    ReviewCyclePoller,
+)
 
 __all__ = [
     "configure_tracing",
@@ -18,4 +22,6 @@ __all__ = [
     "CorrelationContext",
     "get_correlation_id",
     "set_correlation_id",
+    "ReviewCycleData",
+    "ReviewCyclePoller",
 ]
