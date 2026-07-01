@@ -93,6 +93,16 @@ Use these to skip the Jira project property requirement during local development
 | `CONTAINER_MEMORY_LIMIT` | Memory limit for task containers (default: `4g`) |
 | `CONTAINER_CPU_LIMIT` | CPU limit for task containers (default: `2`) |
 
+## Auto-Review
+
+Settings for the automatic review loop that runs after skill execution. See the [Auto-Review Guide](../guide/auto-review.md) for details.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUTO_REVIEW_MAX_RETRIES` | `3` | Default maximum retry attempts when a skill's `review.md` doesn't specify `max_retries` |
+| `AUTO_REVIEW_POLL_INTERVAL` | `5.0` | Polling interval in seconds for detecting review cycle files during container execution |
+| `AUTO_REVIEW_RECORD_POLLED_FILES` | (none) | Recording mode for polled review cycle files: `log` logs cycle data at INFO level, `copy` copies files to recording directory |
+
 ## Observability
 
 ### Langfuse Tracing
