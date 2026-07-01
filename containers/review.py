@@ -6,6 +6,7 @@ This module provides core data structures used by the review loop engine:
 - ReviewCycleData: Data captured for each review cycle iteration
 - Verdict: Enum for review outcomes (APPROVED/REJECTED)
 - parse_review_config: Parser for review.md YAML frontmatter
+- detect_review_md: Locates review.md with project override precedence
 """
 
 import logging
@@ -166,3 +167,51 @@ def parse_review_config(review_md_path: Path) -> ReviewConfig:
             )
 
     return ReviewConfig(max_retries=max_retries, instructions=instructions)
+
+
+def detect_review_md(skill_name: str, ticket_key: str, skills_base: Path) -> Path | None:
+    """Detect the review.md file for a skill with project override precedence.
+
+    Mirrors the precedence logic from src/forge/skills/resolver.py:
+    project-specific override wins over default.
+
+    Search order:
+    1. skills/{project}/{skill_name}/review.md (project override)
+    2. skills/default/{skill_name}/review.md (default)
+
+    Args:
+        skill_name: Name of the skill (e.g., "local-code-review").
+        ticket_key: Jira ticket key (e.g., "AISOS-123") to extract project.
+        skills_base: Base path to the skills directory.
+
+    Returns:
+        Path to review.md if found, None otherwise (SC-010).
+    """
+    # Extract project key from ticket_key (e.g., "AISOS-123" -> "aisos")
+    project: str | None = None
+    if "-" in ticket_key:
+        project = ticket_key.split("-")[0].lower()
+
+    # Check project override first (if project can be extracted)
+    if project:
+        project_path = skills_base / project / skill_name / "review.md"
+        if project_path.is_file():
+            logger.debug(
+                "Found project override review.md: %s",
+                project_path,
+            )
+            return project_path
+
+    # Fall back to default
+    default_path = skills_base / "default" / skill_name / "review.md"
+    if default_path.is_file():
+        logger.debug("Found default review.md: %s", default_path)
+        return default_path
+
+    # No review.md found in either location (SC-010)
+    logger.debug(
+        "No review.md found for skill %r (ticket %s)",
+        skill_name,
+        ticket_key,
+    )
+    return None
