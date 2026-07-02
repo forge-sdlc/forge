@@ -1549,27 +1549,11 @@ class OrchestratorWorker:
             issue_type = fields.get("issuetype", {})
             ticket_type_str = issue_type.get("name", "Unknown")
 
-            # Child ticket events (Epic, Task) are re-routed to the parent Feature
-            # by the Jira webhook handler. The payload still carries the child's
-            # issue type, which won't match any workflow. Fall through to UNKNOWN
-            # so _find_workflow_by_state resolves it from checkpoint.
-            # stand-alone task takeover events (which have trigger labels) bypass child checks.
-            labels = fields.get("labels", []) or []
-            takeover_triggers = {
-                "forge:task-takeover",
-                "forge:managed:task",
-                "forge:managed:task-takeover",
-            }
-            if (
-                self.settings.task_takeover
-                and self.settings.task_takeover.labels
-                and self.settings.task_takeover.labels.trigger
-            ):
-                takeover_triggers.add(self.settings.task_takeover.labels.trigger)
-            is_takeover = any(label in labels for label in takeover_triggers)
-
+            # Child ticket events are re-routed to the parent Feature by the Jira
+            # webhook handler. The payload still carries the child's issue type,
+            # so fall through to UNKNOWN only when this message is from a child.
             child_types = {"Epic", "Task", "Sub-task"}
-            if ticket_type_str in child_types and not is_takeover:
+            if ticket_type_str in child_types and message.payload.get("source_ticket_key"):
                 return TicketType.UNKNOWN
 
             # Map string to TicketType enum

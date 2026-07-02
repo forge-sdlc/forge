@@ -371,7 +371,7 @@ class TestJiraClientADF:
         plan = """# Task Takeover Routing
 
 - Keep workflow identity in TaskTakeoverWorkflow.matches().
-- Preserve forge:managed and add a separate trigger label.
+- Preserve forge:managed as the user-facing workflow opt-in.
 
 ```python
 def matches(issue):

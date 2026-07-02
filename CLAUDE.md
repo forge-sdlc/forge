@@ -109,7 +109,6 @@ podman rm $(podman ps -a --filter name=forge- -q)
 | `forge:spec-pending` | Awaiting spec approval |
 | `forge:plan-pending` | Awaiting plan approval |
 | `forge:task-pending` | Awaiting task approval |
-| `forge:task-takeover` | Standalone task/epic takeover trigger |
 | `forge:task-triage-pending` | Task takeover awaiting triage completion |
 | `forge:task-plan-pending` | Task takeover awaiting plan approval |
 | `forge:task-plan-approved` | Task takeover plan approved |

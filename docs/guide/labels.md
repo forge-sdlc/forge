@@ -26,7 +26,7 @@ These labels advance the pipeline. Forge watches for label changes via Jira webh
 
 ### Task Takeover Workflow
 
-Standalone Tasks and Epics can be processed using Task Takeover trigger labels. These tickets bypass the standard parent Feature validation.
+Standalone Tasks and Epics can be processed with the standard `forge:managed` label. These tickets bypass the standard parent Feature validation.
 
 | Stage | Pending Label | Approved Label | Purpose |
 |-------|--------------|----------------|---------|
@@ -38,7 +38,6 @@ Standalone Tasks and Epics can be processed using Task Takeover trigger labels. 
 | Label | Purpose |
 |-------|---------|
 | `forge:managed` | Marks the ticket for Forge automation. Add this when creating a ticket to start the workflow. |
-| `forge:task-takeover` | Triggers the Task Takeover workflow for standalone Tasks or Epics. |
 | `forge:managed:task` | Identity preservation label used during Task Takeover transitions. |
 | `forge:managed:task-takeover` | Identity preservation label used during Task Takeover transitions. |
 | `forge:blocked` | Set by Forge when a stage fails. Forge posts a comment with the error. |
@@ -46,7 +45,7 @@ Standalone Tasks and Epics can be processed using Task Takeover trigger labels. 
 
 ## How to Use Labels
 
-**Starting a workflow:** Create a Jira issue and add `forge:managed`. Forge detects the issue type (Feature or Bug) and begins the appropriate pipeline. For standalone Tasks or Epics, add `forge:task-takeover` (or another configured trigger label) to initiate the Task Takeover workflow.
+**Starting a workflow:** Create a Jira issue and add `forge:managed`. Forge detects the issue type and begins the appropriate pipeline: Feature/Story, Bug, or standalone Task/Epic takeover.
 
 **Approving a stage:** When Forge posts a PRD, spec, or other artifact, it sets the `forge:*-pending` label. Change it to `forge:*-approved` to advance the workflow. Do not add the approved label manually before Forge posts — it won't be recognized until the pending state is set.
 

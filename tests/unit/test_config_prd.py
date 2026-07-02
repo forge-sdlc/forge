@@ -45,14 +45,11 @@ class TestTaskTakeoverConfig:
             github_token="test",
             anthropic_api_key="test",
         )
-        assert settings.task_takeover.enabled is False
-        assert settings.task_takeover.issue_types == []
         assert settings.task_takeover.require_tests is True
         assert settings.task_takeover.review_max_attempts == 2
 
         # Verify default labels
         labels = settings.task_takeover.labels
-        assert labels.trigger == "forge:task-takeover"
         assert labels.pending == "forge:task-plan-pending"
         assert labels.approved == "forge:task-plan-approved"
 
@@ -64,10 +61,7 @@ class TestTaskTakeoverConfig:
             github_token="test",
             anthropic_api_key="test",
             task_takeover={
-                "enabled": True,
-                "issue_types": ["Bug", "Feature"],
                 "labels": {
-                    "trigger": "custom-trigger",
                     "pending": "custom-pending",
                     "approved": "custom-approved",
                 },
@@ -75,12 +69,9 @@ class TestTaskTakeoverConfig:
                 "review_max_attempts": 3,
             },
         )
-        assert settings.task_takeover.enabled is True
-        assert settings.task_takeover.issue_types == ["Bug", "Feature"]
         assert settings.task_takeover.require_tests is False
         assert settings.task_takeover.review_max_attempts == 3
 
         labels = settings.task_takeover.labels
-        assert labels.trigger == "custom-trigger"
         assert labels.pending == "custom-pending"
         assert labels.approved == "custom-approved"

@@ -1031,13 +1031,13 @@ class TestWorkerRouting:
             ticket_key="TEST-123",
             payload={
                 "issue": {
-                    "key": "TEST-123",
-                    "fields": {
-                        "issuetype": {"name": "Task"},
-                        "labels": ["forge:task-takeover"],
+                        "key": "TEST-123",
+                        "fields": {
+                            "issuetype": {"name": "Task"},
+                            "labels": ["forge:managed"],
+                        },
                     },
                 },
-            },
         )
 
         mock_router = MagicMock()
@@ -1052,6 +1052,6 @@ class TestWorkerRouting:
 
         mock_router.resolve.assert_called_once_with(
             ticket_type=TicketType.TASK,
-            labels=["forge:task-takeover"],
+            labels=["forge:managed"],
             event=message.payload,
         )

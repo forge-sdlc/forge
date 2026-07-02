@@ -64,7 +64,6 @@ class TestForgeLabel:
 
     def test_task_takeover_labels_exist(self) -> None:
         """Verify Task Takeover workflow labels are defined."""
-        assert ForgeLabel.TASK_TAKEOVER.value == "forge:task-takeover"
         assert ForgeLabel.TASK_TRIAGE_PENDING.value == "forge:task-triage-pending"
         assert ForgeLabel.TASK_PLAN_PENDING.value == "forge:task-plan-pending"
         assert ForgeLabel.TASK_PLAN_APPROVED.value == "forge:task-plan-approved"

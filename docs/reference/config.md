@@ -131,7 +131,7 @@ MCP server configuration lives in `mcp-servers.json`, not `.env`. See the [MCP s
 
 ## Task Takeover Configuration
 
-Task Takeover allows Forge to process standalone Task and Epic issues directly from Jira. When a standalone Task/Epic issue is labeled with a task takeover trigger label, Forge bypasses the parent validation check and executes the task directly.
+Task Takeover allows Forge to process standalone Task and Epic issues directly from Jira. When a standalone Task/Epic issue is labeled with `forge:managed`, Forge bypasses the parent validation check and executes the task directly.
 
 Configuration settings can be defined in `Settings` under the `task_takeover` key (which can also be configured using environment variables as a JSON string under `TASK_TAKEOVER` or within the application config).
 
@@ -139,10 +139,7 @@ Configuration settings can be defined in `Settings` under the `task_takeover` ke
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enabled` | `bool` | `False` | Whether Task Takeover is enabled. |
-| `issue_types` | `list[str]` | `[]` | List of Jira issue types that support task takeover (e.g., `["Task", "Epic"]`). |
 | `require_tests` | `bool` | `True` | Whether tests are required to pass before merging the code. |
 | `review_max_attempts` | `int` | `2` | Maximum number of PR review fix attempts. |
-| `labels.trigger` | `str` | `"forge:task-takeover"` | Label that triggers the Task Takeover workflow. |
 | `labels.pending` | `str` | `"forge:task-plan-pending"` | Label set by Forge when a task plan is pending approval. |
 | `labels.approved` | `str` | `"forge:task-plan-approved"` | Label used by humans to approve the task plan. |

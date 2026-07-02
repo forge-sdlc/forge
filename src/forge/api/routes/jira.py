@@ -109,7 +109,7 @@ async def receive_jira_webhook(
         # Record webhook received metric
         record_webhook_received(source="jira", event_type=webhook_data.event_type)
 
-        # Filter: only process issues with forge:managed label or task-takeover triggers
+        # Filter: only process issues with forge:managed label
         issue_labels = payload.get("issue", {}).get("fields", {}).get("labels", [])
         has_forge_managed = "forge:managed" in issue_labels
 
@@ -122,27 +122,7 @@ async def receive_jira_webhook(
                     has_forge_managed = True
                     break
 
-        # Detect task-takeover trigger labels
-        has_takeover_trigger = False
-        if settings.task_takeover and settings.task_takeover.enabled:
-            takeover_triggers = {
-                "forge:task-takeover",
-                "forge:managed:task",
-                "forge:managed:task-takeover",
-            }
-            if settings.task_takeover.labels and settings.task_takeover.labels.trigger:
-                takeover_triggers.add(settings.task_takeover.labels.trigger)
-
-            has_takeover_trigger = any(label in issue_labels for label in takeover_triggers)
-            for item in changelog_items:
-                if item.get("field") == "labels":
-                    to_labels = item.get("toString", "") or ""
-                    updated_labels = to_labels.split()
-                    if any(label in updated_labels for label in takeover_triggers):
-                        has_takeover_trigger = True
-                        break
-
-        if not (has_forge_managed or has_takeover_trigger):
+        if not has_forge_managed:
             span.set_attribute("forge.skipped", True)
             span.set_attribute("forge.skip_reason", "missing forge:managed label")
             logger.debug(f"Skipping {webhook_data.ticket_key}: missing forge:managed label")
@@ -183,12 +163,12 @@ async def receive_jira_webhook(
                     f"Routing {issue_type} {source_ticket_key} webhook "
                     f"to parent Feature {routing_ticket_key}"
                 )
-            elif has_takeover_trigger and issue_type in ("Epic", "Task"):
-                # Bypass parent validation for Epic/Task if takeover trigger label is present.
+            elif issue_type in ("Epic", "Task"):
+                # Bypass parent validation for standalone managed Epic/Task issues.
                 # routing_ticket_key remains webhook_data.ticket_key, source_ticket_key remains None.
                 logger.info(
                     f"Bypassing parent checks for standalone {issue_type} "
-                    f"{webhook_data.ticket_key} due to task-takeover trigger label."
+                    f"{webhook_data.ticket_key}."
                 )
             else:
                 # Epics/Tasks without forge:parent are invalid - reject

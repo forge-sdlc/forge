@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 class TaskTakeoverLabels(BaseModel):
     """Labels used for task takeover workflow."""
 
-    trigger: str = "forge:task-takeover"
     pending: str = "forge:task-plan-pending"
     approved: str = "forge:task-plan-approved"
 
@@ -24,8 +23,6 @@ class TaskTakeoverLabels(BaseModel):
 class TaskTakeoverSettings(BaseModel):
     """Settings configuration for task takeover."""
 
-    enabled: bool = False
-    issue_types: list[str] = Field(default_factory=list)
     labels: TaskTakeoverLabels = Field(default_factory=TaskTakeoverLabels)
     require_tests: bool = True
     review_max_attempts: int = 2

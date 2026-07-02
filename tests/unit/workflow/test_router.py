@@ -1,8 +1,5 @@
 """Tests for WorkflowRouter."""
 
-from unittest.mock import patch
-
-import pytest
 from langgraph.graph import StateGraph
 
 from forge.models.workflow import TicketType
@@ -51,17 +48,6 @@ class MockBugWorkflow(BaseWorkflow):
 
 class TestWorkflowRouter:
     """Tests for WorkflowRouter."""
-
-    @pytest.fixture(autouse=True)
-    def mock_settings(self):
-        """Mock settings to enable task takeover."""
-        from forge.config import Settings, TaskTakeoverSettings
-
-        mock_s = Settings()
-        mock_s.task_takeover = TaskTakeoverSettings(enabled=True)
-
-        with patch("forge.config.get_settings", return_value=mock_s):
-            yield
 
     def test_register_workflow(self):
         """Can register a workflow class."""
@@ -137,34 +123,28 @@ class TestWorkflowRouter:
         assert workflows[0]["name"] == "mock"
         assert workflows[1]["name"] == "mock_bug"
 
-    def test_resolve_exact_matching_no_accidental_prefix_triggers(self):
-        """Verify that prefix-based triggers do not resolve to TaskTakeoverWorkflow."""
+    def test_task_takeover_resolves_by_ticket_type_and_managed_label(self):
+        """TaskTakeoverWorkflow resolves managed Task/Epic tickets only."""
         from forge.workflow.router import WorkflowRouter
         from forge.workflow.task_takeover import TaskTakeoverWorkflow
 
         router = WorkflowRouter()
         router.register(TaskTakeoverWorkflow)
 
-        # Labels starting with triggers but are not exact matches should not resolve
-        prefix_labels_cases = [
-            ["forge:managed", "forge:task-takeover-fake"],
-            ["forge:managed", "forge:managed:task-fake"],
-            ["forge:managed", "forge:managed:task-takeover-fake"],
-        ]
-
-        for labels in prefix_labels_cases:
-            workflow = router.resolve(
-                ticket_type=TicketType.BUG,
-                labels=labels,
-                event={},
-            )
-            assert workflow is None, f"Accidentally resolved with prefix-trigger labels: {labels}"
-
-        # An exact match still resolves correctly
         workflow = router.resolve(
-            ticket_type=TicketType.BUG,
-            labels=["forge:managed", "forge:task-takeover"],
+            ticket_type=TicketType.TASK,
+            labels=["forge:managed"],
             event={},
         )
         assert workflow is not None
         assert workflow.name == "task_takeover"
+
+        workflow = router.resolve(
+            ticket_type=TicketType.EPIC,
+            labels=["forge:managed"],
+            event={},
+        )
+        assert workflow is not None
+        assert workflow.name == "task_takeover"
+
+        assert router.resolve(TicketType.BUG, ["forge:managed", "forge:managed:task"], {}) is None
