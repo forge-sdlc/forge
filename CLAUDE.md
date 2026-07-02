@@ -110,8 +110,6 @@ podman rm $(podman ps -a --filter name=forge- -q)
 | `forge:plan-pending` | Awaiting plan approval |
 | `forge:task-pending` | Awaiting task approval |
 | `forge:task-triage-pending` | Task takeover awaiting triage completion |
-| `forge:task-plan-pending` | Task takeover awaiting plan approval |
-| `forge:task-plan-approved` | Task takeover plan approved |
 | `forge:managed:task` | Task identity preservation label |
 | `forge:managed:task-takeover` | Task takeover identity preservation label |
 | `forge:blocked` | Workflow blocked, needs intervention |

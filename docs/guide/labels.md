@@ -31,7 +31,7 @@ Standalone Tasks and Epics can be processed with the standard `forge:managed` la
 | Stage | Pending Label | Approved Label | Purpose |
 |-------|--------------|----------------|---------|
 | Triage | `forge:task-triage-pending` | _N/A_ | Standalone ticket is missing required fields; waiting for update |
-| Plan Approval | `forge:task-plan-pending` | `forge:task-plan-approved` | Plan is posted; waiting for approval |
+| Plan Approval | `forge:plan-pending` | `forge:plan-approved` | Plan is posted; waiting for approval |
 
 ## Control Labels
 

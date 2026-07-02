@@ -879,8 +879,8 @@ class TestTaskPlanApprovalAndLabelPreservation:
                 "items": [
                     {
                         "field": "labels",
-                        "fromString": "forge:managed forge:task-plan-pending",
-                        "toString": "forge:managed forge:task-plan-approved",
+                        "fromString": "forge:managed forge:plan-pending",
+                        "toString": "forge:managed forge:plan-approved",
                     }
                 ]
             },
@@ -910,7 +910,7 @@ class TestTaskPlanApprovalAndLabelPreservation:
                 "key": "TEST-123",
                 "fields": {
                     "issuetype": {"name": "Task"},
-                    "labels": ["forge:managed", "forge:task-plan-approved"],
+                    "labels": ["forge:managed", "forge:plan-approved"],
                 },
             },
             "changelog": {"items": []},
@@ -979,7 +979,7 @@ class TestTaskPlanApprovalAndLabelPreservation:
         client.get_labels = AsyncMock(
             return_value=[
                 "forge:managed",
-                "forge:task-plan-pending",
+                "forge:plan-pending",
                 "forge:managed:task",
                 "forge:managed:task-takeover",
                 "other-label",
@@ -994,7 +994,7 @@ class TestTaskPlanApprovalAndLabelPreservation:
             mock_http.put = AsyncMock(return_value=mock_response)
             mock_get_client.return_value = mock_http
 
-            await client.set_workflow_label("TEST-123", ForgeLabel.TASK_PLAN_APPROVED)
+            await client.set_workflow_label("TEST-123", ForgeLabel.PLAN_APPROVED)
 
         # Check that PUT was called with correct operations
         mock_http.put.assert_called_once()
@@ -1006,11 +1006,11 @@ class TestTaskPlanApprovalAndLabelPreservation:
         assert not any(op["remove"] == "forge:managed:task" for op in remove_ops)
         assert not any(op["remove"] == "forge:managed:task-takeover" for op in remove_ops)
 
-        # Verify that "forge:task-plan-pending" is removed
-        assert any(op["remove"] == "forge:task-plan-pending" for op in remove_ops)
-        # Verify that "forge:task-plan-approved" is added
+        # Verify that "forge:plan-pending" is removed
+        assert any(op["remove"] == "forge:plan-pending" for op in remove_ops)
+        # Verify that "forge:plan-approved" is added
         add_ops = [op for op in update_ops if "add" in op]
-        assert any(op["add"] == ForgeLabel.TASK_PLAN_APPROVED.value for op in add_ops)
+        assert any(op["add"] == ForgeLabel.PLAN_APPROVED.value for op in add_ops)
 
 
 class TestWorkerRouting:

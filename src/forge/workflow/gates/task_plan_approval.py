@@ -1,11 +1,11 @@
 """Task plan approval gate for standalone task-takeover workflow review.
 
 The task plan approval workflow uses labels:
-- forge:task-plan-pending  - Task plan awaiting approval
-- forge:task-plan-approved - Task plan approved (triggers isolated execution workspace setup)
+- forge:plan-pending  - Task plan awaiting approval
+- forge:plan-approved - Task plan approved (triggers isolated execution workspace setup)
 
-To approve: Change label to forge:task-plan-approved
-To request revision: Add a comment with prefix '!' (keep forge:task-plan-pending)
+To approve: Change label to forge:plan-approved
+To request revision: Add a comment with prefix '!' (keep forge:plan-pending)
 To ask clarifying questions: Add a comment with prefix '?' or '@forge ask'
 """
 

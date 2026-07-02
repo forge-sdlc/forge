@@ -138,7 +138,7 @@ class TestQualitativeReviewRouting:
             review_verdict="tests_incomplete",
             qualitative_review_retry_count=1,
         )
-        # Assuming standard review_max_attempts limit is 2, retry_count of 1 is under the limit
+        # The task takeover qualitative review retry limit is 2, so retry_count of 1 is under the limit.
         assert _route_after_qualitative_review(state) == "execute_task_changes"
 
     def test_route_after_qualitative_review_failed_at_or_above_limit(self) -> None:
@@ -199,7 +199,7 @@ class TestInteractiveGateBehavior:
     def test_gate_routes_to_setup_workspace_on_label_approval(
         self, paused_state: TaskTakeoverState
     ) -> None:
-        """Changing the label to forge:task-plan-approved clears is_paused and routes to setup_workspace."""
+        """Changing the label to forge:plan-approved clears is_paused and routes to setup_workspace."""
         state_approved = {**paused_state, "is_paused": False}
         assert route_task_plan_approval(state_approved) == "setup_workspace"
 
@@ -237,7 +237,7 @@ class TestWorkflowIdentityLabelTransitions:
         )
 
         with patch.object(jira, "_get_client", return_value=mock_client):
-            await jira.set_workflow_label("TASK-123", ForgeLabel.TASK_PLAN_PENDING)
+            await jira.set_workflow_label("TASK-123", ForgeLabel.PLAN_PENDING)
 
         # Retrieve the PUT request payload
         mock_client.put.assert_called_once()
@@ -256,4 +256,4 @@ class TestWorkflowIdentityLabelTransitions:
         # Verify that the old state label was removed
         assert "forge:task-triage-pending" in removed_labels
         # Verify that the new plan pending label was added
-        assert ForgeLabel.TASK_PLAN_PENDING.value in added_labels
+        assert ForgeLabel.PLAN_PENDING.value in added_labels

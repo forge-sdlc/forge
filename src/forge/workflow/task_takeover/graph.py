@@ -28,6 +28,7 @@ from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import resolve_shared_resume_node
 
 logger = logging.getLogger(__name__)
+QUALITATIVE_REVIEW_MAX_ATTEMPTS = 2
 
 
 def route_entry(state: TaskTakeoverState) -> str:
@@ -116,14 +117,7 @@ def _route_after_qualitative_review(state: TaskTakeoverState) -> str:
     if verdict == "adequate":
         return "create_task_takeover_pr"
 
-    # Fetch configured retry limit (review_max_attempts) from settings, default to 2
-    try:
-        from forge.config import get_settings
-
-        settings = get_settings()
-        limit = settings.task_takeover.review_max_attempts
-    except Exception:
-        limit = 2
+    limit = QUALITATIVE_REVIEW_MAX_ATTEMPTS
 
     if retry_count >= limit:
         logger.warning(

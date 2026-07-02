@@ -4,28 +4,13 @@ import logging
 from functools import cached_property, lru_cache
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 if TYPE_CHECKING:
     from forge.integrations.langfuse.fields import TracingField
 
 logger = logging.getLogger(__name__)
-
-
-class TaskTakeoverLabels(BaseModel):
-    """Labels used for task takeover workflow."""
-
-    pending: str = "forge:task-plan-pending"
-    approved: str = "forge:task-plan-approved"
-
-
-class TaskTakeoverSettings(BaseModel):
-    """Settings configuration for task takeover."""
-
-    labels: TaskTakeoverLabels = Field(default_factory=TaskTakeoverLabels)
-    require_tests: bool = True
-    review_max_attempts: int = 2
 
 
 class Settings(BaseSettings):
@@ -373,12 +358,6 @@ class Settings(BaseSettings):
     tracing_enabled: bool = Field(
         default=True,
         description="Enable distributed tracing",
-    )
-
-    # Task Takeover Configuration
-    task_takeover: TaskTakeoverSettings = Field(
-        default_factory=TaskTakeoverSettings,
-        description="Configuration settings for Task Takeover feature",
     )
 
     @property

@@ -582,8 +582,6 @@ class OrchestratorWorker:
                     approval_stage = "prd"
                 elif "spec-approved" in to_labels.lower():
                     approval_stage = "spec"
-                elif "task-plan-approved" in to_labels.lower():
-                    approval_stage = "task_plan"
                 elif "plan-approved" in to_labels.lower():
                     approval_stage = "plan"
                 elif "task-approved" in to_labels.lower():
@@ -601,19 +599,11 @@ class OrchestratorWorker:
                     "decompose_epics": "plan",
                     "regenerate_all_epics": "plan",
                     "update_single_epic": "plan",
-                    "task_plan_approval_gate": "task_plan",
+                    "task_plan_approval_gate": "plan",
                     "task_approval_gate": "task",
                     "generate_tasks": "task",
                 }
                 expected_stage = node_to_stage.get(current_node)
-                if current_node == "plan_approval_gate" and current_state.get("ticket_type") in (
-                    "Task",
-                    "Epic",
-                    TicketType.TASK,
-                    TicketType.EPIC,
-                ):
-                    expected_stage = "task_plan"
-
                 if approval_stage and expected_stage and approval_stage == expected_stage:
                     is_approved = True
                     logger.info(
@@ -634,11 +624,8 @@ class OrchestratorWorker:
             gate_to_approved_label = {
                 "prd_approval_gate": "forge:prd-approved",
                 "spec_approval_gate": "forge:spec-approved",
-                "plan_approval_gate": "forge:task-plan-approved"
-                if current_state.get("ticket_type")
-                in ("Task", "Epic", TicketType.TASK, TicketType.EPIC)
-                else "forge:plan-approved",
-                "task_plan_approval_gate": "forge:task-plan-approved",
+                "plan_approval_gate": "forge:plan-approved",
+                "task_plan_approval_gate": "forge:plan-approved",
                 "task_approval_gate": "forge:task-approved",
             }
             expected_label = gate_to_approved_label.get(current_node)

@@ -97,9 +97,7 @@ class TestGeneratePlan:
 
         assert result["plan_content"] == "## Plan\n\nTask Takeover Plan details."
         assert result["current_node"] == "task_plan_approval_gate"
-        mock_jira.set_workflow_label.assert_called_once_with(
-            "TASK-002", ForgeLabel.TASK_PLAN_PENDING
-        )
+        mock_jira.set_workflow_label.assert_called_once_with("TASK-002", ForgeLabel.PLAN_PENDING)
         assert mock_jira.add_comment.call_count == 2  # Ack comment + Plan comment
 
     @pytest.mark.asyncio

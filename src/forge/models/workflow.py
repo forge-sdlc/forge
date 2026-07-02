@@ -126,8 +126,6 @@ class ForgeLabel(StrEnum):
 
     # Task Takeover workflow
     TASK_TRIAGE_PENDING = "forge:task-triage-pending"
-    TASK_PLAN_PENDING = "forge:task-plan-pending"
-    TASK_PLAN_APPROVED = "forge:task-plan-approved"
 
     # General
     FORGE_MANAGED = "forge:managed"

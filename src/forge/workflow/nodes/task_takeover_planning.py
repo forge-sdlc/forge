@@ -227,7 +227,7 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         # 7. Post the plan to Jira
         truncated_comment = _truncate_plan_comment(new_plan)
         await jira.add_comment(ticket_key, truncated_comment)
-        await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_PLAN_PENDING)
+        await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
 
         return cast(
             TaskTakeoverState,
