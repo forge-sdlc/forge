@@ -40,6 +40,14 @@ class FeatureState(
     parallel_branch_id: int | None
     parallel_total_branches: int | None
 
+    # Local review loop
+    local_review_attempts: int
+    local_review_pass_number: int
+    local_review_has_unfixed_issues: bool
+    local_review_max_attempts_reached: bool
+    local_review_verdict: str | None
+    qualitative_feedback: str | None
+
     # Q&A mode
     # List of {question, answer, artifact_type, timestamp}
     qa_history: list[dict[str, str]]
@@ -101,6 +109,10 @@ def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState
         "parallel_execution_enabled": True,
         "parallel_branch_id": None,
         "parallel_total_branches": None,
+        "local_review_has_unfixed_issues": False,
+        "local_review_max_attempts_reached": False,
+        "local_review_verdict": None,
+        "qualitative_feedback": None,
         "ci_failed_checks": [],
         "ci_skipped_checks": [],
         "ci_fix_attempt": 0,

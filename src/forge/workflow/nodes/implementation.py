@@ -17,6 +17,7 @@ from pathlib import Path
 from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import TicketType
+from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.error_handler import notify_error
@@ -69,6 +70,13 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             if task_key not in implemented:
                 current_task = task_key
                 break
+
+    if not current_task and _has_review_feedback_to_fix(state):
+        return await _implement_review_feedback(
+            state,
+            workspace_path=workspace_path,
+            implementation_node=implementation_node,
+        )
 
     if not current_task:
         logger.info(f"All tasks implemented for {ticket_key}")
@@ -201,6 +209,100 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 def _implementation_node_name(state: WorkflowState) -> str:
     """Return the implementation node name for the active workflow graph."""
     return "implement_bug_fix" if state.get("ticket_type") == TicketType.BUG else "implement_task"
+
+
+def _has_review_feedback_to_fix(state: WorkflowState) -> bool:
+    """Return True when local review asked implementation to make another pass."""
+    verdict = state.get("local_review_verdict")
+    return bool(verdict and verdict != "adequate")
+
+
+async def _implement_review_feedback(
+    state: WorkflowState,
+    *,
+    workspace_path: str,
+    implementation_node: str,
+) -> WorkflowState:
+    """Run the implementation container to address local review feedback."""
+    ticket_key = state["ticket_key"]
+    current_repo = state.get("current_repo", "")
+    branch_name = state.get("context", {}).get("branch_name", "")
+    feedback = state.get("qualitative_feedback") or (
+        f"Local review returned verdict {state.get('local_review_verdict')} without details."
+    )
+
+    logger.info(f"Addressing local review feedback for {ticket_key}")
+
+    settings = get_settings()
+    try:
+        context_parts = []
+        if state.get("spec_content"):
+            context_parts.extend(["## Specification", state.get("spec_content", "")])
+        if state.get("plan_content"):
+            context_parts.extend(["## Approved Plan", state.get("plan_content", "")])
+        if state.get("rca_content"):
+            context_parts.extend(["## Root Cause Analysis", state.get("rca_content", "")])
+
+        task_description = load_prompt(
+            "implement-review-feedback",
+            ticket_key=ticket_key,
+            review_feedback=feedback,
+            context="\n\n".join(context_parts) or "No additional context provided.",
+        )
+
+        runner = ContainerRunner(settings)
+        result = await runner.run(
+            workspace_path=Path(workspace_path),
+            task_summary=f"Address local review feedback for {ticket_key}",
+            task_description=task_description,
+            ticket_key=ticket_key,
+            task_key=f"{ticket_key}-review-fix",
+            repo_name=current_repo,
+            previous_task_keys=list(state.get("implemented_tasks", [])),
+            trace_context=_build_implementation_trace_context(
+                state,
+                implementation_node=implementation_node,
+                current_repo=current_repo,
+            ),
+        )
+
+        if not result.success:
+            error_msg = result.error_message or "Unknown container error"
+            logger.error(f"Review feedback fix failed for {ticket_key}: {error_msg}")
+            raise RuntimeError(error_msg)
+
+        git = GitOperations(
+            Workspace(
+                path=Path(workspace_path),
+                repo_name=current_repo,
+                branch_name=branch_name,
+                ticket_key=ticket_key,
+            )
+        )
+        if git.has_uncommitted_changes():
+            git.stage_all()
+            git.commit(f"[{ticket_key}] fix: address local review feedback")
+
+        return update_state_timestamp(
+            {
+                **state,
+                "current_node": implementation_node,
+                "current_task_key": None,
+                "local_review_verdict": None,
+                "qualitative_feedback": None,
+                "last_error": None,
+                "retry_count": 0,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to address local review feedback for {ticket_key}: {e}")
+        await notify_error(state, str(e), implementation_node)
+        return {
+            **state,
+            "last_error": str(e),
+            "current_node": implementation_node,
+            "retry_count": state.get("retry_count", 0) + 1,
+        }
 
 
 def _build_implementation_trace_context(

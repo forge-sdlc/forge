@@ -293,6 +293,9 @@ def _route_after_local_review(state: BugState) -> str:
     """Route after local_review considering qualitative verdict and retry count."""
     from forge.workflow.nodes.local_reviewer import _QUALITATIVE_CAP, MAX_REVIEW_ATTEMPTS
 
+    if state.get("last_error"):
+        return "update_documentation"
+
     verdict = state.get("local_review_verdict")
     retry_count = state.get("qualitative_retry_count", 0)
 

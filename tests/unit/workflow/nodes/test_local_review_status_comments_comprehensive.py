@@ -34,12 +34,11 @@ def create_mock_container_runner(has_unfixed_issues=False):
     mock_result.success = True
     mock_result.error_message = None
 
-    # Set stdout/stderr to indicate unfixed issues if requested
     if has_unfixed_issues:
-        mock_result.stdout = "unfixed breaking issues remain"
+        mock_result.stdout = "verdict: tests_incomplete\n\nfeedback: breaking issues remain"
         mock_result.stderr = ""
     else:
-        mock_result.stdout = "all issues fixed"
+        mock_result.stdout = "verdict: adequate\n\nfeedback: all issues fixed"
         mock_result.stderr = ""
 
     mock.run = AsyncMock(return_value=mock_result)
@@ -52,12 +51,13 @@ def create_mock_git_operations(has_changes=False):
     mock.has_uncommitted_changes = MagicMock(return_value=has_changes)
     mock.stage_all = MagicMock()
     mock.commit = MagicMock()
+    mock.reset_hard = MagicMock()
     return mock
 
 
 class TestPassNumberOneCommentPosting:
     """Tests verifying initial comment posts only when pass_number == 1.
-    
+
     Acceptance Criteria: Unit tests verify initial comment posts only when pass_number == 1
     """
 
@@ -160,7 +160,7 @@ class TestPassNumberOneCommentPosting:
 
 class TestPassNumberGreaterThanOneCommentPosting:
     """Tests verifying fix comments post only when pass_number > 1.
-    
+
     Acceptance Criteria: Unit tests verify fix comments post only when pass_number > 1
     """
 
@@ -262,8 +262,8 @@ class TestPassNumberGreaterThanOneCommentPosting:
 
 class TestCorrectPassNumberInCommentText:
     """Tests verifying correct pass number appears in comment text.
-    
-    Acceptance Criteria: Unit tests verify correct pass number appears in comment text 
+
+    Acceptance Criteria: Unit tests verify correct pass number appears in comment text
     for passes 2, 3, 4, 5+
     """
 
@@ -436,7 +436,7 @@ class TestCorrectPassNumberInCommentText:
 
 class TestGracefulHandlingWhenPassNumberUnavailable:
     """Tests verifying graceful handling when pass_number unavailable.
-    
+
     Acceptance Criteria: Unit tests verify graceful handling when pass_number unavailable
     """
 
@@ -505,7 +505,7 @@ class TestGracefulHandlingWhenPassNumberUnavailable:
 
         # Verify workflow completed successfully
         assert result is not None
-        assert result["current_node"] == "create_pr"
+        assert result["current_node"] == "local_review"
         assert mock_jira.close.called
 
     @pytest.mark.asyncio
@@ -532,12 +532,12 @@ class TestGracefulHandlingWhenPassNumberUnavailable:
             ) as mock_post_status,
         ):
             mock_post_status.return_value = AsyncMock()
-            
+
             # Should not raise exception
             try:
                 result = await local_review_changes(state)
-                # Verify workflow completed
-                assert result["current_node"] == "create_pr"
+                # Verify review state is ready for graph routing
+                assert result["current_node"] == "local_review"
             except Exception as e:
                 pytest.fail(f"Should handle None pass_number gracefully but raised: {e}")
 
@@ -565,12 +565,12 @@ class TestGracefulHandlingWhenPassNumberUnavailable:
             ) as mock_post_status,
         ):
             mock_post_status.return_value = AsyncMock()
-            
+
             # Should not raise exception
             result = await local_review_changes(state)
 
-            # Verify workflow completed
-            assert result["current_node"] == "create_pr"
+            # Verify review state is ready for graph routing
+            assert result["current_node"] == "local_review"
 
             # With pass_number=0 (invalid), should use generic fallback comment
             assert mock_post_status.call_count == 1
@@ -592,10 +592,10 @@ class TestIntegrationWithReviewFlow:
 
         call_order = []
 
-        async def track_post_status(*args, **kwargs):
+        async def track_post_status(*_args, **_kwargs):
             call_order.append("post_status_comment")
 
-        async def track_container_run(*args, **kwargs):
+        async def track_container_run(*_args, **_kwargs):
             call_order.append("container_run")
             mock_result = MagicMock()
             mock_result.success = True

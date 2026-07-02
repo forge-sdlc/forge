@@ -328,6 +328,30 @@ def _route_implementation(
     return "implement_task"
 
 
+def _route_after_local_review(
+    state: FeatureState,
+) -> Literal["implement_task", "update_documentation"]:
+    """Route after one read-only local review pass."""
+    from forge.workflow.nodes.local_reviewer import MAX_REVIEW_ATTEMPTS
+
+    if state.get("last_error"):
+        return "update_documentation"
+
+    if state.get("local_review_max_attempts_reached"):
+        return "update_documentation"
+
+    if state.get("local_review_verdict") == "adequate":
+        return "update_documentation"
+
+    if (
+        state.get("local_review_has_unfixed_issues")
+        and state.get("local_review_attempts", 0) < MAX_REVIEW_ATTEMPTS
+    ):
+        return "implement_task"
+
+    return "update_documentation"
+
+
 def _route_after_pr_creation(
     state: FeatureState,
 ) -> Literal["teardown_workspace", "escalate_blocked"]:
@@ -411,8 +435,8 @@ def build_feature_graph() -> StateGraph:
     14. task_router -> setup_workspace (or parallel fan-out)
     15. setup_workspace -> implement_task
     16. implement_task (all tasks done) -> local_review
-    17. local_review: reviews git diff vs main, fixes breaking issues in-place (up to 2 passes)
-    18. local_review -> create_pr
+    17. local_review: reviews git diff vs main and emits feedback
+    18. failed review under cap -> implement_task; adequate/cap -> create_pr
     19. create_pr -> teardown_workspace
     20. teardown_workspace -> wait_for_ci_gate (pause) or next repo
     21. wait_for_ci_gate: resumes on GitHub CI webhook
@@ -460,7 +484,7 @@ def build_feature_graph() -> StateGraph:
     graph.add_node("create_pr", create_pull_request)
     graph.add_node("teardown_workspace", teardown_and_route)
 
-    # Local code review node (pre-PR, fixes breaking issues in-place)
+    # Local code review node (pre-PR, read-only feedback gate)
     graph.add_node("local_review", local_review_changes)
 
     # Documentation update node (pre-PR, updates stale docs)
@@ -697,8 +721,8 @@ def build_feature_graph() -> StateGraph:
     )
     graph.add_conditional_edges(
         "local_review",
-        lambda s: s.get("current_node", "create_pr"),
-        {"local_review": "local_review", "create_pr": "update_documentation"},
+        _route_after_local_review,
+        {"implement_task": "implement_task", "update_documentation": "update_documentation"},
     )
     graph.add_edge("update_documentation", "create_pr")
     graph.add_conditional_edges(

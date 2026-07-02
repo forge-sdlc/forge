@@ -1,4 +1,4 @@
-"""Local code review node — reviews and fixes breaking issues before PR creation."""
+"""Local code review node — reviews implemented changes before PR creation."""
 
 import logging
 import re
@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 MAX_REVIEW_ATTEMPTS = 2
 _QUALITATIVE_CAP = 2
 _VALID_VERDICTS = {"adequate", "tests_incomplete", "symptom_only"}
+_VALID_FEATURE_VERDICTS = {"adequate", "tests_incomplete"}
 
 
 def _validate_pass_number(value: int | None) -> int | None:
@@ -74,6 +75,40 @@ def _parse_bug_verdict(output: str) -> tuple[str, str]:
     return verdict, feedback
 
 
+def _parse_feature_verdict(output: str) -> tuple[str, str]:
+    """Parse verdict and feedback from feature local review output."""
+    verdict = "tests_incomplete"
+    feedback = ""
+
+    verdict_match = re.search(r"verdict:\s*`?([a-zA-Z_]+)", output, re.IGNORECASE)
+    if verdict_match:
+        candidate = verdict_match.group(1).strip().lower()
+        if candidate in _VALID_FEATURE_VERDICTS:
+            verdict = candidate
+        else:
+            logger.warning(
+                f"Unrecognized feature review verdict '{candidate}', "
+                "defaulting to tests_incomplete"
+            )
+
+    feedback_match = re.search(r"feedback:\s*(.*)", output, re.IGNORECASE | re.DOTALL)
+    if feedback_match:
+        feedback = feedback_match.group(1).strip()
+
+    return verdict, feedback
+
+
+def _discard_reviewer_changes(git: GitOperations, ticket_key: str) -> None:
+    """Discard any file changes made by a read-only review container."""
+    if not git.has_uncommitted_changes():
+        return
+
+    logger.warning(
+        f"Local review container modified files for {ticket_key}; discarding reviewer changes"
+    )
+    git.reset_hard()
+
+
 def route_local_review(state: WorkflowState) -> str:
     """Route from local_review based on bug verdict and retry count.
 
@@ -86,20 +121,21 @@ def route_local_review(state: WorkflowState) -> str:
         state: Current workflow state after local_review_changes ran.
 
     Returns:
-        Next node name: 'create_pr' or 'implement_bug_fix'.
+        Next node name recorded by the graph-specific local review router.
     """
     return state.get("current_node", "create_pr")
 
 
 async def local_review_changes(state: WorkflowState) -> WorkflowState:
-    """Review implemented changes locally and fix breaking issues before PR creation.
+    """Review implemented changes locally before PR creation.
 
     For bug tickets: runs qualitative review (local-review-bug.md) that checks
-    root-cause alignment and test coverage. Parses verdict; routes to
-    implement_bug_fix on non-adequate verdicts (up to 2 retries), then create_pr.
+    root-cause alignment and test coverage. Parses verdict and records retry
+    metrics; graph routing decides whether to re-enter implementation.
 
-    For other tickets: runs mechanical review (local-review prompt) to find and
-    fix breaking issues in-place.
+    For other tickets: runs a read-only local review that evaluates the
+    implementation and emits feedback. Graph routing decides whether to
+    re-enter implementation for a fix pass.
 
     Args:
         state: Current workflow state.
@@ -163,9 +199,7 @@ async def _run_bug_review(state: WorkflowState) -> WorkflowState:
             )
         )
 
-        if git.has_uncommitted_changes():
-            git.stage_all()
-            git.commit(f"[{ticket_key}] fix: address review feedback")
+        _discard_reviewer_changes(git, ticket_key)
 
         output = (result.stdout or "") + (result.stderr or "")
         verdict, feedback = _parse_bug_verdict(output)
@@ -180,7 +214,7 @@ async def _run_bug_review(state: WorkflowState) -> WorkflowState:
                     "local_review_verdict": verdict,
                     "qualitative_feedback": feedback or None,
                     "qualitative_retry_count": qualitative_retry_count,
-                    "current_node": "create_pr",
+                    "current_node": "local_review",
                     "last_error": None,
                 }
             )
@@ -198,7 +232,7 @@ async def _run_bug_review(state: WorkflowState) -> WorkflowState:
                     "qualitative_feedback": feedback or None,
                     "qualitative_retry_count": new_retry_count,
                     "qualitative_review_failed": True,
-                    "current_node": "create_pr",
+                    "current_node": "local_review",
                     "last_error": None,
                 }
             )
@@ -207,18 +241,15 @@ async def _run_bug_review(state: WorkflowState) -> WorkflowState:
             f"Bug qualitative review: verdict={verdict} for {ticket_key}, "
             f"retry {new_retry_count}/{_QUALITATIVE_CAP}"
         )
-        linked_task_keys = state.get("linked_task_keys") or state.get("task_keys") or []
         return update_state_timestamp(
             {
                 **state,
                 "local_review_verdict": verdict,
                 "qualitative_feedback": feedback or None,
                 "qualitative_retry_count": new_retry_count,
-                "current_node": "implement_bug_fix",
+                "current_node": "local_review",
                 "last_error": None,
-                # Reset so implement_task re-runs the container instead of seeing "all done"
-                "implemented_tasks": [],
-                "current_task_key": linked_task_keys[0] if linked_task_keys else None,
+                "current_task_key": None,
             }
         )
 
@@ -228,14 +259,15 @@ async def _run_bug_review(state: WorkflowState) -> WorkflowState:
             {
                 **state,
                 "local_review_verdict": None,
-                "current_node": "create_pr",
+                "qualitative_feedback": None,
+                "current_node": "local_review",
                 "last_error": str(e),
             }
         )
 
 
 async def _run_feature_review(state: WorkflowState) -> WorkflowState:
-    """Run mechanical local review for non-bug tickets (existing behavior)."""
+    """Run read-only local review for non-bug tickets."""
     ticket_key = state["ticket_key"]
     workspace_path = state["workspace_path"]
     review_attempts = state.get("local_review_attempts", 0)
@@ -283,8 +315,12 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
         return update_state_timestamp(
             {
                 **state,
+                "local_review_has_unfixed_issues": False,
+                "local_review_max_attempts_reached": True,
                 "local_review_attempts": 0,
-                "current_node": "create_pr",
+                "local_review_verdict": state.get("local_review_verdict"),
+                "qualitative_feedback": state.get("qualitative_feedback"),
+                "current_node": "local_review",
             }
         )
 
@@ -297,7 +333,7 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
     guardrails = state.get("context", {}).get("guardrails", "")
 
     task_description = load_prompt(
-        "local-review",
+        "local-review-feature",
         workspace_path=workspace_path,
         spec_content=spec_content[:3000] if spec_content else "Not available",
         guardrails=guardrails[:2000] if guardrails else "",
@@ -307,7 +343,7 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
         runner = ContainerRunner(settings)
         result = await runner.run(
             workspace_path=Path(workspace_path),
-            task_summary="Local code review — fix breaking issues",
+            task_summary="Local code review",
             task_description=task_description,
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-review",
@@ -323,41 +359,42 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
             )
         )
 
-        if git.has_uncommitted_changes():
-            git.stage_all()
-            git.commit(f"[{ticket_key}] fix: address breaking issues found in local review")
-            logger.info(f"Committed local review fixes for {ticket_key}")
+        _discard_reviewer_changes(git, ticket_key)
 
         output = (result.stdout or "") + (result.stderr or "")
-        has_unfixed = _has_unfixed_breaking_issues(output)
+        verdict, feedback = _parse_feature_verdict(output)
+        has_unfixed = verdict != "adequate"
 
-        if has_unfixed and review_attempts + 1 < MAX_REVIEW_ATTEMPTS:
+        if has_unfixed:
             logger.warning(
-                f"Breaking issues remain after review attempt {review_attempts + 1}, retrying"
+                f"Local review found issues after attempt {review_attempts + 1}"
             )
             next_pass = (validated_pass or 1) + 1
             return update_state_timestamp(
                 {
                     **state,
+                    "local_review_has_unfixed_issues": True,
+                    "local_review_max_attempts_reached": False,
+                    "local_review_verdict": verdict,
+                    "qualitative_feedback": feedback or None,
                     "local_review_attempts": review_attempts + 1,
                     "local_review_pass_number": next_pass,
                     "current_node": "local_review",
+                    "last_error": None,
                 }
             )
 
-        if has_unfixed:
-            logger.warning(
-                f"Could not fix all breaking issues after {MAX_REVIEW_ATTEMPTS} attempts "
-                f"for {ticket_key}, proceeding to PR"
-            )
-        else:
-            logger.info(f"Local review passed for {ticket_key}")
+        logger.info(f"Local review passed for {ticket_key}")
 
         return update_state_timestamp(
             {
                 **state,
+                "local_review_has_unfixed_issues": False,
+                "local_review_max_attempts_reached": False,
+                "local_review_verdict": verdict,
+                "qualitative_feedback": feedback or None,
                 "local_review_attempts": 0,
-                "current_node": "create_pr",
+                "current_node": "local_review",
                 "last_error": None,
             }
         )
@@ -367,14 +404,12 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
         return update_state_timestamp(
             {
                 **state,
+                "local_review_has_unfixed_issues": False,
+                "local_review_max_attempts_reached": False,
                 "local_review_attempts": 0,
-                "current_node": "create_pr",
+                "local_review_verdict": None,
+                "qualitative_feedback": None,
+                "current_node": "local_review",
                 "last_error": None,
             }
         )
-
-
-def _has_unfixed_breaking_issues(output: str) -> bool:
-    """Check if the review output indicates unfixed breaking issues remain."""
-    lower = output.lower()
-    return "unfixed" in lower and "breaking" in lower
