@@ -1,7 +1,7 @@
 """Triage node for Task Takeover workflow.
 
-Evaluates whether a Task or Epic ticket contains sufficient details (Problem Statement,
-Proposed Solution/Approach, and Acceptance Criteria) before starting plan generation.
+Evaluates whether a Task or Epic ticket contains sufficient actionable detail
+before starting plan generation.
 """
 
 import json
@@ -27,8 +27,9 @@ async def triage_task(state: TaskTakeoverState) -> TaskTakeoverState:
     """Evaluate a Task Takeover ticket for completeness before planning.
 
     Posts an acknowledgement comment on first execution, then evaluates the
-    ticket against "Problem Statement", "Proposed Solution/Approach", and
-    "Acceptance Criteria".
+    ticket for enough actionable context to safely generate an implementation
+    plan. Formal sections are helpful, but not required for small, contained
+    tasks when the intent, scope, and expected outcome are already clear.
 
     If sufficient, transitions current_node to generate_plan and proceeds.
     If missing sections, applies forge:task-triage-pending label, posts a

@@ -2,88 +2,40 @@
 
 import contextlib
 import logging
-from pathlib import Path
+import re
 from typing import Any, cast
 
 from forge.config import get_settings
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
-from forge.sandbox.runner import ContainerConfig, ContainerRunner
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import set_paused, update_state_timestamp
-from forge.workspace.git_ops import GitOperations
-from forge.workspace.manager import WorkspaceManager
 
 logger = logging.getLogger(__name__)
 
 _MAX_COMMENT_CHARS = 25_000
-_TRUNCATION_NOTE = "*(Plan truncated — full plan available in container logs.)*"
+_TRUNCATION_NOTE = "*(Plan truncated — full plan retained in workflow state.)*"
 
 __all__ = ["generate_plan", "plan_approval_gate", "route_plan_approval"]
 
 
-def _gather_file_metadata(workspace_path: Path) -> str:
-    """Gather file structure and metadata from the cloned workspace."""
-    lines = []
-    ignore_dirs = {
-        ".git",
-        "node_modules",
-        ".venv",
-        "__pycache__",
-        ".pytest_cache",
-        "dist",
-        "build",
-        "target",
-        ".mypy_cache",
-        ".ruff_cache",
-        ".forge",
-    }
-
-    count = 0
-    max_files = 300
-    for path in sorted(workspace_path.rglob("*")):
-        try:
-            # Skip if any part is ignored
-            if any(part in ignore_dirs for part in path.relative_to(workspace_path).parts):
-                continue
-        except ValueError:
+def _extract_plan_repos(plan_content: str, known_repos: list[str]) -> list[str]:
+    """Extract valid repo tags from plan content in first-seen order."""
+    allowed = set(known_repos)
+    repos = []
+    for repo in re.findall(r"repo:([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)", plan_content):
+        if allowed and repo not in allowed:
             continue
+        if repo not in repos:
+            repos.append(repo)
+    return repos
 
-        if path.is_file():
-            # Skip common binary/unwanted extensions
-            if path.suffix.lower() in {
-                ".png",
-                ".jpg",
-                ".jpeg",
-                ".gif",
-                ".ico",
-                ".pyc",
-                ".pdf",
-                ".zip",
-                ".tar",
-                ".gz",
-                ".woff",
-                ".woff2",
-                ".ttf",
-                ".eot",
-            }:
-                continue
 
-            try:
-                rel_path = path.relative_to(workspace_path)
-                size = path.stat().st_size
-                lines.append(f"- {rel_path} ({size} bytes)")
-                count += 1
-                if count >= max_files:
-                    lines.append(f"- ... and more files (truncated at {max_files} files)")
-                    break
-            except Exception:
-                continue
-
-    if not lines:
-        return "No files found in workspace."
-    return "\n".join(lines)
+def _repo_labels(repos: list[str]) -> list[str]:
+    """Build Jira repo labels for valid repository names."""
+    return [f"repo:{repo}" for repo in repos if repo and "/" in repo]
 
 
 def _truncate_plan_comment(plan_content: str, max_chars: int = _MAX_COMMENT_CHARS) -> str:
@@ -98,22 +50,6 @@ def _truncate_plan_comment(plan_content: str, max_chars: int = _MAX_COMMENT_CHAR
         truncated = truncated[:last_para]
 
     return truncated + "\n\n" + _TRUNCATION_NOTE
-
-
-def _harvest_plan(workspace_path: Path) -> str:
-    """Read .forge/plan.md from the container workspace.
-
-    Raises:
-        FileNotFoundError: if plan.md was not written.
-        ValueError: if plan.md is empty.
-    """
-    plan_file = workspace_path / ".forge" / "plan.md"
-    if not plan_file.exists():
-        raise FileNotFoundError(f"plan.md not found at {plan_file}")
-    content = plan_file.read_text()
-    if not content.strip():
-        raise ValueError("plan.md is empty")
-    return content
 
 
 async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
@@ -135,13 +71,14 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
 
     settings = get_settings()
     jira = JiraClient(settings)
+    agent = ForgeAgent(settings)
 
     try:
         issue = await jira.get_issue(ticket_key)
         comments = await jira.get_comments(ticket_key)
         comment_text = "\n\n".join(c.body for c in comments if c.body)
 
-        # Notify Jira before we start container
+        # Notify Jira before planning starts
         if is_revision:
             await jira.add_comment(
                 ticket_key,
@@ -150,47 +87,20 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         else:
             await jira.add_comment(
                 ticket_key,
-                "Starting implementation plan generation — gathering codebase metadata and drafting the plan. This will take a few minutes.",
+                "Starting implementation plan generation — reviewing ticket context and drafting the plan. This will take a few minutes.",
             )
 
-        # 1. Determine and clone/checkout repository
-        current_repo = state.get("current_repo")
-        if not current_repo:
-            with contextlib.suppress(Exception):
-                current_repo = await jira.get_project_default_repo(issue.project_key)
-            if not current_repo:
-                with contextlib.suppress(Exception):
-                    repos = await jira.get_project_repos(issue.project_key)
-                    if repos:
-                        current_repo = repos[0]
-
-        if not current_repo or current_repo == "unknown" or "/" not in current_repo:
-            raise ValueError(f"No valid repository found for project {issue.project_key}")
-
-        # Update current_repo in state
-        state = cast(TaskTakeoverState, {**state, "current_repo": current_repo})
-
-        # 2. Get Workspace and clone if needed
-        workspace_manager = WorkspaceManager(base_dir=settings.workspace_base_dir)
-        workspace = workspace_manager.create_workspace(
-            repo_name=current_repo,
-            ticket_key=ticket_key,
-        )
-        git = GitOperations(workspace)
-        if not (workspace.path / ".git").exists():
-            git.clone()
-
-        # 3. Gather repository file structure & metadata
-        file_metadata = _gather_file_metadata(workspace.path)
-
-        # 4. Load project's known repos
+        # 1. Load project's known repos. Do not pick the first repo as a fallback:
+        # task takeover planning must choose a repo from the ticket context and
+        # generated plan, otherwise multi-repo Jira projects attach unrelated repos.
         known_repos: list[str] = []
         with contextlib.suppress(Exception):
             known_repos = await jira.get_project_repos(issue.project_key)
-        if not known_repos:
-            known_repos = [current_repo]
 
-        # 5. Formulate prompt
+        if not known_repos:
+            raise ValueError(f"No repositories configured for project {issue.project_key}")
+
+        # 2. Formulate prompt
         task_description = load_prompt(
             "task-takeover-planning",
             ticket_key=ticket_key,
@@ -198,35 +108,45 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
             description=issue.description or "",
             comments=comment_text,
             known_repos="\n".join(known_repos),
-            file_metadata=file_metadata,
+            file_metadata=(
+                "No local repository clone is provided during planning. Use the "
+                "available repository/GitHub tools to identify the correct repo "
+                "and inspect only the files needed to produce a grounded plan."
+            ),
         )
 
         # If this is a revision, append the feedback details to task_description
         if is_revision:
             task_description += f"\n\n## Revision Request\nThis is a revision request. Please update the original plan based on the feedback below.\n\n### Original Plan\n{original_plan}\n\n### Feedback Comment\n{feedback_comment}\n"
 
-        # 6. Run container with ContainerRunner (skipping tests for planning speed)
-        runner = ContainerRunner(settings)
-        config = ContainerConfig(skip_tests=True)
-        result = await runner.run(
-            workspace_path=workspace.path,
-            task_summary=f"Plan task takeover for {ticket_key}",
-            task_description=task_description,
-            config=config,
-            ticket_key=ticket_key,
-            task_key=f"{ticket_key}-plan",
+        # 3. Generate the plan directly with the planning agent. This mirrors
+        # feature workflow planning and lets the agent use read-only repository
+        # tools instead of requiring a cloned container workspace.
+        raw_plan = await agent.run_task(
+            task="task-takeover-planning",
+            prompt=task_description,
+            context={
+                "ticket_key": ticket_key,
+                "project_key": issue.project_key,
+                "current_repo": state.get("current_repo") or "",
+                "available_repos": known_repos,
+            },
         )
+        new_plan = agent._strip_preamble(raw_plan).strip()
+        if not new_plan:
+            raise ValueError("Planning agent returned an empty plan")
 
-        if not result.success:
-            raise RuntimeError(
-                f"Container failed with exit_code={result.exit_code}: {result.stderr}"
+        plan_repos = _extract_plan_repos(new_plan, known_repos)
+        if not plan_repos:
+            raise ValueError(
+                "Generated plan did not include a valid repo:<owner>/<repo> tag from "
+                "the configured project repositories."
             )
 
-        new_plan = _harvest_plan(workspace.path)
-
-        # 7. Post the plan to Jira
+        # 4. Post the plan to Jira
         truncated_comment = _truncate_plan_comment(new_plan)
         await jira.add_comment(ticket_key, truncated_comment)
+        await jira.add_labels(ticket_key, _repo_labels(plan_repos))
         await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
 
         return cast(
@@ -235,6 +155,8 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
                 {
                     **state,
                     "plan_content": new_plan,
+                    "current_repo": plan_repos[0],
+                    "repos_to_process": plan_repos,
                     "current_node": "task_plan_approval_gate",
                     "last_error": None,
                     "retry_count": 0,
@@ -259,14 +181,8 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
             ),
         )
     finally:
-        if (
-            "workspace" in locals()
-            and workspace
-            and "workspace_manager" in locals()
-            and workspace_manager
-        ):
-            workspace_manager.destroy_workspace(workspace)
         await jira.close()
+        await agent.close()
 
 
 def plan_approval_gate(state: TaskTakeoverState) -> TaskTakeoverState:

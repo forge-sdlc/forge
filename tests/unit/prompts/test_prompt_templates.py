@@ -263,7 +263,7 @@ class TestPromptContent:
         assert "Test context" in result
 
     def test_task_takeover_triage_prompt(self):
-        """task-takeover-triage prompt should enforce strict evaluation of the three mandatory sections."""
+        """task-takeover-triage prompt should allow contained tasks without formal sections."""
         result = load_prompt(
             "task-takeover-triage",
             summary="Test summary",
@@ -274,6 +274,9 @@ class TestPromptContent:
         assert "Problem Statement" in result
         assert "Proposed Solution/Approach" in result
         assert "Acceptance Criteria" in result
+        assert "Do not require formal section headings" in result
+        assert "small and contained" in result
+        assert "Target repository/file" in result
         assert "Test description" in result
         assert "Test comments" in result
 
@@ -295,6 +298,9 @@ class TestPromptContent:
         assert "Target Files" in result
         assert "Test Plans" in result
         assert "Implementation Steps" in result
+        assert "repository-relative paths only" in result
+        assert "/home/..." in result
+        assert "/workspace/..." in result
 
     def test_task_takeover_qa_prompt(self):
         """task-takeover-qa prompt should provide guidelines for contextual Q&A during planning."""

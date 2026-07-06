@@ -40,6 +40,7 @@ def _make_mock_jira(summary="Implement user session logout", project_key="TASK")
     jira.get_issue = AsyncMock(return_value=issue)
     jira.get_comments = AsyncMock(return_value=[])
     jira.add_comment = AsyncMock()
+    jira.add_labels = AsyncMock()
     jira.set_workflow_label = AsyncMock()
     jira.get_project_default_repo = AsyncMock(return_value="owner/project")
     jira.get_project_repos = AsyncMock(return_value=["owner/project"])
@@ -47,31 +48,22 @@ def _make_mock_jira(summary="Implement user session logout", project_key="TASK")
     return jira
 
 
-def _make_mock_runner_success(plan_content="## Plan\n\nTask Takeover Plan details."):
-    class _FakeRunner:
-        async def run(self, workspace_path, **_kwargs):
-            forge_dir = workspace_path / ".forge"
-            forge_dir.mkdir(exist_ok=True, parents=True)
-            (forge_dir / "plan.md").write_text(plan_content)
-            result = MagicMock()
-            result.success = True
-            result.exit_code = 0
-            result.stdout = "Done"
-            result.stderr = ""
-            return result
-
-    return _FakeRunner()
+def _make_mock_agent_success(
+    plan_content="## Plan\n\nTask Takeover Plan details.\n\nrepo:owner/project",
+) -> MagicMock:
+    agent = MagicMock()
+    agent.run_task = AsyncMock(return_value=plan_content)
+    agent._strip_preamble.side_effect = lambda text: text
+    agent.close = AsyncMock()
+    return agent
 
 
-def _make_mock_runner_failure():
-    runner = MagicMock()
-    result = MagicMock()
-    result.success = False
-    result.exit_code = 1
-    result.stdout = ""
-    result.stderr = "Container failed"
-    runner.run = AsyncMock(return_value=result)
-    return runner
+def _make_mock_agent_failure() -> MagicMock:
+    agent = MagicMock()
+    agent.run_task = AsyncMock(side_effect=RuntimeError("Agent failed"))
+    agent._strip_preamble.side_effect = lambda text: text
+    agent.close = AsyncMock()
+    return agent
 
 
 class TestGeneratePlan:
@@ -81,42 +73,36 @@ class TestGeneratePlan:
     async def test_generate_plan_success(self, base_task_state: TaskTakeoverState) -> None:
         """Verify successful generation of task takeover plan."""
         mock_jira = _make_mock_jira()
-        runner = _make_mock_runner_success("## Plan\n\nTask Takeover Plan details.")
+        agent = _make_mock_agent_success(
+            "## Plan\n\nTask Takeover Plan details.\n\nrepo:owner/project"
+        )
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch(
-                "forge.workflow.nodes.task_takeover_planning.ContainerRunner", return_value=runner
-            ),
-            patch("forge.workflow.nodes.task_takeover_planning.GitOperations") as mock_git,
+            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
         ):
-            mock_git_instance = MagicMock()
-            mock_git_instance.clone = MagicMock()
-            mock_git.return_value = mock_git_instance
             result = await generate_plan(base_task_state)
 
-        assert result["plan_content"] == "## Plan\n\nTask Takeover Plan details."
+        assert result["plan_content"] == "## Plan\n\nTask Takeover Plan details.\n\nrepo:owner/project"
+        assert result["current_repo"] == "owner/project"
+        assert result["repos_to_process"] == ["owner/project"]
         assert result["current_node"] == "task_plan_approval_gate"
         mock_jira.set_workflow_label.assert_called_once_with("TASK-002", ForgeLabel.PLAN_PENDING)
+        mock_jira.add_labels.assert_called_once_with("TASK-002", ["repo:owner/project"])
         assert mock_jira.add_comment.call_count == 2  # Ack comment + Plan comment
+        mock_jira.get_project_default_repo.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_generate_plan_with_truncation(self, base_task_state: TaskTakeoverState) -> None:
         """Verify plan comment is truncated if it exceeds maximum comment size."""
         mock_jira = _make_mock_jira()
-        long_plan = "A" * 30_000
-        runner = _make_mock_runner_success(long_plan)
+        long_plan = "A" * 30_000 + "\n\nrepo:owner/project"
+        agent = _make_mock_agent_success(long_plan)
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch(
-                "forge.workflow.nodes.task_takeover_planning.ContainerRunner", return_value=runner
-            ),
-            patch("forge.workflow.nodes.task_takeover_planning.GitOperations") as mock_git,
+            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
         ):
-            mock_git_instance = MagicMock()
-            mock_git_instance.clone = MagicMock()
-            mock_git.return_value = mock_git_instance
             await generate_plan(base_task_state)
 
         # Plan comment is the second comment
@@ -126,20 +112,14 @@ class TestGeneratePlan:
 
     @pytest.mark.asyncio
     async def test_generate_plan_failure_retries(self, base_task_state: TaskTakeoverState) -> None:
-        """Verify container failure increments retry_count and handles errors."""
+        """Verify agent failure increments retry_count and handles errors."""
         mock_jira = _make_mock_jira()
-        runner = _make_mock_runner_failure()
+        agent = _make_mock_agent_failure()
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch(
-                "forge.workflow.nodes.task_takeover_planning.ContainerRunner", return_value=runner
-            ),
-            patch("forge.workflow.nodes.task_takeover_planning.GitOperations") as mock_git,
+            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
         ):
-            mock_git_instance = MagicMock()
-            mock_git_instance.clone = MagicMock()
-            mock_git.return_value = mock_git_instance
             result = await generate_plan(base_task_state)
 
         assert result["retry_count"] == 1
@@ -161,24 +141,67 @@ class TestRegeneratePlanFlow:
         }
 
         mock_jira = _make_mock_jira()
-        runner = _make_mock_runner_success("## Plan\n\nNew Plan content with logging.")
+        agent = _make_mock_agent_success(
+            "## Plan\n\nNew Plan content with logging.\n\nrepo:owner/project"
+        )
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch(
-                "forge.workflow.nodes.task_takeover_planning.ContainerRunner", return_value=runner
-            ),
-            patch("forge.workflow.nodes.task_takeover_planning.GitOperations") as mock_git,
+            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
         ):
-            mock_git_instance = MagicMock()
-            mock_git_instance.clone = MagicMock()
-            mock_git.return_value = mock_git_instance
             result = await generate_plan(state)
 
-        assert result["plan_content"] == "## Plan\n\nNew Plan content with logging."
+        assert result["plan_content"] == "## Plan\n\nNew Plan content with logging.\n\nrepo:owner/project"
         assert result["revision_requested"] is False
         assert result["feedback_comment"] is None
         assert result["current_node"] == "task_plan_approval_gate"
+
+    @pytest.mark.asyncio
+    async def test_generate_plan_does_not_fallback_to_first_project_repo(
+        self, base_task_state: TaskTakeoverState
+    ) -> None:
+        """Planning should not use repos[0] before the agent chooses a repo."""
+        mock_jira = _make_mock_jira(project_key="AISOS")
+        mock_jira.get_project_default_repo = AsyncMock(side_effect=Exception("not configured"))
+        mock_jira.get_project_repos = AsyncMock(
+            return_value=["openshift/installer", "forge-sdlc/forge"]
+        )
+        agent = _make_mock_agent_success(
+            "## Plan\n\nUpdate README quick start instructions.\n\nrepo:forge-sdlc/forge"
+        )
+
+        with (
+            patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+        ):
+            result = await generate_plan(base_task_state)
+
+        assert result["current_repo"] == "forge-sdlc/forge"
+        assert result["repos_to_process"] == ["forge-sdlc/forge"]
+        mock_jira.get_project_default_repo.assert_not_called()
+        mock_jira.add_labels.assert_called_once_with("TASK-002", ["repo:forge-sdlc/forge"])
+        agent.run_task.assert_awaited_once()
+        context = agent.run_task.call_args.kwargs["context"]
+        assert context["current_repo"] == ""
+        assert context["available_repos"] == ["openshift/installer", "forge-sdlc/forge"]
+
+    @pytest.mark.asyncio
+    async def test_generate_plan_retries_when_plan_has_no_valid_repo_tag(
+        self, base_task_state: TaskTakeoverState
+    ) -> None:
+        """A plan must name a configured repo so setup_workspace can use the right target."""
+        mock_jira = _make_mock_jira()
+        agent = _make_mock_agent_success("## Plan\n\nTask Takeover Plan details.")
+
+        with (
+            patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+        ):
+            result = await generate_plan(base_task_state)
+
+        assert result["retry_count"] == 1
+        assert result["current_node"] == "generate_plan"
+        assert "repo:<owner>/<repo>" in result["last_error"]
 
 
 class TestPlanApprovalGate:

@@ -8,6 +8,7 @@ from typing import cast
 
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
+from forge.workflow.nodes.pr_creation import _build_pr_body, _generate_pr_body_with_agent
 from forge.workflow.nodes.workspace_setup import teardown_workspace
 from forge.workflow.task_takeover.state import TaskTakeoverState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
@@ -133,23 +134,26 @@ async def create_task_takeover_pr(state: WorkflowState) -> WorkflowState:
         git.add_fork_remote(fork_owner, fork_repo)
         git.push_to_fork()
 
-        # Step 3: Fetch Jira issue details to construct the PR title/description
+        # Step 3: Fetch Jira issue details to construct the PR title
         ticket_summary = ""
-        ticket_description = ""
         try:
             ticket_issue = await jira.get_issue(ticket_key)
             ticket_summary = ticket_issue.summary or ""
-            ticket_description = ticket_issue.description or ""
         except Exception as e:
             logger.warning(f"Could not fetch ticket details for PR: {e}")
 
         pr_title = f"[{ticket_key}] {ticket_summary or 'Task Takeover Implementation'}"
-        pr_body = (
-            f"This Pull Request implements task takeover for ticket **[{ticket_key}]**.\n\n"
-            f"### Ticket Description\n"
-            f"{ticket_description}\n\n"
-            f"Co-authored-by: Forge <forge@noreply.anthropic.com>"
+        implemented_tasks = state.get("implemented_tasks") or [
+            state.get("current_task_key") or ticket_key
+        ]
+        pr_body = await _generate_pr_body_with_agent(
+            cast(WorkflowState, state),
+            git,
+            jira,
+            implemented_tasks,
         )
+        if not pr_body:
+            pr_body = _build_pr_body(cast(WorkflowState, state), implemented_tasks)
 
         # Step 4: Open a Pull Request from fork to upstream
         pr_data = await github.create_pull_request(
