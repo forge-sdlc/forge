@@ -37,7 +37,7 @@ def format_status_comment(message: str) -> str:
         emoji = "⚙️"
     elif "pull request" in normalized or " pr " in f" {normalized} ":
         emoji = "🔀"
-    elif "ci" in normalized:
+    elif " ci " in f" {normalized} ":
         emoji = "🧪"
     elif "review" in normalized:
         emoji = "👀"

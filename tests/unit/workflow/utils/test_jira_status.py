@@ -35,6 +35,11 @@ class TestPostStatusComment:
             == "🔀 Pull request created: https://example.test/pr/1"
         )
         assert format_status_comment("Rebase failed: conflict") == "⚠️ Rebase failed: conflict"
+        assert format_status_comment("CI gate skipped") == "🧪 CI gate skipped"
+
+    def test_format_status_comment_ci_no_false_positive(self) -> None:
+        assert format_status_comment("Received your selection").startswith("ℹ️")
+        assert format_status_comment("Ancient config removed").startswith("ℹ️")
 
     def test_format_status_comment_preserves_existing_emoji(self) -> None:
         assert format_status_comment("🧪 CI is pending") == "🧪 CI is pending"

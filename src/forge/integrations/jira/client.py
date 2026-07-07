@@ -37,7 +37,7 @@ class MissingProjectConfig(Exception):
 
 
 def artifact_interaction_options(comment_type: str) -> str:
-    approval_label = _ARTIFACT_APPROVAL_LABELS.get(comment_type.lower(), "the approval label")
+    approval_label = _ARTIFACT_APPROVAL_LABELS[comment_type.lower()]
     return (
         "## Interaction options\n\n"
         f"- Approve: add `{approval_label}` to continue.\n"

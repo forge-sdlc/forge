@@ -93,7 +93,8 @@ def _format_rca_comment(
 
     footer = (
         "\n\nReply with `>option N` to select an approach, "
-        "or comment starting with `!` to revise the RCA."
+        "comment starting with `!` to revise the RCA, "
+        "or comment starting with `?` to ask a question."
     )
     header = "## Root Cause Analysis\n\n"
     options_header = "\n\n## Fix Options\n\n"

@@ -152,7 +152,7 @@ async def _run_plan_container(
 
         comment = _truncate_plan_comment(new_plan)
         comment = f"{comment}\n\n{artifact_interaction_options('plan')}"
-        await jira.add_comment(ticket_key, comment)
+        await post_status_comment(jira, ticket_key, comment)
         await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
 
         return update_state_timestamp(
