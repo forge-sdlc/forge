@@ -376,3 +376,59 @@ class TestImplementationStepLogging:
         # ISO 8601 pattern: YYYY-MM-DDTHH:MM:SS.ffffff+HH:MM or YYYY-MM-DDTHH:MM:SS+HH:MM
         iso8601_pattern = r"timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)"
         assert re.search(iso8601_pattern, start_log_records[0].message)
+
+    @pytest.mark.asyncio
+    async def test_end_log_emitted_on_success(self, caplog):
+        """Verify end log is emitted on successful implementation with all required fields."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Implement user preferences")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-555",
+                    ticket_type=TicketType.FEATURE,
+                    current_task_key="TASK-222",
+                    tasks_by_repo={"acme/backend": ["TASK-222"]},
+                )
+            )
+
+        # Verify both start and end logs are emitted (2 log records)
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        end_log_records = [
+            r for r in caplog.records if "Implementation step completed" in r.message
+        ]
+        assert len(start_log_records) == 1, "Expected exactly 1 start log record"
+        assert len(end_log_records) == 1, "Expected exactly 1 end log record"
+
+        # Verify end log message format matches spec
+        end_log_message = end_log_records[0].message
+        assert "Implementation step completed" in end_log_message
+
+        # Verify end log contains all required fields
+        assert "task: Implement user preferences" in end_log_message
+        assert "feature_id: FEAT-555" in end_log_message
+        assert "task_id: TASK-222" in end_log_message
+        assert "timestamp:" in end_log_message
+
+        # Verify end log level is INFO
+        assert end_log_records[0].levelno == logging.INFO
+
+        # Verify timestamp is in ISO 8601 format
+        iso8601_pattern = r"timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)"
+        assert re.search(iso8601_pattern, end_log_message)
