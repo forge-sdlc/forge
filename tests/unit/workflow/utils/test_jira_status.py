@@ -1,13 +1,13 @@
 """Tests for Jira status utility functions."""
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, call
 
 import httpx
 import pytest
 
 from forge.models.workflow import ForgeLabel
 from forge.workflow.utils.jira_status import (
+    format_status_comment,
     post_status_comment,
     set_implementing_label,
     set_review_pending_label,
@@ -26,7 +26,24 @@ class TestPostStatusComment:
 
         await post_status_comment(mock_jira, "TEST-123", "Test message")
 
-        mock_jira.add_comment.assert_called_once_with("TEST-123", "Test message")
+        mock_jira.add_comment.assert_called_once_with("TEST-123", "ℹ️ Test message")
+
+    def test_format_status_comment_selects_matching_emoji(self) -> None:
+        assert format_status_comment("PRD published for review") == "📝 PRD published for review"
+        assert (
+            format_status_comment("Pull request created: https://example.test/pr/1")
+            == "🔀 Pull request created: https://example.test/pr/1"
+        )
+        assert format_status_comment("Rebase failed: conflict") == "⚠️ Rebase failed: conflict"
+
+    def test_format_status_comment_preserves_existing_emoji(self) -> None:
+        assert format_status_comment("🧪 CI is pending") == "🧪 CI is pending"
+        assert format_status_comment("♻️ Forge received your revision request") == (
+            "♻️ Forge received your revision request"
+        )
+        assert format_status_comment("⚙️ Forge is generating tasks") == (
+            "⚙️ Forge is generating tasks"
+        )
 
     @pytest.mark.asyncio
     async def test_post_status_comment_api_failure(self, caplog) -> None:
@@ -51,7 +68,7 @@ class TestPostStatusComment:
     async def test_post_status_comment_timeout(self, caplog) -> None:
         """Should suppress TimeoutError and log warning."""
         mock_jira = MagicMock()
-        timeout_error = asyncio.TimeoutError()
+        timeout_error = TimeoutError()
         mock_jira.add_comment = AsyncMock(side_effect=timeout_error)
 
         # Should not raise
@@ -139,7 +156,7 @@ class TestTransitionTasksToInProgress:
         mock_jira = MagicMock()
 
         # Make the second task fail, but others succeed
-        async def transition_side_effect(task_key: str, status: str):
+        async def transition_side_effect(task_key: str, _status: str):
             if task_key == "TASK-2":
                 raise httpx.HTTPError("API error")
 
@@ -177,7 +194,7 @@ class TestTransitionTasksToInProgress:
         mock_jira = MagicMock()
 
         # Make the transition unavailable for TASK-2
-        async def transition_side_effect(task_key: str, status: str):
+        async def transition_side_effect(task_key: str, _status: str):
             if task_key == "TASK-2":
                 raise ValueError("Transition 'In Progress' not available")
 

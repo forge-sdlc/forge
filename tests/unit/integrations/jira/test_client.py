@@ -89,6 +89,44 @@ class TestJiraClientGetIssue:
         assert issue.issue_type == "Feature"
 
 
+class TestJiraClientStructuredComments:
+    """Tests for structured artifact comments."""
+
+    @pytest.fixture
+    def jira_client(self):
+        """Create client with mocked settings."""
+        with patch("forge.integrations.jira.client.get_settings") as mock_settings:
+            mock_settings.return_value.jira_base_url = "https://test.atlassian.net"
+            mock_settings.return_value.jira_api_token = MagicMock()
+            mock_settings.return_value.jira_api_token.get_secret_value.return_value = "token"
+            mock_settings.return_value.jira_user_email = "test@example.com"
+            return JiraClient()
+
+    @pytest.mark.asyncio
+    async def test_add_structured_comment_includes_interaction_options_outside_marker(
+        self, jira_client
+    ):
+        """Artifact comments include actions without polluting stored content."""
+        jira_client.add_comment = AsyncMock(return_value=MagicMock())
+
+        await jira_client.add_structured_comment(
+            "TEST-123",
+            "Product Requirements Document (PRD)",
+            "# PRD\n\nGenerated content.",
+            comment_type="prd",
+        )
+
+        body = jira_client.add_comment.call_args.args[1]
+        assert body.startswith("[FORGE:PRD]\n# Product Requirements Document (PRD)")
+        assert "[/FORGE:PRD]\n\n## Interaction options" in body
+        assert "Approve: add `forge:prd-approved` to continue." in body
+        assert "Request changes: add a Jira comment starting with `!`" in body
+        assert "Ask a question: add a Jira comment starting with `?`." in body
+        assert "@forge ask" not in body
+        marker_end = body.index("[/FORGE:PRD]")
+        assert "## Interaction options" not in body[:marker_end]
+
+
 class TestJiraClientLabels:
     """Tests for label operations."""
 

@@ -5,7 +5,7 @@ The plan approval workflow uses labels:
 - forge:plan-approved - Plan approved (triggers task generation)
 
 To approve: Change label from forge:plan-pending to forge:plan-approved
-To request revision: Add a comment with feedback (keep forge:plan-pending)
+To request revision: Add a comment starting with ! (keep forge:plan-pending)
 """
 
 import logging
@@ -25,7 +25,7 @@ def plan_approval_gate(state: WorkflowState) -> WorkflowState:
     This gate pauses the workflow until a human approves or rejects
     the generated Epics and their implementation plans. The workflow resumes when:
     - Label changes to forge:plan-approved -> proceed to task generation
-    - Comment with feedback added -> regenerate Epics with feedback
+    - Comment starting with ! -> regenerate Epics with feedback
 
     Args:
         state: Current workflow state.

@@ -10,12 +10,13 @@ from pathlib import Path
 from langgraph.graph import END
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
+from forge.integrations.jira.client import JiraClient, artifact_interaction_options
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.bug.state import BugState
 from forge.workflow.utils import set_paused, update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +101,15 @@ async def _run_plan_container(
         # Let the user know planning is starting before the container runs
         if prompt_name == "plan-bug-fix":
             approach_title = selected_fix_approach.get("title", "selected approach")
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 f"Got it — working on a concrete plan for *{approach_title}*. "
                 "This will take a few minutes.",
             )
         elif prompt_name == "regenerate-plan":
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 "Revising the plan based on your feedback — this will take a few minutes.",
             )
@@ -148,6 +151,7 @@ async def _run_plan_container(
             new_plan = _harvest_plan(workspace_path)
 
         comment = _truncate_plan_comment(new_plan)
+        comment = f"{comment}\n\n{artifact_interaction_options('plan')}"
         await jira.add_comment(ticket_key, comment)
         await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
 

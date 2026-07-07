@@ -43,13 +43,13 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 | # | File | Action | Next State |
 |---|------|--------|------------|
 | 1 | `01-feature-created.json` | Create feature | PRD generated, `forge:prd-pending` |
-| 2 | `02-prd-revision-requested.json` | Comment with feedback | PRD regenerated |
+| 2 | `02-prd-revision-requested.json` | `!` comment with feedback | PRD regenerated |
 | 3 | `03-prd-approved.json` | Label change | Spec generated, `forge:spec-pending` |
-| 4 | `04-spec-revision-requested.json` | Comment with feedback | Spec regenerated |
+| 4 | `04-spec-revision-requested.json` | `!` comment with feedback | Spec regenerated |
 | 5 | `05-spec-approved.json` | Label change | Epics decomposed, `forge:plan-pending` |
-| 6 | `06-plan-revision-requested.json` | Comment with feedback | Epics regenerated |
+| 6 | `06-plan-revision-requested.json` | `!` comment with feedback | Epics regenerated |
 | 7 | `07-plan-approved.json` | Label change | Tasks generated, `forge:task-pending` |
-| 8 | `08-task-revision-requested.json` | Comment with feedback | Tasks regenerated |
+| 8 | `08-task-revision-requested.json` | `!` comment with feedback | Tasks regenerated |
 | 9 | `09-task-approved.json` | Label change | Implementation starts |
 
 ## Q&A Mode Payloads
@@ -60,9 +60,9 @@ Ask questions about generated artifacts without triggering regeneration:
 |---|------|-------------|
 | 10 | `10-prd-question.json` | Question about PRD using `?` prefix |
 | 11 | `11-spec-question.json` | Question about Spec using `?` prefix |
-| 12 | `12-forge-ask-question.json` | Question using `@forge ask` syntax |
+| 12 | `12-forge-ask-question.json` | Legacy question payload |
 | 13 | `13-plan-question.json` | Question about Epic plan using `?` prefix |
-| 14 | `14-task-question.json` | Question about Tasks using `@Forge Ask` syntax |
+| 14 | `14-task-question.json` | Legacy question payload |
 | 15 | `15-rca-question.json` | Question about Bug RCA using `?` prefix |
 
 ```bash
@@ -76,7 +76,7 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
   -H "Content-Type: application/json" \
   -d @tests/payloads/11-spec-question.json
 
-# Use @forge ask syntax
+# Legacy question payload
 curl -X POST http://localhost:8000/api/v1/webhooks/jira \
   -H "Content-Type: application/json" \
   -d @tests/payloads/12-forge-ask-question.json
@@ -99,7 +99,6 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 
 Questions are detected by:
 - Starting with `?` (e.g., `?Why did you choose this approach?`)
-- Starting with `@forge ask` (case-insensitive, e.g., `@forge ask explain the auth flow`)
 
 ## Label Reference
 

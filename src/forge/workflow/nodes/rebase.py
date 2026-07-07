@@ -17,6 +17,7 @@ from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.workspace_setup import get_workspace_manager
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 from forge.workspace.git_ops import GitOperations
 
 logger = logging.getLogger(__name__)
@@ -82,8 +83,8 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         if merge_result.returncode == 0:
             if "Already up to date" in merge_result.stdout:
                 logger.info(f"{ticket_key}: branch already up to date with main")
-                await jira.add_comment(
-                    ticket_key, "Branch is already up to date with main — no rebase needed."
+                await post_status_comment(
+                    jira, ticket_key, "Branch is already up to date with main — no rebase needed."
                 )
                 return update_state_timestamp(
                     {
@@ -103,7 +104,8 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
                 pr_number,
                 "Branch has been rebased onto main (no conflicts). CI should re-run.",
             )
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 f"Branch rebased onto main (clean merge) via `/forge rebase` on PR #{pr_number}.",
             )
@@ -162,7 +164,8 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
                 f"Conflict resolution container failed for {ticket_key}: exit {result.exit_code}"
             )
             git._run_git("merge", "--abort", check=False)
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 f"Conflict resolution failed (container exit code {result.exit_code}). Manual intervention needed.",
             )
@@ -180,7 +183,8 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         if check_result.returncode != 0:
             logger.error(f"Conflict markers still present after resolution for {ticket_key}")
             git._run_git("merge", "--abort", check=False)
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 "Conflict resolution incomplete — conflict markers still present. Manual intervention needed.",
             )
@@ -208,7 +212,8 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
             f"Merge conflicts resolved and pushed. The PR branch has been updated.\n\n"
             f"Resolved files: {', '.join(f'`{f}`' for f in conflicted_files)}",
         )
-        await jira.add_comment(
+        await post_status_comment(
+            jira,
             ticket_key,
             f"Merge conflicts with main resolved via `/forge rebase` on PR #{pr_number}.\n"
             f"Conflicted files: {', '.join(conflicted_files)}",
@@ -227,7 +232,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
     except Exception as e:
         logger.error(f"Rebase failed for {ticket_key}: {e}", exc_info=True)
         with contextlib.suppress(Exception):
-            await jira.add_comment(ticket_key, f"Rebase failed: {e}")
+            await post_status_comment(jira, ticket_key, f"Rebase failed: {e}")
         return update_state_timestamp(
             {
                 **state,

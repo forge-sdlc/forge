@@ -102,7 +102,9 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
                 logger.error(
                     f"Project {project_key}: {e} — posting config instructions and blocking"
                 )
-                await jira.add_comment(ticket_key, _missing_repo_config_comment(project_key))
+                await post_status_comment(
+                    jira, ticket_key, _missing_repo_config_comment(project_key)
+                )
                 await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
                 return {**state, "last_error": str(e), "current_node": "decompose_epics"}
             logger.warning(f"Project {project_key}: {e} — falling back to GITHUB_KNOWN_REPOS")
@@ -341,7 +343,8 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
         await jira.update_description(epic_key, new_plan)
 
         # Add comment to Epic acknowledging revision
-        await jira.add_comment(
+        await post_status_comment(
+            jira,
             epic_key,
             "Implementation plan has been revised based on feedback.",
         )

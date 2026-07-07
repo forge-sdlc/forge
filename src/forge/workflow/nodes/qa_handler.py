@@ -45,7 +45,7 @@ async def _post_qa_response(
 def extract_question_text(comment: str) -> str:
     """Extract the actual question from a comment with Q&A prefix.
 
-    Removes ? or @forge ask prefix.
+    Removes the leading ? prefix.
 
     Args:
         comment: Raw comment text with Q&A prefix.

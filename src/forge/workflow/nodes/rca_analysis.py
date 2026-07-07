@@ -63,7 +63,8 @@ async def analyze_bug(state: BugState) -> BugState:
         try:
             repos = await jira.get_project_repos(issue.project_key)
         except MissingProjectConfig as e:
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 f"Cannot start RCA: repository configuration is missing for project "
                 f"`{issue.project_key}`.\n\n"
@@ -263,7 +264,8 @@ async def reflect_rca(state: BugState) -> BugState:
         new_reflection_count = reflection_count + 1
 
         if new_reflection_count >= MAX_REFLECTION_ITERATIONS:
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 f"Reflection cap reached — proceeding with best available RCA after "
                 f"{new_reflection_count} validation attempts.",

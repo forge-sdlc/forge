@@ -16,6 +16,7 @@ from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.workflow.bug.state import BugState
 from forge.workflow.utils import set_paused, update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,8 @@ async def triage_check(state: BugState) -> BugState:
 
         # Step 1: Post acknowledgement on first invocation only (not on resume)
         if not is_resume:
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 "Received this bug report — checking ticket completeness before starting analysis.",
             )
@@ -88,7 +90,7 @@ async def triage_check(state: BugState) -> BugState:
                 if is_resume
                 else "Ticket has enough information to proceed. Starting root cause analysis — results will be posted here."
             )
-            await jira.add_comment(ticket_key, pass_msg)
+            await post_status_comment(jira, ticket_key, pass_msg)
             return update_state_timestamp(
                 {
                     **state,
@@ -117,7 +119,8 @@ async def triage_check(state: BugState) -> BugState:
             ]
 
         fields_listed = "\n".join(f"- {f}" for f in missing_fields)
-        await jira.add_comment(
+        await post_status_comment(
+            jira,
             ticket_key,
             f"To proceed with analysis, please provide the following information:\n\n{fields_listed}",
         )

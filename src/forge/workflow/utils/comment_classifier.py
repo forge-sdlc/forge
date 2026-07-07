@@ -12,7 +12,7 @@ class CommentType(StrEnum):
     INFORMATIONAL = "informational"
 
 
-# Pattern for @forge ask (case insensitive)
+# Legacy @forge ask pattern (case insensitive).
 _FORGE_ASK_PATTERN = re.compile(r"^\s*@forge\s+ask", re.IGNORECASE)
 
 # Pattern for question mark at start (allowing leading whitespace)
@@ -26,7 +26,7 @@ def classify_comment(comment_text: str) -> CommentType:
     """Classify a comment into question, feedback, or informational.
 
     Classification rules:
-    - Questions: Comments starting with '?' or '@forge ask' (case-insensitive)
+    - Questions: Comments starting with '?'
     - Feedback (revision request): Comments starting with '!'
     - Informational: Everything else — ignored by the workflow
 

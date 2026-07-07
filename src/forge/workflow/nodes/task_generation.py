@@ -827,7 +827,8 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         await jira.update_description(task_key, new_description)
 
         # Add comment acknowledging revision
-        await jira.add_comment(
+        await post_status_comment(
+            jira,
             task_key,
             "Task has been revised based on feedback. Please review.",
         )

@@ -685,7 +685,8 @@ class OrchestratorWorker:
                             )
                             jira = JiraClient()
                             try:
-                                await jira.add_comment(
+                                await post_status_comment(
+                                    jira,
                                     message.ticket_key,
                                     f"Please reply with >option N where N is between 1 and {max_n}.",
                                 )
@@ -1413,7 +1414,7 @@ class OrchestratorWorker:
 
                 if pr_number:
                     await github.create_issue_comment(owner, repo, pr_number, gh_comment)
-                await jira.add_comment(ticket_key, jira_comment)
+                await post_status_comment(jira, ticket_key, jira_comment)
             finally:
                 await github.close()
                 await jira.close()
@@ -1443,7 +1444,7 @@ class OrchestratorWorker:
                 )
                 if pr_number:
                     await github.create_issue_comment(owner, repo, pr_number, gh_comment)
-                await jira.add_comment(ticket_key, jira_comment)
+                await post_status_comment(jira, ticket_key, jira_comment)
             finally:
                 await github.close()
                 await jira.close()
@@ -1468,7 +1469,7 @@ class OrchestratorWorker:
                 f"{{code}}{error_preview}{{code}}\n\n"
                 f"To retry the workflow, add the label `forge:retry` to this ticket."
             )
-            await jira.add_comment(ticket_key, comment)
+            await post_status_comment(jira, ticket_key, comment)
             await jira.close()
             logger.info(f"Posted terminal error comment to {ticket_key}")
         except Exception as e:

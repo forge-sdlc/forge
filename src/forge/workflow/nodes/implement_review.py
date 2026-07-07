@@ -15,6 +15,7 @@ from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_description
 from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.utils import set_paused, update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 
 logger = logging.getLogger(__name__)
 
@@ -338,7 +339,8 @@ async def _post_review_objection(
             )
             if pr_number:
                 await github.create_issue_comment(owner, repo, pr_number, comment)
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 f"Forge has concerns about the PR review feedback. "
                 f"Objection posted on PR #{pr_number}. Awaiting confirmation.",

@@ -8,6 +8,7 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel, JiraStatus
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import set_paused, update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 
 logger = logging.getLogger(__name__)
 
@@ -192,8 +193,8 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         logger.info(f"Feature {ticket_key} marked as Done")
 
         # Add completion comment
-        await jira.add_comment(
-            ticket_key, "All Epics and Tasks completed. Feature implementation done."
+        await post_status_comment(
+            jira, ticket_key, "All Epics and Tasks completed. Feature implementation done."
         )
 
         return update_state_timestamp(

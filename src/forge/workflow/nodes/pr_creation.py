@@ -14,6 +14,7 @@ from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.code_review import sync_pr_description
 from forge.workflow.nodes.post_merge_summary import _extract_impact
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
@@ -148,7 +149,8 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
 
             # Transition to blocked status
             await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 "**Merge Conflicts Detected**\n\n"
                 "Cannot create PR due to merge conflicts with main branch.\n\n"
@@ -211,7 +213,8 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         pr_urls.append(pr_url)
 
         # Add comment to Jira with PR link
-        await jira.add_comment(
+        await post_status_comment(
+            jira,
             ticket_key,
             f"Pull request created: {pr_url}\n\nImplements {len(implemented_tasks)} tasks.",
         )

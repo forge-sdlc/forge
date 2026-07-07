@@ -8,6 +8,7 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.workflow.bug.state import BugState
 from forge.workflow.utils import set_paused, update_state_timestamp
+from forge.workflow.utils.jira_status import post_status_comment
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,10 @@ def _format_rca_comment(
         for i, opt in enumerate(rca_options)
     )
 
-    footer = "\n\nReply with `>option N` to select an approach, or comment with feedback to revise the RCA."
+    footer = (
+        "\n\nReply with `>option N` to select an approach, "
+        "or comment starting with `!` to revise the RCA."
+    )
     header = "## Root Cause Analysis\n\n"
     options_header = "\n\n## Fix Options\n\n"
 
@@ -172,7 +176,8 @@ async def regenerate_rca(state: BugState) -> BugState:
 
     jira = JiraClient()
     try:
-        await jira.add_comment(
+        await post_status_comment(
+            jira,
             ticket_key,
             "Revisiting the analysis based on your feedback — this will take a few minutes.",
         )

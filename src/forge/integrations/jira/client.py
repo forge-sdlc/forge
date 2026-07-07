@@ -24,9 +24,26 @@ MAX_BACKOFF_SECONDS = 60.0
 # Module-level cache for project properties (persists per worker lifetime)
 _project_property_cache: dict[tuple[str, str], Any] = {}
 
+_ARTIFACT_APPROVAL_LABELS = {
+    "prd": ForgeLabel.PRD_APPROVED.value,
+    "spec": ForgeLabel.SPEC_APPROVED.value,
+    "plan": ForgeLabel.PLAN_APPROVED.value,
+    "task": ForgeLabel.TASK_APPROVED.value,
+}
+
 
 class MissingProjectConfig(Exception):
     """Raised when a required Jira project property is absent or malformed."""
+
+
+def artifact_interaction_options(comment_type: str) -> str:
+    approval_label = _ARTIFACT_APPROVAL_LABELS.get(comment_type.lower(), "the approval label")
+    return (
+        "## Interaction options\n\n"
+        f"- Approve: add `{approval_label}` to continue.\n"
+        "- Request changes: add a Jira comment starting with `!`, followed by the requested revision.\n"
+        "- Ask a question: add a Jira comment starting with `?`."
+    )
 
 
 class JiraClient:
@@ -797,7 +814,8 @@ class JiraClient:
             f"[FORGE:{comment_type.upper()}]\n"
             f"# {title}\n\n"
             f"{content}\n\n"
-            f"[/FORGE:{comment_type.upper()}]"
+            f"[/FORGE:{comment_type.upper()}]\n\n"
+            f"{artifact_interaction_options(comment_type)}"
         )
         return await self.add_comment(issue_key, formatted_body)
 

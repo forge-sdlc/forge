@@ -108,7 +108,8 @@ async def _create_prd_proposal_pr(
 
         await set_pr_ticket_index(pr_url, ticket_key)
         await jira.set_workflow_label(ticket_key, ForgeLabel.PRD_PENDING)
-        await jira.add_comment(
+        await post_status_comment(
+            jira,
             ticket_key,
             f"PRD published for review: [GitHub PR]({pr_url})",
         )
@@ -349,7 +350,8 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
                 )
             else:
                 await jira.update_description(ticket_key, new_prd)
-            await jira.add_comment(
+            await post_status_comment(
+                jira,
                 ticket_key,
                 "📝 PRD has been revised based on feedback. Please review.",
             )
