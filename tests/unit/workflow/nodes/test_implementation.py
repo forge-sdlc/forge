@@ -1,5 +1,7 @@
 """Unit tests for implement_task node."""
 
+import logging
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -272,3 +274,105 @@ class TestImplementationNodeRouting:
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "container failed"
         assert result["retry_count"] == 1
+
+
+class TestImplementationStepLogging:
+    """Tests for lifecycle start log emission during implement_task execution."""
+
+    @pytest.mark.asyncio
+    async def test_start_log_emitted_with_all_fields(self, caplog):
+        """Verify start log contains task name, feature_id, task_id, and timestamp."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add caching layer")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-789",
+                    ticket_type=TicketType.FEATURE,
+                    current_task_key="TASK-101",
+                    tasks_by_repo={"acme/backend": ["TASK-101"]},
+                )
+            )
+
+        # Verify start log contains all required fields
+        assert "Implementation step started" in caplog.text
+        assert "task: Add caching layer" in caplog.text
+        assert "feature_id: FEAT-789" in caplog.text
+        assert "task_id: TASK-101" in caplog.text
+        assert "timestamp:" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_start_log_level_is_info(self, caplog):
+        """Verify start log is emitted at INFO level."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Refactor auth module")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(_make_state())
+
+        # Find the start log record and verify its level
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_log_records) >= 1
+        assert start_log_records[0].levelno == logging.INFO
+
+    @pytest.mark.asyncio
+    async def test_start_log_contains_iso8601_timestamp(self, caplog):
+        """Verify start log timestamp is in ISO 8601 format."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Update API endpoint")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(_make_state())
+
+        # Find the start log record
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_log_records) >= 1
+
+        # Extract timestamp and verify ISO 8601 format
+        # ISO 8601 pattern: YYYY-MM-DDTHH:MM:SS.ffffff+HH:MM or YYYY-MM-DDTHH:MM:SS+HH:MM
+        iso8601_pattern = r"timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)"
+        assert re.search(iso8601_pattern, start_log_records[0].message)
