@@ -432,3 +432,112 @@ class TestImplementationStepLogging:
         # Verify timestamp is in ISO 8601 format
         iso8601_pattern = r"timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)"
         assert re.search(iso8601_pattern, end_log_message)
+
+    @pytest.mark.asyncio
+    async def test_end_log_emitted_on_container_failure(self, caplog):
+        """Verify end log is emitted via try/finally even when container returns failure."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add payment gateway")
+        runner = MagicMock()
+        container_result = MagicMock()
+        container_result.success = False
+        container_result.error_message = "Tests failed in container"
+        runner.run = AsyncMock(return_value=container_result)
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            patch(
+                "forge.workflow.nodes.implementation.notify_error",
+                new_callable=AsyncMock,
+            ),
+            caplog.at_level(logging.INFO),
+        ):
+            result = await implement_task(
+                _make_state(
+                    ticket_key="FEAT-333",
+                    ticket_type=TicketType.FEATURE,
+                    current_task_key="TASK-444",
+                    tasks_by_repo={"acme/backend": ["TASK-444"]},
+                )
+            )
+
+        # Verify that implementation failed as expected
+        assert result["last_error"] == "Tests failed in container"
+
+        # Verify end log is still emitted despite failure (via try/finally)
+        end_log_records = [
+            r for r in caplog.records if "Implementation step completed" in r.message
+        ]
+        assert len(end_log_records) == 1, "End log should be emitted on container failure"
+
+        # Verify end log contains all required fields
+        end_log_message = end_log_records[0].message
+        assert "task: Add payment gateway" in end_log_message
+        assert "feature_id: FEAT-333" in end_log_message
+        assert "task_id: TASK-444" in end_log_message
+        assert "timestamp:" in end_log_message
+
+        # Verify end log is emitted at INFO level
+        assert end_log_records[0].levelno == logging.INFO
+
+    @pytest.mark.asyncio
+    async def test_end_log_emitted_on_exception(self, caplog):
+        """Verify end log is emitted via try/finally when exception is raised during implementation."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Migrate database schema")
+        runner = MagicMock()
+        runner.run = AsyncMock(side_effect=RuntimeError("Network connection lost"))
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            patch(
+                "forge.workflow.nodes.implementation.notify_error",
+                new_callable=AsyncMock,
+            ),
+            caplog.at_level(logging.INFO),
+        ):
+            result = await implement_task(
+                _make_state(
+                    ticket_key="FEAT-666",
+                    ticket_type=TicketType.FEATURE,
+                    current_task_key="TASK-777",
+                    tasks_by_repo={"acme/backend": ["TASK-777"]},
+                )
+            )
+
+        # Verify that implementation failed as expected
+        assert result["last_error"] == "Network connection lost"
+
+        # Verify end log is still emitted despite exception (via try/finally)
+        end_log_records = [
+            r for r in caplog.records if "Implementation step completed" in r.message
+        ]
+        assert len(end_log_records) == 1, "End log should be emitted when exception is raised"
+
+        # Verify end log contains all required fields
+        end_log_message = end_log_records[0].message
+        assert "task: Migrate database schema" in end_log_message
+        assert "feature_id: FEAT-666" in end_log_message
+        assert "task_id: TASK-777" in end_log_message
+        assert "timestamp:" in end_log_message
+
+        # Verify end log is emitted at INFO level
+        assert end_log_records[0].levelno == logging.INFO
