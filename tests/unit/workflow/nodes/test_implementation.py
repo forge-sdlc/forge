@@ -1,5 +1,7 @@
 """Unit tests for implement_task node."""
 
+import logging
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -272,3 +274,118 @@ class TestImplementationNodeRouting:
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "container failed"
         assert result["retry_count"] == 1
+
+
+class TestImplementationStepLogging:
+    """Test lifecycle logging in implement_task node."""
+
+    @pytest.mark.asyncio
+    async def test_start_log_emitted_with_all_fields(self, caplog):
+        """Verify start log contains task name, feature_id, and task_id."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add user authentication")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-100",
+                    current_task_key="TASK-200",
+                    tasks_by_repo={"acme/backend": ["TASK-200"]},
+                )
+            )
+
+        # Find the start log message
+        start_log_found = False
+        for record in caplog.records:
+            if "Implementation step started" in record.message:
+                start_log_found = True
+                # Verify task name
+                assert "task: Add user authentication" in record.message
+                # Verify feature_id (ticket_key)
+                assert "feature_id: FEAT-100" in record.message
+                # Verify task_id (current_task_key)
+                assert "task_id: TASK-200" in record.message
+                break
+
+        assert start_log_found, "Start log message not found in log records"
+
+    @pytest.mark.asyncio
+    async def test_start_log_level_is_info(self, caplog):
+        """Verify start log is emitted at INFO level."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Fix bug")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(_make_state())
+
+        # Find the start log record and verify level
+        start_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_records) == 1, "Expected exactly one start log record"
+        assert start_records[0].levelno == logging.INFO
+        assert start_records[0].levelname == "INFO"
+
+    @pytest.mark.asyncio
+    async def test_start_log_contains_iso8601_timestamp(self, caplog):
+        """Verify start log contains ISO 8601 formatted timestamp."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Implement feature")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(_make_state())
+
+        # Find the start log message
+        start_log_text = None
+        for record in caplog.records:
+            if "Implementation step started" in record.message:
+                start_log_text = record.message
+                break
+
+        assert start_log_text is not None, "Start log message not found"
+
+        # ISO 8601 pattern: YYYY-MM-DDTHH:MM:SS.ssssss+HH:MM or YYYY-MM-DDTHH:MM:SS+HH:MM
+        # Also accepts Z suffix for UTC
+        iso8601_pattern = r"timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)"
+        assert re.search(iso8601_pattern, start_log_text), (
+            f"ISO 8601 timestamp not found in log message: {start_log_text}"
+        )
