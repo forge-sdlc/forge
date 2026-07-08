@@ -386,3 +386,60 @@ class TestImplementationStepLogging:
         # Verify timestamp field exists and has ISO 8601 format
         assert "timestamp:" in start_log_records[0].message
         assert re.search(iso8601_pattern, start_log_records[0].message)
+
+    @pytest.mark.asyncio
+    async def test_end_log_emitted_on_success(self, caplog):
+        """Verify end log emitted on successful implementation with all required fields."""
+        import re
+
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Implement user profile API")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-500",
+                    current_task_key="TASK-501",
+                    tasks_by_repo={"acme/backend": ["TASK-501"]},
+                )
+            )
+
+        # Verify end log message is emitted
+        end_log_records = [
+            r for r in caplog.records if "Implementation step completed" in r.message
+        ]
+        assert len(end_log_records) == 1
+
+        # Verify end log level is INFO
+        assert end_log_records[0].levelno == logging.INFO
+
+        # Verify end log contains all required fields
+        end_message = end_log_records[0].message
+        assert "task: Implement user profile API" in end_message  # task_name
+        assert "feature_id: FEAT-500" in end_message
+        assert "task_id: TASK-501" in end_message
+
+        # Verify timestamp field exists with ISO 8601 format
+        assert "timestamp:" in end_message
+        iso8601_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?"
+        assert re.search(iso8601_pattern, end_message)
+
+        # Verify both start and end logs are emitted
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_log_records) == 1
+        assert len(end_log_records) == 1  # Already verified above
