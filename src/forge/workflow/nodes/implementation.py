@@ -110,10 +110,12 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
     settings = get_settings()
     jira = JiraClient(settings)
 
-    try:
-        # Initialize task_name before fetch so finally always has a value
-        task_name = "unknown"
+    # Initialize task_name before try block so finally always has a value
+    task_name = "unknown"
+    # Track whether start log was emitted so we know if end log should be emitted
+    started = False
 
+    try:
         # Get Task details from Jira
         task_issue = await jira.get_issue(current_task)
         task_description = task_issue.description or ""
@@ -128,6 +130,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             f"feature_id: {ticket_key}, task_id: {current_task}, "
             f"timestamp: {datetime.now(UTC).isoformat()}"
         )
+        started = True
 
         # Post status comment at task implementation start
         await post_status_comment(
@@ -146,66 +149,58 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             guardrails=guardrails,
         )
 
-        # Run implementation in container sandbox with lifecycle end logging
-        try:
-            runner = ContainerRunner(settings)
+        # Run implementation in container sandbox
+        runner = ContainerRunner(settings)
 
-            current_repo = state.get("current_repo", "")
-            # Copy list to avoid mutation after passing to runner
-            implemented_tasks = list(state.get("implemented_tasks", []))
-            result = await runner.run(
-                workspace_path=Path(workspace_path),
-                task_summary=task_summary,
-                task_description=full_description,
-                ticket_key=ticket_key,
-                task_key=current_task,
-                repo_name=current_repo,
-                previous_task_keys=implemented_tasks,
-                trace_context=_build_implementation_trace_context(
-                    state,
-                    implementation_node=implementation_node,
-                    current_repo=current_repo,
-                ),
+        current_repo = state.get("current_repo", "")
+        # Copy list to avoid mutation after passing to runner
+        implemented_tasks = list(state.get("implemented_tasks", []))
+        result = await runner.run(
+            workspace_path=Path(workspace_path),
+            task_summary=task_summary,
+            task_description=full_description,
+            ticket_key=ticket_key,
+            task_key=current_task,
+            repo_name=current_repo,
+            previous_task_keys=implemented_tasks,
+            trace_context=_build_implementation_trace_context(
+                state,
+                implementation_node=implementation_node,
+                current_repo=current_repo,
+            ),
+        )
+
+        if result.success:
+            logger.info(f"Container completed successfully for {current_task}")
+
+            # Post status comment at task implementation completion
+            await post_status_comment(
+                jira,
+                current_task,
+                "✅ Implementation complete. Running local code review before PR.",
             )
 
-            if result.success:
-                logger.info(f"Container completed successfully for {current_task}")
+            # Track implemented tasks
+            implemented = state.get("implemented_tasks", [])
+            implemented.append(current_task)
 
-                # Post status comment at task implementation completion
-                await post_status_comment(
-                    jira,
-                    current_task,
-                    "✅ Implementation complete. Running local code review before PR.",
-                )
-
-                # Track implemented tasks
-                implemented = state.get("implemented_tasks", [])
-                implemented.append(current_task)
-
-                return update_state_timestamp(
-                    {
-                        **state,
-                        "current_task_key": None,
-                        "implemented_tasks": implemented,
-                        "current_node": implementation_node,
-                        "last_error": None,
-                        "retry_count": 0,
-                    }
-                )
-            else:
-                # Container failed - treat all failures the same
-                # The container agent is responsible for running tests and only
-                # committing when they pass. If we get here, implementation failed.
-                error_msg = result.error_message or "Unknown container error"
-                logger.error(f"Implementation failed for {current_task}: {error_msg}")
-                raise RuntimeError(error_msg)
-        finally:
-            # Log lifecycle end event (success or failure)
-            logger.info(
-                f"Implementation step completed - task: {task_name}, "
-                f"feature_id: {ticket_key}, task_id: {current_task}, "
-                f"timestamp: {datetime.now(UTC).isoformat()}"
+            return update_state_timestamp(
+                {
+                    **state,
+                    "current_task_key": None,
+                    "implemented_tasks": implemented,
+                    "current_node": implementation_node,
+                    "last_error": None,
+                    "retry_count": 0,
+                }
             )
+        else:
+            # Container failed - treat all failures the same
+            # The container agent is responsible for running tests and only
+            # committing when they pass. If we get here, implementation failed.
+            error_msg = result.error_message or "Unknown container error"
+            logger.error(f"Implementation failed for {current_task}: {error_msg}")
+            raise RuntimeError(error_msg)
 
     except Exception as e:
         logger.error(f"Implementation failed for {current_task}: {e}")
@@ -217,6 +212,13 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             "retry_count": state.get("retry_count", 0) + 1,
         }
     finally:
+        # Log lifecycle end event (success or failure) only if start was logged
+        if started:
+            logger.info(
+                f"Implementation step completed - task: {task_name}, "
+                f"feature_id: {ticket_key}, task_id: {current_task}, "
+                f"timestamp: {datetime.now(UTC).isoformat()}"
+            )
         await jira.close()
 
 
