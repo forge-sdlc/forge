@@ -214,6 +214,15 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
             except Exception as e:
                 jira_error = str(e)
                 logger.warning(f"Failed to set workflow label for {ticket_key}: {e}")
+
+            await jira.add_comment(
+                ticket_key,
+                "## Interaction options\n\n"
+                f"- Approve: add `{ForgeLabel.TASK_APPROVED.value}` to continue.\n"
+                "- Revise all tasks: add a comment starting with `!` on this ticket.\n"
+                "- Revise a single task: add a comment starting with `!` on the Task.\n"
+                "- Ask a question: add a Jira comment starting with `?`.",
+            )
             return update_state_timestamp(
                 {
                     **state,
