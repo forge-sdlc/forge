@@ -53,6 +53,12 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     if not workspace_path:
         logger.error(f"No workspace for implementation on {ticket_key}")
+        # Log end lifecycle event for early return (spec: SC-002 edge case)
+        logger.info(
+            f"Implementation step completed - task: unknown, "
+            f"feature_id: {ticket_key}, task_id: {current_task}, "
+            f"timestamp: {datetime.now(UTC).isoformat()}"
+        )
         return {
             **state,
             "last_error": "Workspace not set up",
