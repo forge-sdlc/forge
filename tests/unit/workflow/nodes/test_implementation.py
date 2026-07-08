@@ -58,7 +58,6 @@ def _make_successful_runner():
 
 
 class TestImplementTaskStartedComment:
-
     @pytest.mark.asyncio
     async def test_posts_comment_on_task_ticket_before_container(self):
         """A comment is posted on the task ticket (not parent) when implementation starts."""
@@ -186,7 +185,6 @@ class TestImplementTaskStartedComment:
 
 
 class TestImplementationNodeRouting:
-
     @pytest.mark.asyncio
     async def test_feature_missing_workspace_uses_feature_implementation_node(self):
         """Feature implementation failures must resume at implement_task."""
@@ -345,9 +343,7 @@ class TestImplementationStepLogging:
             await implement_task(_make_state())
 
         # Find the start log record and verify level
-        start_records = [
-            r for r in caplog.records if "Implementation step started" in r.message
-        ]
+        start_records = [r for r in caplog.records if "Implementation step started" in r.message]
         assert len(start_records) == 1, "Expected exactly one start log record"
         assert start_records[0].levelno == logging.INFO
         assert start_records[0].levelname == "INFO"
@@ -456,3 +452,139 @@ class TestImplementationStepLogging:
         assert len(start_log_records) + len(end_log_records) == 2, (
             "Expected exactly 2 lifecycle log records (start and end)"
         )
+
+    @pytest.mark.asyncio
+    async def test_end_log_emitted_on_container_failure(self, caplog):
+        """Verify end log is emitted even when container returns failure result."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Failing task")
+        runner = MagicMock()
+        container_result = MagicMock()
+        container_result.success = False
+        container_result.error_message = "container failed"
+        runner.run = AsyncMock(return_value=container_result)
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            patch(
+                "forge.workflow.nodes.implementation.notify_error",
+                new_callable=AsyncMock,
+            ),
+            caplog.at_level(logging.INFO),
+        ):
+            result = await implement_task(
+                _make_state(
+                    ticket_key="FEAT-500",
+                    current_task_key="TASK-600",
+                    tasks_by_repo={"acme/backend": ["TASK-600"]},
+                )
+            )
+
+        # Verify the function returned with error state
+        assert result["last_error"] == "container failed"
+        assert result["retry_count"] == 1
+
+        # Find the end log message - it should still be emitted via try/finally
+        end_log_records = [
+            r for r in caplog.records if "Implementation step completed" in r.message
+        ]
+        assert len(end_log_records) == 1, "Expected end log to be emitted even on container failure"
+
+        end_log = end_log_records[0]
+
+        # Verify log level is INFO
+        assert end_log.levelno == logging.INFO
+
+        # Verify log message contains all fields
+        assert "task: Failing task" in end_log.message
+        assert "feature_id: FEAT-500" in end_log.message
+        assert "task_id: TASK-600" in end_log.message
+
+        # Verify ISO 8601 timestamp
+        iso8601_pattern = r"timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)"
+        assert re.search(iso8601_pattern, end_log.message), (
+            f"ISO 8601 timestamp not found in end log message: {end_log.message}"
+        )
+
+        # Verify start log was also emitted (both logs are a matched pair)
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_log_records) == 1, "Expected start log to be emitted"
+
+    @pytest.mark.asyncio
+    async def test_end_log_emitted_on_exception(self, caplog):
+        """Verify end log is emitted when exception is raised during implementation."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Crashing task")
+        runner = MagicMock()
+        # Configure runner to raise an exception
+        runner.run = AsyncMock(side_effect=RuntimeError("Unexpected crash"))
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            patch(
+                "forge.workflow.nodes.implementation.notify_error",
+                new_callable=AsyncMock,
+            ),
+            caplog.at_level(logging.INFO),
+        ):
+            result = await implement_task(
+                _make_state(
+                    ticket_key="FEAT-700",
+                    current_task_key="TASK-800",
+                    tasks_by_repo={"acme/backend": ["TASK-800"]},
+                )
+            )
+
+        # Verify the function returned with error state
+        assert result["last_error"] == "Unexpected crash"
+        assert result["retry_count"] == 1
+
+        # Find the end log message - emitted via try/finally before error state returned
+        end_log_records = [
+            r for r in caplog.records if "Implementation step completed" in r.message
+        ]
+        assert len(end_log_records) == 1, (
+            "Expected end log to be emitted even when exception is raised"
+        )
+
+        end_log = end_log_records[0]
+
+        # Verify log level is INFO
+        assert end_log.levelno == logging.INFO
+
+        # Verify log message contains all fields
+        assert "task: Crashing task" in end_log.message
+        assert "feature_id: FEAT-700" in end_log.message
+        assert "task_id: TASK-800" in end_log.message
+
+        # Verify ISO 8601 timestamp
+        iso8601_pattern = r"timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)"
+        assert re.search(iso8601_pattern, end_log.message), (
+            f"ISO 8601 timestamp not found in end log message: {end_log.message}"
+        )
+
+        # Verify start log was also emitted (both logs are a matched pair)
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_log_records) == 1, "Expected start log to be emitted"
