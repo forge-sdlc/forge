@@ -110,14 +110,19 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
     settings = get_settings()
     jira = JiraClient(settings)
 
+    # Initialize task_name before try block for use in finally
+    task_name = "unknown"
+
     try:
         # Get Task details from Jira
         task_issue = await jira.get_issue(current_task)
         task_description = task_issue.description or ""
         task_summary = task_issue.summary
 
-        # Log implementation start lifecycle event
+        # Update task_name now that we have it
         task_name = task_summary or "unknown"
+
+        # Log implementation start lifecycle event
         logger.info(
             f"Implementation step started - task: {task_name}, "
             f"feature_id: {ticket_key}, task_id: {current_task}, "
@@ -204,6 +209,12 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             "retry_count": state.get("retry_count", 0) + 1,
         }
     finally:
+        # Log implementation end lifecycle event (always runs)
+        logger.info(
+            f"Implementation step completed - task: {task_name}, "
+            f"feature_id: {ticket_key}, task_id: {current_task}, "
+            f"timestamp: {datetime.now(UTC).isoformat()}"
+        )
         await jira.close()
 
 
