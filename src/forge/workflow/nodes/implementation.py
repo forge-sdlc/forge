@@ -12,6 +12,7 @@ Architecture:
 """
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from forge.config import get_settings
@@ -114,6 +115,14 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         task_issue = await jira.get_issue(current_task)
         task_description = task_issue.description or ""
         task_summary = task_issue.summary
+
+        # Log lifecycle start event
+        task_name = task_summary or "unknown"
+        logger.info(
+            f"Implementation step started - task: {task_name}, "
+            f"feature_id: {ticket_key}, task_id: {current_task}, "
+            f"timestamp: {datetime.now(UTC).isoformat()}"
+        )
 
         # Post status comment at task implementation start
         await post_status_comment(
