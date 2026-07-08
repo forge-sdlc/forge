@@ -46,6 +46,15 @@ def artifact_interaction_options(comment_type: str) -> str:
     )
 
 
+def pr_interaction_options(pr_url: str) -> str:
+    return (
+        "## Interaction options\n\n"
+        f"- Approve: merge the [GitHub PR]({pr_url}) to continue.\n"
+        "- Request changes: add a Jira comment starting with `!`, followed by the requested revision.\n"
+        "- Ask a question: add a Jira comment starting with `?`."
+    )
+
+
 class JiraClient:
     """Async client for Jira REST API v3.
 

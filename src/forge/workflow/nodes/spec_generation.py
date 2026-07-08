@@ -7,7 +7,11 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
-from forge.integrations.jira.client import JiraClient
+from forge.integrations.jira.client import (
+    JiraClient,
+    artifact_interaction_options,
+    pr_interaction_options,
+)
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.checkpointer import set_pr_ticket_index
 from forge.workflow.feature.state import FeatureState as WorkflowState
@@ -71,7 +75,8 @@ async def _create_spec_proposal_pr(
         await post_status_comment(
             jira,
             ticket_key,
-            f"Specification published for review: [GitHub PR]({pr_url})",
+            f"Specification published for review: [GitHub PR]({pr_url})\n\n"
+            f"{pr_interaction_options(pr_url)}",
         )
 
         return {
@@ -216,12 +221,18 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                         settings.jira_spec_custom_field,
                         spec_content,
                     )
+                    await post_status_comment(
+                        jira, ticket_key, artifact_interaction_options("spec")
+                    )
                 else:
                     await jira.add_attachment(
                         ticket_key,
                         filename=f"{ticket_key}-spec.md",
                         content=spec_content,
                         content_type="text/markdown",
+                    )
+                    await post_status_comment(
+                        jira, ticket_key, artifact_interaction_options("spec")
                     )
                 await jira.set_workflow_label(ticket_key, ForgeLabel.SPEC_PENDING)
         except Exception as e:
@@ -311,6 +322,13 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         # Publish revised spec
         if state.get("spec_pr_number"):
             await _update_spec_proposal_pr(ticket_key, new_spec, state)
+            pr_url = state.get("spec_pr_url", "")
+            await post_status_comment(
+                jira,
+                ticket_key,
+                f"📋 Specification has been revised based on feedback: [GitHub PR]({pr_url})\n\n"
+                f"{pr_interaction_options(pr_url)}",
+            )
         else:
             settings = get_settings()
             if settings.jira_store_in_comments:
