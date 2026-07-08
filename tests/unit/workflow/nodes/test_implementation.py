@@ -389,3 +389,70 @@ class TestImplementationStepLogging:
         assert re.search(iso8601_pattern, start_log_text), (
             f"ISO 8601 timestamp not found in log message: {start_log_text}"
         )
+
+    @pytest.mark.asyncio
+    async def test_end_log_emitted_on_success(self, caplog):
+        """Verify end log is emitted on successful implementation with all fields."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Implement feature X")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-300",
+                    current_task_key="TASK-400",
+                    tasks_by_repo={"acme/backend": ["TASK-400"]},
+                )
+            )
+
+        # Find the end log message
+        end_log_records = [
+            r for r in caplog.records if "Implementation step completed" in r.message
+        ]
+        assert len(end_log_records) == 1, "Expected exactly one end log record"
+
+        end_log = end_log_records[0]
+
+        # Verify log level is INFO
+        assert end_log.levelno == logging.INFO
+        assert end_log.levelname == "INFO"
+
+        # Verify log message format matches spec
+        assert "Implementation step completed - task:" in end_log.message
+
+        # Verify task name
+        assert "task: Implement feature X" in end_log.message
+
+        # Verify feature_id (ticket_key)
+        assert "feature_id: FEAT-300" in end_log.message
+
+        # Verify task_id (current_task_key)
+        assert "task_id: TASK-400" in end_log.message
+
+        # Verify ISO 8601 timestamp
+        iso8601_pattern = r"timestamp: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)"
+        assert re.search(iso8601_pattern, end_log.message), (
+            f"ISO 8601 timestamp not found in end log message: {end_log.message}"
+        )
+
+        # Verify both start and end logs are emitted (2 log records for lifecycle)
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_log_records) == 1, "Expected exactly one start log record"
+        assert len(start_log_records) + len(end_log_records) == 2, (
+            "Expected exactly 2 lifecycle log records (start and end)"
+        )
