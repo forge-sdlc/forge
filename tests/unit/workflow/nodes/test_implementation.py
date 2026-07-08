@@ -547,3 +547,101 @@ class TestImplementationStepLogging:
         assert "task: Exception task" in end_message
         assert "feature_id: FEAT-505" in end_message
         assert "task_id: TASK-606" in end_message
+
+    @pytest.mark.asyncio
+    async def test_log_uses_unknown_when_task_name_unavailable(self, caplog):
+        """Verify 'unknown' is used in logs when task_issue.summary is unavailable.
+
+        Tests both None and empty string cases for task_issue.summary.
+        The implementation should:
+        - Continue without failure when task_issue.summary is None
+        - Continue without failure when task_issue.summary is empty string
+        - Use "unknown" for task name in log messages in both cases
+        """
+        from forge.workflow.nodes.implementation import implement_task
+
+        # Test case 1: task_issue.summary is None
+        mock_jira_none = _make_mock_jira(summary=None)
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira_none,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            caplog.clear()
+            result_none = await implement_task(
+                _make_state(
+                    ticket_key="FEAT-701",
+                    current_task_key="TASK-702",
+                    tasks_by_repo={"acme/backend": ["TASK-702"]},
+                )
+            )
+
+        # Verify implementation continued without failure
+        assert result_none["last_error"] is None, "Implementation should not fail for None summary"
+
+        # Verify start log uses "unknown" for task name
+        start_logs_none = [r for r in caplog.records if "Implementation step started" in r.message]
+        assert len(start_logs_none) == 1
+        assert "task: unknown" in start_logs_none[0].message, (
+            "Start log should use 'unknown' when summary is None"
+        )
+
+        # Verify end log uses "unknown" for task name
+        end_logs_none = [r for r in caplog.records if "Implementation step completed" in r.message]
+        assert len(end_logs_none) == 1
+        assert "task: unknown" in end_logs_none[0].message, (
+            "End log should use 'unknown' when summary is None"
+        )
+
+        # Test case 2: task_issue.summary is empty string
+        mock_jira_empty = _make_mock_jira(summary="")
+        runner_empty = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira_empty,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner_empty,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            caplog.clear()
+            result_empty = await implement_task(
+                _make_state(
+                    ticket_key="FEAT-801",
+                    current_task_key="TASK-802",
+                    tasks_by_repo={"acme/backend": ["TASK-802"]},
+                )
+            )
+
+        # Verify implementation continued without failure
+        assert result_empty["last_error"] is None, (
+            "Implementation should not fail for empty string summary"
+        )
+
+        # Verify start log uses "unknown" for task name
+        start_logs_empty = [r for r in caplog.records if "Implementation step started" in r.message]
+        assert len(start_logs_empty) == 1
+        assert "task: unknown" in start_logs_empty[0].message, (
+            "Start log should use 'unknown' when summary is empty string"
+        )
+
+        # Verify end log uses "unknown" for task name
+        end_logs_empty = [r for r in caplog.records if "Implementation step completed" in r.message]
+        assert len(end_logs_empty) == 1
+        assert "task: unknown" in end_logs_empty[0].message, (
+            "End log should use 'unknown' when summary is empty string"
+        )
