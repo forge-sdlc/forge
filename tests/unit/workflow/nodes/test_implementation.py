@@ -1,6 +1,7 @@
 """Unit tests for implement_task node."""
 
 import logging
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -57,7 +58,6 @@ def _make_successful_runner():
 
 
 class TestImplementTaskStartedComment:
-
     @pytest.mark.asyncio
     async def test_posts_comment_on_task_ticket_before_container(self):
         """A comment is posted on the task ticket (not parent) when implementation starts."""
@@ -185,7 +185,6 @@ class TestImplementTaskStartedComment:
 
 
 class TestImplementationNodeRouting:
-
     @pytest.mark.asyncio
     async def test_feature_missing_workspace_uses_feature_implementation_node(self):
         """Feature implementation failures must resume at implement_task."""
@@ -335,10 +334,7 @@ class TestImplementationStepLogging:
             await implement_task(_make_state())
 
         # Find the start log record and verify level is INFO
-        start_logs = [
-            r for r in caplog.records
-            if "Implementation step started" in r.message
-        ]
+        start_logs = [r for r in caplog.records if "Implementation step started" in r.message]
         assert len(start_logs) == 1
         assert start_logs[0].levelname == "INFO"
 
@@ -365,10 +361,7 @@ class TestImplementationStepLogging:
             await implement_task(_make_state())
 
         # Find the start log record
-        start_logs = [
-            r for r in caplog.records
-            if "Implementation step started" in r.message
-        ]
+        start_logs = [r for r in caplog.records if "Implementation step started" in r.message]
         assert len(start_logs) == 1
 
         # Verify timestamp is present and in ISO 8601 format
@@ -378,7 +371,64 @@ class TestImplementationStepLogging:
 
         # Extract timestamp value and verify it's in ISO 8601 format
         # The log format is: "... timestamp: 2024-01-15T10:30:45.123456+00:00"
-        import re
         # ISO 8601 pattern: YYYY-MM-DDTHH:MM:SS with optional fractional seconds and timezone
         iso8601_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)?"
         assert re.search(iso8601_pattern, message), f"No ISO 8601 timestamp found in: {message}"
+
+    @pytest.mark.asyncio
+    async def test_end_log_emitted_on_success(self, caplog):
+        """Verify end log is emitted on successful implementation completion.
+
+        Verifies:
+        - End log message is emitted at INFO level
+        - End log contains all required fields (task_name, feature_id, task_id, timestamp)
+        - End log message format matches spec: Implementation step completed - task: ...
+        - Both start and end logs are emitted (2 log records)
+        """
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add retry logic")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-101",
+                    current_task_key="TASK-202",
+                    tasks_by_repo={"acme/backend": ["TASK-202"]},
+                )
+            )
+
+        # Verify both start and end logs are emitted (2 log records for lifecycle)
+        start_logs = [r for r in caplog.records if "Implementation step started" in r.message]
+        end_logs = [r for r in caplog.records if "Implementation step completed" in r.message]
+        assert len(start_logs) == 1, "Expected exactly 1 start log"
+        assert len(end_logs) == 1, "Expected exactly 1 end log"
+
+        # Verify end log level is INFO
+        assert end_logs[0].levelname == "INFO", "End log should be at INFO level"
+
+        # Verify end log contains all required fields
+        end_message = end_logs[0].message
+        assert "Implementation step completed" in end_message
+        assert "task: Add retry logic" in end_message  # task_name
+        assert "feature_id: FEAT-101" in end_message  # feature_id (ticket_key)
+        assert "task_id: TASK-202" in end_message  # task_id (current_task_key)
+        assert "timestamp:" in end_message
+
+        # Verify timestamp is in ISO 8601 format
+        iso8601_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(\+\d{2}:\d{2}|Z)?"
+        assert re.search(iso8601_pattern, end_message), (
+            f"No ISO 8601 timestamp found in: {end_message}"
+        )
