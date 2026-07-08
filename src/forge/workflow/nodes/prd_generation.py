@@ -250,8 +250,8 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
                     )
                 else:
                     await jira.update_description(ticket_key, prd_content)
-                    await post_status_comment(
-                        jira, ticket_key, artifact_interaction_options("prd")
+                    await jira.add_comment(
+                        ticket_key, artifact_interaction_options("prd")
                     )
                 await jira.set_workflow_label(ticket_key, ForgeLabel.PRD_PENDING)
         except Exception as e:

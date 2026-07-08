@@ -221,8 +221,8 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                         settings.jira_spec_custom_field,
                         spec_content,
                     )
-                    await post_status_comment(
-                        jira, ticket_key, artifact_interaction_options("spec")
+                    await jira.add_comment(
+                        ticket_key, artifact_interaction_options("spec")
                     )
                 else:
                     await jira.add_attachment(
@@ -231,8 +231,8 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                         content=spec_content,
                         content_type="text/markdown",
                     )
-                    await post_status_comment(
-                        jira, ticket_key, artifact_interaction_options("spec")
+                    await jira.add_comment(
+                        ticket_key, artifact_interaction_options("spec")
                     )
                 await jira.set_workflow_label(ticket_key, ForgeLabel.SPEC_PENDING)
         except Exception as e:
