@@ -1,5 +1,6 @@
 """Unit tests for implement_task node."""
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -56,7 +57,6 @@ def _make_successful_runner():
 
 
 class TestImplementTaskStartedComment:
-
     @pytest.mark.asyncio
     async def test_posts_comment_on_task_ticket_before_container(self):
         """A comment is posted on the task ticket (not parent) when implementation starts."""
@@ -184,7 +184,6 @@ class TestImplementTaskStartedComment:
 
 
 class TestImplementationNodeRouting:
-
     @pytest.mark.asyncio
     async def test_feature_missing_workspace_uses_feature_implementation_node(self):
         """Feature implementation failures must resume at implement_task."""
@@ -272,3 +271,118 @@ class TestImplementationNodeRouting:
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "container failed"
         assert result["retry_count"] == 1
+
+
+class TestImplementationStepLogging:
+    """Test lifecycle logging for implementation step."""
+
+    @pytest.mark.asyncio
+    async def test_start_log_emitted_with_all_fields(self, caplog):
+        """Verify start log contains task name, feature_id, and task_id."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add authentication middleware")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-200",
+                    current_task_key="TASK-201",
+                    tasks_by_repo={"acme/backend": ["TASK-201"]},
+                )
+            )
+
+        # Verify start log contains all required fields
+        assert "Implementation step started" in caplog.text
+        assert "Add authentication middleware" in caplog.text  # task name
+        assert "feature_id: FEAT-200" in caplog.text
+        assert "task_id: TASK-201" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_start_log_level_is_info(self, caplog):
+        """Verify start log is emitted at INFO level."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Fix login timeout")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="BUG-300",
+                    current_task_key="TASK-301",
+                    tasks_by_repo={"acme/backend": ["TASK-301"]},
+                )
+            )
+
+        # Find the start log record and verify its level
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_log_records) == 1
+        assert start_log_records[0].levelno == logging.INFO
+
+    @pytest.mark.asyncio
+    async def test_start_log_contains_iso8601_timestamp(self, caplog):
+        """Verify start log contains ISO 8601 formatted timestamp."""
+        import re
+
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Implement user search")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level(logging.INFO),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-400",
+                    current_task_key="TASK-401",
+                    tasks_by_repo={"acme/backend": ["TASK-401"]},
+                )
+            )
+
+        # Find start log message and verify ISO 8601 timestamp format
+        # ISO 8601 format: YYYY-MM-DDTHH:MM:SS.ffffff+HH:MM or ending with Z
+        iso8601_pattern = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?"
+        start_log_records = [
+            r for r in caplog.records if "Implementation step started" in r.message
+        ]
+        assert len(start_log_records) == 1
+
+        # Verify timestamp field exists and has ISO 8601 format
+        assert "timestamp:" in start_log_records[0].message
+        assert re.search(iso8601_pattern, start_log_records[0].message)
