@@ -111,13 +111,18 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
     jira = JiraClient(settings)
 
     try:
+        # Initialize task_name before fetch so finally always has a value
+        task_name = "unknown"
+
         # Get Task details from Jira
         task_issue = await jira.get_issue(current_task)
         task_description = task_issue.description or ""
         task_summary = task_issue.summary
 
-        # Log lifecycle start event
+        # Update task_name now that we have it
         task_name = task_summary or "unknown"
+
+        # Log lifecycle start event
         logger.info(
             f"Implementation step started - task: {task_name}, "
             f"feature_id: {ticket_key}, task_id: {current_task}, "
@@ -141,58 +146,66 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             guardrails=guardrails,
         )
 
-        # Run implementation in container sandbox
-        runner = ContainerRunner(settings)
+        # Run implementation in container sandbox with lifecycle end logging
+        try:
+            runner = ContainerRunner(settings)
 
-        current_repo = state.get("current_repo", "")
-        # Copy list to avoid mutation after passing to runner
-        implemented_tasks = list(state.get("implemented_tasks", []))
-        result = await runner.run(
-            workspace_path=Path(workspace_path),
-            task_summary=task_summary,
-            task_description=full_description,
-            ticket_key=ticket_key,
-            task_key=current_task,
-            repo_name=current_repo,
-            previous_task_keys=implemented_tasks,
-            trace_context=_build_implementation_trace_context(
-                state,
-                implementation_node=implementation_node,
-                current_repo=current_repo,
-            ),
-        )
-
-        if result.success:
-            logger.info(f"Container completed successfully for {current_task}")
-
-            # Post status comment at task implementation completion
-            await post_status_comment(
-                jira,
-                current_task,
-                "✅ Implementation complete. Running local code review before PR.",
+            current_repo = state.get("current_repo", "")
+            # Copy list to avoid mutation after passing to runner
+            implemented_tasks = list(state.get("implemented_tasks", []))
+            result = await runner.run(
+                workspace_path=Path(workspace_path),
+                task_summary=task_summary,
+                task_description=full_description,
+                ticket_key=ticket_key,
+                task_key=current_task,
+                repo_name=current_repo,
+                previous_task_keys=implemented_tasks,
+                trace_context=_build_implementation_trace_context(
+                    state,
+                    implementation_node=implementation_node,
+                    current_repo=current_repo,
+                ),
             )
 
-            # Track implemented tasks
-            implemented = state.get("implemented_tasks", [])
-            implemented.append(current_task)
+            if result.success:
+                logger.info(f"Container completed successfully for {current_task}")
 
-            return update_state_timestamp(
-                {
-                    **state,
-                    "current_task_key": None,
-                    "implemented_tasks": implemented,
-                    "current_node": implementation_node,
-                    "last_error": None,
-                    "retry_count": 0,
-                }
+                # Post status comment at task implementation completion
+                await post_status_comment(
+                    jira,
+                    current_task,
+                    "✅ Implementation complete. Running local code review before PR.",
+                )
+
+                # Track implemented tasks
+                implemented = state.get("implemented_tasks", [])
+                implemented.append(current_task)
+
+                return update_state_timestamp(
+                    {
+                        **state,
+                        "current_task_key": None,
+                        "implemented_tasks": implemented,
+                        "current_node": implementation_node,
+                        "last_error": None,
+                        "retry_count": 0,
+                    }
+                )
+            else:
+                # Container failed - treat all failures the same
+                # The container agent is responsible for running tests and only
+                # committing when they pass. If we get here, implementation failed.
+                error_msg = result.error_message or "Unknown container error"
+                logger.error(f"Implementation failed for {current_task}: {error_msg}")
+                raise RuntimeError(error_msg)
+        finally:
+            # Log lifecycle end event (success or failure)
+            logger.info(
+                f"Implementation step completed - task: {task_name}, "
+                f"feature_id: {ticket_key}, task_id: {current_task}, "
+                f"timestamp: {datetime.now(UTC).isoformat()}"
             )
-        else:
-            # Container failed - treat all failures the same
-            # The container agent is responsible for running tests and only
-            # committing when they pass. If we get here, implementation failed.
-            error_msg = result.error_message or "Unknown container error"
-            logger.error(f"Implementation failed for {current_task}: {error_msg}")
-            raise RuntimeError(error_msg)
 
     except Exception as e:
         logger.error(f"Implementation failed for {current_task}: {e}")
