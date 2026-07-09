@@ -355,6 +355,10 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
                     content=new_spec,
                     content_type="text/markdown",
                 )
+            if not state.get("spec_pr_number"):
+                await jira.add_comment(
+                    ticket_key, artifact_interaction_options("spec")
+                )
             await post_status_comment(
                 jira,
                 ticket_key,

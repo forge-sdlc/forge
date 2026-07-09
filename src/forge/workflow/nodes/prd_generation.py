@@ -365,6 +365,9 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
                 )
             else:
                 await jira.update_description(ticket_key, new_prd)
+                await jira.add_comment(
+                    ticket_key, artifact_interaction_options("prd")
+                )
             await post_status_comment(
                 jira,
                 ticket_key,

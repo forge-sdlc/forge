@@ -192,7 +192,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
 
             await jira.add_comment(
                 ticket_key,
-                "## Interaction options\n\n"
+                "## Forge — what's next?\n\n"
                 f"- Approve: add `{ForgeLabel.PLAN_APPROVED.value}` to continue.\n"
                 "- Revise all epics: add a comment starting with `!` on this ticket.\n"
                 "- Revise a single epic: add a comment starting with `!` on the Epic.\n"
