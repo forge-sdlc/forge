@@ -192,11 +192,11 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
 
             await jira.add_comment(
                 ticket_key,
-                "## Forge — what's next?\n\n"
-                f"- Approve: add `{ForgeLabel.PLAN_APPROVED.value}` to continue.\n"
-                "- Revise all epics: add a comment starting with `!` on this ticket.\n"
-                "- Revise a single epic: add a comment starting with `!` on the Epic.\n"
-                "- Ask a question: add a Jira comment starting with `?`.",
+                "## 🤖 Forge interaction options\n\n"
+                f"- ✅ **Approve:** add `{ForgeLabel.PLAN_APPROVED.value}` to continue.\n"
+                "- ♻️ **Revise all epics:** add a comment starting with `!` on this ticket.\n"
+                "- 🔧 **Revise a single epic:** add a comment starting with `!` on the Epic.\n"
+                "- ❓ **Ask a question:** add a Jira comment starting with `?`.",
             )
 
             # Store plan summary in generation_context so Q&A can reference it

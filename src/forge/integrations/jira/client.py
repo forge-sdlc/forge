@@ -39,19 +39,19 @@ class MissingProjectConfig(Exception):
 def artifact_interaction_options(comment_type: str) -> str:
     approval_label = _ARTIFACT_APPROVAL_LABELS[comment_type.lower()]
     return (
-        "## Forge — what's next?\n\n"
-        f"- Approve: add `{approval_label}` to continue.\n"
-        "- Request changes: add a Jira comment starting with `!`, followed by the requested revision.\n"
-        "- Ask a question: add a Jira comment starting with `?`."
+        "## 🤖 Forge interaction options\n\n"
+        f"- ✅ **Approve:** add `{approval_label}` to continue.\n"
+        "- ♻️ **Request changes:** add a Jira comment starting with `!`, followed by the requested revision.\n"
+        "- ❓ **Ask a question:** add a Jira comment starting with `?`."
     )
 
 
 def pr_interaction_options(pr_url: str) -> str:
     return (
-        "## Forge — what's next?\n\n"
-        f"- Approve: merge the [GitHub PR]({pr_url}) to continue.\n"
-        "- Request changes: add a Jira comment starting with `!`, followed by the requested revision.\n"
-        "- Ask a question: add a Jira comment starting with `?`."
+        "## 🤖 Forge interaction options\n\n"
+        f"- ✅ **Approve:** merge the [GitHub PR]({pr_url}) to continue.\n"
+        "- ♻️ **Request changes:** add a Jira comment starting with `!`, followed by the requested revision.\n"
+        "- ❓ **Ask a question:** add a Jira comment starting with `?`."
     )
 
 

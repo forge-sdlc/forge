@@ -118,13 +118,13 @@ class TestJiraClientStructuredComments:
 
         body = jira_client.add_comment.call_args.args[1]
         assert body.startswith("[FORGE:PRD]\n# Product Requirements Document (PRD)")
-        assert "[/FORGE:PRD]\n\n## Forge — what's next?" in body
-        assert "Approve: add `forge:prd-approved` to continue." in body
-        assert "Request changes: add a Jira comment starting with `!`" in body
-        assert "Ask a question: add a Jira comment starting with `?`." in body
+        assert "[/FORGE:PRD]\n\n## 🤖 Forge interaction options" in body
+        assert "**Approve:** add `forge:prd-approved` to continue." in body
+        assert "**Request changes:** add a Jira comment starting with `!`" in body
+        assert "**Ask a question:** add a Jira comment starting with `?`." in body
         assert "@forge ask" not in body
         marker_end = body.index("[/FORGE:PRD]")
-        assert "## Forge — what's next?" not in body[:marker_end]
+        assert "## 🤖 Forge interaction options" not in body[:marker_end]
 
 
 class TestJiraClientLabels:

@@ -217,11 +217,11 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
             await jira.add_comment(
                 ticket_key,
-                "## Forge — what's next?\n\n"
-                f"- Approve: add `{ForgeLabel.TASK_APPROVED.value}` to continue.\n"
-                "- Revise all tasks: add a comment starting with `!` on this ticket.\n"
-                "- Revise a single task: add a comment starting with `!` on the Task.\n"
-                "- Ask a question: add a Jira comment starting with `?`.",
+                "## 🤖 Forge interaction options\n\n"
+                f"- ✅ **Approve:** add `{ForgeLabel.TASK_APPROVED.value}` to continue.\n"
+                "- ♻️ **Revise all tasks:** add a comment starting with `!` on this ticket.\n"
+                "- 🔧 **Revise a single task:** add a comment starting with `!` on the Task.\n"
+                "- ❓ **Ask a question:** add a Jira comment starting with `?`.",
             )
             return update_state_timestamp(
                 {
