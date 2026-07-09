@@ -608,6 +608,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#task-takeover-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Task Takeover Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1199,6 +1210,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#task-takeover-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Task Takeover Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1322,6 +1344,32 @@
 </tr>
 </tbody>
 </table>
+<h3 id="task-takeover-workflow">Task Takeover Workflow<a class="headerlink" href="#task-takeover-workflow" title="Permanent link">&para;</a></h3>
+<p>Standalone Tasks and Epics can be processed with the standard <code>forge:managed</code> label. These tickets bypass the standard parent Feature validation.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Pending Label</th>
+<th>Approved Label</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Triage</td>
+<td><code>forge:task-triage-pending</code></td>
+<td><em>N/A</em></td>
+<td>Standalone ticket is missing required fields; waiting for update</td>
+</tr>
+<tr>
+<td>Plan Approval</td>
+<td><code>forge:plan-pending</code></td>
+<td><code>forge:plan-approved</code></td>
+<td>Plan is posted; waiting for approval</td>
+</tr>
+</tbody>
+</table>
 <h2 id="control-labels">Control Labels<a class="headerlink" href="#control-labels" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1336,6 +1384,14 @@
 <td>Marks the ticket for Forge automation. Add this when creating a ticket to start the workflow.</td>
 </tr>
 <tr>
+<td><code>forge:managed:task</code></td>
+<td>Identity preservation label used during Task Takeover transitions.</td>
+</tr>
+<tr>
+<td><code>forge:managed:task-takeover</code></td>
+<td>Identity preservation label used during Task Takeover transitions.</td>
+</tr>
+<tr>
 <td><code>forge:blocked</code></td>
 <td>Set by Forge when a stage fails. Forge posts a comment with the error.</td>
 </tr>
@@ -1346,7 +1402,7 @@
 </tbody>
 </table>
 <h2 id="how-to-use-labels">How to Use Labels<a class="headerlink" href="#how-to-use-labels" title="Permanent link">&para;</a></h2>
-<p><strong>Starting a workflow:</strong> Create a Jira issue and add <code>forge:managed</code>. Forge detects the issue type (Feature or Bug) and begins the appropriate pipeline.</p>
+<p><strong>Starting a workflow:</strong> Create a Jira issue and add <code>forge:managed</code>. Forge detects the issue type and begins the appropriate pipeline: Feature/Story, Bug, or standalone Task/Epic takeover.</p>
 <p><strong>Approving a stage:</strong> When Forge posts a PRD, spec, or other artifact, it sets the <code>forge:*-pending</code> label. Change it to <code>forge:*-approved</code> to advance the workflow. Do not add the approved label manually before Forge posts — it won't be recognized until the pending state is set.</p>
 <p><strong>Requesting revisions:</strong> Start a comment with <code>!</code> followed by your feedback. Forge regenerates the artifact and resets the pending label.</p>
 <p><strong>Asking questions:</strong> Start a comment with <code>?</code> or <code>@forge ask</code>. Forge answers without advancing or regenerating.</p>
