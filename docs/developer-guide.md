@@ -27,6 +27,7 @@ Everything you need to run Forge locally, test it, observe what it's doing, and 
 
 - **Python 3.11+** with [uv](https://github.com/astral-sh/uv)
 - **Podman** — for running task containers (`dnf install podman` / `brew install podman`)
+- **slirp4netns** — for rootless Podman networking on Linux (`dnf install slirp4netns`)
 - **Docker Compose** — for Redis and API gateway (`dnf install docker-compose` / included with Docker Desktop)
 - **Jira Cloud** account with API access
 - **GitHub** account with a Personal Access Token (scopes: `repo`, `read:org`)
