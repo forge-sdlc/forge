@@ -115,8 +115,7 @@ async def _create_prd_proposal_pr(
         await post_status_comment(
             jira,
             ticket_key,
-            f"PRD published for review: [GitHub PR]({pr_url})\n\n"
-            f"{pr_interaction_options(pr_url)}",
+            f"PRD published for review: [GitHub PR]({pr_url})\n\n{pr_interaction_options(pr_url)}",
         )
 
         return {
@@ -250,9 +249,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
                     )
                 else:
                     await jira.update_description(ticket_key, prd_content)
-                    await jira.add_comment(
-                        ticket_key, artifact_interaction_options("prd")
-                    )
+                    await jira.add_comment(ticket_key, artifact_interaction_options("prd"))
                 await jira.set_workflow_label(ticket_key, ForgeLabel.PRD_PENDING)
         except Exception as e:
             jira_error = str(e)
@@ -365,9 +362,7 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
                 )
             else:
                 await jira.update_description(ticket_key, new_prd)
-                await jira.add_comment(
-                    ticket_key, artifact_interaction_options("prd")
-                )
+                await jira.add_comment(ticket_key, artifact_interaction_options("prd"))
             await post_status_comment(
                 jira,
                 ticket_key,
