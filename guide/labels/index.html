@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://forge-sdlc.github.io/forge/guide/labels/">
       
       
-        <link rel="prev" href="../bug-workflow/">
+        <link rel="prev" href="../task-workflow/">
       
       
         <link rel="next" href="../pr-commands/">
@@ -513,6 +513,33 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../task-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Task Workflow
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -609,10 +636,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#task-takeover-workflow" class="md-nav__link">
+  <a href="#task-workflow" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Task Takeover Workflow
+        Task Workflow
       </span>
     </span>
   </a>
@@ -1211,10 +1238,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#task-takeover-workflow" class="md-nav__link">
+  <a href="#task-workflow" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Task Takeover Workflow
+        Task Workflow
       </span>
     </span>
   </a>
@@ -1344,8 +1371,8 @@
 </tr>
 </tbody>
 </table>
-<h3 id="task-takeover-workflow">Task Takeover Workflow<a class="headerlink" href="#task-takeover-workflow" title="Permanent link">&para;</a></h3>
-<p>Standalone Tasks and Epics can be processed with the standard <code>forge:managed</code> label. These tickets bypass the standard parent Feature validation.</p>
+<h3 id="task-workflow">Task Workflow<a class="headerlink" href="#task-workflow" title="Permanent link">&para;</a></h3>
+<p>Standalone Tasks and Epics can be processed with the standard <code>forge:managed</code> label. These tickets bypass the standard parent Feature validation and use the Task workflow.</p>
 <table>
 <thead>
 <tr>
@@ -1360,13 +1387,25 @@
 <td>Triage</td>
 <td><code>forge:task-triage-pending</code></td>
 <td><em>N/A</em></td>
-<td>Standalone ticket is missing required fields; waiting for update</td>
+<td>Standalone ticket is missing actionable context; waiting for an update</td>
 </tr>
 <tr>
 <td>Plan Approval</td>
 <td><code>forge:plan-pending</code></td>
 <td><code>forge:plan-approved</code></td>
 <td>Plan is posted; waiting for approval</td>
+</tr>
+<tr>
+<td>Implementation</td>
+<td><em>N/A</em></td>
+<td><em>N/A</em></td>
+<td>Approved plan is implemented in an isolated workspace, then reviewed and opened as a PR</td>
+</tr>
+<tr>
+<td>CI + Review</td>
+<td><em>N/A</em></td>
+<td><em>N/A</em></td>
+<td>CI is evaluated, failures are fixed, and the PR pauses for human review</td>
 </tr>
 </tbody>
 </table>
@@ -1398,6 +1437,14 @@
 <tr>
 <td><code>forge:retry</code></td>
 <td>Add this to resume from the exact node that failed. Forge removes it after resuming.</td>
+</tr>
+<tr>
+<td><code>forge:yolo</code></td>
+<td>Auto-approve supported planning gates. Human PR review still remains a gate.</td>
+</tr>
+<tr>
+<td><code>repo:&lt;owner&gt;/&lt;repo&gt;</code></td>
+<td>Identifies repositories selected for planning and implementation.</td>
 </tr>
 </tbody>
 </table>

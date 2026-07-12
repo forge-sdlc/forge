@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://forge-sdlc.github.io/forge/guide/feature-workflow/">
+        <link rel="canonical" href="https://forge-sdlc.github.io/forge/guide/task-workflow/">
       
       
-        <link rel="prev" href="../../getting-started/">
+        <link rel="prev" href="../bug-workflow/">
       
       
-        <link rel="next" href="../bug-workflow/">
+        <link rel="next" href="../labels/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Feature Workflow - Forge SDLC Guide</title>
+        <title>Task Workflow - Forge SDLC Guide</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#feature-workflow" class="md-skip">
+        <a href="#task-workflow" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Feature Workflow
+              Task Workflow
             
           </span>
         </div>
@@ -236,7 +236,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="././" class="md-tabs__link">
+        <a href="../feature-workflow/" class="md-tabs__link">
           
   
   User Guide
@@ -459,36 +459,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Feature Workflow
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="././" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../feature-workflow/" class="md-nav__link">
         
   
   
@@ -503,220 +477,6 @@
   
 
       </a>
-      
-        
-
-
-<nav class="md-nav md-nav--secondary" aria-label="On this page">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      On this page
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Overview
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#triggering-a-workflow" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Triggering a Workflow
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stage-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Stage Reference
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Stage Reference">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#prd-generation" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        PRD Generation
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#spec-generation" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Spec Generation
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#epic-decomposition" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Epic Decomposition
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#task-generation" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Task Generation
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#implementation" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Implementation
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#local-code-review" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Local Code Review
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#pr-creation" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        PR Creation
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#cicd-fix-loop" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        CI/CD + Fix Loop
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#ai-review" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        AI Review
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#human-review" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Human Review
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#qa-mode" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Q&amp;A Mode
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#requesting-revisions" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Requesting Revisions
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#handling-failures" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Handling Failures
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#labels-summary" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Labels Summary
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -753,10 +513,36 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../task-workflow/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Task Workflow
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
         
   
   
@@ -771,6 +557,209 @@
   
 
       </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Overview
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        When to Use It
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#triggering-a-task-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Triggering a Task Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Stage Reference
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stage Reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-triage" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        1. Triage
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-plan-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        2. Plan Generation
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-plan-approval-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        3. Plan Approval Gate
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-workspace-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        4. Workspace Setup
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-implementation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        5. Implementation
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-qualitative-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        6. Qualitative Review
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-pr-creation" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        7. PR Creation
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#8-cicd-fix-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        8. CI/CD + Fix Loop
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#9-human-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        9. Human Review
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#comment-syntax" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Comment Syntax
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Labels
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#failure-and-retry-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Failure and Retry Behavior
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1336,10 +1325,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#triggering-a-workflow" class="md-nav__link">
+  <a href="#when-to-use-it" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Triggering a Workflow
+        When to Use It
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#triggering-a-task-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Triggering a Task Workflow
       </span>
     </span>
   </a>
@@ -1359,10 +1359,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#prd-generation" class="md-nav__link">
+  <a href="#1-triage" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        PRD Generation
+        1. Triage
       </span>
     </span>
   </a>
@@ -1370,10 +1370,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#spec-generation" class="md-nav__link">
+  <a href="#2-plan-generation" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Spec Generation
+        2. Plan Generation
       </span>
     </span>
   </a>
@@ -1381,10 +1381,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#epic-decomposition" class="md-nav__link">
+  <a href="#3-plan-approval-gate" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Epic Decomposition
+        3. Plan Approval Gate
       </span>
     </span>
   </a>
@@ -1392,10 +1392,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#task-generation" class="md-nav__link">
+  <a href="#4-workspace-setup" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Task Generation
+        4. Workspace Setup
       </span>
     </span>
   </a>
@@ -1403,10 +1403,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#implementation" class="md-nav__link">
+  <a href="#5-implementation" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Implementation
+        5. Implementation
       </span>
     </span>
   </a>
@@ -1414,10 +1414,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#local-code-review" class="md-nav__link">
+  <a href="#6-qualitative-review" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Local Code Review
+        6. Qualitative Review
       </span>
     </span>
   </a>
@@ -1425,10 +1425,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#pr-creation" class="md-nav__link">
+  <a href="#7-pr-creation" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        PR Creation
+        7. PR Creation
       </span>
     </span>
   </a>
@@ -1436,10 +1436,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#cicd-fix-loop" class="md-nav__link">
+  <a href="#8-cicd-fix-loop" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        CI/CD + Fix Loop
+        8. CI/CD + Fix Loop
       </span>
     </span>
   </a>
@@ -1447,21 +1447,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#ai-review" class="md-nav__link">
+  <a href="#9-human-review" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        AI Review
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#human-review" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Human Review
+        9. Human Review
       </span>
     </span>
   </a>
@@ -1474,10 +1463,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#qa-mode" class="md-nav__link">
+  <a href="#comment-syntax" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Q&amp;A Mode
+        Comment Syntax
       </span>
     </span>
   </a>
@@ -1485,10 +1474,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#requesting-revisions" class="md-nav__link">
+  <a href="#labels" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Requesting Revisions
+        Labels
       </span>
     </span>
   </a>
@@ -1496,21 +1485,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#handling-failures" class="md-nav__link">
+  <a href="#failure-and-retry-behavior" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Handling Failures
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#labels-summary" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Labels Summary
+        Failure and Retry Behavior
       </span>
     </span>
   </a>
@@ -1532,7 +1510,7 @@
                 
                   
   
-    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/guide/feature-workflow.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/guide/task-workflow.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
     </a>
@@ -1540,51 +1518,66 @@
   
 
 
-<h1 id="feature-workflow">Feature Workflow<a class="headerlink" href="#feature-workflow" title="Permanent link">&para;</a></h1>
-<p>Forge orchestrates features through a multi-stage pipeline with human approval gates at each planning step and automated execution for implementation.</p>
+<h1 id="task-workflow">Task Workflow<a class="headerlink" href="#task-workflow" title="Permanent link">&para;</a></h1>
+<p>Forge can take over a standalone Jira Task or Epic and carry it from ticket triage to an implemented pull request. This workflow is for already-scoped work that does not need the full Feature pipeline or Bug RCA pipeline.</p>
+<p>In code this workflow is named <code>TaskTakeoverWorkflow</code>. In the user guide it is documented as the Task workflow because it is the path teams use for standalone implementation tickets.</p>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <pre class="mermaid"><code>flowchart TD
-    subgraph Planning
-        A[Create Feature] --&gt; B[Generate PRD]
-        B --&gt;|Approval| C[Generate Spec]
-        C --&gt;|Approval| D[Decompose Epics]
-        D --&gt;|Approval| E[Generate Tasks]
-    end
-
-    subgraph Implementation
-        E --&gt;|Approval| F[Implement in Container]
-        F --&gt; G[Local Code Review]
-        G --&gt; H[Create PR]
-    end
-
-    subgraph Validation
-        H --&gt; I[CI/CD Pipeline]
-        I --&gt;|Failure| J[AI Fix Loop]
-        J --&gt; I
-        I --&gt;|Pass| K[AI Review]
-        K --&gt; L[Human Review]
-    end
-
-    L --&gt;|Approved| M[Merge]
-    L --&gt;|Changes| F</code></pre>
-<h2 id="triggering-a-workflow">Triggering a Workflow<a class="headerlink" href="#triggering-a-workflow" title="Permanent link">&para;</a></h2>
-<p>Create a Jira issue with the <code>forge:managed</code> label. Forge listens for Jira webhooks and starts the pipeline automatically.</p>
+    A[Create Task or Epic + forge:managed] --&gt; B[Triage Check]
+    B --&gt;|Missing context| C[Triage Gate\nforge:task-triage-pending]
+    C --&gt; B
+    B --&gt;|Sufficient| D[Generate Implementation Plan]
+    D --&gt; E[Plan Approval Gate\nforge:plan-pending]
+    E --&gt;|'? question'| F[Answer Question]
+    F --&gt; E
+    E --&gt;|'! feedback'| D
+    E --&gt;|forge:plan-approved| G[Set Up Workspace]
+    G --&gt; H[Implement Changes\ncontainer]
+    H --&gt; I[Qualitative Review]
+    I --&gt;|Needs work, retry &lt; 2| H
+    I --&gt;|Adequate or retry cap reached| J[Create PR]
+    J --&gt; K[Wait for CI]
+    K --&gt;|Failure| L[CI Fix Loop]
+    L --&gt; K
+    K --&gt;|Pass| M[Human Review]
+    M --&gt;|Changes requested| N[Implement Review Feedback]
+    N --&gt; K
+    M --&gt;|Merged| O[Complete]</code></pre>
+<h2 id="when-to-use-it">When to Use It<a class="headerlink" href="#when-to-use-it" title="Permanent link">&para;</a></h2>
+<p>Use the Task workflow for a Jira Task or Epic when:</p>
+<ul>
+<li>The request is already concrete enough to implement directly.</li>
+<li>The work should produce one or more GitHub pull requests.</li>
+<li>You still want Forge's planning, approval, container execution, CI repair, and human PR review gates.</li>
+</ul>
+<p>Use the <a href="../feature-workflow/">Feature Workflow</a> when the work still needs PRD/spec/epic/task decomposition. Use the <a href="../bug-workflow/">Bug Workflow</a> when the ticket needs root cause analysis and fix-option selection before implementation.</p>
+<h2 id="triggering-a-task-workflow">Triggering a Task Workflow<a class="headerlink" href="#triggering-a-task-workflow" title="Permanent link">&para;</a></h2>
+<p>Create or update a Jira issue with:</p>
+<ul>
+<li><strong>Issue type:</strong> Task or Epic</li>
+<li><strong>Label:</strong> <code>forge:managed</code></li>
+</ul>
+<p>Forge routes standalone managed Tasks and Epics into the Task workflow. These tickets bypass the parent Feature validation that normally applies to generated implementation tasks.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p>The issue type must be <strong>Feature</strong> (not Bug — see <a href="../bug-workflow/">Bug Workflow</a>).</p>
+<p>The same <code>forge:managed</code> label starts Feature, Bug, and Task workflows. Forge chooses the workflow from the Jira issue type.</p>
 </div>
 <h2 id="stage-reference">Stage Reference<a class="headerlink" href="#stage-reference" title="Permanent link">&para;</a></h2>
-<h3 id="prd-generation">PRD Generation<a class="headerlink" href="#prd-generation" title="Permanent link">&para;</a></h3>
-<p>Forge reads the ticket description and generates a structured Product Requirements Document. The PRD is posted as a comment on the Jira ticket.</p>
-<p><strong>Human action:</strong> Review the PRD. Optionally ask questions with <code>?</code> prefix (see <a href="#qa-mode">Q&amp;A Mode</a>). When satisfied, change the label to <code>forge:prd-approved</code>.</p>
-<hr />
-<h3 id="spec-generation">Spec Generation<a class="headerlink" href="#spec-generation" title="Permanent link">&para;</a></h3>
-<p>Forge generates a behavioral specification from the approved PRD, typically using Given/When/Then acceptance criteria.</p>
-<p><strong>Human action:</strong> Review the spec. Ask questions with <code>?</code> or request revisions with <code>!</code>. Approve with <code>forge:spec-approved</code>.</p>
-<hr />
-<h3 id="epic-decomposition">Epic Decomposition<a class="headerlink" href="#epic-decomposition" title="Permanent link">&para;</a></h3>
-<p>Forge breaks the feature into logical epics — high-level areas of work that map to implementation phases.</p>
-<p><strong>Human action:</strong> Review the epic plan. You have four options at this stage:</p>
+<h3 id="1-triage">1. Triage<a class="headerlink" href="#1-triage" title="Permanent link">&para;</a></h3>
+<p>Forge first posts an acknowledgement comment, reads the ticket summary, description, comments, and project repository configuration, then checks whether the ticket has enough actionable context.</p>
+<p>The ticket does not need a rigid template. Small tasks can pass triage when the intent, scope, expected outcome, and repository target are clear.</p>
+<p><strong>If the ticket is sufficient:</strong> Forge posts a confirmation, records the resolved repository when possible, and starts plan generation.</p>
+<p><strong>If information is missing:</strong> Forge sets <code>forge:task-triage-pending</code>, posts a targeted list of missing information, and pauses.</p>
+<p>To resume, reply with a comment starting with <code>!</code> and include the requested information:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>! This should update the billing API in acme/payments. The endpoint should reject expired tokens with 401 and the existing auth tests should cover it.
+</code></pre></div>
+<p>Forge then re-runs triage against the updated ticket context.</p>
+<h3 id="2-plan-generation">2. Plan Generation<a class="headerlink" href="#2-plan-generation" title="Permanent link">&para;</a></h3>
+<p>Forge generates an implementation plan from the ticket, comments, and configured project repositories. The plan must include valid <code>repo:&lt;owner&gt;/&lt;repo&gt;</code> tags that match repositories configured for the Jira project.</p>
+<p>The plan is posted back to Jira. Forge also applies repository labels such as <code>repo:acme/payments</code> and sets <code>forge:plan-pending</code>.</p>
+<p>If the plan is too large for a Jira comment, Forge truncates the comment and keeps the full plan in workflow state.</p>
+<h3 id="3-plan-approval-gate">3. Plan Approval Gate<a class="headerlink" href="#3-plan-approval-gate" title="Permanent link">&para;</a></h3>
+<p>Review the posted implementation plan before Forge changes code.</p>
 <table>
 <thead>
 <tr>
@@ -1598,129 +1591,123 @@
 <td>Change label to <code>forge:plan-approved</code></td>
 </tr>
 <tr>
+<td>Request revision</td>
+<td>Comment with <code>!</code> followed by feedback</td>
+</tr>
+<tr>
 <td>Ask a question</td>
-<td>Comment with <code>?</code> prefix — Forge answers without re-decomposing</td>
+<td>Comment with <code>?</code> or <code>@forge ask</code></td>
 </tr>
 <tr>
-<td>Revise one epic</td>
-<td><code>!</code> comment on the <strong>specific epic sub-ticket</strong> — Forge updates only that epic</td>
-</tr>
-<tr>
-<td>Redo the full decomposition</td>
-<td><code>!</code> comment on the <strong>feature ticket</strong> — Forge regenerates all epics with your feedback</td>
+<td>Leave paused</td>
+<td>Keep <code>forge:plan-pending</code></td>
 </tr>
 </tbody>
 </table>
-<pre class="mermaid"><code>flowchart TD
-    Gate([plan_approval_gate])
-    Gate --&gt;|forge:plan-approved| Next[Generate Tasks]
-    Gate --&gt;|"? on feature ticket"| QA[Answer Question]
-    Gate --&gt;|"! on feature ticket"| Regen[Regenerate All Epics]
-    Gate --&gt;|"! on epic sub-ticket"| Update[Update Single Epic]
-    QA --&gt; Gate
-    Regen --&gt; Gate
-    Update --&gt; Gate</code></pre>
-<hr />
-<h3 id="task-generation">Task Generation<a class="headerlink" href="#task-generation" title="Permanent link">&para;</a></h3>
-<p>Forge generates granular implementation tasks scoped to individual repositories. Each task is sized to fit in a single container execution pass.</p>
-<p><strong>Human action:</strong> Review the tasks. You have four options at this stage:</p>
+<p>Question comments route to Q&amp;A mode and return to the same approval gate. Revision comments regenerate the plan with the previous plan and your feedback in context.</p>
+<div class="admonition tip">
+<p class="admonition-title">YOLO mode</p>
+<p>If <code>forge:yolo</code> is present, Forge auto-approves the task plan and proceeds to workspace setup. Human PR review still remains a gate.</p>
+</div>
+<h3 id="4-workspace-setup">4. Workspace Setup<a class="headerlink" href="#4-workspace-setup" title="Permanent link">&para;</a></h3>
+<p>After approval, Forge creates an isolated workspace for the first repository in the approved plan. Multi-repo plans are processed one repository at a time.</p>
+<p>The workspace state tracks the current repository, branch, completed repositories, PR URLs, CI status, and review state so the workflow can resume safely after webhooks or retries.</p>
+<h3 id="5-implementation">5. Implementation<a class="headerlink" href="#5-implementation" title="Permanent link">&para;</a></h3>
+<p>Implementation runs in a container sandbox. The task prompt includes:</p>
+<ul>
+<li>The approved implementation plan</li>
+<li>The original Jira ticket description</li>
+<li>Any qualitative review feedback from a previous pass</li>
+<li>Instructions to inspect the codebase, make the planned changes, add or update tests, and run local validation</li>
+</ul>
+<p>After the container run, Forge stages and commits workspace changes on the host. If the container reports a failure, Forge records the failure in workflow state so the next routing decision can retry or block appropriately.</p>
+<h3 id="6-qualitative-review">6. Qualitative Review<a class="headerlink" href="#6-qualitative-review" title="Permanent link">&para;</a></h3>
+<p>Forge reviews the implemented changes before opening a PR. If the verdict is adequate, the workflow proceeds to PR creation.</p>
+<p>If the review finds incomplete tests or a symptom-only implementation, Forge routes back to implementation with the review feedback. The Task workflow allows up to 2 qualitative review retries. If the retry cap is reached, Forge proceeds to PR creation with the failed review state retained so reviewers can see the risk.</p>
+<p>Infrastructure errors that prevent review from producing a verdict route to <code>forge:blocked</code>.</p>
+<h3 id="7-pr-creation">7. PR Creation<a class="headerlink" href="#7-pr-creation" title="Permanent link">&para;</a></h3>
+<p>Forge creates a fork-based pull request for the current repository. After PR creation succeeds, Forge tears down the workspace and moves to the next repository in the approved plan.</p>
+<p>When all repositories are processed, the workflow waits for CI.</p>
+<h3 id="8-cicd-fix-loop">8. CI/CD + Fix Loop<a class="headerlink" href="#8-cicd-fix-loop" title="Permanent link">&para;</a></h3>
+<p>Forge waits for GitHub CI webhooks. If checks are still pending, the workflow stays paused. If CI passes, it proceeds to human review.</p>
+<p>On CI failure, Forge runs the shared CI fix loop:</p>
+<ol>
+<li>Evaluate failed checks.</li>
+<li>Analyze the failure.</li>
+<li>Apply a fix.</li>
+<li>Push the update.</li>
+<li>Wait for CI again.</li>
+</ol>
+<p>To skip an infrastructure-related check, use <code>/forge skip-gate &lt;name&gt;</code> on the PR. See <a href="../pr-commands/">PR Commands</a>.</p>
+<h3 id="9-human-review">9. Human Review<a class="headerlink" href="#9-human-review" title="Permanent link">&para;</a></h3>
+<p>Forge pauses at the human review gate after CI passes. Merge the PR when satisfied.</p>
+<p>If changes are requested in GitHub review, Forge routes to the review implementation node, applies the requested changes, returns to CI, and then pauses for review again.</p>
+<p>When the PR is merged, Forge marks the Task workflow complete.</p>
+<h2 id="comment-syntax">Comment Syntax<a class="headerlink" href="#comment-syntax" title="Permanent link">&para;</a></h2>
+<p>At the triage and plan gates, Forge classifies comments by prefix:</p>
+<ul>
+<li><strong><code>!</code> prefix</strong> - provide missing triage context or request a plan revision</li>
+<li><strong><code>?</code> prefix or <code>@forge ask</code></strong> - ask a question without advancing the workflow</li>
+<li><strong>No prefix</strong> - informational; ignored by workflow routing</li>
+</ul>
+<p>The <code>&gt;option N</code> syntax is only used by the Bug workflow RCA option gate.</p>
+<h2 id="labels">Labels<a class="headerlink" href="#labels" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Action</th>
-<th>How</th>
+<th>Label</th>
+<th>Set by</th>
+<th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Approve</td>
-<td>Change label to <code>forge:task-approved</code></td>
+<td><code>forge:managed</code></td>
+<td>Human</td>
+<td>Start the Task workflow for a standalone Task or Epic</td>
 </tr>
 <tr>
-<td>Ask a question</td>
-<td>Comment with <code>?</code> prefix — Forge answers without regenerating</td>
+<td><code>forge:task-triage-pending</code></td>
+<td>Forge</td>
+<td>Ticket needs more actionable context before planning</td>
 </tr>
 <tr>
-<td>Revise one task</td>
-<td><code>!</code> comment on the <strong>specific task sub-ticket</strong> — Forge updates only that task</td>
+<td><code>forge:plan-pending</code></td>
+<td>Forge</td>
+<td>Implementation plan is posted and waiting for review</td>
 </tr>
 <tr>
-<td>Regenerate all tasks</td>
-<td><code>!</code> comment on the <strong>feature or epic ticket</strong> — Forge regenerates the full task list with your feedback</td>
+<td><code>forge:plan-approved</code></td>
+<td>Human</td>
+<td>Approve the plan and start implementation</td>
+</tr>
+<tr>
+<td><code>forge:yolo</code></td>
+<td>Human</td>
+<td>Auto-approve the plan gate</td>
+</tr>
+<tr>
+<td><code>repo:&lt;owner&gt;/&lt;repo&gt;</code></td>
+<td>Forge or Human</td>
+<td>Repository selected for planning and implementation</td>
+</tr>
+<tr>
+<td><code>forge:blocked</code></td>
+<td>Forge</td>
+<td>Workflow failed or reached a retry limit</td>
+</tr>
+<tr>
+<td><code>forge:retry</code></td>
+<td>Human</td>
+<td>Resume from the failed node after fixing the underlying issue</td>
 </tr>
 </tbody>
 </table>
-<pre class="mermaid"><code>flowchart TD
-    Gate([task_approval_gate])
-    Gate --&gt;|forge:task-approved| Next[Implement Tasks]
-    Gate --&gt;|"? on ticket"| QA[Answer Question]
-    Gate --&gt;|"! on feature/epic"| Regen[Regenerate All Tasks]
-    Gate --&gt;|"! on task sub-ticket"| Update[Update Single Task]
-    QA --&gt; Gate
-    Regen --&gt; Gate
-    Update --&gt; Gate</code></pre>
-<hr />
-<h3 id="implementation">Implementation<a class="headerlink" href="#implementation" title="Permanent link">&para;</a></h3>
-<p>Tasks are executed in ephemeral Podman containers. Each container:</p>
-<ul>
-<li>Clones the target repository</li>
-<li>Reads the task file</li>
-<li>Writes code, runs tests, commits</li>
-<li>Has no external network access</li>
-</ul>
-<p>The orchestrator handles push and PR creation.</p>
-<hr />
-<h3 id="local-code-review">Local Code Review<a class="headerlink" href="#local-code-review" title="Permanent link">&para;</a></h3>
-<p>After implementation and before PR creation, Forge reviews the diff against <code>main</code> and fixes any breaking issues in-place (up to 2 passes).</p>
-<hr />
-<h3 id="pr-creation">PR Creation<a class="headerlink" href="#pr-creation" title="Permanent link">&para;</a></h3>
-<p>A fork-based pull request is created with an AI-generated description. The PR body is kept in sync with commits throughout the CI fix loop.</p>
-<hr />
-<h3 id="cicd-fix-loop">CI/CD + Fix Loop<a class="headerlink" href="#cicd-fix-loop" title="Permanent link">&para;</a></h3>
-<p>Forge waits for CI results via GitHub webhooks. On failure:</p>
-<ol>
-<li><strong>Analyze</strong> — categorizes the failure using the <code>analyze-ci</code> skill</li>
-<li><strong>Fix</strong> — implements a fix in-place using the <code>fix-ci</code> skill</li>
-<li><strong>Review</strong> — reviews the fix before pushing</li>
-<li>Repeat up to 5 times</li>
-</ol>
-<p>Each fix pass re-syncs the PR description. After CI passes, Forge proceeds to AI review.</p>
-<p>To skip an infrastructure-related check, see <a href="../pr-commands/">PR Commands</a>.</p>
-<hr />
-<h3 id="ai-review">AI Review<a class="headerlink" href="#ai-review" title="Permanent link">&para;</a></h3>
-<p>Forge reviews the completed PR against the original spec, checking for completeness and correctness.</p>
-<hr />
-<h3 id="human-review">Human Review<a class="headerlink" href="#human-review" title="Permanent link">&para;</a></h3>
-<p>The PR is now ready for human review. Merge when satisfied, or request changes to trigger another implementation pass.</p>
-<h2 id="qa-mode">Q&amp;A Mode<a class="headerlink" href="#qa-mode" title="Permanent link">&para;</a></h2>
-<p>At any approval gate, you can ask questions without triggering regeneration:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>? Why did you choose this approach over X?
-</code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>@forge ask explain the auth strategy
-</code></pre></div>
-<p>Forge answers based on the artifact content and generation context, then keeps the workflow paused. When you're ready to approve, change the label as normal.</p>
-<p>A summary of all Q&amp;A exchanges is posted to the ticket when you approve.</p>
-<h2 id="requesting-revisions">Requesting Revisions<a class="headerlink" href="#requesting-revisions" title="Permanent link">&para;</a></h2>
-<p>Start a comment with <code>!</code> followed by your feedback. Forge regenerates the current artifact incorporating your feedback, replacing the previous version.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>! The spec is missing error handling for the webhook retry path
-</code></pre></div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Comments without a recognized prefix (<code>!</code>, <code>?</code>, <code>@forge ask</code>) are treated as informational and ignored by the workflow. Only <code>!</code>-prefixed comments trigger regeneration.</p>
-</div>
-<h2 id="handling-failures">Handling Failures<a class="headerlink" href="#handling-failures" title="Permanent link">&para;</a></h2>
-<p>If a stage fails, Forge:</p>
-<ol>
-<li>Sets the <code>forge:blocked</code> label</li>
-<li>Posts a comment tagging the reporter and assignee with the error</li>
-</ol>
-<p>To retry, add the <code>forge:retry</code> label. Forge resumes from the exact node that failed — not from the beginning.</p>
-<div class="admonition tip">
-<p class="admonition-title">CI retries</p>
-<p>If CI fix attempts are exhausted, <code>forge:retry</code> resets the attempt counter for a fresh budget of retries.</p>
-</div>
-<h2 id="labels-summary">Labels Summary<a class="headerlink" href="#labels-summary" title="Permanent link">&para;</a></h2>
-<p>See <a href="../labels/">Jira Labels</a> for the complete reference.</p>
+<p>See <a href="../labels/">Jira Labels</a> for the complete label reference.</p>
+<h2 id="failure-and-retry-behavior">Failure and Retry Behavior<a class="headerlink" href="#failure-and-retry-behavior" title="Permanent link">&para;</a></h2>
+<p>If a stage fails, Forge records the error, sets <code>forge:blocked</code>, and posts an error comment on the Jira ticket.</p>
+<p>To resume, add <code>forge:retry</code>. Forge resumes from the saved <code>current_node</code> instead of restarting the workflow from triage. For CI failures, retrying gives the workflow a fresh CI-fix budget.</p>
+<p>Planning and triage have bounded retry behavior. Qualitative review also has a bounded retry loop and will proceed to PR creation after the retry cap when it has a non-adequate verdict, preserving that state for reviewers.</p>
 
 
 
