@@ -24,14 +24,16 @@ These labels advance the pipeline. Forge watches for label changes via Jira webh
 | Plan Approval Gate | `forge:plan-pending` | Forge | Plan posted; waiting for approval |
 | Plan Approval Gate | `forge:plan-approved` | Human | Approve plan and trigger task decomposition + implementation |
 
-### Task Takeover Workflow
+### Task Workflow
 
-Standalone Tasks and Epics can be processed with the standard `forge:managed` label. These tickets bypass the standard parent Feature validation.
+Standalone Tasks and Epics can be processed with the standard `forge:managed` label. These tickets bypass the standard parent Feature validation and use the Task workflow.
 
 | Stage | Pending Label | Approved Label | Purpose |
 |-------|--------------|----------------|---------|
-| Triage | `forge:task-triage-pending` | _N/A_ | Standalone ticket is missing required fields; waiting for update |
+| Triage | `forge:task-triage-pending` | _N/A_ | Standalone ticket is missing actionable context; waiting for an update |
 | Plan Approval | `forge:plan-pending` | `forge:plan-approved` | Plan is posted; waiting for approval |
+| Implementation | _N/A_ | _N/A_ | Approved plan is implemented in an isolated workspace, then reviewed and opened as a PR |
+| CI + Review | _N/A_ | _N/A_ | CI is evaluated, failures are fixed, and the PR pauses for human review |
 
 ## Control Labels
 
@@ -42,6 +44,8 @@ Standalone Tasks and Epics can be processed with the standard `forge:managed` la
 | `forge:managed:task-takeover` | Identity preservation label used during Task Takeover transitions. |
 | `forge:blocked` | Set by Forge when a stage fails. Forge posts a comment with the error. |
 | `forge:retry` | Add this to resume from the exact node that failed. Forge removes it after resuming. |
+| `forge:yolo` | Auto-approve supported planning gates. Human PR review still remains a gate. |
+| `repo:<owner>/<repo>` | Identifies repositories selected for planning and implementation. |
 
 ## How to Use Labels
 

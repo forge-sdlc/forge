@@ -22,6 +22,8 @@ graph TD
 
 - [Getting Started](getting-started.md) — Set up Forge in 10 minutes
 - [Feature Workflow](guide/feature-workflow.md) — How features flow through Forge
+- [Bug Workflow](guide/bug-workflow.md) — How bug diagnosis and implementation flow through Forge
+- [Task Workflow](guide/task-workflow.md) — How standalone Tasks and Epics become PRs
 - [Developer Guide](developer-guide.md) — Full local development reference
 - [Skills System](skills/index.md) — Customize Forge for your stack
 - [Contributing](dev/contributing.md) — How to contribute

@@ -12,6 +12,7 @@ nav = [
   {"User Guide" = [
     {"Feature Workflow" = "guide/feature-workflow.md"},
     {"Bug Workflow" = "guide/bug-workflow.md"},
+    {"Task Workflow" = "guide/task-workflow.md"},
     {"Jira Labels" = "guide/labels.md"},
     {"PR Commands" = "guide/pr-commands.md"},
   ]},
