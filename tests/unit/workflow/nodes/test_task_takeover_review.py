@@ -181,13 +181,11 @@ class TestRunQualitativeReview:
         mock_jira = _make_mock_jira()
         mock_jira.get_issue = AsyncMock(side_effect=RuntimeError("Jira connection failure"))
 
-        with (
-            patch("forge.workflow.nodes.task_takeover_review.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.error_handler.notify_error") as mock_notify,
+        with patch(
+            "forge.workflow.nodes.task_takeover_review.JiraClient", return_value=mock_jira
         ):
             result = await run_qualitative_review(base_task_state)
 
         assert result["last_error"] is not None
         assert "Jira connection failure" in result["last_error"]
         assert result["current_node"] == "qualitative_review"
-        mock_notify.assert_called_once()

@@ -363,17 +363,15 @@ new file mode 100644
     async def test_run_qualitative_review_exception_handling(
         self, base_task_state: TaskTakeoverState
     ) -> None:
-        """Verify robust error recovery and notify_error triggering when exceptions are raised."""
+        """Verify robust error recovery when exceptions are raised."""
         mock_jira = _make_mock_jira()
         mock_jira.get_issue = AsyncMock(side_effect=RuntimeError("Jira API timeout"))
 
-        with (
-            patch("forge.workflow.nodes.task_takeover_review.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.error_handler.notify_error") as mock_notify,
+        with patch(
+            "forge.workflow.nodes.task_takeover_review.JiraClient", return_value=mock_jira
         ):
             result = await run_qualitative_review(base_task_state)
 
         assert result["last_error"] is not None
         assert "Jira API timeout" in result["last_error"]
         assert result["current_node"] == "qualitative_review"
-        mock_notify.assert_called_once()

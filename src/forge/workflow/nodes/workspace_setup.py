@@ -311,10 +311,6 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Workspace setup failed for {ticket_key}: {e}")
-        # Post error notification to Jira
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "setup_workspace")
         return {
             **state,
             "last_error": str(e),

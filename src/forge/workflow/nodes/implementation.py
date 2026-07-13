@@ -19,7 +19,6 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import TicketType
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
-from forge.workflow.nodes.error_handler import notify_error
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workspace.git_ops import GitOperations
@@ -187,7 +186,6 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Implementation failed for {current_task}: {e}")
-        await notify_error(state, str(e), "implement_task")
         return {
             **state,
             "last_error": str(e),

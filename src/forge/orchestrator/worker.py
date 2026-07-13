@@ -50,6 +50,18 @@ def _has_new_reportable_error(result: dict, error_before_invoke: str | None) -> 
     )
 
 
+async def _report_new_workflow_error(result: dict, error_before_invoke: str | None) -> None:
+    """Post one notification when an invocation produces a reportable error."""
+    if not _has_new_reportable_error(result, error_before_invoke):
+        return
+
+    await notify_error(
+        result,
+        result["last_error"],
+        result.get("current_node", "unknown"),
+    )
+
+
 _PRD_GATE_NODES = ("prd_approval_gate", "generate_prd", "regenerate_prd")
 _SPEC_GATE_NODES = ("spec_approval_gate", "generate_spec", "regenerate_spec")
 
@@ -407,9 +419,7 @@ class OrchestratorWorker:
 
             # Report errors to Jira — only if the error is new (not carried
             # over from a previous invocation that already reported it).
-            last_error = result.get("last_error")
-            if _has_new_reportable_error(result, error_before_invoke):
-                await notify_error(result, last_error, final_node)
+            await _report_new_workflow_error(result, error_before_invoke)
 
             # Record workflow completed metric (only if not paused - paused means waiting for approval)
             if not is_paused:

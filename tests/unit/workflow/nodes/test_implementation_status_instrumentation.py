@@ -189,7 +189,6 @@ class TestImplementationStatusInstrumentationCompletionComment:
             patch(
                 "forge.workflow.nodes.implementation.post_status_comment"
             ) as mock_post_status,
-            patch("forge.workflow.nodes.implementation.notify_error", new=AsyncMock()),
         ):
             mock_post_status.return_value = AsyncMock()
             result = await implement_task(state)
@@ -324,7 +323,6 @@ class TestImplementationStatusInstrumentationMultipleTasks:
             patch(
                 "forge.workflow.nodes.implementation.post_status_comment"
             ) as mock_post_status2,
-            patch("forge.workflow.nodes.implementation.notify_error", new=AsyncMock()),
         ):
             mock_post_status2.return_value = AsyncMock()
             result2 = await implement_task(state2)
@@ -335,5 +333,4 @@ class TestImplementationStatusInstrumentationMultipleTasks:
         assert (
             mock_post_status2.call_args_list[0][0][2] == "🔨 Forge started implementing [TASK-2]: Task summary"
         )
-
 

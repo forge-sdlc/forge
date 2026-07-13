@@ -1,6 +1,5 @@
 """Task execution node for Task Takeover workflow."""
 
-import contextlib
 import logging
 from pathlib import Path
 from typing import cast
@@ -139,11 +138,6 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
 
     except Exception as e:
         logger.error(f"execute_task_changes failed for {ticket_key}: {e}")
-        with contextlib.suppress(Exception):
-            from forge.workflow.nodes.error_handler import notify_error
-
-            await notify_error(state, str(e), "execute_task_changes")  # type: ignore[arg-type]
-
         return cast(
             TaskTakeoverState,
             update_state_timestamp(

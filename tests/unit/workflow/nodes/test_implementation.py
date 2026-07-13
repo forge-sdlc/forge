@@ -233,7 +233,6 @@ class TestImplementationNodeRouting:
                 return_value=runner,
             ),
             patch("forge.workflow.nodes.implementation.get_settings"),
-            patch("forge.workflow.nodes.implementation.notify_error", new_callable=AsyncMock),
         ):
             result = await implement_task(
                 _make_state(ticket_key="FEAT-123", ticket_type=TicketType.FEATURE)
@@ -265,7 +264,6 @@ class TestImplementationNodeRouting:
                 return_value=runner,
             ),
             patch("forge.workflow.nodes.implementation.get_settings"),
-            patch("forge.workflow.nodes.implementation.notify_error", new_callable=AsyncMock),
         ):
             result = await implement_task(_make_state())
 

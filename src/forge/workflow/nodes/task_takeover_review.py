@@ -1,6 +1,5 @@
 """Qualitative review node for Task Takeover workflow."""
 
-import contextlib
 import logging
 import re
 from pathlib import Path
@@ -165,11 +164,6 @@ async def run_qualitative_review(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"run_qualitative_review failed for {ticket_key}: {e}")
-        with contextlib.suppress(Exception):
-            from forge.workflow.nodes.error_handler import notify_error
-
-            await notify_error(state, str(e), "qualitative_review")  # type: ignore[arg-type]
-
         return cast(
             WorkflowState,
             update_state_timestamp(

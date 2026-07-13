@@ -534,7 +534,6 @@ class TestRegenerateEpicTasks:
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
             patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
-            patch("forge.workflow.nodes.error_handler.notify_error", new_callable=AsyncMock),
         ):
             mock_jira = AsyncMock()
             MockJira.return_value = mock_jira

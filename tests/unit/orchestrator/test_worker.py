@@ -6,7 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.models.events import EventSource
-from forge.orchestrator.worker import OrchestratorWorker, _has_new_reportable_error
+from forge.orchestrator.worker import (
+    OrchestratorWorker,
+    _has_new_reportable_error,
+    _report_new_workflow_error,
+)
 from forge.queue.models import QueueMessage
 
 
@@ -21,6 +25,39 @@ from forge.queue.models import QueueMessage
 )
 def test_has_new_reportable_error(result: dict, error_before_invoke: str | None, expected: bool):
     assert _has_new_reportable_error(result, error_before_invoke) is expected
+
+
+@pytest.mark.asyncio
+async def test_report_new_workflow_error_posts_once():
+    result = {
+        "ticket_key": "TEST-123",
+        "current_node": "setup_workspace",
+        "last_error": "clone failed",
+        "is_paused": False,
+    }
+
+    with patch("forge.orchestrator.worker.notify_error", new_callable=AsyncMock) as notify:
+        await _report_new_workflow_error(result, None)
+
+    notify.assert_awaited_once_with(result, "clone failed", "setup_workspace")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("result", "error_before_invoke"),
+    [
+        ({"last_error": "same failure", "is_paused": False}, "same failure"),
+        ({"last_error": "needs input", "is_paused": True}, None),
+        ({"last_error": None, "is_paused": False}, None),
+    ],
+)
+async def test_report_new_workflow_error_skips_non_reportable_errors(
+    result: dict, error_before_invoke: str | None
+):
+    with patch("forge.orchestrator.worker.notify_error", new_callable=AsyncMock) as notify:
+        await _report_new_workflow_error(result, error_before_invoke)
+
+    notify.assert_not_awaited()
 
 
 class TestQuestionDetection:

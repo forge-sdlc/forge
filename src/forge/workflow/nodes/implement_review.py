@@ -287,9 +287,6 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"implement_review failed for {ticket_key}: {e}")
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "implement_review")
         return {
             **state,
             "last_error": str(e),

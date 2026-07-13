@@ -185,13 +185,9 @@ class TestTaskTakeoverExecutionNode:
                 "forge.workflow.nodes.task_takeover_execution.JiraClient", return_value=mock_jira
             ),
             patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
-            patch(
-                "forge.workflow.nodes.error_handler.notify_error", new=AsyncMock()
-            ) as mock_notify,
         ):
             result_state = await execute_task_changes(state)
 
         assert result_state["last_error"] == "Jira Connection Error"
         assert result_state["current_node"] == "execute_task_changes"
         assert result_state["retry_count"] == 1
-        mock_notify.assert_called_once()

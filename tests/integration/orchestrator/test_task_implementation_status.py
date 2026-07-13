@@ -142,7 +142,6 @@ class TestTaskImplementationStatusCommentsTS003:
         with (
             patch("forge.workflow.nodes.implementation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.implementation.ContainerRunner", return_value=mock_runner),
-            patch("forge.workflow.nodes.implementation.notify_error", new=AsyncMock()),
         ):
             result = await implement_task(state)
 
@@ -332,7 +331,6 @@ class TestTaskImplementationFailureScenarios:
         with (
             patch("forge.workflow.nodes.implementation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.implementation.ContainerRunner", return_value=mock_runner),
-            patch("forge.workflow.nodes.implementation.notify_error", new=AsyncMock()),
         ):
             result = await implement_task(state)
 
@@ -384,7 +382,6 @@ class TestTaskImplementationFailureScenarios:
         with (
             patch("forge.workflow.nodes.implementation.JiraClient", return_value=mock_jira2),
             patch("forge.workflow.nodes.implementation.ContainerRunner", return_value=mock_runner2),
-            patch("forge.workflow.nodes.implementation.notify_error", new=AsyncMock()),
         ):
             result2 = await implement_task(state2)
 

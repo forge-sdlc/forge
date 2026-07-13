@@ -259,9 +259,6 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Spec generation failed for {ticket_key}: {e}")
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "generate_spec")
         # If we have partial content, save it even on failure
         result_state = {
             **state,
@@ -374,9 +371,6 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Spec regeneration failed for {ticket_key}: {e}")
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "regenerate_spec")
         return {
             **state,
             "last_error": str(e),

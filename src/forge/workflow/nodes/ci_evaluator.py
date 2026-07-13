@@ -221,7 +221,6 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"CI evaluation failed for {ticket_key}: {e}")
-        await notify_error(state, str(e), "ci_evaluator")
         return {
             **state,
             "last_error": str(e),
@@ -283,7 +282,6 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     except Exception as _setup_err:
         logger.error(f"Workspace setup failed for {ticket_key}: {_setup_err}")
-        await notify_error(state, str(_setup_err), "attempt_ci_fix")
         return {
             **state,
             "last_error": str(_setup_err),
@@ -425,7 +423,6 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"CI fix failed for {ticket_key}: {e}")
-        await notify_error(state, str(e), "attempt_ci_fix")
         return {
             **state,
             "last_error": str(e),

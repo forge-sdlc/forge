@@ -312,9 +312,6 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"PR creation failed for {ticket_key}: {e}")
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "create_pr")
         return {
             **state,
             "last_error": str(e),

@@ -247,9 +247,6 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Task generation failed for {ticket_key}: {e}")
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "generate_tasks")
         # Save any Tasks we managed to create
         result_state = {
             **state,
@@ -500,9 +497,6 @@ async def regenerate_all_tasks(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Task regeneration failed for {ticket_key}: {e}")
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "regenerate_all_tasks")
         return {
             **state,
             "last_error": str(e),
@@ -770,9 +764,6 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Epic task regeneration failed for {epic_key} on {ticket_key}: {e}")
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "regenerate_epic_tasks")
         return {
             **state,
             "last_error": str(e),
@@ -857,9 +848,6 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Task update failed for {task_key}: {e}")
-        from forge.workflow.nodes.error_handler import notify_error
-
-        await notify_error(state, str(e), "update_single_task")
         return {
             **state,
             "last_error": str(e),
