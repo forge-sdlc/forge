@@ -111,6 +111,7 @@ class TestPathTransitions:
     @pytest.mark.parametrize(
         "current_node, expected_next",
         [
+            ("triage_check", "triage_check"),
             ("generate_plan", "generate_plan"),
             ("triage_gate", "triage_gate"),
             ("escalate_blocked", "escalate_blocked"),

@@ -19,7 +19,7 @@ from forge.queue.models import QueueMessage
     [
         ({"last_error": "new failure", "is_paused": False}, None, True),
         ({"last_error": "same failure", "is_paused": False}, "same failure", False),
-        ({"last_error": "needs input", "is_paused": True}, None, False),
+        ({"last_error": "paused failure", "is_paused": True}, None, True),
         ({"last_error": None, "is_paused": False}, None, False),
     ],
 )
@@ -43,11 +43,25 @@ async def test_report_new_workflow_error_posts_once():
 
 
 @pytest.mark.asyncio
+async def test_report_new_workflow_error_posts_when_failure_ends_at_pause_gate():
+    result = {
+        "ticket_key": "TEST-123",
+        "current_node": "triage_gate",
+        "last_error": "model backend unavailable",
+        "is_paused": True,
+    }
+
+    with patch("forge.orchestrator.worker.notify_error", new_callable=AsyncMock) as notify:
+        await _report_new_workflow_error(result, None)
+
+    notify.assert_awaited_once_with(result, "model backend unavailable", "triage_gate")
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("result", "error_before_invoke"),
     [
         ({"last_error": "same failure", "is_paused": False}, "same failure"),
-        ({"last_error": "needs input", "is_paused": True}, None),
         ({"last_error": None, "is_paused": False}, None),
     ],
 )

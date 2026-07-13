@@ -145,7 +145,7 @@ def route_entry(state: BugState) -> str:
 def _route_after_triage_check(state: BugState) -> str:
     """Route after triage_check based on what triage_check set as current_node."""
     node = state.get("current_node", "triage_gate")
-    if node in ("analyze_bug", "triage_gate", "escalate_blocked"):
+    if node in ("triage_check", "analyze_bug", "triage_gate", "escalate_blocked"):
         return node
     return "triage_gate"
 
@@ -491,6 +491,7 @@ def build_bug_graph() -> StateGraph:
         "triage_check",
         _route_after_triage_check,
         {
+            "triage_check": "triage_check",
             "triage_gate": "triage_gate",
             "analyze_bug": "analyze_bug",
             "escalate_blocked": "escalate_blocked",

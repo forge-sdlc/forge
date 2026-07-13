@@ -96,6 +96,8 @@ def route_entry(state: TaskTakeoverState) -> str:
 def _route_after_triage_check(state: TaskTakeoverState) -> str:
     """Route after triage_check based on what triage_check set as current_node."""
     node = state.get("current_node", "triage_gate")
+    if node == "triage_check":
+        return "triage_check"
     if node in ("analyze_bug", "generate_plan"):
         return "generate_plan"
     if node in ("triage_gate", "escalate_blocked"):
@@ -282,6 +284,7 @@ def build_task_takeover_graph() -> StateGraph[TaskTakeoverState, Any, Any]:
         "triage_check",
         _route_after_triage_check,
         {
+            "triage_check": "triage_check",
             "triage_gate": "triage_gate",
             "generate_plan": "generate_plan",
             "escalate_blocked": "escalate_blocked",

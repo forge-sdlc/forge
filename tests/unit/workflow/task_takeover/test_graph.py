@@ -1,6 +1,7 @@
 """Unit tests for Task Takeover workflow state and graph structure."""
 
 from typing import Any, cast
+
 import pytest
 from langgraph.graph import END, StateGraph
 
@@ -93,6 +94,7 @@ class TestTriageCheckRouting:
     @pytest.mark.parametrize(
         "current_node,expected",
         [
+            ("triage_check", "triage_check"),
             ("analyze_bug", "generate_plan"),
             ("triage_gate", "triage_gate"),
             ("escalate_blocked", "escalate_blocked"),

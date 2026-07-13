@@ -45,9 +45,7 @@ def _is_workflow_errored(state: dict) -> bool:
 def _has_new_reportable_error(result: dict, error_before_invoke: str | None) -> bool:
     """Return whether an invocation produced an error that should be reported."""
     last_error = result.get("last_error")
-    return bool(
-        last_error and not result.get("is_paused", False) and last_error != error_before_invoke
-    )
+    return bool(last_error and last_error != error_before_invoke)
 
 
 async def _report_new_workflow_error(result: dict, error_before_invoke: str | None) -> None:

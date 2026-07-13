@@ -99,6 +99,10 @@ class TestRouteEntry:
 class TestTriageCheckRouting:
     """_route_after_triage_check proxies triage_check current_node output."""
 
+    def test_routes_retryable_failure_back_to_triage_check(self):
+        state = _bug_state(current_node="triage_check", last_error="temporary failure")
+        assert _route_after_triage_check(state) == "triage_check"
+
     def test_routes_to_analyze_bug(self):
         state = _bug_state(current_node="analyze_bug")
         assert _route_after_triage_check(state) == "analyze_bug"
