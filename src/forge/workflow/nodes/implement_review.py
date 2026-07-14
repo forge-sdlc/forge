@@ -27,6 +27,31 @@ _REVIEW_ADDRESSING_COMMENT = (
 )
 
 
+def _review_plan_has_actionable_items(plan_text: str) -> bool:
+    """Validate a review plan and report whether it contains actionable items."""
+    lines = [line.strip() for line in plan_text.splitlines()]
+    nonempty_lines = [line for line in lines if line]
+    if not nonempty_lines or nonempty_lines[0] != "# Review Plan":
+        raise ValueError("Review plan is missing the required '# Review Plan' heading")
+
+    try:
+        actionable_start = lines.index("## Actionable Items") + 1
+    except ValueError:
+        return False
+
+    actionable_lines = []
+    for line in lines[actionable_start:]:
+        if line.startswith("## "):
+            break
+        actionable_lines.append(line)
+
+    if not any(line.startswith("### Item ") for line in actionable_lines):
+        raise ValueError(
+            "Review plan has an Actionable Items section but no '### Item ...' entries"
+        )
+    return True
+
+
 def review_response_gate(state: WorkflowState) -> WorkflowState:
     """Pause workflow awaiting human confirmation of contested review comments."""
     ticket_key = state["ticket_key"]
@@ -181,6 +206,18 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             repo_name=current_repo,
         )
 
+        plan_path = Path(workspace_path) / _REVIEW_PLAN_FILE
+        if not plan_path.exists():
+            raise RuntimeError(
+                "Review analysis completed without producing the required "
+                f"{_REVIEW_PLAN_FILE} artifact"
+            )
+
+        plan_text = plan_path.read_text().strip()
+        if not plan_text:
+            raise RuntimeError(f"Review analysis produced an empty {_REVIEW_PLAN_FILE} artifact")
+        has_actionable_items = _review_plan_has_actionable_items(plan_text)
+
         # ── Check for objections ──────────────────────────────────────────────
         objections_path = Path(workspace_path) / _REVIEW_OBJECTIONS_FILE
         if objections_path.exists():
@@ -205,10 +242,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
 
         # ── Phase 2: Implementation container ────────────────────────────────
         # Only runs if the analysis produced actionable items.
-        plan_path = Path(workspace_path) / _REVIEW_PLAN_FILE
-        plan_text = plan_path.read_text().strip() if plan_path.exists() else ""
-
-        if not plan_text or plan_text == "# No actionable items":
+        if not has_actionable_items:
             logger.info(f"No actionable review items for {ticket_key} — nothing to implement")
         else:
             fix_prompt = load_prompt("implement-review-fix", ticket_key=ticket_key)
