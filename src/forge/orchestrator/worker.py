@@ -1156,7 +1156,19 @@ class OrchestratorWorker:
             }
             prev_error = current_state.get("last_error")
             is_paused_at_gate = current_state.get("is_paused") and current_node in approval_gates
-            if is_paused_at_gate and not prev_error:
+            if current_node == "triage_gate":
+                logger.info("Retry at triage_gate — re-running triage_check")
+                updated_state["is_paused"] = False
+                updated_state["is_blocked"] = False
+                updated_state["last_error"] = None
+                updated_state["auto_retry_cap_notified"] = False
+                updated_state["retry_count"] = 0
+                updated_state["current_node"] = "triage_check"
+                updated_state["context"] = {
+                    **updated_state.get("context", {}),
+                    "force_fresh_invoke": True,
+                }
+            elif is_paused_at_gate:
                 logger.info(
                     f"Retry at approval gate {current_node} — triggering regeneration "
                     f"via revision request"

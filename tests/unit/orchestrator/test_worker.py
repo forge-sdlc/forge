@@ -331,6 +331,84 @@ class TestQuestionDetection:
         assert result["revision_requested"] is True
 
     @pytest.mark.asyncio
+    async def test_retry_at_triage_gate_reenters_triage_check(
+        self, worker: OrchestratorWorker, base_message: QueueMessage, base_state: dict
+    ):
+        state = {
+            **base_state,
+            "current_node": "triage_gate",
+            "is_paused": True,
+            "last_error": "model backend unavailable",
+            "retry_count": 1,
+        }
+        payload = {
+            **base_message.payload,
+            "changelog": {
+                "items": [
+                    {
+                        "field": "labels",
+                        "fromString": "forge:managed",
+                        "toString": "forge:managed forge:retry",
+                    }
+                ]
+            },
+        }
+        message = QueueMessage(
+            message_id=base_message.message_id,
+            event_id=base_message.event_id,
+            source=base_message.source,
+            event_type="jira:issue_updated",
+            ticket_key=base_message.ticket_key,
+            payload=payload,
+        )
+
+        result = await worker._handle_resume_event(message, state)
+
+        assert result["current_node"] == "triage_check"
+        assert result["is_paused"] is False
+        assert result["last_error"] is None
+        assert result["context"]["force_fresh_invoke"] is True
+
+    @pytest.mark.asyncio
+    async def test_retry_at_approval_gate_with_error_triggers_regeneration(
+        self, worker: OrchestratorWorker, base_message: QueueMessage, base_state: dict
+    ):
+        state = {
+            **base_state,
+            "current_node": "prd_approval_gate",
+            "is_paused": True,
+            "last_error": "PRD publish pending",
+        }
+        payload = {
+            **base_message.payload,
+            "changelog": {
+                "items": [
+                    {
+                        "field": "labels",
+                        "fromString": "forge:managed",
+                        "toString": "forge:managed forge:retry",
+                    }
+                ]
+            },
+        }
+        message = QueueMessage(
+            message_id=base_message.message_id,
+            event_id=base_message.event_id,
+            source=base_message.source,
+            event_type="jira:issue_updated",
+            ticket_key=base_message.ticket_key,
+            payload=payload,
+        )
+
+        result = await worker._handle_resume_event(message, state)
+
+        assert result["current_node"] == "prd_approval_gate"
+        assert result["is_paused"] is False
+        assert result["last_error"] is None
+        assert result["revision_requested"] is True
+        assert result["feedback_comment"] == "Regeneration requested via retry."
+
+    @pytest.mark.asyncio
     async def test_prd_label_change_to_approved_sets_approved_flag(
         self, worker: OrchestratorWorker, base_message: QueueMessage, base_state: dict
     ):
