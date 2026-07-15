@@ -182,6 +182,43 @@ class TestConsumeStreamFailure:
         # xack must be called to clear PEL after DLQ move
         redis_mock.xack.assert_called_once_with("stream:jira", CONSUMER_GROUP, "1-0")
 
+    @pytest.mark.asyncio
+    async def test_terminal_callback_failure_does_not_block_dlq_ack(self):
+        """A notification failure must not prevent acknowledging a DLQ message."""
+        callback = AsyncMock(side_effect=RuntimeError("Jira unavailable"))
+        consumer = QueueConsumer("test-worker", terminal_failure_handler=callback)
+        consumer._retry_queue = MagicMock(spec=RetryQueue)
+        consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=False)
+
+        redis_mock = AsyncMock()
+        redis_mock.set = AsyncMock(return_value=True)
+        redis_mock.xack = AsyncMock()
+        consumer._redis = redis_mock
+        consumer.register_handler(
+            EventSource.JIRA,
+            AsyncMock(side_effect=RuntimeError("permanent failure")),
+        )
+
+        await consumer._process_message(make_message(), "stream:jira")
+
+        callback.assert_awaited_once()
+        redis_mock.xack.assert_awaited_once_with("stream:jira", CONSUMER_GROUP, "1-0")
+
+    @pytest.mark.asyncio
+    async def test_terminal_callback_is_claimed_once_per_event(self):
+        """Duplicate terminal handling must not invoke the callback twice."""
+        callback = AsyncMock()
+        consumer = QueueConsumer("test-worker", terminal_failure_handler=callback)
+        redis_mock = AsyncMock()
+        redis_mock.set = AsyncMock(side_effect=[True, None, False])
+        consumer._redis = redis_mock
+        message = make_message()
+
+        await consumer._notify_terminal_failure(message, "failed")
+        await consumer._notify_terminal_failure(message, "failed again")
+
+        callback.assert_awaited_once_with(message, "failed")
+
 
 # ---------------------------------------------------------------------------
 # _process_retry_queue — background poller
@@ -260,6 +297,44 @@ class TestProcessRetryQueue:
         enqueue_args = consumer._retry_queue.enqueue_for_retry.call_args[0]
         assert enqueue_args[0].event_id == "evt-001"
         assert "still broken" in enqueue_args[1]
+
+    @pytest.mark.asyncio
+    async def test_exhausted_retry_invokes_terminal_callback(self):
+        """The retry poller notifies only after re-enqueue moves the event to DLQ."""
+        callback = AsyncMock()
+        consumer = make_consumer()
+        consumer._terminal_failure_handler = callback
+        message = make_message()
+        entry = RetryEntry(
+            message=message,
+            attempt=3,
+            next_retry=datetime.utcnow(),
+            last_error="still broken",
+        )
+
+        call_count = 0
+
+        async def get_due_side_effect(*_args, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [entry]
+            consumer._running = False
+            return []
+
+        consumer._retry_queue.get_due_messages = AsyncMock(side_effect=get_due_side_effect)
+        consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=False)
+        consumer._redis = AsyncMock()
+        consumer._redis.set = AsyncMock(side_effect=[True, None])
+        consumer.register_handler(
+            EventSource.JIRA,
+            AsyncMock(side_effect=RuntimeError("retries exhausted")),
+        )
+
+        with patch("forge.queue.consumer.asyncio.sleep", new_callable=AsyncMock):
+            await consumer._process_retry_queue()
+
+        callback.assert_awaited_once_with(message, "retries exhausted")
 
     @pytest.mark.asyncio
     async def test_empty_retry_queue_no_action(self):

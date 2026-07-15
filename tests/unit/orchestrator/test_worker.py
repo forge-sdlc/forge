@@ -221,6 +221,57 @@ async def test_multi_repo_review_selects_earlier_pr(mock_github_client: MagicMoc
     assert result["feedback_comment"] == "Fix backend"
 
 
+@pytest.mark.asyncio
+async def test_terminal_failure_posts_sanitized_recovery_comment():
+    worker = OrchestratorWorker(consumer_name="test-worker")
+    message = QueueMessage(
+        message_id="1-0",
+        event_id="evt-terminal-1",
+        source=EventSource.JIRA,
+        event_type="issue_updated",
+        ticket_key="TEST-123",
+    )
+    jira = AsyncMock()
+    jira.get_comments = AsyncMock(return_value=[])
+
+    with patch("forge.orchestrator.worker.JiraClient", return_value=jira):
+        await worker._handle_terminal_failure(
+            message,
+            "clone https://ghp_abcdefghijklmnopqrstuvwxyz123456@github.com/acme/repo failed",
+        )
+
+    jira.add_error_comment.assert_awaited_once()
+    kwargs = jira.add_error_comment.await_args.kwargs
+    assert kwargs["issue_key"] == "TEST-123"
+    assert "[REDACTED]" in kwargs["error_message"]
+    assert "ghp_" not in kwargs["error_message"]
+    assert "Event/correlation ID: evt-terminal-1" in kwargs["error_message"]
+    assert "Recovery:" in kwargs["error_message"]
+    jira.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_terminal_failure_skips_existing_event_comment():
+    worker = OrchestratorWorker(consumer_name="test-worker")
+    message = QueueMessage(
+        message_id="1-0",
+        event_id="evt-terminal-1",
+        source=EventSource.JIRA,
+        event_type="issue_updated",
+        ticket_key="TEST-123",
+    )
+    jira = AsyncMock()
+    jira.get_comments = AsyncMock(
+        return_value=[MagicMock(body="Event/correlation ID: evt-terminal-1")]
+    )
+
+    with patch("forge.orchestrator.worker.JiraClient", return_value=jira):
+        await worker._handle_terminal_failure(message, "failed")
+
+    jira.add_error_comment.assert_not_awaited()
+    jira.close.assert_awaited_once()
+
+
 class TestQuestionDetection:
     """Tests for Q&A mode question detection."""
 

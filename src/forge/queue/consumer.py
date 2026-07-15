@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import uuid
 from collections import defaultdict
 from collections.abc import Callable, Coroutine
 from contextlib import asynccontextmanager, suppress
@@ -33,8 +34,15 @@ TICKET_LOCK_LEASE_SECONDS = 600
 TICKET_LOCK_RENEW_SECONDS = 60
 TICKET_LOCK_KEY_PREFIX = "forge:queue:ticket-lock:"
 
+# Terminal-failure callbacks are claimed across workers because every worker
+# polls the shared retry sorted set. The short lease recovers if a worker dies
+# while posting the notification; completed claims are retained for idempotency.
+TERMINAL_FAILURE_CLAIM_PREFIX = "forge:queue:terminal-failure:"
+TERMINAL_FAILURE_CLAIM_TTL_SECONDS = 300
+
 # Handler type for message processing
 MessageHandler = Callable[[QueueMessage], Coroutine[Any, Any, None]]
+TerminalFailureHandler = Callable[[QueueMessage, str], Coroutine[Any, Any, None]]
 
 
 class TicketLockLostError(RuntimeError):
@@ -54,6 +62,7 @@ class QueueConsumer:
         redis_client: redis.Redis | None = None,
         jira_client: JiraClient | None = None,
         max_concurrent_tasks: int | None = None,
+        terminal_failure_handler: TerminalFailureHandler | None = None,
     ):
         """Initialize the queue consumer.
 
@@ -63,6 +72,8 @@ class QueueConsumer:
             jira_client: Optional Jira client for freshness checks.
             max_concurrent_tasks: Maximum concurrent in-flight tasks. Defaults
                 to ``settings.queue_max_concurrent_tasks`` when not provided.
+            terminal_failure_handler: Optional callback invoked after a message
+                is moved to the dead-letter queue.
         """
         self.consumer_name = consumer_name
         self._redis = redis_client
@@ -78,6 +89,7 @@ class QueueConsumer:
         self._semaphore = asyncio.Semaphore(concurrency)
         self._active_tasks: set[asyncio.Task[None]] = set()
         self._retry_queue = RetryQueue()
+        self._terminal_failure_handler = terminal_failure_handler
 
     @asynccontextmanager
     async def _distributed_ticket_lock(self, ticket_key: str):
@@ -199,6 +211,49 @@ class QueueConsumer:
         redis_client = await self._get_redis()
         await redis_client.xack(stream, CONSUMER_GROUP, message_id)
 
+    async def _notify_terminal_failure(self, message: QueueMessage, error: str) -> None:
+        """Invoke the terminal callback once per event without blocking DLQ handling."""
+        if self._terminal_failure_handler is None:
+            return
+
+        claim_key = f"{TERMINAL_FAILURE_CLAIM_PREFIX}{message.event_id}"
+        claim_token = uuid.uuid4().hex
+        try:
+            redis_client = await self._get_redis()
+            claimed = await redis_client.set(
+                claim_key,
+                claim_token,
+                ex=TERMINAL_FAILURE_CLAIM_TTL_SECONDS,
+                nx=True,
+            )
+        except Exception as claim_error:
+            logger.error(
+                f"Could not claim terminal failure callback for {message.event_id}: {claim_error}"
+            )
+            return
+
+        if not claimed:
+            logger.info(f"Terminal failure already handled for event {message.event_id}")
+            return
+
+        try:
+            await self._terminal_failure_handler(message, error)
+        except Exception as callback_error:
+            logger.error(
+                f"Terminal failure callback failed for {message.event_id}: {callback_error}"
+            )
+            return
+
+        try:
+            # A completed claim intentionally has no expiry: DLQ entries are
+            # retained too, and replaying one must not create another comment.
+            await redis_client.set(claim_key, "completed")
+        except Exception as completion_error:
+            logger.error(
+                f"Could not complete terminal failure claim for "
+                f"{message.event_id}: {completion_error}"
+            )
+
     async def _process_message(
         self,
         message: QueueMessage,
@@ -251,6 +306,7 @@ class QueueConsumer:
             try:
                 moved_to_dlq = not await self._retry_queue.enqueue_for_retry(message, str(exc))
                 if moved_to_dlq:
+                    await self._notify_terminal_failure(message, str(exc))
                     await self._ack(stream, message.message_id)
             except Exception as retry_err:
                 logger.error(
@@ -290,6 +346,7 @@ class QueueConsumer:
             try:
                 moved_to_dlq = not await self._retry_queue.enqueue_for_retry(message, str(e))
                 if moved_to_dlq:
+                    await self._notify_terminal_failure(message, str(e))
                     await self._ack(stream, message.message_id)
             except Exception as retry_err:
                 logger.error(
@@ -364,6 +421,7 @@ class QueueConsumer:
                 if not queued:
                     # Terminal failure: the DLQ now owns the message, so clear
                     # its original stream PEL entry.
+                    await self._notify_terminal_failure(entry.message, str(e))
                     await self._ack(retry_stream, entry.message.message_id)
                 continue
 

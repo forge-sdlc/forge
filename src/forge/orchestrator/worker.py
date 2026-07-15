@@ -126,7 +126,10 @@ class OrchestratorWorker:
         """
         self.settings = get_settings()
         self.consumer_name = consumer_name or f"worker-{uuid.uuid4().hex[:8]}"
-        self.consumer = QueueConsumer(self.consumer_name)
+        self.consumer = QueueConsumer(
+            self.consumer_name,
+            terminal_failure_handler=self._handle_terminal_failure,
+        )
         self.router = router or create_default_router()
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
@@ -146,6 +149,37 @@ class OrchestratorWorker:
         if login:
             self._forge_github_login = login
         return login
+
+    async def _handle_terminal_failure(self, message: QueueMessage, error: str) -> None:
+        """Post one Jira comment after queue retries are exhausted."""
+        jira = JiraClient()
+        event_marker = f"Event/correlation ID: {message.event_id}"
+        try:
+            comments = await jira.get_comments(message.ticket_key)
+            if any(event_marker in comment.body for comment in comments):
+                logger.info(
+                    f"Terminal failure notification already exists for event {message.event_id}"
+                )
+                return
+
+            safe_error = redact_secrets(error)
+            if len(safe_error) > 500:
+                safe_error = f"{safe_error[:500]}..."
+            details = (
+                f"{safe_error}\n\n"
+                f"Ticket: {message.ticket_key}\n"
+                f"{event_marker}\n"
+                "Recovery: inspect the dead-letter entry, resolve the root cause, "
+                "then requeue the event."
+            )
+            await jira.add_error_comment(
+                issue_key=message.ticket_key,
+                error_message=details,
+                node_name="queue execution (retries exhausted)",
+            )
+            logger.info(f"Posted terminal queue failure notification to {message.ticket_key}")
+        finally:
+            await jira.close()
 
     async def _handle_jira_event(self, message: QueueMessage) -> None:
         """Handle a Jira webhook event.
