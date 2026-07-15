@@ -1,6 +1,8 @@
 """Tests for container runner timeout cleanup."""
 
+import asyncio
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,6 +19,71 @@ def _driver_without_init() -> PodmanDriver:
 
 def _runner_without_init() -> ContainerRunner:
     return object.__new__(ContainerRunner)
+
+
+@pytest.mark.asyncio
+async def test_container_heartbeat_logs_elapsed_and_remaining_time(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    runner = _runner_without_init()
+    loop = MagicMock()
+    loop.time.side_effect = [100.0, 160.0]
+    sleep_calls = 0
+
+    async def fake_sleep(delay: float) -> None:
+        nonlocal sleep_calls
+        assert delay == 60
+        sleep_calls += 1
+        if sleep_calls == 2:
+            raise asyncio.CancelledError
+
+    with (
+        patch("forge.sandbox.runner.asyncio.get_running_loop", return_value=loop),
+        patch("forge.sandbox.runner.asyncio.sleep", side_effect=fake_sleep),
+        caplog.at_level(logging.INFO, logger="forge.sandbox.runner"),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await runner._log_container_heartbeat("forge-ticket-abc123", 180)
+
+    assert (
+        "Container forge-ticket-abc123 still running (60s elapsed, 120s remaining of 180s timeout)"
+    ) in caplog.messages
+
+
+@pytest.mark.asyncio
+async def test_run_cancels_heartbeat_after_process_exits(tmp_path) -> None:
+    runner = _runner_without_init()
+    runner.settings = MagicMock()
+    runner._build_container_name = MagicMock(return_value="forge-ticket-abc123")
+    runner._build_execution_spec = MagicMock(return_value=MagicMock())
+
+    heartbeat_started = asyncio.Event()
+    heartbeat_cancelled = asyncio.Event()
+
+    async def heartbeat(_container_name: str, _timeout_seconds: int) -> None:
+        heartbeat_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            heartbeat_cancelled.set()
+
+    async def execute(_spec: object) -> ExecutionResult:
+        await heartbeat_started.wait()
+        return ExecutionResult(exit_code=0, stdout="ok", stderr="")
+
+    runner._log_container_heartbeat = heartbeat  # type: ignore[method-assign]
+    runner._driver = MagicMock()
+    runner._driver.execute = AsyncMock(side_effect=execute)
+
+    result = await runner.run(
+        workspace_path=tmp_path,
+        task_summary="Do it",
+        task_description="Details",
+        config=ContainerConfig(timeout_seconds=180),
+    )
+
+    assert result.success is True
+    assert heartbeat_cancelled.is_set()
 
 
 @pytest.mark.asyncio

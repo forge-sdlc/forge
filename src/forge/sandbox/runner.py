@@ -66,6 +66,7 @@ EXIT_SUCCESS = 0
 EXIT_TASK_FAILED = 1
 EXIT_TESTS_FAILED = 2
 EXIT_CONFIG_ERROR = 3
+CONTAINER_HEARTBEAT_INTERVAL_SECONDS = 60
 
 
 @dataclass
@@ -705,6 +706,27 @@ class ContainerRunner:
                 review_cycles=collected_cycles,
             )
 
+    @staticmethod
+    async def _log_container_heartbeat(
+        container_name: str,
+        timeout_seconds: int,
+    ) -> None:
+        """Log periodic progress while a container execution is running."""
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+
+        while True:
+            await asyncio.sleep(CONTAINER_HEARTBEAT_INTERVAL_SECONDS)
+            elapsed = int(loop.time() - started_at)
+            remaining = max(0, timeout_seconds - elapsed)
+            logger.info(
+                "Container %s still running (%ss elapsed, %ss remaining of %ss timeout)",
+                container_name,
+                elapsed,
+                remaining,
+                timeout_seconds,
+            )
+
     async def run(
         self,
         workspace_path: Path,
@@ -800,10 +822,18 @@ class ContainerRunner:
                 collected_cycles,
             )
 
+            heartbeat_task = asyncio.create_task(
+                self._log_container_heartbeat(container_name, config.timeout_seconds)
+            )
             try:
-                exec_result = await self._driver.execute(spec)
-            except asyncio.CancelledError:
-                raise
+                try:
+                    exec_result = await self._driver.execute(spec)
+                except asyncio.CancelledError:
+                    raise
+                finally:
+                    heartbeat_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await heartbeat_task
             finally:
                 await self._finalize_review_polling(
                     poller,
