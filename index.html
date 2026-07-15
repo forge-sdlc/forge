@@ -434,6 +434,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#supported-workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Supported Workflows
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Supported Workflows">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#feature-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🚀 Feature Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🐛 Bug Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🛠️ Task Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-features" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1182,6 +1232,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#supported-workflows" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Supported Workflows
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Supported Workflows">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#feature-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🚀 Feature Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#bug-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🐛 Bug Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        🛠️ Task Workflow
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-features" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1216,19 +1316,40 @@
 
 
 <h1 id="forge">Forge<a class="headerlink" href="#forge" title="Permanent link">&para;</a></h1>
-<p>Forge automates the software development lifecycle from feature ideation through code delivery using AI-powered planning and execution. It connects Jira, GitHub, and Claude to transform tickets into shipped code with human approval gates at each stage.</p>
+<p>Forge automates the software development lifecycle from ticket creation through code delivery using AI-powered planning and execution. It connects Jira, GitHub, and Claude to transform tickets into shipped code with human approval gates at each stage.</p>
+<p>Forge supports three distinct, user-facing workflows depending on your ticket type and project requirements.</p>
 <h2 id="how-it-works">How It Works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
 <pre class="mermaid"><code>graph TD
-    A[Create Feature] --&gt; B[Generate PRD]
-    B --&gt;|Approval| C[Generate Spec]
-    C --&gt;|Approval| D[Decompose Epics]
-    D --&gt;|Approval| E[Generate Tasks]
-    E --&gt;|Approval| F[Implement Code]
-    F --&gt; G[Local Review]
-    G --&gt; H[Create PR]
-    H --&gt; I[CI/CD + Fix]
-    I --&gt; J[AI Review]
-    J --&gt; K[Human Review]</code></pre>
+    %% Workflow entrypoints
+    subgraph "1. Choose Your Workflow"
+        Feature[Jira Feature/Story&lt;br/&gt;Feature Workflow]
+        Bug[Jira Bug&lt;br/&gt;Bug Workflow]
+        Task[Jira Task&lt;br/&gt;Task Workflow]
+    end
+
+    %% Workflow processing paths
+    subgraph "2. Automated Planning &amp; Diagnosis"
+        PRD[Generate PRD &amp; Spec&lt;br/&gt;with Epic &amp; Task Decomposition]
+        RCA[Generate Root Cause Analysis&lt;br/&gt;&amp; Option Selection / Fix Plan]
+        Takeover[Triage &amp; Task Takeover Planning]
+    end
+
+    %% Common implementation &amp; delivery path
+    subgraph "3. Execution &amp; Delivery"
+        Code[Autonomous Containerized Implementation]
+        Review[CI &amp; AI/Human Code Review]
+    end
+
+    %% Connections
+    Feature --&gt; PRD
+    Bug --&gt; RCA
+    Task --&gt; Takeover
+
+    PRD --&gt; Code
+    RCA --&gt; Code
+    Takeover --&gt; Code
+
+    Code --&gt; Review</code></pre>
 <h2 id="quick-links">Quick Links<a class="headerlink" href="#quick-links" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="getting-started/">Getting Started</a> — Set up Forge in 10 minutes</li>
@@ -1239,6 +1360,22 @@
 <li><a href="skills/">Skills System</a> — Customize Forge for your stack</li>
 <li><a href="dev/contributing/">Contributing</a> — How to contribute</li>
 </ul>
+<h2 id="supported-workflows">Supported Workflows<a class="headerlink" href="#supported-workflows" title="Permanent link">&para;</a></h2>
+<h3 id="feature-workflow">🚀 Feature Workflow<a class="headerlink" href="#feature-workflow" title="Permanent link">&para;</a></h3>
+<p>Used for long-term or large-scale product changes where requirements need detailed definition and structural design before writing code.
+* <strong>Process</strong>: Progresses from initial Jira Feature to automated PRD generation, Technical Spec creation, Epic decomposition, and task implementation with rigorous human review gates at every planning step.
+* <strong>When to use</strong>: Choose this workflow for net-new features, substantial architectural modifications, or projects requiring collaborative product/engineering alignment on requirements before any code is touched.
+* <strong>More Info</strong>: Read the <a href="guide/feature-workflow/">Feature Workflow Guide</a>.</p>
+<h3 id="bug-workflow">🐛 Bug Workflow<a class="headerlink" href="#bug-workflow" title="Permanent link">&para;</a></h3>
+<p>Designed specifically for triaging, diagnosing, and resolving software defects efficiently.
+* <strong>Process</strong>: Forge reproduces the issue inside an isolated sandbox, automatically drafts a detailed Root Cause Analysis (RCA) presenting alternative fix options, generates a concrete fix plan upon option selection, and implements the verified fix.
+* <strong>When to use</strong>: Choose this workflow for reported bugs, unexpected crashes, test regressions, or any ticket where the root cause is unknown or multiple fix strategies need to be evaluated first.
+* <strong>More Info</strong>: Read the <a href="guide/bug-workflow/">Bug Workflow Guide</a>.</p>
+<h3 id="task-workflow">🛠️ Task Workflow<a class="headerlink" href="#task-workflow" title="Permanent link">&para;</a></h3>
+<p>Tailored for already-scoped, standalone tickets or task takeovers that bypass the extended feature planning and decomposition phases.
+* <strong>Process</strong>: Forge takes existing, clear engineering instructions directly from a Jira Task or Epic, generates a direct implementation plan, executes the changes in a sandbox, repairs CI, and opens a review-ready Pull Request.
+* <strong>When to use</strong>: Choose this workflow for well-defined engineering chores, minor refactors, simple library upgrades, or whenever the technical implementation steps are already pre-determined and agreed upon.
+* <strong>More Info</strong>: Read the <a href="guide/task-workflow/">Task Workflow Guide</a>.</p>
 <h2 id="key-features">Key Features<a class="headerlink" href="#key-features" title="Permanent link">&para;</a></h2>
 <p><strong>AI-Powered Planning</strong>
 : PRD, spec, and task generation at each stage with human approval gates before moving forward.</p>
