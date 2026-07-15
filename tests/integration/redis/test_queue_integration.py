@@ -5,6 +5,8 @@ using a real Redis instance via testcontainers.
 """
 
 import asyncio
+import json
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -12,6 +14,7 @@ from forge.models.events import EventSource
 from forge.queue.consumer import CONSUMER_GROUP, QueueConsumer
 from forge.queue.models import QueueMessage
 from forge.queue.producer import GITHUB_STREAM, JIRA_STREAM, QueueProducer
+from forge.queue.retry import RETRY_QUEUE_KEY, RetryEntry, RetryQueue
 
 
 @pytest.mark.integration
@@ -260,6 +263,48 @@ class TestQueueConsumer:
         )
 
         assert len(messages) == 0
+
+
+@pytest.mark.integration
+class TestRetryQueue:
+    """Test retry leasing against a real shared Redis instance."""
+
+    async def test_due_entry_is_claimed_by_only_one_worker(self, redis_client):
+        """Concurrent pollers must not receive the same due retry entry."""
+        message = QueueMessage(
+            message_id="1-0",
+            event_id="lease-test-1",
+            source=EventSource.JIRA,
+            event_type="issue_updated",
+            ticket_key="TEST-LEASE",
+        )
+        entry = RetryEntry(
+            message=message,
+            attempt=1,
+            next_retry=datetime.utcnow() - timedelta(seconds=1),
+            last_error="temporary failure",
+        )
+        serialized_entry = json.dumps(entry.to_dict())
+        await redis_client.zadd(
+            RETRY_QUEUE_KEY,
+            {serialized_entry: entry.next_retry.timestamp()},
+        )
+
+        first = RetryQueue()
+        second = RetryQueue()
+        first._redis = redis_client
+        second._redis = redis_client
+
+        claims = await asyncio.gather(
+            first.claim_due_messages(),
+            second.claim_due_messages(),
+        )
+
+        assert sorted(len(claim) for claim in claims) == [0, 1]
+        assert sum(claim[0].message.event_id == message.event_id for claim in claims if claim) == 1
+        lease_score = await redis_client.zscore(RETRY_QUEUE_KEY, serialized_entry)
+        assert lease_score is not None
+        assert lease_score > datetime.utcnow().timestamp()
 
 
 @pytest.mark.integration

@@ -22,6 +22,20 @@ MAX_RETRY_ATTEMPTS = 3
 RETRY_BACKOFF_MULTIPLIER = 2
 INITIAL_RETRY_DELAY_SECONDS = 30
 MAX_RETRY_DELAY_SECONDS = 3600  # 1 hour
+RETRY_CLAIM_LEASE_SECONDS = 900  # 15 minutes
+
+# Atomically move due entries beyond the visibility window before returning
+# them. Other pollers cannot claim the same entries while this lease is active;
+# if a worker exits before cleanup, the entries become visible again.
+_CLAIM_DUE_MESSAGES_SCRIPT = """
+local entries = redis.call(
+    "ZRANGEBYSCORE", KEYS[1], "-inf", ARGV[1], "LIMIT", 0, ARGV[3]
+)
+for _, entry in ipairs(entries) do
+    redis.call("ZADD", KEYS[1], ARGV[2], entry)
+end
+return entries
+"""
 
 
 @dataclass
@@ -153,25 +167,27 @@ class RetryQueue:
             f"{attempt} attempts. Error: {error}"
         )
 
-    async def get_due_messages(self, limit: int = 10) -> list[RetryEntry]:
-        """Get messages that are due for retry.
+    async def claim_due_messages(self, limit: int = 10) -> list[RetryEntry]:
+        """Atomically lease and return messages that are due for retry.
 
         Args:
             limit: Maximum number of messages to return.
 
         Returns:
-            List of retry entries ready to be processed.
+            List of retry entries exclusively leased to this poller for the
+            visibility window.
         """
         redis = await self._get_redis()
         now = datetime.utcnow().timestamp()
+        lease_until = now + RETRY_CLAIM_LEASE_SECONDS
 
-        # Get messages with score <= now
-        entries = await redis.zrangebyscore(
+        entries = await redis.eval(
+            _CLAIM_DUE_MESSAGES_SCRIPT,
+            1,
             RETRY_QUEUE_KEY,
-            "-inf",
             now,
-            start=0,
-            num=limit,
+            lease_until,
+            limit,
         )
 
         results = []

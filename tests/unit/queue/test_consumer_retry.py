@@ -55,7 +55,7 @@ def make_consumer() -> QueueConsumer:
     # Replace the real RetryQueue with a mock
     consumer._retry_queue = MagicMock(spec=RetryQueue)
     consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=True)
-    consumer._retry_queue.get_due_messages = AsyncMock(return_value=[])
+    consumer._retry_queue.claim_due_messages = AsyncMock(return_value=[])
     consumer._retry_queue.remove_from_retry = AsyncMock()
     consumer._retry_queue.remove_from_retry_without_counter_reset = AsyncMock()
     return consumer
@@ -240,7 +240,7 @@ class TestProcessRetryQueue:
 
         call_count = 0
 
-        async def get_due_side_effect(*_args, **_kwargs):
+        async def claim_due_side_effect(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -248,7 +248,7 @@ class TestProcessRetryQueue:
             consumer._running = False
             return []
 
-        consumer._retry_queue.get_due_messages = AsyncMock(side_effect=get_due_side_effect)
+        consumer._retry_queue.claim_due_messages = AsyncMock(side_effect=claim_due_side_effect)
         handler = AsyncMock()
         consumer.register_handler(EventSource.JIRA, handler)
 
@@ -272,7 +272,7 @@ class TestProcessRetryQueue:
 
         call_count = 0
 
-        async def get_due_side_effect(*_args, **_kwargs):
+        async def claim_due_side_effect(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -280,7 +280,7 @@ class TestProcessRetryQueue:
             consumer._running = False
             return []
 
-        consumer._retry_queue.get_due_messages = AsyncMock(side_effect=get_due_side_effect)
+        consumer._retry_queue.claim_due_messages = AsyncMock(side_effect=claim_due_side_effect)
         failing_handler = AsyncMock(side_effect=RuntimeError("still broken"))
         consumer.register_handler(EventSource.JIRA, failing_handler)
 
@@ -314,7 +314,7 @@ class TestProcessRetryQueue:
 
         call_count = 0
 
-        async def get_due_side_effect(*_args, **_kwargs):
+        async def claim_due_side_effect(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -322,7 +322,7 @@ class TestProcessRetryQueue:
             consumer._running = False
             return []
 
-        consumer._retry_queue.get_due_messages = AsyncMock(side_effect=get_due_side_effect)
+        consumer._retry_queue.claim_due_messages = AsyncMock(side_effect=claim_due_side_effect)
         consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=False)
         consumer._redis = AsyncMock()
         consumer._redis.set = AsyncMock(side_effect=[True, None])
@@ -335,6 +335,50 @@ class TestProcessRetryQueue:
             await consumer._process_retry_queue()
 
         callback.assert_awaited_once_with(message, "retries exhausted")
+        consumer._redis.xack.assert_awaited_once_with(
+            "forge:events:jira", CONSUMER_GROUP, message.message_id
+        )
+
+    @pytest.mark.asyncio
+    async def test_terminal_callback_failure_still_acknowledges_retry(self):
+        """A callback failure cannot leave a terminal retry in the PEL."""
+        callback = AsyncMock(side_effect=RuntimeError("Jira unavailable"))
+        consumer = make_consumer()
+        consumer._terminal_failure_handler = callback
+        message = make_message()
+        entry = RetryEntry(
+            message=message,
+            attempt=3,
+            next_retry=datetime.utcnow(),
+            last_error="still broken",
+        )
+
+        call_count = 0
+
+        async def claim_due_side_effect(*_args, **_kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [entry]
+            consumer._running = False
+            return []
+
+        consumer._retry_queue.claim_due_messages = AsyncMock(side_effect=claim_due_side_effect)
+        consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=False)
+        consumer._redis = AsyncMock()
+        consumer._redis.set = AsyncMock(return_value=True)
+        consumer.register_handler(
+            EventSource.JIRA,
+            AsyncMock(side_effect=RuntimeError("retries exhausted")),
+        )
+
+        with patch("forge.queue.consumer.asyncio.sleep", new_callable=AsyncMock):
+            await consumer._process_retry_queue()
+
+        callback.assert_awaited_once_with(message, "retries exhausted")
+        consumer._redis.xack.assert_awaited_once_with(
+            "forge:events:jira", CONSUMER_GROUP, message.message_id
+        )
 
     @pytest.mark.asyncio
     async def test_empty_retry_queue_no_action(self):
@@ -343,14 +387,14 @@ class TestProcessRetryQueue:
 
         call_count = 0
 
-        async def get_due_side_effect(*_args, **_kwargs):
+        async def claim_due_side_effect(*_args, **_kwargs):
             nonlocal call_count
             call_count += 1
             if call_count >= 2:
                 consumer._running = False
             return []
 
-        consumer._retry_queue.get_due_messages = AsyncMock(side_effect=get_due_side_effect)
+        consumer._retry_queue.claim_due_messages = AsyncMock(side_effect=claim_due_side_effect)
 
         with patch("forge.queue.consumer.asyncio.sleep", new_callable=AsyncMock):
             await consumer._process_retry_queue()

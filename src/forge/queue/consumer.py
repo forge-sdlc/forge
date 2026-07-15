@@ -254,6 +254,16 @@ class QueueConsumer:
                 f"{message.event_id}: {completion_error}"
             )
 
+    async def _ack_terminal_message(self, message: QueueMessage, stream: str) -> None:
+        """Best-effort acknowledge a message after it has reached the DLQ."""
+        try:
+            await self._ack(stream, message.message_id)
+        except Exception as ack_error:
+            logger.warning(
+                f"xack failed for terminal event {message.event_id}; "
+                f"PEL entry may linger: {ack_error}"
+            )
+
     async def _process_message(
         self,
         message: QueueMessage,
@@ -307,7 +317,7 @@ class QueueConsumer:
                 moved_to_dlq = not await self._retry_queue.enqueue_for_retry(message, str(exc))
                 if moved_to_dlq:
                     await self._notify_terminal_failure(message, str(exc))
-                    await self._ack(stream, message.message_id)
+                    await self._ack_terminal_message(message, stream)
             except Exception as retry_err:
                 logger.error(
                     f"Failed to enqueue {message.event_id} for retry after ticket lock loss: "
@@ -347,7 +357,7 @@ class QueueConsumer:
                 moved_to_dlq = not await self._retry_queue.enqueue_for_retry(message, str(e))
                 if moved_to_dlq:
                     await self._notify_terminal_failure(message, str(e))
-                    await self._ack(stream, message.message_id)
+                    await self._ack_terminal_message(message, stream)
             except Exception as retry_err:
                 logger.error(
                     f"Failed to enqueue {message.event_id} for retry: {retry_err}. "
@@ -400,7 +410,7 @@ class QueueConsumer:
         Kept separate from the polling loop so recovery and terminal DLQ
         behavior can be exercised deterministically in integration tests.
         """
-        entries = await self._retry_queue.get_due_messages()
+        entries = await self._retry_queue.claim_due_messages()
         for entry in entries:
             retry_stream = (
                 JIRA_STREAM if entry.message.source == EventSource.JIRA else GITHUB_STREAM
@@ -422,7 +432,7 @@ class QueueConsumer:
                     # Terminal failure: the DLQ now owns the message, so clear
                     # its original stream PEL entry.
                     await self._notify_terminal_failure(entry.message, str(e))
-                    await self._ack(retry_stream, entry.message.message_id)
+                    await self._ack_terminal_message(entry.message, retry_stream)
                 continue
 
             # Success: clear retry state and acknowledge the original entry.
