@@ -63,21 +63,28 @@ async def analyze_bug(state: BugState) -> BugState:
         try:
             repos = await jira.get_project_repos(issue.project_key)
         except MissingProjectConfig as e:
-            await post_status_comment(
-                jira,
-                ticket_key,
-                f"Cannot start RCA: repository configuration is missing for project "
-                f"`{issue.project_key}`.\n\n"
-                f"Set `forge.repos` on the Jira project to a comma-separated list of "
-                f"`owner/repo` values, then add `forge:retry` to resume.\n\n"
-                f"Details: {e}",
+            if settings.forge_require_project_config:
+                await post_status_comment(
+                    jira,
+                    ticket_key,
+                    f"Cannot start RCA: repository configuration is missing for project "
+                    f"`{issue.project_key}`.\n\n"
+                    f"Set `forge.repos` on the Jira project to a comma-separated list of "
+                    f"`owner/repo` values, then add `forge:retry` to resume.\n\n"
+                    f"Details: {e}",
+                )
+                await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
+                return {
+                    **state,
+                    "last_error": str(e),
+                    "current_node": "analyze_bug",
+                }
+            repos = settings.known_repos
+            logger.info(
+                "Project %s: falling back to GITHUB_KNOWN_REPOS: %s",
+                issue.project_key,
+                repos,
             )
-            await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
-            return {
-                **state,
-                "last_error": str(e),
-                "current_node": "analyze_bug",
-            }
 
         task_description = load_prompt(
             "analyze-bug",
