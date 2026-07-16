@@ -108,6 +108,9 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
     settings = get_settings()
     jira = JiraClient(settings)
 
+    # Initialize task_summary before Jira fetch to handle early failures (BR-003)
+    task_summary = "unknown"
+
     try:
         # Get Task details from Jira
         task_issue = await jira.get_issue(current_task)
@@ -207,6 +210,18 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Implementation failed for {current_task}: {e}")
+        # Emit structured end log before notify_error for timing accuracy
+        task_id = current_task if current_task else "unknown"
+        logger.info(
+            f"Implementation ended for task {task_id}",
+            extra={
+                "event": "implementation_ended",
+                "task_name": task_summary,
+                "feature_id": ticket_key,
+                "task_id": task_id,
+                "success": False,
+            },
+        )
         return {
             **state,
             "last_error": str(e),
