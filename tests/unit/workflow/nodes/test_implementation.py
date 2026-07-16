@@ -13,6 +13,7 @@ def _make_state(
     current_task_key="TASK-456",
     workspace_path="/tmp/ws",
     current_repo="acme/backend",
+    task_keys=None,
     tasks_by_repo=None,
     implemented_tasks=None,
 ):
@@ -26,7 +27,9 @@ def _make_state(
         "workspace_path": workspace_path,
         "current_task_key": current_task_key,
         "current_repo": current_repo,
-        "task_keys": [current_task_key] if current_task_key else [],
+        "task_keys": (
+            task_keys if task_keys is not None else ([current_task_key] if current_task_key else [])
+        ),
         "tasks_by_repo": tasks_by_repo or {current_repo: [current_task_key]},
         "implemented_tasks": implemented_tasks or [],
         "context": {"branch_name": "forge/BUG-123", "guardrails": ""},
@@ -210,6 +213,81 @@ class TestImplementationNodeRouting:
 
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "Workspace not set up"
+
+    @pytest.mark.asyncio
+    async def test_feature_review_feedback_runs_implementation_fix_pass(self):
+        """Failed local review routes to implementation for a dedicated fix pass."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        state = _make_state(
+            ticket_key="FEAT-123",
+            ticket_type=TicketType.FEATURE,
+            current_task_key=None,
+            task_keys=[],
+            tasks_by_repo={"acme/backend": ["TASK-1"]},
+            implemented_tasks=["TASK-1"],
+        )
+        state["local_review_verdict"] = "tests_incomplete"
+        state["qualitative_feedback"] = "Add regression coverage."
+        runner = _make_successful_runner()
+        mock_git = MagicMock()
+        mock_git.has_uncommitted_changes.return_value = True
+        mock_git.stage_all = MagicMock()
+        mock_git.commit = MagicMock()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.implementation.Workspace", return_value=MagicMock()),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+        ):
+            result = await implement_task(state)
+
+        assert runner.run.call_args.kwargs["task_key"] == "FEAT-123-review-fix"
+        assert "Add regression coverage." in runner.run.call_args.kwargs["task_description"]
+        mock_git.stage_all.assert_called_once()
+        mock_git.commit.assert_called_once_with("[FEAT-123] fix: address local review feedback")
+        assert result["current_node"] == "implement_task"
+        assert result["local_review_verdict"] is None
+        assert result["qualitative_feedback"] is None
+        assert result["retry_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_bug_review_feedback_runs_bug_implementation_fix_pass(self):
+        """Bug graph uses the same implementation fix pass but keeps bug node naming."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        state = _make_state(
+            ticket_key="BUG-123",
+            ticket_type=TicketType.BUG,
+            current_task_key=None,
+            task_keys=[],
+            tasks_by_repo={"acme/backend": ["TASK-1"]},
+            implemented_tasks=["TASK-1"],
+        )
+        state["local_review_verdict"] = "symptom_only"
+        state["qualitative_feedback"] = "Fix only handles a symptom."
+        runner = _make_successful_runner()
+        mock_git = MagicMock()
+        mock_git.has_uncommitted_changes.return_value = False
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.implementation.Workspace", return_value=MagicMock()),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+        ):
+            result = await implement_task(state)
+
+        assert runner.run.call_args.kwargs["task_key"] == "BUG-123-review-fix"
+        assert result["current_node"] == "implement_bug_fix"
+        assert result["local_review_verdict"] is None
 
     @pytest.mark.asyncio
     async def test_feature_container_failure_uses_feature_implementation_node(self):

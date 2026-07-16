@@ -7,6 +7,7 @@ from forge.models.workflow import TicketType
 from forge.workflow.feature.graph import (
     _route_after_epic_regeneration,
     _route_after_epic_task_regeneration,
+    _route_after_local_review,
     _route_after_prd_regeneration,
     _route_after_single_epic_update,
     _route_after_single_task_update,
@@ -88,6 +89,32 @@ class TestFeatureWorkflow:
         assert state["ticket_key"] == "TEST-123"
         assert state["ticket_type"] == TicketType.FEATURE
         assert state["prd_content"] == ""
+
+    def test_local_review_routes_to_implementation_when_issues_remain_under_cap(self):
+        state = {
+            "local_review_has_unfixed_issues": True,
+            "local_review_verdict": "tests_incomplete",
+            "local_review_attempts": 1,
+        }
+
+        assert _route_after_local_review(state) == "implement_task"
+
+    def test_local_review_routes_to_docs_when_review_passes(self):
+        state = {
+            "local_review_has_unfixed_issues": False,
+            "local_review_verdict": "adequate",
+            "local_review_attempts": 0,
+        }
+
+        assert _route_after_local_review(state) == "update_documentation"
+
+    def test_local_review_routes_to_docs_at_retry_cap(self):
+        state = {
+            "local_review_has_unfixed_issues": True,
+            "local_review_attempts": 2,
+        }
+
+        assert _route_after_local_review(state) == "update_documentation"
 
     def test_resume_regenerate_all_epics_stays_on_regeneration_node(self):
         """Retrying full plan regeneration should not restart raw epic decomposition."""

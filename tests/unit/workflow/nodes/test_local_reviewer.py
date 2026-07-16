@@ -7,6 +7,7 @@ import pytest
 from forge.models.workflow import TicketType
 from forge.workflow.nodes.local_reviewer import (
     _parse_bug_verdict,
+    _parse_feature_verdict,
     local_review_changes,
     route_local_review,
 )
@@ -73,6 +74,7 @@ def _make_mock_git(has_changes=False):
     git.has_uncommitted_changes.return_value = has_changes
     git.stage_all = MagicMock()
     git.commit = MagicMock()
+    git.reset_hard = MagicMock()
     return git
 
 
@@ -121,6 +123,27 @@ class TestParseBugVerdict:
         assert verdict == "adequate"
 
 
+class TestParseFeatureVerdict:
+    """Tests for the _parse_feature_verdict helper."""
+
+    def test_parses_adequate(self):
+        output = "verdict: adequate\n\nfeedback: Everything is correct."
+        verdict, feedback = _parse_feature_verdict(output)
+        assert verdict == "adequate"
+        assert "Everything is correct" in feedback
+
+    def test_parses_tests_incomplete(self):
+        output = "verdict: tests_incomplete\n\nfeedback: Missing coverage."
+        verdict, feedback = _parse_feature_verdict(output)
+        assert verdict == "tests_incomplete"
+        assert "Missing coverage" in feedback
+
+    def test_unknown_verdict_defaults_to_tests_incomplete(self):
+        output = "verdict: maybe\n\nfeedback: unclear"
+        verdict, _ = _parse_feature_verdict(output)
+        assert verdict == "tests_incomplete"
+
+
 class TestLocalReviewBug:
     """Tests for bug-specific local review behavior."""
 
@@ -158,8 +181,8 @@ class TestLocalReviewBug:
         assert "Password validator" in desc or "Fix regex" in desc or "validators.py" in desc
 
     @pytest.mark.asyncio
-    async def test_adequate_verdict_routes_to_create_pr(self, base_bug_review_state):
-        """'adequate' verdict → routes to create_pr."""
+    async def test_adequate_verdict_records_review_state(self, base_bug_review_state):
+        """'adequate' verdict is recorded for graph routing."""
         runner = _make_mock_runner("verdict: adequate\n\nfeedback: Looks good.")
         mock_git = _make_mock_git()
         mock_workspace = MagicMock()
@@ -171,12 +194,12 @@ class TestLocalReviewBug:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_node"] == "create_pr"
+        assert result["current_node"] == "local_review"
         assert result["local_review_verdict"] == "adequate"
 
     @pytest.mark.asyncio
     async def test_tests_incomplete_increments_retry(self, base_bug_review_state):
-        """'tests_incomplete' verdict → qualitative_retry_count incremented, routes to implement_bug_fix."""
+        """'tests_incomplete' verdict increments qualitative_retry_count for graph routing."""
         runner = _make_mock_runner(
             "verdict: tests_incomplete\n\nfeedback: Tests do not fail without fix."
         )
@@ -190,14 +213,14 @@ class TestLocalReviewBug:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_node"] == "implement_bug_fix"
+        assert result["current_node"] == "local_review"
         assert result["qualitative_retry_count"] == 1
         assert result["local_review_verdict"] == "tests_incomplete"
         assert "Tests do not fail" in (result["qualitative_feedback"] or "")
 
     @pytest.mark.asyncio
     async def test_symptom_only_increments_retry(self, base_bug_review_state):
-        """'symptom_only' verdict → qualitative_retry_count incremented, routes to implement_bug_fix."""
+        """'symptom_only' verdict increments qualitative_retry_count for graph routing."""
         runner = _make_mock_runner("verdict: symptom_only\n\nfeedback: Root cause not addressed.")
         mock_git = _make_mock_git()
         mock_workspace = MagicMock()
@@ -209,12 +232,12 @@ class TestLocalReviewBug:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_node"] == "implement_bug_fix"
+        assert result["current_node"] == "local_review"
         assert result["qualitative_retry_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_retry_uses_task_keys_when_linked_task_keys_empty(self, base_bug_review_state):
-        """When linked_task_keys is empty, task_keys is used to reset current_task_key on retry."""
+    async def test_retry_leaves_task_key_empty_for_review_feedback_fix(self, base_bug_review_state):
+        """Failed review asks implementation for a feedback fix pass, not a task rerun."""
         base_bug_review_state["linked_task_keys"] = []
         base_bug_review_state["task_keys"] = ["TASK-789"]
         runner = _make_mock_runner("verdict: tests_incomplete\n\nfeedback: Missing tests.")
@@ -228,11 +251,11 @@ class TestLocalReviewBug:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_task_key"] == "TASK-789"
+        assert result["current_task_key"] is None
 
     @pytest.mark.asyncio
-    async def test_cap_at_two_retries_routes_to_create_pr(self, base_bug_review_state):
-        """qualitative_retry_count >= 2 → routes to create_pr with qualitative_review_failed=True."""
+    async def test_cap_at_two_retries_records_failed_review(self, base_bug_review_state):
+        """qualitative_retry_count >= 2 records qualitative_review_failed=True."""
         base_bug_review_state["qualitative_retry_count"] = 1  # Already 1, will become 2 → cap
         runner = _make_mock_runner("verdict: tests_incomplete\n\nfeedback: Still missing tests.")
         mock_git = _make_mock_git()
@@ -245,9 +268,27 @@ class TestLocalReviewBug:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_node"] == "create_pr"
+        assert result["current_node"] == "local_review"
         assert result["qualitative_review_failed"] is True
         assert result["qualitative_retry_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_reviewer_changes_are_discarded_not_committed(self, base_bug_review_state):
+        """Bug reviewer output is feedback only; file edits are discarded."""
+        runner = _make_mock_runner("verdict: tests_incomplete\n\nfeedback: Missing tests.")
+        mock_git = _make_mock_git(has_changes=True)
+        mock_workspace = MagicMock()
+
+        with (
+            patch("forge.workflow.nodes.local_reviewer.ContainerRunner", return_value=runner),
+            patch("forge.workflow.nodes.local_reviewer.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.local_reviewer.Workspace", return_value=mock_workspace),
+        ):
+            await local_review_changes(base_bug_review_state)
+
+        mock_git.reset_hard.assert_called_once()
+        mock_git.stage_all.assert_not_called()
+        mock_git.commit.assert_not_called()
 
 
 class TestRouteLocalReview:
@@ -284,7 +325,7 @@ class TestBugReviewExceptionHandling:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_node"] == "create_pr"
+        assert result["current_node"] == "local_review"
         assert result["last_error"] is not None
         assert "Container crashed" in result["last_error"]
 
@@ -309,16 +350,16 @@ class TestBugReviewExceptionHandling:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_node"] == "create_pr"
+        assert result["current_node"] == "local_review"
         assert result["local_review_verdict"] is None
 
 
 class TestLocalReviewFeature:
-    """Tests that feature tickets use existing non-bug behavior."""
+    """Tests that feature tickets use read-only local review behavior."""
 
     @pytest.mark.asyncio
-    async def test_feature_uses_existing_prompt(self, base_feature_review_state):
-        """Feature ticket → existing prompt behavior (no qualitative verdict parsing)."""
+    async def test_feature_uses_read_only_prompt(self, base_feature_review_state):
+        """Feature ticket → read-only prompt behavior with verdict parsing."""
         captured_desc = []
 
         class _CapturingRunner:
@@ -327,7 +368,7 @@ class TestLocalReviewFeature:
                 result = MagicMock()
                 result.success = True
                 result.exit_code = 0
-                result.stdout = "No issues found."
+                result.stdout = "verdict: adequate\n\nfeedback: No issues found."
                 result.stderr = ""
                 return result
 
@@ -344,13 +385,14 @@ class TestLocalReviewFeature:
         ):
             result = await local_review_changes(base_feature_review_state)
 
-        assert result["current_node"] == "create_pr"
-        assert result.get("local_review_verdict") is None
+        assert result["current_node"] == "local_review"
+        assert result["local_review_has_unfixed_issues"] is False
+        assert result["local_review_verdict"] == "adequate"
 
     @pytest.mark.asyncio
-    async def test_feature_no_qualitative_fields_set(self, base_feature_review_state):
-        """Feature ticket → qualitative_retry_count and verdict not modified."""
-        runner = _make_mock_runner("verdict: adequate\n\nfeedback: Good.")
+    async def test_feature_tests_incomplete_records_feedback(self, base_feature_review_state):
+        """Feature reviewer feedback drives a later implementation fix pass."""
+        runner = _make_mock_runner("verdict: tests_incomplete\n\nfeedback: Add regression tests.")
         mock_git = _make_mock_git()
         mock_workspace = MagicMock()
 
@@ -361,8 +403,26 @@ class TestLocalReviewFeature:
         ):
             result = await local_review_changes(base_feature_review_state)
 
-        # Feature state should not have qualitative fields modified
-        assert (
-            "qualitative_retry_count" not in result or result.get("qualitative_retry_count") is None
-        )
-        assert "local_review_verdict" not in result or result.get("local_review_verdict") is None
+        assert result["local_review_has_unfixed_issues"] is True
+        assert result["local_review_verdict"] == "tests_incomplete"
+        assert "Add regression tests" in (result["qualitative_feedback"] or "")
+
+    @pytest.mark.asyncio
+    async def test_feature_reviewer_changes_are_discarded_not_committed(
+        self, base_feature_review_state
+    ):
+        """Feature reviewer output is feedback only; file edits are discarded."""
+        runner = _make_mock_runner("verdict: tests_incomplete\n\nfeedback: Missing tests.")
+        mock_git = _make_mock_git(has_changes=True)
+        mock_workspace = MagicMock()
+
+        with (
+            patch("forge.workflow.nodes.local_reviewer.ContainerRunner", return_value=runner),
+            patch("forge.workflow.nodes.local_reviewer.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.local_reviewer.Workspace", return_value=mock_workspace),
+        ):
+            await local_review_changes(base_feature_review_state)
+
+        mock_git.reset_hard.assert_called_once()
+        mock_git.stage_all.assert_not_called()
+        mock_git.commit.assert_not_called()

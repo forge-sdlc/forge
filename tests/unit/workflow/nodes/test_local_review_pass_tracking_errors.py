@@ -1,7 +1,6 @@
 """Unit tests for defensive pass number tracking error handling in local_reviewer.py."""
 
 import logging
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -110,8 +109,8 @@ class TestPassTrackingUnavailable:
                 "🔧 Local review found issues, applying fixes.",
             )
 
-            # Verify workflow continued successfully
-            assert result["current_node"] == "create_pr"
+            # Verify workflow continued successfully and left routing to the graph
+            assert result["current_node"] == "local_review"
 
     @pytest.mark.asyncio
     async def test_workflow_continues_when_pass_number_unavailable(self):
@@ -148,8 +147,8 @@ class TestPassTrackingUnavailable:
 
             # Verify container was executed despite pass tracking failure
             assert mock_runner.run.called
-            # Verify state transitioned to create_pr
-            assert result["current_node"] == "create_pr"
+            # Verify state remains on local_review for graph routing
+            assert result["current_node"] == "local_review"
 
 
 class TestInvalidPassNumberValues:
@@ -202,8 +201,8 @@ class TestInvalidPassNumberValues:
                 "🔧 Local review found issues, applying fixes.",
             )
 
-            # Verify workflow continued
-            assert result["current_node"] == "create_pr"
+            # Verify workflow continued and left routing to the graph
+            assert result["current_node"] == "local_review"
 
     @pytest.mark.asyncio
     async def test_non_integer_pass_number_detected_and_logged(self, caplog):
@@ -250,7 +249,7 @@ class TestInvalidPassNumberValues:
                 "🔧 Local review found issues, applying fixes.",
             )
 
-            assert result["current_node"] == "create_pr"
+            assert result["current_node"] == "local_review"
 
     @pytest.mark.asyncio
     async def test_zero_pass_number_rejected_with_generic_comment(self, caplog):
@@ -296,7 +295,7 @@ class TestInvalidPassNumberValues:
                 "🔧 Local review found issues, applying fixes.",
             )
 
-            assert result["current_node"] == "create_pr"
+            assert result["current_node"] == "local_review"
 
 
 class TestNormalPassNumberLogging:
@@ -514,7 +513,7 @@ class TestPassNumberIncrement:
         mock_runner = MagicMock()
         mock_result = MagicMock()
         mock_result.success = True
-        mock_result.stdout = "unfixed breaking issues remain"
+        mock_result.stdout = "verdict: tests_incomplete\n\nfeedback: breaking issues remain"
         mock_result.stderr = ""
         mock_runner.run = AsyncMock(return_value=mock_result)
 
@@ -551,7 +550,7 @@ class TestPassNumberIncrement:
         mock_runner = MagicMock()
         mock_result = MagicMock()
         mock_result.success = True
-        mock_result.stdout = "unfixed breaking issues remain"
+        mock_result.stdout = "verdict: tests_incomplete\n\nfeedback: breaking issues remain"
         mock_result.stderr = ""
         mock_runner.run = AsyncMock(return_value=mock_result)
 
