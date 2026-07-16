@@ -56,7 +56,6 @@ def _make_successful_runner():
 
 
 class TestImplementTaskStartedComment:
-
     @pytest.mark.asyncio
     async def test_posts_comment_on_task_ticket_before_container(self):
         """A comment is posted on the task ticket (not parent) when implementation starts."""
@@ -184,7 +183,6 @@ class TestImplementTaskStartedComment:
 
 
 class TestImplementationNodeRouting:
-
     @pytest.mark.asyncio
     async def test_feature_missing_workspace_uses_feature_implementation_node(self):
         """Feature implementation failures must resume at implement_task."""
@@ -295,14 +293,10 @@ class TestImplementTaskStructuredLogging:
             patch("forge.workflow.nodes.implementation.get_settings"),
             caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
         ):
-            await implement_task(
-                _make_state(ticket_key="FEAT-100", current_task_key="TASK-200")
-            )
+            await implement_task(_make_state(ticket_key="FEAT-100", current_task_key="TASK-200"))
 
         # Find the start log record
-        start_records = [
-            r for r in caplog.records if "implementation_started" in str(r.__dict__)
-        ]
+        start_records = [r for r in caplog.records if "implementation_started" in str(r.__dict__)]
         assert len(start_records) == 1
         record = start_records[0]
 
@@ -332,14 +326,10 @@ class TestImplementTaskStructuredLogging:
             patch("forge.workflow.nodes.implementation.get_settings"),
             caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
         ):
-            await implement_task(
-                _make_state(ticket_key="FEAT-101", current_task_key="TASK-201")
-            )
+            await implement_task(_make_state(ticket_key="FEAT-101", current_task_key="TASK-201"))
 
         # Find the completion log record
-        end_records = [
-            r for r in caplog.records if "implementation_completed" in str(r.__dict__)
-        ]
+        end_records = [r for r in caplog.records if "implementation_completed" in str(r.__dict__)]
         assert len(end_records) == 1
         record = end_records[0]
 
@@ -374,14 +364,10 @@ class TestImplementTaskStructuredLogging:
             patch("forge.workflow.nodes.implementation.get_settings"),
             caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
         ):
-            await implement_task(
-                _make_state(ticket_key="FEAT-102", current_task_key="TASK-202")
-            )
+            await implement_task(_make_state(ticket_key="FEAT-102", current_task_key="TASK-202"))
 
         # Find the failure log record
-        end_records = [
-            r for r in caplog.records if "implementation_ended" in str(r.__dict__)
-        ]
+        end_records = [r for r in caplog.records if "implementation_ended" in str(r.__dict__)]
         assert len(end_records) == 1
         record = end_records[0]
 
@@ -413,14 +399,10 @@ class TestImplementTaskStructuredLogging:
             patch("forge.workflow.nodes.implementation.get_settings"),
             caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
         ):
-            await implement_task(
-                _make_state(ticket_key="FEAT-103", current_task_key="TASK-203")
-            )
+            await implement_task(_make_state(ticket_key="FEAT-103", current_task_key="TASK-203"))
 
         # Find the failure log record
-        end_records = [
-            r for r in caplog.records if "implementation_ended" in str(r.__dict__)
-        ]
+        end_records = [r for r in caplog.records if "implementation_ended" in str(r.__dict__)]
         assert len(end_records) == 1
         record = end_records[0]
 
@@ -447,14 +429,10 @@ class TestImplementTaskStructuredLogging:
             patch("forge.workflow.nodes.implementation.get_settings"),
             caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
         ):
-            await implement_task(
-                _make_state(ticket_key="FEAT-104", current_task_key="TASK-204")
-            )
+            await implement_task(_make_state(ticket_key="FEAT-104", current_task_key="TASK-204"))
 
         # Find the failure log record
-        end_records = [
-            r for r in caplog.records if "implementation_ended" in str(r.__dict__)
-        ]
+        end_records = [r for r in caplog.records if "implementation_ended" in str(r.__dict__)]
         assert len(end_records) == 1
         record = end_records[0]
 
@@ -485,14 +463,10 @@ class TestImplementTaskStructuredLogging:
             patch("forge.workflow.nodes.implementation.get_settings"),
             caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
         ):
-            await implement_task(
-                _make_state(ticket_key="FEAT-105", current_task_key="TASK-205")
-            )
+            await implement_task(_make_state(ticket_key="FEAT-105", current_task_key="TASK-205"))
 
         # Find the start log record
-        start_records = [
-            r for r in caplog.records if "implementation_started" in str(r.__dict__)
-        ]
+        start_records = [r for r in caplog.records if "implementation_started" in str(r.__dict__)]
         assert len(start_records) == 1
         record = start_records[0]
 
@@ -520,14 +494,10 @@ class TestImplementTaskStructuredLogging:
             patch("forge.workflow.nodes.implementation.get_settings"),
             caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
         ):
-            await implement_task(
-                _make_state(ticket_key="FEAT-106", current_task_key="TASK-206")
-            )
+            await implement_task(_make_state(ticket_key="FEAT-106", current_task_key="TASK-206"))
 
         # Find the start log record
-        start_records = [
-            r for r in caplog.records if "implementation_started" in str(r.__dict__)
-        ]
+        start_records = [r for r in caplog.records if "implementation_started" in str(r.__dict__)]
         assert len(start_records) == 1
         record = start_records[0]
 

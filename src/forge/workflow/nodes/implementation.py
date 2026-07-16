@@ -216,7 +216,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             f"Implementation ended for task {task_id}",
             extra={
                 "event": "implementation_ended",
-                "task_name": task_summary,
+                "task_name": task_summary or "",
                 "feature_id": ticket_key,
                 "task_id": task_id,
                 "success": False,
