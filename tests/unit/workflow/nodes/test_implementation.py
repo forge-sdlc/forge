@@ -270,3 +270,266 @@ class TestImplementationNodeRouting:
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "container failed"
         assert result["retry_count"] == 1
+
+
+class TestImplementTaskStructuredLogging:
+    """Tests for structured logging in implement_task (TS-001 through TS-007)."""
+
+    @pytest.mark.asyncio
+    async def test_logs_implementation_started_with_structured_fields(self, caplog):
+        """TS-001: Verify start log has correct extra fields."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add caching layer")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(ticket_key="FEAT-100", current_task_key="TASK-200")
+            )
+
+        # Find the start log record
+        start_records = [
+            r for r in caplog.records if "implementation_started" in str(r.__dict__)
+        ]
+        assert len(start_records) == 1
+        record = start_records[0]
+
+        assert record.levelname == "INFO"
+        assert record.event == "implementation_started"
+        assert record.task_name == "Add caching layer"
+        assert record.feature_id == "FEAT-100"
+        assert record.task_id == "TASK-200"
+
+    @pytest.mark.asyncio
+    async def test_logs_implementation_completed_on_success(self, caplog):
+        """TS-002: Verify success end log has success=True."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Refactor DB queries")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(ticket_key="FEAT-101", current_task_key="TASK-201")
+            )
+
+        # Find the completion log record
+        end_records = [
+            r for r in caplog.records if "implementation_completed" in str(r.__dict__)
+        ]
+        assert len(end_records) == 1
+        record = end_records[0]
+
+        assert record.levelname == "INFO"
+        assert record.event == "implementation_completed"
+        assert record.task_name == "Refactor DB queries"
+        assert record.feature_id == "FEAT-101"
+        assert record.task_id == "TASK-201"
+        assert record.success is True
+
+    @pytest.mark.asyncio
+    async def test_logs_implementation_ended_on_failure(self, caplog):
+        """TS-003: Verify failure end log has success=False."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Fix memory leak")
+        runner = MagicMock()
+        container_result = MagicMock()
+        container_result.success = False
+        container_result.error_message = "container failed"
+        runner.run = AsyncMock(return_value=container_result)
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(ticket_key="FEAT-102", current_task_key="TASK-202")
+            )
+
+        # Find the failure log record
+        end_records = [
+            r for r in caplog.records if "implementation_ended" in str(r.__dict__)
+        ]
+        assert len(end_records) == 1
+        record = end_records[0]
+
+        assert record.levelname == "INFO"
+        assert record.event == "implementation_ended"
+        assert record.task_name == "Fix memory leak"
+        assert record.feature_id == "FEAT-102"
+        assert record.task_id == "TASK-202"
+        assert record.success is False
+
+    @pytest.mark.asyncio
+    async def test_logs_implementation_ended_on_exception(self, caplog):
+        """TS-004: Verify exception path emits end log."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add retry logic")
+        runner = MagicMock()
+        runner.run = AsyncMock(side_effect=RuntimeError("Connection timeout"))
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(ticket_key="FEAT-103", current_task_key="TASK-203")
+            )
+
+        # Find the failure log record
+        end_records = [
+            r for r in caplog.records if "implementation_ended" in str(r.__dict__)
+        ]
+        assert len(end_records) == 1
+        record = end_records[0]
+
+        assert record.levelname == "INFO"
+        assert record.event == "implementation_ended"
+        assert record.feature_id == "FEAT-103"
+        assert record.task_id == "TASK-203"
+        assert record.success is False
+
+    @pytest.mark.asyncio
+    async def test_logs_unknown_task_name_when_jira_fails_early(self, caplog):
+        """TS-005: Verify placeholder handling when Jira fetch fails."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = AsyncMock()
+        mock_jira.get_issue = AsyncMock(side_effect=Exception("Jira API timeout"))
+        mock_jira.close = AsyncMock()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(ticket_key="FEAT-104", current_task_key="TASK-204")
+            )
+
+        # Find the failure log record
+        end_records = [
+            r for r in caplog.records if "implementation_ended" in str(r.__dict__)
+        ]
+        assert len(end_records) == 1
+        record = end_records[0]
+
+        assert record.levelname == "INFO"
+        assert record.event == "implementation_ended"
+        assert record.task_name == "unknown"
+        assert record.feature_id == "FEAT-104"
+        assert record.task_id == "TASK-204"
+        assert record.success is False
+
+    @pytest.mark.asyncio
+    async def test_logs_empty_task_summary_as_empty_string(self, caplog):
+        """TS-006: Verify empty summary handling."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(ticket_key="FEAT-105", current_task_key="TASK-205")
+            )
+
+        # Find the start log record
+        start_records = [
+            r for r in caplog.records if "implementation_started" in str(r.__dict__)
+        ]
+        assert len(start_records) == 1
+        record = start_records[0]
+
+        assert record.levelname == "INFO"
+        assert record.task_name == ""
+
+    @pytest.mark.asyncio
+    async def test_logs_special_characters_in_task_summary(self, caplog):
+        """TS-007: Verify special chars not escaped."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        special_summary = 'Fix <script>alert("xss")</script> & handle "quotes"'
+        mock_jira = _make_mock_jira(summary=special_summary)
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(ticket_key="FEAT-106", current_task_key="TASK-206")
+            )
+
+        # Find the start log record
+        start_records = [
+            r for r in caplog.records if "implementation_started" in str(r.__dict__)
+        ]
+        assert len(start_records) == 1
+        record = start_records[0]
+
+        assert record.levelname == "INFO"
+        assert record.task_name == special_summary
