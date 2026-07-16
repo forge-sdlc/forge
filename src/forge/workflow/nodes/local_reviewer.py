@@ -1,7 +1,6 @@
 """Local code review node — reviews and fixes breaking issues before PR creation."""
 
 import logging
-import re
 from pathlib import Path
 
 from forge.config import get_settings
@@ -10,6 +9,12 @@ from forge.models.workflow import TicketType
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.nodes.review_utils import (
+    next_review_attempt,
+    parse_review_verdict,
+    review_attempts_exhausted,
+    run_review_container,
+)
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workspace.git_ops import GitOperations
@@ -54,24 +59,7 @@ def _parse_bug_verdict(output: str) -> tuple[str, str]:
     Returns:
         Tuple of (verdict, feedback).
     """
-    verdict = "tests_incomplete"
-    feedback = ""
-
-    verdict_match = re.search(r"verdict:\s*`?([a-zA-Z_]+)", output, re.IGNORECASE)
-    if verdict_match:
-        candidate = verdict_match.group(1).strip().lower()
-        if candidate in _VALID_VERDICTS:
-            verdict = candidate
-        else:
-            logger.warning(
-                f"Unrecognized verdict string '{candidate}', defaulting to tests_incomplete"
-            )
-
-    feedback_match = re.search(r"feedback:\s*(.*)", output, re.IGNORECASE | re.DOTALL)
-    if feedback_match:
-        feedback = feedback_match.group(1).strip()
-
-    return verdict, feedback
+    return parse_review_verdict(output, valid_verdicts=_VALID_VERDICTS)
 
 
 def route_local_review(state: WorkflowState) -> str:
@@ -145,7 +133,8 @@ async def _run_bug_review(state: WorkflowState) -> WorkflowState:
 
     try:
         runner = ContainerRunner(settings)
-        result = await runner.run(
+        _, output = await run_review_container(
+            runner,
             workspace_path=Path(workspace_path),
             task_summary="Qualitative bug review — root cause and test coverage",
             task_description=task_description,
@@ -167,10 +156,12 @@ async def _run_bug_review(state: WorkflowState) -> WorkflowState:
             git.stage_all()
             git.commit(f"[{ticket_key}] fix: address review feedback")
 
-        output = (result.stdout or "") + (result.stderr or "")
         verdict, feedback = _parse_bug_verdict(output)
 
-        new_retry_count = qualitative_retry_count + (0 if verdict == "adequate" else 1)
+        new_retry_count = next_review_attempt(
+            qualitative_retry_count,
+            passed=verdict == "adequate",
+        )
 
         if verdict == "adequate":
             logger.info(f"Bug qualitative review passed for {ticket_key}")
@@ -186,7 +177,7 @@ async def _run_bug_review(state: WorkflowState) -> WorkflowState:
             )
 
         # Non-adequate verdict
-        if new_retry_count >= _QUALITATIVE_CAP:
+        if review_attempts_exhausted(new_retry_count, _QUALITATIVE_CAP):
             logger.warning(
                 f"Qualitative review cap ({_QUALITATIVE_CAP}) reached for {ticket_key}, "
                 f"proceeding with warning"
@@ -305,7 +296,8 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
 
     try:
         runner = ContainerRunner(settings)
-        result = await runner.run(
+        _, output = await run_review_container(
+            runner,
             workspace_path=Path(workspace_path),
             task_summary="Local code review — fix breaking issues",
             task_description=task_description,
@@ -328,7 +320,6 @@ async def _run_feature_review(state: WorkflowState) -> WorkflowState:
             git.commit(f"[{ticket_key}] fix: address breaking issues found in local review")
             logger.info(f"Committed local review fixes for {ticket_key}")
 
-        output = (result.stdout or "") + (result.stderr or "")
         has_unfixed = _has_unfixed_breaking_issues(output)
 
         if has_unfixed and review_attempts + 1 < MAX_REVIEW_ATTEMPTS:

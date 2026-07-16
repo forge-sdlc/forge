@@ -33,6 +33,23 @@ def base_task_state() -> TaskTakeoverState:
     )
 
 
+@pytest.fixture(autouse=True)
+def mock_workspace_recovery():
+    """Keep these review tests focused on review behavior, not cloning."""
+
+    def _prepare(state):
+        workspace_path = state.get("workspace_path")
+        if not workspace_path:
+            raise ValueError("Workspace not set up")
+        return workspace_path, MagicMock()
+
+    with patch(
+        "forge.workflow.nodes.task_takeover_review.prepare_workspace",
+        side_effect=_prepare,
+    ):
+        yield
+
+
 def _make_mock_jira(description: str = "Acceptance Criteria:\n- Foo\n- Bar") -> AsyncMock:
     jira = AsyncMock()
     issue = MagicMock()
@@ -369,6 +386,9 @@ new file mode 100644
 
         with patch(
             "forge.workflow.nodes.task_takeover_review.JiraClient", return_value=mock_jira
+        ), patch(
+            "forge.workflow.nodes.task_takeover_review.prepare_workspace",
+            return_value=("/tmp/fake-workspace-review", MagicMock()),
         ):
             result = await run_qualitative_review(base_task_state)
 

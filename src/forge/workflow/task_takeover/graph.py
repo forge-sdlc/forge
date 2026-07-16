@@ -146,13 +146,26 @@ def _route_after_qualitative_review(state: TaskTakeoverState) -> str:
     if verdict == "adequate":
         return "create_pr"
 
-    # Unrecoverable errors (no workspace, infrastructure failure) should escalate
-    # instead of looping — retrying without a workspace will never succeed.
-    if last_error and not verdict:
-        logger.warning(f"Qualitative review hit an error without producing a verdict: {last_error}")
-        return "escalate_blocked"
-
     limit = QUALITATIVE_REVIEW_MAX_ATTEMPTS
+
+    # Review infrastructure failures are bounded like negative verdicts. Retry
+    # the review itself (not implementation), then proceed with the failure
+    # retained in state so the PR warns human reviewers.
+    if last_error and not verdict:
+        if retry_count >= limit:
+            logger.error(
+                "Qualitative review failed %s times; skipping review and proceeding to PR: %s",
+                retry_count,
+                last_error,
+            )
+            return "create_pr"
+        logger.warning(
+            "Qualitative review execution failed; retrying review (%s/%s): %s",
+            retry_count,
+            limit,
+            last_error,
+        )
+        return "run_qualitative_review"
 
     if retry_count >= limit:
         logger.warning(
@@ -327,6 +340,7 @@ def build_task_takeover_graph() -> StateGraph[TaskTakeoverState, Any, Any]:
         "run_qualitative_review",
         _route_after_qualitative_review,
         {
+            "run_qualitative_review": "run_qualitative_review",
             "execute_task_changes": "execute_task_changes",
             "create_pr": "create_pr",
             "escalate_blocked": "escalate_blocked",

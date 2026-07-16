@@ -88,7 +88,8 @@ class TestTaskTakeoverExecutionNode:
                 return_value=mock_runner,
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_execution.GitOperations", return_value=mock_git
+                "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
+                return_value=("/tmp/ws", mock_git),
             ),
             patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
         ):
@@ -120,6 +121,7 @@ class TestTaskTakeoverExecutionNode:
         mock_git.stage_all.assert_called_once()
         mock_git.commit.assert_called_once()
         mock_git.get_current_sha.assert_called_once()
+        mock_git.push_to_fork.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execution_failure(self) -> None:
@@ -140,7 +142,8 @@ class TestTaskTakeoverExecutionNode:
                 return_value=mock_runner,
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_execution.GitOperations", return_value=mock_git
+                "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
+                return_value=("/tmp/ws", mock_git),
             ),
             patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
         ):
@@ -167,6 +170,10 @@ class TestTaskTakeoverExecutionNode:
                 "forge.workflow.nodes.task_takeover_execution.JiraClient", return_value=mock_jira
             ),
             patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
+                side_effect=ValueError("Workspace not set up"),
+            ),
         ):
             result_state = await execute_task_changes(state)
 
@@ -185,6 +192,10 @@ class TestTaskTakeoverExecutionNode:
                 "forge.workflow.nodes.task_takeover_execution.JiraClient", return_value=mock_jira
             ),
             patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
+                return_value=("/tmp/ws", _make_mock_git()),
+            ),
         ):
             result_state = await execute_task_changes(state)
 

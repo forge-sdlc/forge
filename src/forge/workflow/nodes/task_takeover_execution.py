@@ -7,10 +7,9 @@ from typing import cast
 from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
 from forge.sandbox.runner import ContainerConfig, ContainerRunner
+from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import update_state_timestamp
-from forge.workspace.git_ops import GitOperations
-from forge.workspace.manager import Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -25,28 +24,19 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
         Updated TaskTakeoverState.
     """
     ticket_key = state["ticket_key"]
-    workspace_path = state.get("workspace_path")
     current_repo = state.get("current_repo", "")
-    branch_name = state.get("context", {}).get("branch_name", "")
     current_task = state.get("current_task_key") or ticket_key
 
     settings = get_settings()
     jira = JiraClient(settings)
 
-    if not workspace_path:
-        logger.error(f"No workspace for task execution on {ticket_key}")
-        return cast(
-            TaskTakeoverState,
-            update_state_timestamp(
-                {
-                    **state,
-                    "last_error": "Workspace not set up",
-                    "current_node": "execute_task_changes",
-                }
-            ),
-        )
-
     try:
+        # Resume safely when another worker cannot see the checkpointed local
+        # workspace.  The implementation branch is persisted to the fork
+        # below so a newly cloned workspace contains the reviewed changes.
+        workspace_path, git = prepare_workspace(state)
+        state = {**state, "workspace_path": workspace_path}
+
         # Get details from Jira for task implementation context
         task_issue = await jira.get_issue(current_task)
         task_description = task_issue.description or ""
@@ -89,14 +79,6 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
         )
 
         # Initialize GitOperations on the host to stage and commit
-        workspace_obj = Workspace(
-            path=Path(workspace_path),
-            repo_name=current_repo or "",
-            branch_name=branch_name or "",
-            ticket_key=ticket_key,
-        )
-        git = GitOperations(workspace_obj)
-
         committed = False
         commit_message = (
             f"[{current_task}] feat: implement task takeover execution changes and tests"
@@ -108,6 +90,9 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
             committed = git.commit(commit_message)
 
         current_sha = git.get_current_sha()
+        # Review may be consumed by another worker with a different local
+        # filesystem.  Persist the exact commit before checkpointing this node.
+        git.push_to_fork()
 
         # Store results, logs, and commit info in state
         return cast(

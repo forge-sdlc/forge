@@ -108,6 +108,7 @@ class TestRunQualitativeReview:
             patch("forge.workflow.nodes.task_takeover_review.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.task_takeover_review.GitOperations") as mock_git,
             patch("forge.workflow.nodes.task_takeover_review.ContainerRunner", return_value=mock_runner),
+            patch("forge.workflow.nodes.task_takeover_review.prepare_workspace") as mock_prepare,
         ):
             mock_git_instance = MagicMock()
             mock_git_instance._run_git = MagicMock()
@@ -117,6 +118,7 @@ class TestRunQualitativeReview:
             mock_git_instance.stage_all = MagicMock()
             mock_git_instance.commit = MagicMock()
             mock_git.return_value = mock_git_instance
+            mock_prepare.return_value = ("/tmp/fake-workspace-review", mock_git_instance)
 
             result = await run_qualitative_review(base_task_state)
 
@@ -147,6 +149,7 @@ class TestRunQualitativeReview:
             patch("forge.workflow.nodes.task_takeover_review.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.task_takeover_review.GitOperations") as mock_git,
             patch("forge.workflow.nodes.task_takeover_review.ContainerRunner", return_value=mock_runner),
+            patch("forge.workflow.nodes.task_takeover_review.prepare_workspace") as mock_prepare,
         ):
             mock_git_instance = MagicMock()
             mock_git_instance._run_git = MagicMock()
@@ -154,6 +157,7 @@ class TestRunQualitativeReview:
             mock_git_instance._run_git.return_value.stdout = "diff contents"
             mock_git_instance.has_uncommitted_changes = MagicMock(return_value=False)
             mock_git.return_value = mock_git_instance
+            mock_prepare.return_value = ("/tmp/fake-workspace-review", mock_git_instance)
 
             result = await run_qualitative_review(base_task_state)
 
@@ -170,9 +174,15 @@ class TestRunQualitativeReview:
     ) -> None:
         base_task_state["workspace_path"] = None
 
-        result = await run_qualitative_review(base_task_state)
+        with patch(
+            "forge.workflow.nodes.task_takeover_review.prepare_workspace",
+            side_effect=ValueError("Workspace not set up"),
+        ):
+            result = await run_qualitative_review(base_task_state)
         assert result["last_error"] == "Workspace not set up"
         assert result["current_node"] == "qualitative_review"
+        assert result["qualitative_review_retry_count"] == 1
+        assert result["qualitative_review_failed"] is True
 
     @pytest.mark.asyncio
     async def test_run_qualitative_review_exception_handling(
@@ -183,9 +193,13 @@ class TestRunQualitativeReview:
 
         with patch(
             "forge.workflow.nodes.task_takeover_review.JiraClient", return_value=mock_jira
+        ), patch(
+            "forge.workflow.nodes.task_takeover_review.prepare_workspace",
+            return_value=("/tmp/fake-workspace-review", MagicMock()),
         ):
             result = await run_qualitative_review(base_task_state)
 
         assert result["last_error"] is not None
         assert "Jira connection failure" in result["last_error"]
         assert result["current_node"] == "qualitative_review"
+        assert result["qualitative_review_retry_count"] == 1
