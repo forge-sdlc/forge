@@ -1489,10 +1489,10 @@
 <h1 id="contributing-to-forge">Contributing to Forge<a class="headerlink" href="#contributing-to-forge" title="Permanent link">&para;</a></h1>
 <p>Thanks for your interest. This document explains what kind of contributions Forge welcomes and how to make them.</p>
 <h2 id="have-an-idea-or-need-help">Have an idea or need help?<a class="headerlink" href="#have-an-idea-or-need-help" title="Permanent link">&para;</a></h2>
-<p>Open a <a href="https://github.com/Forge-sdlc/forge/issues">GitHub issue</a>. Issues are the right place for feature ideas, questions, bug reports, and anything else you want to discuss before writing code. If your idea is larger in scope — a new workflow type, a significant change to the pipeline, a new integration — you can also submit a proposal following the format in <code>proposals/TEMPLATE.md</code>. Proposals give everyone a chance to read, comment, and align before implementation starts.</p>
+<p>Open a <a href="https://github.com/Forge-sdlc/forge/issues">GitHub issue</a>. Issues are the right place for feature ideas, questions, bug reports, and anything else you want to discuss before writing code. If your idea is larger in scope (such as a new workflow type, a significant change to the pipeline, or a new integration) you can also submit a proposal following the format in <code>proposals/TEMPLATE.md</code>. Proposals give everyone a chance to read, comment, and align before implementation starts.</p>
 <p>The point is to work on things together. An early conversation usually leads to a better outcome than a PR that surprises everyone.</p>
 <h2 id="customize-forge-for-your-project">Customize Forge for your project<a class="headerlink" href="#customize-forge-for-your-project" title="Permanent link">&para;</a></h2>
-<p>Skills are the primary customization mechanism — they define how Forge generates PRDs, analyzes CI failures, implements code, and more. Since the <a href="https://github.com/forge-sdlc/forge/pull/34">skill installer</a> landed, teams keep their skills in their own Git repository and point Forge at it via a Jira project property (think of a <em>plugin</em>). You never need to fork the Forge repo to customize behavior.</p>
+<p>Skills are the primary customization mechanism; they define how Forge generates PRDs, analyzes CI failures, implements code, and more. Since the <a href="https://github.com/forge-sdlc/forge/pull/34">skill installer</a> landed, teams keep their skills in their own Git repository and point Forge at it via a Jira project property (think of a <em>plugin</em>). You never need to fork the Forge repo to customize behavior.</p>
 <h3 id="1-author-your-skills">1. Author your skills<a class="headerlink" href="#1-author-your-skills" title="Permanent link">&para;</a></h3>
 <p>Create a Git repository (anywhere) with one directory per skill you want to override:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>forge-skills-myteam/
@@ -1510,13 +1510,13 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--default-repo<span class="w"> </span>myorg/myrepo<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>--add-skill<span class="w"> </span><span class="nv">source</span><span class="o">=</span>https://github.com/myorg/forge-skills-myteam,ref<span class="o">=</span>v1.0,path<span class="o">=</span>
 </code></pre></div>
-<p>This writes three Jira project properties — <code>forge.repos</code>, <code>forge.default_repo</code>, and <code>forge.skills</code> — that Forge reads per ticket.</p>
+<p>This writes three Jira project properties: <code>forge.repos</code>, <code>forge.default_repo</code>, and <code>forge.skills</code> that Forge reads per ticket.</p>
 <p>For a monorepo where skills live in a subdirectory, use <code>skill_mapping</code> mode instead of <code>path</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--add-skill<span class="w"> </span><span class="nv">source</span><span class="o">=</span>https://github.com/myorg/tooling,ref<span class="o">=</span>main,mapping<span class="o">=</span>generate-prd:ai/prompts/prd
 </code></pre></div>
 <h3 id="3-auto-sync">3. Auto-sync<a class="headerlink" href="#3-auto-sync" title="Permanent link">&para;</a></h3>
-<p>The Forge worker reads the <code>forge.skills</code> project property at the start of every workflow and fetches any packages that have changed (SHA-based comparison against <code>skills/skills.lock</code>). No restart needed — push a new tag to your skills repo, update the <code>ref</code> via <code>forge project-setup</code>, and the next workflow run picks it up.</p>
+<p>The Forge worker reads the <code>forge.skills</code> project property at the start of every workflow and fetches any packages that have changed using a SHA-based comparison against <code>skills/skills.lock</code>. No restart needed: push a new tag to your skills repo, update the <code>ref</code> via <code>forge project-setup</code>, and the next workflow run picks it up.</p>
 <h3 id="local-development">Local development<a class="headerlink" href="#local-development" title="Permanent link">&para;</a></h3>
 <p>While authoring skills, install directly from a local path:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># From a local directory</span>
@@ -1533,10 +1533,10 @@
 </code></pre></div>
 <h2 id="other-ways-to-contribute">Other ways to contribute<a class="headerlink" href="#other-ways-to-contribute" title="Permanent link">&para;</a></h2>
 <h3 id="bug-fixes">Bug fixes<a class="headerlink" href="#bug-fixes" title="Permanent link">&para;</a></h3>
-<p>If something in the core workflow is broken, a focused fix with a test is always welcome. Keep the scope tight — a bug fix should fix the bug and nothing else.</p>
+<p>If something in the core workflow is broken, a focused fix with a test is always welcome. Keep the scope tight: a bug fix should fix the bug and nothing else.</p>
 <h3 id="default-skill-improvements">Default skill improvements<a class="headerlink" href="#default-skill-improvements" title="Permanent link">&para;</a></h3>
-<p>The skills in <code>skills/default/</code> should work for any software project regardless of stack. If you find something in a default skill that's OpenShift-specific, Java-specific, or otherwise not genuinely general — that's a bug. Fix it and submit a PR.</p>
-<p>If you want to improve a default skill's quality (better structure, clearer instructions, a missing edge case) — open an issue first to discuss, especially for significant changes that affect everyone.</p>
+<p>The skills in <code>skills/default/</code> should work for any software project regardless of stack. If you find something in a default skill that is OpenShift-specific, Java-specific, or otherwise not genuinely general, that is a bug. Fix it and submit a PR.</p>
+<p>If you want to improve a default skill's quality (better structure, clearer instructions, a missing edge case), open an issue first to discuss, especially for significant changes that affect everyone.</p>
 <h3 id="new-workflow-ideas">New workflow ideas<a class="headerlink" href="#new-workflow-ideas" title="Permanent link">&para;</a></h3>
 <p>Open a <a href="https://github.com/Forge-sdlc/forge/issues">GitHub issue</a> or submit a proposal in <code>proposals/</code> before writing any code. An early conversation saves everyone time and means the implementation is more likely to land.</p>
 <h3 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h3>
@@ -1550,13 +1550,13 @@
 </code></pre></div>
 <h2 id="pull-request-guidelines">Pull request guidelines<a class="headerlink" href="#pull-request-guidelines" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>One thing per PR.</strong> A skill set, a bug fix, or a doc improvement — not all three.</li>
-<li><strong>Tests for code changes.</strong> New logic needs tests. Skills don't need tests, but the resolver does.</li>
-<li><strong>No unrelated cleanup.</strong> If you notice something off while working on your change, open a separate issue.</li>
-<li><strong>Short description.</strong> What does this change and why? One paragraph is enough.</li>
+<li><strong>One thing per PR</strong>: A skill set, a bug fix, or a doc improvement (not all three).</li>
+<li><strong>Tests for code changes</strong>: New logic needs tests. Skills don't need tests, but the resolver does.</li>
+<li><strong>No unrelated cleanup</strong>: If you notice something off while working on your change, open a separate issue.</li>
+<li><strong>Short description</strong>: What does this change and why? One paragraph is enough.</li>
 </ul>
 <h2 id="questions">Questions<a class="headerlink" href="#questions" title="Permanent link">&para;</a></h2>
-<p>Open a <a href="https://github.com/Forge-sdlc/forge/issues">GitHub issue</a> — for "how do I" questions, sharing what your team built, or early feedback before you start writing code.</p>
+<p>Open a <a href="https://github.com/Forge-sdlc/forge/issues">GitHub issue</a> to ask questions, share what your team built, or get early feedback before writing code.</p>
 
 
 
