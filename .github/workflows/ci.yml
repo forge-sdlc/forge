@@ -57,3 +57,25 @@ jobs:
           JIRA_USER_EMAIL: dummy@example.com
           GITHUB_TOKEN: dummy
         run: uv run pytest tests/unit/ -q
+
+  container-build:
+    name: Container Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build --tag forge-ci:${{ github.sha }} .
+
+      - name: Verify application imports
+        run: >-
+          docker run --rm
+          --env JIRA_BASE_URL=https://example.atlassian.net
+          --env JIRA_API_TOKEN=dummy
+          --env JIRA_USER_EMAIL=dummy@example.com
+          --env GITHUB_TOKEN=dummy
+          forge-ci:${{ github.sha }}
+          python -c "import forge; from forge.main import app; assert app is not None"
+
+      - name: Verify Forge CLI entry point
+        run: docker run --rm forge-ci:${{ github.sha }} forge --help
