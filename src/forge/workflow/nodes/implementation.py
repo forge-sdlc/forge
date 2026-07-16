@@ -114,6 +114,16 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         task_description = task_issue.description or ""
         task_summary = task_issue.summary
 
+        logger.info(
+            f"Implementation started for task {current_task}",
+            extra={
+                "event": "implementation_started",
+                "task_name": task_summary,
+                "feature_id": ticket_key,
+                "task_id": current_task,
+            },
+        )
+
         # Post status comment at task implementation start
         await post_status_comment(
             jira,
