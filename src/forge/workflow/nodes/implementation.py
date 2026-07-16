@@ -165,6 +165,17 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         if result.success:
             logger.info(f"Container completed successfully for {current_task}")
 
+            logger.info(
+                f"Implementation completed for task {current_task}",
+                extra={
+                    "event": "implementation_completed",
+                    "task_name": task_summary or "",
+                    "feature_id": ticket_key,
+                    "task_id": current_task,
+                    "success": True,
+                },
+            )
+
             # Post status comment at task implementation completion
             await post_status_comment(
                 jira,
