@@ -489,3 +489,127 @@ class TestImplementationStartedStructuredLog:
 
         record = started_records[0]
         assert record.task_name == special_summary
+
+
+class TestImplementationCompletedStructuredLog:
+    """Tests for the structured log emitted when implementation completes successfully."""
+
+    @pytest.mark.asyncio
+    async def test_implementation_completed_log_emitted_with_extra_fields(self, caplog):
+        """Structured log is emitted with correct extra fields on success."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add retry logic")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-99",
+                    current_task_key="TASK-100",
+                    tasks_by_repo={"acme/backend": ["TASK-100"]},
+                )
+            )
+
+        # Find the implementation_completed log record
+        completed_records = [
+            r for r in caplog.records if "Implementation completed for task" in r.message
+        ]
+        assert len(completed_records) == 1, "Expected exactly one implementation_completed log"
+
+        record = completed_records[0]
+        assert record.levelname == "INFO"
+        assert "TASK-100" in record.message
+        assert record.event == "implementation_completed"
+        assert record.task_name == "Add retry logic"
+        assert record.feature_id == "FEAT-99"
+        assert record.task_id == "TASK-100"
+        assert record.success is True
+
+    @pytest.mark.asyncio
+    async def test_implementation_completed_log_empty_summary(self, caplog):
+        """Empty task summary results in task_name="" in extra dict."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="", description="Some description")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="BUG-50",
+                    current_task_key="TASK-200",
+                    tasks_by_repo={"acme/backend": ["TASK-200"]},
+                )
+            )
+
+        completed_records = [
+            r for r in caplog.records if "Implementation completed for task" in r.message
+        ]
+        assert len(completed_records) == 1
+
+        record = completed_records[0]
+        assert record.task_name == ""
+        assert record.success is True
+
+    @pytest.mark.asyncio
+    async def test_implementation_completed_log_not_emitted_on_failure(self, caplog):
+        """The implementation_completed log is not emitted when container fails."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add retry logic")
+        runner = MagicMock()
+        container_result = MagicMock()
+        container_result.success = False
+        container_result.error_message = "container failed"
+        runner.run = AsyncMock(return_value=container_result)
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-99",
+                    current_task_key="TASK-100",
+                    tasks_by_repo={"acme/backend": ["TASK-100"]},
+                )
+            )
+
+        # The implementation_completed log should NOT be emitted
+        completed_records = [
+            r for r in caplog.records if "Implementation completed for task" in r.message
+        ]
+        assert len(completed_records) == 0, (
+            "implementation_completed log should not be emitted on failure"
+        )
