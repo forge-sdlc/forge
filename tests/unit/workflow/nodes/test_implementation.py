@@ -370,3 +370,122 @@ class TestImplementationNodeRouting:
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "container failed"
         assert result["retry_count"] == 1
+
+
+class TestImplementationStartedStructuredLog:
+    """Tests for the structured log emitted when implementation starts."""
+
+    @pytest.mark.asyncio
+    async def test_implementation_started_log_emitted_with_extra_fields(self, caplog):
+        """Structured log is emitted with correct extra fields."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add retry logic")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-99",
+                    current_task_key="TASK-100",
+                    tasks_by_repo={"acme/backend": ["TASK-100"]},
+                )
+            )
+
+        # Find the implementation_started log record
+        started_records = [
+            r for r in caplog.records if "Implementation started for task" in r.message
+        ]
+        assert len(started_records) == 1, "Expected exactly one implementation_started log"
+
+        record = started_records[0]
+        assert record.levelname == "INFO"
+        assert "TASK-100" in record.message
+        assert record.event == "implementation_started"
+        assert record.task_name == "Add retry logic"
+        assert record.feature_id == "FEAT-99"
+        assert record.task_id == "TASK-100"
+
+    @pytest.mark.asyncio
+    async def test_implementation_started_log_empty_summary(self, caplog):
+        """Empty task summary results in task_name="" in extra dict."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="", description="Some description")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="BUG-50",
+                    current_task_key="TASK-200",
+                    tasks_by_repo={"acme/backend": ["TASK-200"]},
+                )
+            )
+
+        started_records = [
+            r for r in caplog.records if "Implementation started for task" in r.message
+        ]
+        assert len(started_records) == 1
+
+        record = started_records[0]
+        assert record.task_name == ""
+
+    @pytest.mark.asyncio
+    async def test_implementation_started_log_special_characters_preserved(self, caplog):
+        """Special characters in task summary are logged as-is."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        special_summary = "Fix: <script>alert('XSS')</script> & unicode: 日本語"
+        mock_jira = _make_mock_jira(summary=special_summary)
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-1",
+                    current_task_key="TASK-1",
+                    tasks_by_repo={"acme/backend": ["TASK-1"]},
+                )
+            )
+
+        started_records = [
+            r for r in caplog.records if "Implementation started for task" in r.message
+        ]
+        assert len(started_records) == 1
+
+        record = started_records[0]
+        assert record.task_name == special_summary
