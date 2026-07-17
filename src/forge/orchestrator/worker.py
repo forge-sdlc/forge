@@ -314,7 +314,12 @@ class OrchestratorWorker:
             project_key = extract_project_key(ticket_key)
             jira_client = JiraClient()
             skills_dir = Path(self.settings.skills_dir)
-            await ensure_skills(project_key, jira_client, skills_dir)
+            await ensure_skills(
+                project_key,
+                jira_client,
+                skills_dir,
+                skills_install_dir=self.settings.skills_install_dir,
+            )
         except Exception:
             logger.warning(
                 "Skill synchronisation failed for %s; continuing with workflow.",

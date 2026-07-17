@@ -566,3 +566,115 @@ class TestEnsureSkillsInvalidConfig:
         mock_clone.assert_not_called()
         mock_update_lock.assert_not_called()
         assert "is empty" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# skills_install_dir support
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureSkillsInstallDir:
+    @pytest.mark.asyncio
+    async def test_lock_file_written_to_skills_install_dir(self, tmp_path: Path) -> None:
+        """When skills_install_dir is provided, lock file is written there instead of skills_dir."""
+        skills = tmp_path / "skills"
+        skills.mkdir()
+        cache = tmp_path / "cache"
+
+        entry = _make_skill_entry()
+        jira_client = _make_jira_client([entry])
+
+        fake_clone = tmp_path / "clone"
+        (fake_clone / "skills").mkdir(parents=True)
+
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=fake_clone)
+        mock_cm.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch(
+                "forge.skills.orchestrator.resolve_ref_sha",
+                new=AsyncMock(return_value=RESOLVED_SHA),
+            ),
+            patch("forge.skills.orchestrator.should_fetch_entry", return_value=True),
+            patch("forge.skills.orchestrator.clone_context", return_value=mock_cm),
+            patch(
+                "forge.skills.orchestrator.install_path_mode",
+                return_value=["skill-a"],
+            ),
+            patch("forge.skills.orchestrator.update_lock_file") as mock_update_lock,
+            patch(
+                "forge.skills.orchestrator.read_lock_file",
+                return_value=LockFile(),
+            ),
+        ):
+            await ensure_skills(PROJECT_KEY, jira_client, skills, skills_install_dir=cache)
+
+        lock_path_used = mock_update_lock.call_args[0][0]
+        assert lock_path_used == cache / "skills.lock"
+        assert "skills.lock" not in [p.name for p in skills.iterdir()]
+
+    @pytest.mark.asyncio
+    async def test_skills_installed_to_skills_install_dir(self, tmp_path: Path) -> None:
+        """When skills_install_dir is provided, skills install to skills_install_dir/{project}."""
+        skills = tmp_path / "skills"
+        skills.mkdir()
+        cache = tmp_path / "cache"
+
+        entry = _make_skill_entry()
+        jira_client = _make_jira_client([entry])
+
+        fake_clone = tmp_path / "clone"
+        (fake_clone / "skills").mkdir(parents=True)
+
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=fake_clone)
+        mock_cm.__aexit__ = AsyncMock(return_value=False)
+
+        captured_target_dir: list[Path] = []
+
+        def fake_install(_source_dir: Path, target_dir: Path) -> list[str]:
+            captured_target_dir.append(target_dir)
+            return ["skill-a"]
+
+        with (
+            patch(
+                "forge.skills.orchestrator.resolve_ref_sha",
+                new=AsyncMock(return_value=RESOLVED_SHA),
+            ),
+            patch("forge.skills.orchestrator.should_fetch_entry", return_value=True),
+            patch("forge.skills.orchestrator.clone_context", return_value=mock_cm),
+            patch(
+                "forge.skills.orchestrator.install_path_mode",
+                side_effect=fake_install,
+            ),
+            patch("forge.skills.orchestrator.update_lock_file"),
+            patch(
+                "forge.skills.orchestrator.read_lock_file",
+                return_value=LockFile(),
+            ),
+        ):
+            await ensure_skills(PROJECT_KEY, jira_client, skills, skills_install_dir=cache)
+
+        assert captured_target_dir[0] == cache / "myproj"
+
+    @pytest.mark.asyncio
+    async def test_skills_install_dir_created_if_missing(self, tmp_path: Path) -> None:
+        """skills_install_dir is created automatically when it does not exist."""
+        cache = tmp_path / "nonexistent" / "cache"
+        assert not cache.exists()
+
+        entry = _make_skill_entry()
+        jira_client = _make_jira_client([entry])
+
+        with (
+            patch(
+                "forge.skills.orchestrator.resolve_ref_sha",
+                new=AsyncMock(return_value=RESOLVED_SHA),
+            ),
+            patch("forge.skills.orchestrator.should_fetch_entry", return_value=False),
+            patch("forge.skills.orchestrator.clone_context"),
+        ):
+            await ensure_skills(PROJECT_KEY, jira_client, tmp_path, skills_install_dir=cache)
+
+        assert cache.is_dir()

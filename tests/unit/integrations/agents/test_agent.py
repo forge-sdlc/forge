@@ -210,5 +210,5 @@ def test_get_skill_paths_returns_default_without_ticket_key():
         mock_resolver.return_value = ["skills/default/"]
         result = agent._get_skill_paths(None)
 
-    mock_resolver.assert_called_once_with("", ANY)
+    mock_resolver.assert_called_once_with("", ANY, skills_install_dir=ANY)
     assert result == ["skills/default/"]

@@ -31,6 +31,8 @@ async def ensure_skills(
     project_key: str,
     jira_client: JiraClient,
     skills_dir: Path,
+    *,
+    skills_install_dir: Path | None = None,
 ) -> None:
     """Ensure all skills configured for *project_key* are installed.
 
@@ -39,15 +41,16 @@ async def ensure_skills(
     and installs any entries whose SHA has changed or that are not yet
     installed.
 
-    The target directory for skills is ``skills_dir/<project_key_lower>/``
-    where ``<project_key_lower>`` is the lowercase form of *project_key*.
-
     Args:
         project_key: Jira project key (e.g., ``"MYPROJ"``).
         jira_client: Authenticated Jira client used to read the project
             property.
-        skills_dir: Root directory where skills are installed.  The lock file
-            is read from ``skills_dir/skills.lock``.
+        skills_dir: Root directory for source-tracked skills (e.g.
+            ``skills/default/``).  Used as the install target only when
+            *skills_install_dir* is not provided.
+        skills_install_dir: When provided, fetched skills and the lock file are
+            written here instead of *skills_dir*.  Keeps runtime artifacts
+            out of the source tree.
     """
     # ------------------------------------------------------------------
     # 1. Fetch the forge.skills configuration from Jira.
@@ -69,15 +72,18 @@ async def ensure_skills(
         return
 
     # ------------------------------------------------------------------
-    # 2. Read the current lock file.
+    # 2. Determine install root (skills_install_dir if provided, else skills_dir).
     # ------------------------------------------------------------------
-    lock_path = skills_dir / "skills.lock"
+    install_root = skills_install_dir if skills_install_dir is not None else skills_dir
+    install_root.mkdir(parents=True, exist_ok=True)
+
+    lock_path = install_root / "skills.lock"
     lock = read_lock_file(lock_path)
 
     # ------------------------------------------------------------------
     # 3. Determine the target directory (lowercase project key).
     # ------------------------------------------------------------------
-    target_dir = skills_dir / project_key.lower()
+    target_dir = install_root / project_key.lower()
 
     # ------------------------------------------------------------------
     # 4. Process each SkillEntry.

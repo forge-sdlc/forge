@@ -263,8 +263,13 @@ class ContainerRunner:
             - container_paths: Comma-separated paths for AGENT_SKILL_PATHS env var
         """
         skills_dir = Path.cwd() / self.settings.skills_dir.rstrip("/")
+        # Assumes worker and runner share the same host filesystem — skills_install_dir
+        # is populated by the worker and mounted into the container from the host.
         host_paths = [
-            Path(p.rstrip("/")) for p in resolve_skill_paths(ticket_key or "", skills_dir)
+            Path(p.rstrip("/"))
+            for p in resolve_skill_paths(
+                ticket_key or "", skills_dir, skills_install_dir=self.settings.skills_install_dir
+            )
         ]
 
         mounts = []

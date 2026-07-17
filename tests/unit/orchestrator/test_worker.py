@@ -828,7 +828,7 @@ class TestEnsureSkillsIntegration:
         """Project key extracted from ticket key is passed to ensure_skills."""
         received: dict = {}
 
-        async def fake_ensure_skills(project_key, _jira_client, _skills_dir) -> None:
+        async def fake_ensure_skills(project_key, _jira_client, _skills_dir, **_kw) -> None:
             received["project_key"] = project_key
 
         with (
@@ -845,11 +845,14 @@ class TestEnsureSkillsIntegration:
     async def test_ensure_skills_receives_skills_dir_from_settings(
         self, worker: OrchestratorWorker, jira_message: QueueMessage
     ):
-        """skills_dir passed to ensure_skills comes from settings.skills_dir."""
+        """skills_dir and skills_install_dir passed to ensure_skills come from settings."""
         received: dict = {}
 
-        async def fake_ensure_skills(_project_key, _jira_client, skills_dir) -> None:
+        async def fake_ensure_skills(
+            _project_key, _jira_client, skills_dir, *, skills_install_dir=None
+        ) -> None:
             received["skills_dir"] = skills_dir
+            received["skills_install_dir"] = skills_install_dir
 
         worker.settings.skills_dir = "custom/skills"
 
@@ -862,6 +865,7 @@ class TestEnsureSkillsIntegration:
             await worker._process_workflow(jira_message)
 
         assert received["skills_dir"] == Path("custom/skills")
+        assert received["skills_install_dir"] == worker.settings.skills_install_dir
 
     @pytest.mark.asyncio
     async def test_workflow_continues_when_ensure_skills_raises(
@@ -928,7 +932,7 @@ class TestEnsureSkillsIntegration:
         received: dict = {}
         fake_client_instance = MagicMock()
 
-        async def fake_ensure_skills(_project_key, jira_client, _skills_dir) -> None:
+        async def fake_ensure_skills(_project_key, jira_client, _skills_dir, **_kw) -> None:
             received["jira_client"] = jira_client
 
         with (
@@ -952,7 +956,7 @@ class TestEnsureSkillsIntegration:
         """
         ensure_skills_called = False
 
-        async def fake_ensure_skills_no_property(project_key, jira_client, _skills_dir) -> None:
+        async def fake_ensure_skills_no_property(project_key, jira_client, _skills_dir, **_kw) -> None:
             """Simulate ensure_skills when forge.skills property is absent (returns None)."""
             nonlocal ensure_skills_called
             ensure_skills_called = True

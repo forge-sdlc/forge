@@ -270,7 +270,9 @@ class ForgeAgent:
         fallback to skills/default/ for any skill not overridden by the project.
         """
         skills_dir = PROJECT_ROOT / self.settings.skills_dir.rstrip("/")
-        paths = resolve_skill_paths(ticket_key or "", skills_dir)
+        paths = resolve_skill_paths(
+            ticket_key or "", skills_dir, skills_install_dir=self.settings.skills_install_dir
+        )
         logger.debug(f"Using skill paths: {paths}")
         return paths
 
