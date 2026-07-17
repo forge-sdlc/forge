@@ -13,6 +13,11 @@ LABEL org.opencontainers.image.title="Forge Development Sandbox"
 LABEL org.opencontainers.image.description="AI-powered development environment for Forge SDLC orchestrator"
 LABEL org.opencontainers.image.source="https://github.com/your-org/forge"
 
+# Install system packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install Deep Agents and dependencies
 # Using pip as the universal image has Python pre-installed
 RUN pip install --no-cache-dir \
