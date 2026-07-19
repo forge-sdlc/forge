@@ -16,7 +16,6 @@ from forge.utils.rate_limiter import (
     rate_limited,
 )
 from forge.utils.retry import (
-    ANTHROPIC_RETRY_CONFIG,
     GITHUB_RETRY_CONFIG,
     JIRA_RETRY_CONFIG,
     RetryableError,
@@ -38,7 +37,6 @@ __all__ = [
     "get_rate_limiter",
     "rate_limited",
     # Retry
-    "ANTHROPIC_RETRY_CONFIG",
     "GITHUB_RETRY_CONFIG",
     "JIRA_RETRY_CONFIG",
     "RetryConfig",

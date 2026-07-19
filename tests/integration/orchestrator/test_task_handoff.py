@@ -103,8 +103,8 @@ class TestPreviousTaskKeysPassing:
             ):
                 settings = MagicMock()
                 settings.anthropic_api_key.get_secret_value.return_value = "test-key"
-                settings.use_vertex_ai = False
-                settings.claude_model = "claude-test"
+                settings.llm_backend = "anthropic"
+                settings.llm_model = "claude-test"
                 settings.container_image = "test-image"
                 settings.container_timeout = 3600
                 settings.container_memory = "4g"

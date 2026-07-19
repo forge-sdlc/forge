@@ -227,8 +227,8 @@ def trace_llm_call(
     Note: For LangChain/Deep Agents, use get_langfuse_config() instead
     and pass the callbacks via the config parameter.
 
-    This context manager is kept for backwards compatibility with
-    direct Anthropic API calls.
+    This context manager is kept for backwards compatibility with direct
+    provider API calls.
 
     Args:
         name: Name of the LLM operation.

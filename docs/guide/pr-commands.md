@@ -59,7 +59,7 @@ Merge `main` into the PR branch and resolve any merge conflicts using AI. Use th
 3. Clones the repository and checks out the PR branch from the fork
 4. Attempts `git merge origin/main`
 5. If no conflicts: pushes the merge commit to the fork branch
-6. If conflicts: spawns a container with Claude to resolve them using the PR description and changed files as context
+6. If conflicts: spawns a container agent to resolve them using the PR description and changed files as context
 7. Verifies no conflict markers remain, commits, and force-pushes to the fork
 8. Returns the workflow to the node it was at before the rebase
 

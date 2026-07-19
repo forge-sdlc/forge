@@ -221,7 +221,7 @@ def log_api_call(
 
     Args:
         logger: Logger to use.
-        service: Service name (jira, github, anthropic).
+        service: Service name (jira, github, llm).
         method: HTTP method.
         endpoint: API endpoint.
         status_code: Response status code.

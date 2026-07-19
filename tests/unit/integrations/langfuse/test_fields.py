@@ -101,7 +101,9 @@ class TestFieldResolvers:
         )
 
     def test_workflow_step_explicit_artifact_type(self) -> None:
-        state = _make_state(current_node="answer_question", artifact_type="custom_type", retry_count=0)
+        state = _make_state(
+            current_node="answer_question", artifact_type="custom_type", retry_count=0
+        )
         assert (
             resolve_field(TracingField.WORKFLOW_STEP, state)
             == "answer_question:question_asking:custom_type"
@@ -295,6 +297,8 @@ def _make_settings(**overrides: Any) -> Settings:
         "jira_api_token": "test",
         "jira_user_email": "test@example.com",
         "github_token": "test",
+        "llm_backend": "anthropic",
+        "llm_model": "claude-sonnet-4-5-20250929",
         "anthropic_api_key": "test",
         "langfuse_trace_tags": "",
         "langfuse_trace_metadata": "",

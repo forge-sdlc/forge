@@ -126,7 +126,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
             "retry_count": state.get("retry_count", 0),
         }
 
-        # Generate specification using Claude - primary operation
+        # Generate specification using the configured LLM backend - primary operation
         spec_content = await agent.generate_spec(prd_content, context)
 
         # Publish spec — either as GitHub PR or Jira update

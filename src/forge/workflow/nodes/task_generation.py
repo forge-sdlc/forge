@@ -22,7 +22,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
     This node:
     1. Iterates through all Epics in epic_keys
-    2. Generates Tasks for each Epic using Claude
+    2. Generates Tasks for each Epic using the configured LLM backend
     3. Creates Task tickets in Jira with repository labels
     4. Updates state with task tracking
 
@@ -375,7 +375,7 @@ def _parse_tasks_response(response: str) -> list[dict[str, str]]:
     """Parse Task generation response into structured data.
 
     Args:
-        response: Raw response from Claude.
+        response: Raw response from the configured LLM backend.
 
     Returns:
         List of Task dicts.

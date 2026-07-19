@@ -50,7 +50,7 @@ class TestRunTaskTraceResolution:
         assert resolve_call_state["current_node"] == "generate_prd"
         assert "system_prompt_length" in resolve_call_state
         assert isinstance(resolve_call_state["system_prompt_length"], int)
-        assert resolve_call_state["llm_model"] == agent.settings.claude_model
+        assert resolve_call_state["llm_model"] == agent.settings.llm_model
 
     @pytest.mark.asyncio
     async def test_passes_resolved_tags_to_run_agent(self, agent: ForgeAgent) -> None:

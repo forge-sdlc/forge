@@ -974,13 +974,24 @@ async def cmd_health(_args: argparse.Namespace) -> int:
     else:
         print("[SKIP] Jira: API token not configured")
 
-    # Check Anthropic/Vertex
-    if settings.use_vertex_ai:
-        print(f"[OK] Using Vertex AI: {settings.anthropic_vertex_project_id}")
-    elif settings.anthropic_api_key.get_secret_value():
-        print("[OK] Using direct Anthropic API")
+    # Check model backend
+    if settings.llm_backend == "vertex-ai":
+        if settings.google_cloud_project:
+            print(f"[OK] Using Vertex AI: {settings.google_cloud_project}")
+        else:
+            print("[WARN] Vertex AI selected but GOOGLE_CLOUD_PROJECT is not configured")
+    elif settings.llm_backend == "google-genai":
+        if settings.google_api_key.get_secret_value():
+            print("[OK] Using Gemini API")
+        else:
+            print("[WARN] Gemini API selected but GOOGLE_API_KEY is not configured")
+    elif settings.llm_backend == "anthropic":
+        if settings.anthropic_api_key.get_secret_value():
+            print("[OK] Using Anthropic API")
+        else:
+            print("[WARN] Anthropic selected but ANTHROPIC_API_KEY is not configured")
     else:
-        print("[WARN] No Claude API configured")
+        print("[WARN] No LLM backend configured")
 
     print("\nHealth check complete!")
     return 0

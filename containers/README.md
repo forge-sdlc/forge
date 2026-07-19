@@ -46,8 +46,8 @@ Based on `mcr.microsoft.com/devcontainers/universal:linux` which provides:
 
 Additional packages installed:
 - `deepagents` - AI agent framework
-- `anthropic`, `langchain-anthropic` - Claude API access
-- `langchain-google-vertexai` - Vertex AI support (Claude and Gemini)
+- `anthropic`, `langchain-anthropic` - direct Anthropic API access
+- `langchain-google-vertexai` - Vertex AI model access
 - `langchain-mcp-adapters` - MCP server integration
 
 ## Image Configuration
@@ -104,10 +104,12 @@ Passed automatically by the orchestrator:
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Claude API key (direct API) |
-| `ANTHROPIC_VERTEX_PROJECT_ID` | GCP project for Vertex AI |
-| `ANTHROPIC_VERTEX_REGION` | Vertex AI region |
-| `LLM_MODEL` | Model to use (e.g., `claude-opus-4-5@20251101`, `gemini-2.5-pro`) |
+| `LLM_BACKEND` | Required: `vertex-ai`, `google-genai`, or `anthropic` |
+| `GOOGLE_API_KEY` | Gemini API key for `google-genai` |
+| `GOOGLE_CLOUD_PROJECT` | GCP project for `vertex-ai` |
+| `GOOGLE_CLOUD_LOCATION` | Vertex AI location |
+| `ANTHROPIC_API_KEY` | API key for `anthropic` |
+| `LLM_MODEL` | Required model name (for example, `gemini-3.5-flash`) |
 | `FORGE_SYSTEM_PROMPT_TEMPLATE` | System prompt template (interpolated by entrypoint) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to mounted gcloud credentials |
 | `GIT_USER_NAME` | Git author name for commits (default: `Forge`) |
@@ -136,9 +138,10 @@ Example: `forge-AISOS-189-installer-12345`
 
 ## Task Execution
 
-The entrypoint runs a Deep Agent with `LocalShellBackend`. Supported models:
-- **Claude** (via Anthropic API or Vertex AI): `claude-opus-4-5@20251101`, `claude-sonnet-4-5@20250929`
-- **Gemini** (via Vertex AI): `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3.1-pro-preview`
+The entrypoint runs a Deep Agent with `LocalShellBackend`. The built-in model
+factory supports the Gemini API, Vertex AI, and the Anthropic API. Because the
+agent receives a LangChain chat model instance, additional providers can be
+added by extending the model factory.
 
 The agent:
 1. Reads and understands the codebase

@@ -43,6 +43,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def resolve_llm_backend() -> str:
+    """Read the required model backend."""
+    backend = os.environ.get("LLM_BACKEND")
+    if not backend:
+        raise ValueError("LLM_BACKEND is required")
+    return backend
+
+
+def resolve_llm_model() -> str:
+    """Read the required model name."""
+    model = os.environ.get("LLM_MODEL")
+    if not model:
+        raise ValueError("LLM_MODEL is required")
+    return model
+
+
 # Enable LangChain debug/verbose mode if requested
 if os.environ.get("LANGCHAIN_VERBOSE", "").lower() in ("true", "1", "yes"):
     try:
@@ -376,54 +392,72 @@ def _create_llm_model(max_tokens_default: int = 16384):
     Raises:
         RuntimeError: If credentials are missing or Gemini is used without Vertex AI.
     """
-    model_name = os.environ.get("LLM_MODEL") or os.environ.get(
-        "CLAUDE_MODEL", "claude-sonnet-4-5@20250929"
-    )
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    vertex_project = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID")
-
-    if not api_key and not vertex_project:
-        raise RuntimeError(
-            "No API credentials found (ANTHROPIC_API_KEY or ANTHROPIC_VERTEX_PROJECT_ID)"
-        )
-
+    backend_name = resolve_llm_backend()
+    model_name = resolve_llm_model()
     is_gemini = model_name.lower().startswith(("gemini", "models/gemini"))
     max_tokens = int(os.environ.get("LLM_MAX_TOKENS", str(max_tokens_default)))
 
-    if vertex_project:
+    if backend_name == "vertex-ai":
+        vertex_project = os.environ.get("GOOGLE_CLOUD_PROJECT")
+        if not vertex_project:
+            raise RuntimeError("GOOGLE_CLOUD_PROJECT is required for the vertex-ai backend")
+        vertex_region = os.environ.get("GOOGLE_CLOUD_LOCATION", "global")
         if is_gemini:
             from langchain_google_genai import ChatGoogleGenerativeAI
 
-            logger.info(f"Using Gemini model: {model_name}, max_output_tokens={max_tokens}")
+            logger.info(
+                f"Using Vertex AI Gemini model: {model_name}, max_output_tokens={max_tokens}"
+            )
             model = ChatGoogleGenerativeAI(
                 model=model_name,
                 project=vertex_project,
-                location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
+                location=vertex_region,
                 vertexai=True,
                 max_output_tokens=max_tokens,
             )
         else:
             from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
-            logger.info(f"Using Claude model: {model_name}, max_tokens={max_tokens}")
+            logger.info(
+                f"Using Vertex AI Anthropic model: {model_name}, max_tokens={max_tokens}"
+            )
             model = ChatAnthropicVertex(
                 model_name=model_name,
                 project=vertex_project,
-                location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
+                location=vertex_region,
                 max_tokens=max_tokens,
             )
-    else:
-        if is_gemini:
-            raise RuntimeError(f"Gemini model '{model_name}' requires Vertex AI credentials")
+    elif backend_name == "google-genai":
+        if not is_gemini:
+            raise RuntimeError(f"Model '{model_name}' is not supported by google-genai")
+        google_api_key = os.environ.get("GOOGLE_API_KEY")
+        if not google_api_key:
+            raise RuntimeError("GOOGLE_API_KEY is required for the google-genai backend")
 
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        logger.info(f"Using Gemini API model: {model_name}, max_output_tokens={max_tokens}")
+        model = ChatGoogleGenerativeAI(
+            model=model_name,
+            api_key=google_api_key,
+            max_output_tokens=max_tokens,
+        )
+    elif backend_name == "anthropic":
+        if is_gemini:
+            raise RuntimeError(f"Model '{model_name}' is not supported by anthropic")
+        anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY is required for the anthropic backend")
         from langchain_anthropic import ChatAnthropic
 
-        logger.info(f"Using Claude model: {model_name}, max_tokens={max_tokens}")
+        logger.info(f"Using direct Anthropic model: {model_name}, max_tokens={max_tokens}")
         model = ChatAnthropic(
             model=model_name,
-            api_key=api_key,
+            api_key=anthropic_api_key,
             max_tokens=max_tokens,
         )
+    else:
+        raise RuntimeError(f"Unsupported LLM_BACKEND: {backend_name}")
 
     return model_name, model
 

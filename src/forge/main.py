@@ -64,7 +64,7 @@ AI-powered software development lifecycle orchestration.
 
 - **Webhook Gateway**: Receives events from Jira and GitHub
 - **Workflow Orchestration**: LangGraph-based state machine
-- **AI Integration**: Claude-powered planning and code generation
+- **AI Integration**: Deep Agents-backed planning and code generation
 - **Multi-repo Support**: Concurrent execution across repositories
 
 ### Workflow

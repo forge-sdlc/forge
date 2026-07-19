@@ -36,15 +36,22 @@ from forge.integrations.langfuse.fields import resolve_trace_fields
 from forge.prompts import load_prompt, set_default_version
 from forge.skills.resolver import resolve_skill_paths
 
-# Optional Vertex AI support (Claude and Gemini)
+# Optional Google model support
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
-    from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
-    HAS_VERTEX = True
+    HAS_GOOGLE_GENAI = True
 except ImportError:
     ChatGoogleGenerativeAI = None  # type: ignore[misc, assignment]
-    HAS_VERTEX = False
+    HAS_GOOGLE_GENAI = False
+
+try:
+    from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+
+    HAS_ANTHROPIC_VERTEX = True
+except ImportError:
+    ChatAnthropicVertex = None  # type: ignore[misc, assignment]
+    HAS_ANTHROPIC_VERTEX = False
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
@@ -140,9 +147,13 @@ class ForgeAgent:
         set_default_version(self.settings.prompt_version)
 
     def _ensure_api_key(self) -> None:
-        """Ensure Anthropic API key is available."""
-        if self.settings.use_vertex_ai:
+        """Expose provider-native credentials expected by LangChain."""
+        if self.settings.llm_backend == "vertex-ai":
             logger.info("Using Vertex AI backend")
+        elif self.settings.llm_backend == "google-genai":
+            api_key = self.settings.google_api_key.get_secret_value()
+            if api_key and not os.environ.get("GOOGLE_API_KEY"):
+                os.environ["GOOGLE_API_KEY"] = api_key
         elif not os.environ.get("ANTHROPIC_API_KEY"):
             api_key = self.settings.anthropic_api_key.get_secret_value()
             if api_key:
@@ -155,57 +166,78 @@ class ForgeAgent:
             model_name: Optional model name override. Uses settings if not provided.
 
         Returns:
-            A LangChain ChatModel instance (ChatAnthropic, ChatAnthropicVertex, or ChatVertexAI).
+            A LangChain chat model instance for Deep Agents.
         """
-        model = model_name or self.settings.claude_model
-        provider = Settings.detect_model_provider(model)
+        model = model_name or self.settings.llm_model
+        is_gemini = Settings.detect_model_provider(model) == "google"
+        backend = self.settings.llm_backend
 
-        if self.settings.use_vertex_ai:
-            if not HAS_VERTEX:
-                raise ImportError(
-                    "langchain-google-vertexai is required for Vertex AI. "
-                    "Install with: pip install langchain-google-vertexai"
-                )
+        if backend == "google-genai":
+            if not is_gemini:
+                raise ValueError(f"Model '{model}' is not supported by google-genai")
+            if not HAS_GOOGLE_GENAI:
+                raise ImportError("langchain-google-genai is required for google-genai")
+            api_key = self.settings.google_api_key.get_secret_value()
+            if not api_key:
+                raise ValueError("GOOGLE_API_KEY is required for google-genai")
+            return ChatGoogleGenerativeAI(
+                model=model,
+                api_key=api_key,
+                max_output_tokens=self.settings.llm_max_tokens,
+            )
 
-            if provider == "google":
-                # Gemini models via ChatGoogleGenerativeAI with Vertex AI backend
+        if backend == "vertex-ai":
+            project = self.settings.google_cloud_project
+            if not project:
+                raise ValueError("GOOGLE_CLOUD_PROJECT is required for vertex-ai")
+            if is_gemini:
+                if not HAS_GOOGLE_GENAI:
+                    raise ImportError("langchain-google-genai is required for Vertex AI Gemini")
                 logger.info(
-                    f"Creating ChatGoogleGenerativeAI (Gemini) model: {model} "
-                    f"in {self.settings.anthropic_vertex_region}, max_output_tokens={self.settings.llm_max_tokens}"
+                    f"Creating Vertex AI Gemini model: {model} "
+                    f"in {self.settings.google_cloud_location}, "
+                    f"max_output_tokens={self.settings.llm_max_tokens}"
                 )
                 return ChatGoogleGenerativeAI(
                     model=model,
-                    project=self.settings.anthropic_vertex_project_id,
-                    location=self.settings.anthropic_vertex_region,
+                    project=self.settings.google_cloud_project,
+                    location=self.settings.google_cloud_location,
                     vertexai=True,
                     max_output_tokens=self.settings.llm_max_tokens,
                 )
             else:
-                # Claude models via ChatAnthropicVertex
+                if not HAS_ANTHROPIC_VERTEX:
+                    raise ImportError(
+                        "langchain-google-vertexai is required for Vertex AI Anthropic models"
+                    )
                 logger.info(
-                    f"Creating ChatAnthropicVertex model: {model} "
-                    f"in {self.settings.anthropic_vertex_region}, max_tokens={self.settings.llm_max_tokens}"
+                    f"Creating Vertex AI Anthropic model: {model} "
+                    f"in {self.settings.google_cloud_location}, "
+                    f"max_tokens={self.settings.llm_max_tokens}"
                 )
                 return ChatAnthropicVertex(
                     model_name=model,
-                    project=self.settings.anthropic_vertex_project_id,
-                    location=self.settings.anthropic_vertex_region,
+                    project=self.settings.google_cloud_project,
+                    location=self.settings.google_cloud_location,
                     max_tokens=self.settings.llm_max_tokens,
                 )
-        else:
-            if provider == "google":
-                raise ValueError(
-                    f"Gemini model '{model}' requires Vertex AI. "
-                    "Set ANTHROPIC_VERTEX_PROJECT_ID or use a Claude model."
-                )
+        if backend == "anthropic":
+            if is_gemini:
+                raise ValueError(f"Model '{model}' is not supported by anthropic")
+            api_key = self.settings.anthropic_api_key.get_secret_value()
+            if not api_key:
+                raise ValueError("ANTHROPIC_API_KEY is required for anthropic")
             logger.info(
-                f"Creating ChatAnthropic model: {model}, max_tokens={self.settings.llm_max_tokens}"
+                f"Creating direct Anthropic model: {model}, "
+                f"max_tokens={self.settings.llm_max_tokens}"
             )
             return ChatAnthropic(
                 model=model,
-                api_key=self.settings.anthropic_api_key.get_secret_value(),
+                api_key=api_key,
                 max_tokens=self.settings.llm_max_tokens,
             )
+
+        raise ValueError(f"Unsupported LLM backend: {backend}")
 
     def _get_skill_paths(self, ticket_key: str | None = None) -> list[str]:
         """Return ordered skill source paths for Deep Agents.
@@ -786,7 +818,7 @@ class ForgeAgent:
             **(context or {}),
             **(trace_context or {}),
             "system_prompt_length": len(system_prompt),
-            "llm_model": self.settings.claude_model,
+            "llm_model": self.settings.llm_model,
         }
 
         if langgraph_node:

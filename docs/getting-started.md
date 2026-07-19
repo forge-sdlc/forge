@@ -9,7 +9,7 @@ Get Forge running locally in about 10 minutes.
 - **Docker Compose** — for Redis (`brew install docker-compose` / included with Docker Desktop)
 - **Jira Cloud** account with API access
 - **GitHub** Personal Access Token (scopes: `repo`, `read:org`)
-- **Claude API key** (Anthropic direct) or Google Cloud project with Vertex AI enabled
+- **LLM backend access** through a direct model provider API or Google Cloud project with Vertex AI enabled
 
 ## 1. Install
 
@@ -36,12 +36,11 @@ JIRA_API_TOKEN=your-jira-api-token
 # GitHub
 GITHUB_TOKEN=github_pat_your_token
 
-# LLM — choose one
-ANTHROPIC_API_KEY=sk-ant-your-key       # Anthropic direct
-# ANTHROPIC_VERTEX_PROJECT_ID=my-proj  # OR Vertex AI
-# ANTHROPIC_VERTEX_REGION=us-east5
-
-LLM_MODEL=claude-opus-4-5@20251101
+# Required LLM configuration (recommended Vertex AI setup)
+LLM_BACKEND=vertex-ai
+GOOGLE_CLOUD_PROJECT=your-gcp-project
+GOOGLE_CLOUD_LOCATION=global
+LLM_MODEL=gemini-3.5-flash
 ```
 
 ## 3. Build the Container Image

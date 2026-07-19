@@ -236,7 +236,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     This node:
     1. Extracts error information from failed checks
-    2. Invokes Claude to generate a fix
+    2. Invokes the configured LLM backend to generate a fix
     3. Applies the fix and pushes
     4. Routes back to CI evaluation
 

@@ -11,7 +11,7 @@ This page is a condensed reference. For the full walkthrough including payload-b
 | Podman | `brew install podman` / `dnf install podman` |
 | Docker Compose | Included with Docker Desktop or `brew install docker-compose` |
 
-External accounts needed: Jira Cloud, GitHub, and Anthropic API key (or Vertex AI).
+External accounts needed: Jira Cloud, GitHub, and LLM backend access through a direct model provider API or Vertex AI.
 
 ## Installation
 
@@ -33,9 +33,10 @@ JIRA_API_TOKEN=your-jira-api-token
 
 GITHUB_TOKEN=github_pat_your_token
 
-ANTHROPIC_API_KEY=sk-ant-your-key   # or Vertex AI — see developer guide
-
-LLM_MODEL=claude-opus-4-5@20251101
+LLM_BACKEND=vertex-ai
+GOOGLE_CLOUD_PROJECT=your-gcp-project
+GOOGLE_CLOUD_LOCATION=global
+LLM_MODEL=gemini-3.5-flash
 REDIS_URL=redis://localhost:6380/0
 ```
 

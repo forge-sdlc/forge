@@ -43,6 +43,8 @@ def mock_settings() -> Settings:
         jira_webhook_secret="test-webhook-secret",
         github_token="test-github-token",
         github_webhook_secret="test-github-webhook-secret",
+        llm_backend="anthropic",
+        llm_model="claude-sonnet-4-5-20250929",
         anthropic_api_key="test-anthropic-key",
     )
 

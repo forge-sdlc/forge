@@ -31,7 +31,7 @@ Everything you need to run Forge locally, test it, observe what it's doing, and 
 - **Docker Compose** — for Redis and API gateway (`dnf install docker-compose` / included with Docker Desktop)
 - **Jira Cloud** account with API access
 - **GitHub** account with a Personal Access Token (scopes: `repo`, `read:org`)
-- **Claude API key** (Anthropic direct) OR Google Cloud project with Vertex AI enabled
+- **LLM backend access** through a direct model provider API OR Google Cloud project with Vertex AI enabled
 
 ---
 
@@ -68,17 +68,11 @@ JIRA_API_TOKEN=your-jira-api-token
 # GitHub
 GITHUB_TOKEN=github_pat_your_token
 
-# LLM — choose one backend
-
-# Option A: Anthropic direct
-ANTHROPIC_API_KEY=sk-ant-your-key
-
-# Option B: Google Vertex AI (supports Claude + Gemini)
-ANTHROPIC_VERTEX_PROJECT_ID=your-gcp-project
-ANTHROPIC_VERTEX_REGION=us-east5
-
-# Which model to use
-LLM_MODEL=claude-opus-4-5@20251101
+# Required LLM configuration (recommended Vertex AI setup)
+LLM_BACKEND=vertex-ai
+GOOGLE_CLOUD_PROJECT=your-gcp-project
+GOOGLE_CLOUD_LOCATION=global
+LLM_MODEL=gemini-3.5-flash
 ```
 
 ---
@@ -514,7 +508,7 @@ forge_webhooks_failed_total
 # External API latency
 forge_external_api_latency_seconds{service="jira"}
 forge_external_api_latency_seconds{service="github"}
-forge_external_api_latency_seconds{service="claude"}
+forge_external_api_latency_seconds{service="llm"}
 ```
 
 ### Adding worker metrics to Prometheus

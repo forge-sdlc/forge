@@ -253,7 +253,7 @@ class GitOperations:
             "-m",
             message,
             "--author",
-            f"{author_name} <forge@noreply.anthropic.com>",
+            f"{author_name} <forge@example.com>",
         )
         logger.info(f"Committed: {message[:50]}...")
         return True

@@ -56,6 +56,8 @@ jobs:
           JIRA_API_TOKEN: dummy
           JIRA_USER_EMAIL: dummy@example.com
           GITHUB_TOKEN: dummy
+          LLM_BACKEND: vertex-ai
+          LLM_MODEL: gemini-3.5-flash
         run: >-
           uv run pytest tests/unit/ tests/contracts tests/flows -q --strict-markers
           --cov=forge --cov-branch
@@ -180,6 +182,8 @@ jobs:
           --env JIRA_API_TOKEN=dummy
           --env JIRA_USER_EMAIL=dummy@example.com
           --env GITHUB_TOKEN=dummy
+          --env LLM_BACKEND=vertex-ai
+          --env LLM_MODEL=gemini-3.5-flash
           forge-ci:${{ github.sha }}
           python -c "import forge; from forge.main import app; assert app is not None"
 

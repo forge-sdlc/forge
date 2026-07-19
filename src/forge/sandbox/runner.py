@@ -156,14 +156,23 @@ class ContainerRunner:
         """
         env = {}
 
-        # Pass Anthropic credentials
-        if self.settings.anthropic_api_key.get_secret_value():
-            env["ANTHROPIC_API_KEY"] = self.settings.anthropic_api_key.get_secret_value()
+        if not self.settings.llm_backend:
+            raise ValueError("llm_backend must be configured before building container env")
+        env["LLM_BACKEND"] = self.settings.llm_backend
+
+        if self.settings.llm_backend == "google-genai":
+            google_api_key = self.settings.google_api_key.get_secret_value()
+            if google_api_key:
+                env["GOOGLE_API_KEY"] = google_api_key
+        elif self.settings.llm_backend == "anthropic":
+            anthropic_api_key = self.settings.anthropic_api_key.get_secret_value()
+            if anthropic_api_key:
+                env["ANTHROPIC_API_KEY"] = anthropic_api_key
 
         # Pass Vertex AI credentials
-        if self.settings.use_vertex_ai:
-            env["ANTHROPIC_VERTEX_PROJECT_ID"] = self.settings.anthropic_vertex_project_id
-            env["ANTHROPIC_VERTEX_REGION"] = self.settings.anthropic_vertex_region
+        if self.settings.llm_backend == "vertex-ai":
+            env["GOOGLE_CLOUD_PROJECT"] = self.settings.google_cloud_project
+            env["GOOGLE_CLOUD_LOCATION"] = self.settings.google_cloud_location
             # GOOGLE_APPLICATION_CREDENTIALS will be set if we mount gcloud creds
             env["GOOGLE_APPLICATION_CREDENTIALS"] = (
                 "/root/.config/gcloud/application_default_credentials.json"
@@ -313,7 +322,7 @@ class ContainerRunner:
         ]
 
         # Mount gcloud credentials for Vertex AI authentication
-        if self.settings.use_vertex_ai:
+        if self.settings.llm_backend == "vertex-ai":
             gcloud_creds = self._get_gcloud_credentials_path()
             if gcloud_creds:
                 # Mount the credentials file to container

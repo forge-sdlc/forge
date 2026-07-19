@@ -1,6 +1,6 @@
 # Forge
 
-Forge automates the software development lifecycle from ticket creation through code delivery using AI-powered planning and execution. It connects Jira, GitHub, and Claude to transform tickets into shipped code with human approval gates at each stage.
+Forge automates the software development lifecycle from ticket creation through code delivery using AI-powered planning and execution. It connects Jira, GitHub, and LLM-backed agents to transform tickets into shipped code with human approval gates at each stage.
 
 Forge supports three distinct, user-facing workflows depending on your ticket type and project requirements.
 

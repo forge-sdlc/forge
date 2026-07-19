@@ -109,7 +109,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
 
     This node:
     1. Reads the current Jira issue description
-    2. Generates a structured PRD using Claude
+    2. Generates a structured PRD using the configured LLM backend
     3. Updates the Jira description with the PRD
     4. Transitions the ticket to "Pending PRD Approval"
 
@@ -158,7 +158,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
             "project_key": issue.project_key,
         }
 
-        # Generate PRD using Claude - primary operation
+        # Generate PRD using the configured LLM backend - primary operation
         prd_content = await agent.generate_prd(raw_requirements, context)
 
         # Publish PRD - either as GitHub PR or Jira update

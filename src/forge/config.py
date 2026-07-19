@@ -147,27 +147,29 @@ class Settings(BaseSettings):
             return []
         return [r.strip() for r in self.github_known_repos.split(",") if r.strip()]
 
-    # Anthropic Configuration
-    # Option 1: Direct Anthropic API
+    # Model backend configuration. Provider-specific credentials stay at the
+    # adapter boundary; the rest of Forge consumes the resolved backend/model.
+    llm_backend: Literal["google-genai", "vertex-ai", "anthropic"] = Field(
+        description="Model backend: vertex-ai, google-genai, or anthropic",
+    )
+    google_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description="Google Gemini API key for the google-genai backend",
+    )
+    google_cloud_project: str = Field(
+        default="",
+        description="Google Cloud project for the vertex-ai backend",
+    )
+    google_cloud_location: str = Field(
+        default="global",
+        description="Google Cloud location for the vertex-ai backend",
+    )
     anthropic_api_key: SecretStr = Field(
         default=SecretStr(""),
-        description="Anthropic API key for Claude (leave empty for Vertex AI)",
+        description="Anthropic API key for the anthropic backend",
     )
-    # Option 2: Google Vertex AI (supports Claude and Gemini)
-    anthropic_vertex_project_id: str = Field(
-        default="",
-        description="Google Cloud project ID for Vertex AI",
-    )
-    anthropic_vertex_region: str = Field(
-        default="us-east5",
-        description="Google Cloud region for Vertex AI (e.g., us-east5)",
-    )
-    # Model configuration (supports Claude and Gemini on Vertex AI)
-    # Claude models: claude-opus-4-5@20251101, claude-sonnet-4-5@20250929, etc.
-    # Gemini models: gemini-2.5-pro, gemini-2.5-flash, gemini-3.1-pro-preview, etc.
     llm_model: str = Field(
-        default="claude-sonnet-4-5@20250929",
-        description="Model for orchestrator (Claude or Gemini on Vertex AI)",
+        description="Model for orchestrator agents",
     )
     container_llm_model: str = Field(
         default="",
@@ -180,26 +182,20 @@ class Settings(BaseSettings):
 
     @property
     def container_model(self) -> str:
-        """Get model for container execution, falling back to default model."""
+        """Get the container model, falling back to the primary configured model."""
         return self.container_llm_model or self.llm_model
-
-    # Backwards compatibility aliases
-    @property
-    def claude_model(self) -> str:
-        """Alias for llm_model (backwards compatibility)."""
-        return self.llm_model
 
     @staticmethod
     def detect_model_provider(model_name: str) -> str:
         """Detect model provider from model name.
 
         Returns:
-            'anthropic' for Claude models, 'google' for Gemini models.
+            'anthropic' for Anthropic models, 'google' for Gemini models.
         """
         model_lower = model_name.lower()
         if model_lower.startswith(("gemini", "models/gemini")):
             return "google"
-        # Default to anthropic for claude-* or unknown models
+        # Default to anthropic for claude-* or unknown direct-provider models.
         return "anthropic"
 
     # Langfuse Configuration
@@ -222,7 +218,7 @@ class Settings(BaseSettings):
         description="Comma-separated list of TracingField names to include as Langfuse trace metadata",
     )
 
-    # Claude Agent SDK Configuration
+    # Agent Configuration
     agent_enable_tools: bool = Field(
         default=True,
         description="Enable agent tools (Read, Glob, Grep, WebSearch)",
@@ -413,13 +409,6 @@ class Settings(BaseSettings):
                 ", ".join(f.value for f in fields),
             )
         return fields
-
-    @property
-    def use_vertex_ai(self) -> bool:
-        """Check if using Vertex AI instead of direct Anthropic API."""
-        return bool(
-            self.anthropic_vertex_project_id and not self.anthropic_api_key.get_secret_value()
-        )
 
 
 @lru_cache

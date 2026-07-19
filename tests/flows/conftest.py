@@ -32,6 +32,8 @@ def mock_settings() -> Settings:
         jira_webhook_secret="test-webhook-secret",
         github_token="test-github-token",
         github_webhook_secret="test-github-webhook-secret",
+        llm_backend="anthropic",
+        llm_model="claude-sonnet-4-5-20250929",
         anthropic_api_key="test-anthropic-key",
     )
 
@@ -60,8 +62,7 @@ def mock_jira_client() -> MagicMock:
     def set_workflow_label(issue_key: str, new_label: ForgeLabel, **kwargs):
         # Remove old forge: labels except managed
         mock._labels = [
-            l for l in mock._labels
-            if not l.startswith("forge:") or l == "forge:managed"
+            l for l in mock._labels if not l.startswith("forge:") or l == "forge:managed"
         ]
         mock._labels.append(new_label.value)
 
@@ -74,8 +75,12 @@ def mock_jira_client() -> MagicMock:
     mock.get_issue = AsyncMock(side_effect=get_issue)
     mock.update_description = AsyncMock()
     mock.transition_issue = AsyncMock()
-    mock.create_epic = AsyncMock(side_effect=lambda *args, **kwargs: f"TEST-{100 + len(mock.create_epic.call_args_list)}")
-    mock.create_task = AsyncMock(side_effect=lambda *args, **kwargs: f"TEST-{200 + len(mock.create_task.call_args_list)}")
+    mock.create_epic = AsyncMock(
+        side_effect=lambda *args, **kwargs: f"TEST-{100 + len(mock.create_epic.call_args_list)}"
+    )
+    mock.create_task = AsyncMock(
+        side_effect=lambda *args, **kwargs: f"TEST-{200 + len(mock.create_task.call_args_list)}"
+    )
     mock.delete_issue = AsyncMock()
     mock.add_comment = AsyncMock()
     mock.get_comments = AsyncMock(return_value=[])
@@ -119,21 +124,15 @@ def mock_github_client() -> MagicMock:
 def mock_forge_agent() -> MagicMock:
     """Create a mock ForgeAgent for flow tests."""
     mock = MagicMock()
-    mock.generate_prd = AsyncMock(
-        return_value="# PRD\n\nGenerated PRD content."
-    )
-    mock.generate_spec = AsyncMock(
-        return_value="# Spec\n\nGenerated spec content."
-    )
+    mock.generate_prd = AsyncMock(return_value="# PRD\n\nGenerated PRD content.")
+    mock.generate_spec = AsyncMock(return_value="# Spec\n\nGenerated spec content.")
     mock.generate_epics = AsyncMock(
         return_value=[
             {"summary": "Epic 1", "plan": "Plan 1", "repo": "org/backend"},
             {"summary": "Epic 2", "plan": "Plan 2", "repo": "org/frontend"},
         ]
     )
-    mock.regenerate_with_feedback = AsyncMock(
-        return_value="# Revised\n\nRevised content."
-    )
+    mock.regenerate_with_feedback = AsyncMock(return_value="# Revised\n\nRevised content.")
     mock.run_task = AsyncMock(return_value="Implementation complete.")
     mock.close = AsyncMock()
     return mock
@@ -227,10 +226,7 @@ class WorkflowTestHelper:
 
     def simulate_approval(self, current_label: ForgeLabel, approved_label: ForgeLabel):
         """Simulate user approving by changing labels."""
-        self.mock_jira._labels = [
-            l for l in self.mock_jira._labels
-            if l != current_label.value
-        ]
+        self.mock_jira._labels = [l for l in self.mock_jira._labels if l != current_label.value]
         self.mock_jira._labels.append(approved_label.value)
 
     def simulate_rejection_with_comment(self, comment: str):
@@ -251,9 +247,7 @@ class WorkflowTestHelper:
     def set_ci_result(self, conclusion: str):
         """Set CI check result."""
         self.mock_github.get_check_runs = AsyncMock(
-            return_value=[
-                {"name": "CI", "conclusion": conclusion, "status": "completed"}
-            ]
+            return_value=[{"name": "CI", "conclusion": conclusion, "status": "completed"}]
         )
 
 

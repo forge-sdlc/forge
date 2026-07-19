@@ -185,15 +185,3 @@ GITHUB_RETRY_CONFIG = RetryConfig(
         RetryableError,
     ),
 )
-
-ANTHROPIC_RETRY_CONFIG = RetryConfig(
-    max_attempts=5,
-    initial_delay=5.0,
-    max_delay=120.0,
-    retryable_exceptions=(
-        ConnectionError,
-        TimeoutError,
-        asyncio.TimeoutError,
-        RetryableError,
-    ),
-)

@@ -97,7 +97,12 @@ class RateLimiter:
                 requests_per_second=1.0,
                 burst_limit=20,
             ),
-            # Anthropic: varies by tier, conservative default
+            # LLM providers vary by tier; keep a conservative default.
+            "llm": RateLimitConfig(
+                requests_per_second=0.5,
+                burst_limit=5,
+            ),
+            # Backwards-compatible service key for existing callers.
             "anthropic": RateLimitConfig(
                 requests_per_second=0.5,
                 burst_limit=5,
@@ -130,7 +135,7 @@ class RateLimiter:
         Blocks until tokens are available.
 
         Args:
-            service: Service name (jira, github, anthropic).
+            service: Service name (jira, github, llm).
             tokens: Number of tokens to acquire.
         """
         bucket = self._get_bucket(service)

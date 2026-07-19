@@ -7,6 +7,68 @@ import pytest
 from forge.integrations.agents.agent import ForgeAgent
 
 
+def _model_agent(backend: str, model: str) -> ForgeAgent:
+    agent = ForgeAgent.__new__(ForgeAgent)
+    agent.settings = MagicMock(
+        llm_backend=backend,
+        llm_model=model,
+        llm_max_tokens=16384,
+        google_cloud_project="project",
+        google_cloud_location="global",
+    )
+    agent.settings.google_api_key.get_secret_value.return_value = "google-key"
+    agent.settings.anthropic_api_key.get_secret_value.return_value = "anthropic-key"
+    return agent
+
+
+def test_create_model_uses_google_genai_backend():
+    agent = _model_agent("google-genai", "gemini-3.5-flash")
+
+    with patch("forge.integrations.agents.agent.ChatGoogleGenerativeAI") as model_class:
+        agent._create_model()
+
+    model_class.assert_called_once_with(
+        model="gemini-3.5-flash",
+        api_key="google-key",
+        max_output_tokens=16384,
+    )
+
+
+def test_create_model_uses_vertex_backend_for_gemini():
+    agent = _model_agent("vertex-ai", "gemini-3.5-flash")
+
+    with patch("forge.integrations.agents.agent.ChatGoogleGenerativeAI") as model_class:
+        agent._create_model()
+
+    model_class.assert_called_once_with(
+        model="gemini-3.5-flash",
+        project="project",
+        location="global",
+        vertexai=True,
+        max_output_tokens=16384,
+    )
+
+
+def test_create_model_uses_anthropic_backend():
+    agent = _model_agent("anthropic", "claude-sonnet-4-6")
+
+    with patch("forge.integrations.agents.agent.ChatAnthropic") as model_class:
+        agent._create_model()
+
+    model_class.assert_called_once_with(
+        model="claude-sonnet-4-6",
+        api_key="anthropic-key",
+        max_tokens=16384,
+    )
+
+
+def test_create_model_rejects_backend_model_mismatch():
+    agent = _model_agent("anthropic", "gemini-3.5-flash")
+
+    with pytest.raises(ValueError, match="not supported by anthropic"):
+        agent._create_model()
+
+
 @pytest.mark.asyncio
 async def test_answer_question():
     """ForgeAgent can answer questions about artifacts."""

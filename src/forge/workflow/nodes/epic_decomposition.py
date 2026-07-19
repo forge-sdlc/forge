@@ -35,7 +35,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
 
     This node:
     1. Reads the approved specification from state
-    2. Generates 2-5 cohesive Epics using Claude
+    2. Generates 2-5 cohesive Epics using the configured LLM backend
     3. Creates Epic tickets in Jira linked to parent Feature
     4. Transitions Feature to "Pending Plan Approval"
 
@@ -127,7 +127,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
             "feedback": state.get("feedback_comment", ""),
         }
 
-        # Generate Epic breakdown using Claude - primary operation
+        # Generate Epic breakdown using the configured LLM backend - primary operation
         epics_data = await agent.generate_epics(spec_content, context)
 
         if not epics_data:

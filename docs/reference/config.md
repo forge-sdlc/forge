@@ -22,22 +22,35 @@ All configuration is via environment variables in `.env`. See `.env.example` in 
 
 ### LLM
 
-Choose one backend:
+Choose one backend explicitly. Gemini 3.5 Flash through Vertex AI is recommended.
 
-=== "Anthropic Direct"
-
-    ```bash
-    ANTHROPIC_API_KEY=sk-ant-your-key
-    LLM_MODEL=claude-opus-4-5@20251101
-    ```
-
-=== "Google Vertex AI"
+=== "Vertex AI (recommended)"
 
     ```bash
-    ANTHROPIC_VERTEX_PROJECT_ID=your-gcp-project
-    ANTHROPIC_VERTEX_REGION=us-east5
-    LLM_MODEL=claude-opus-4-5@20251101
+    LLM_BACKEND=vertex-ai
+    GOOGLE_CLOUD_PROJECT=your-gcp-project
+    GOOGLE_CLOUD_LOCATION=global
+    LLM_MODEL=gemini-3.5-flash
     ```
+
+=== "Gemini API"
+
+    ```bash
+    LLM_BACKEND=google-genai
+    GOOGLE_API_KEY=your-google-api-key
+    LLM_MODEL=gemini-3.5-flash
+    ```
+
+=== "Anthropic API"
+
+    ```bash
+    LLM_BACKEND=anthropic
+    ANTHROPIC_API_KEY=your-anthropic-api-key
+    LLM_MODEL=claude-sonnet-4-6
+    ```
+
+`LLM_BACKEND` and `LLM_MODEL` are required. Provider credentials must use the
+provider-native variables shown above; legacy aliases are not supported.
 
 ### Redis
 

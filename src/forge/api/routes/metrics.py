@@ -118,7 +118,7 @@ EXTERNAL_API_LATENCY = Histogram(
     [
         "service",
         "operation",
-    ],  # service: jira, github, claude; operation: get_issue, create_pr, etc.
+    ],  # service: jira, github, llm; operation: get_issue, create_pr, etc.
     buckets=[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
 )
 
@@ -250,7 +250,7 @@ def observe_external_api_latency(service: str, operation: str, duration: float) 
     """Record latency of an external API call.
 
     Args:
-        service: External service name (jira, github, claude).
+        service: External service name (jira, github, llm).
         operation: Operation name (get_issue, create_pr, generate, etc.).
         duration: Duration in seconds.
     """
@@ -261,7 +261,7 @@ def record_external_api_error(service: str, operation: str, error_type: str) -> 
     """Record an external API call error.
 
     Args:
-        service: External service name (jira, github, claude).
+        service: External service name (jira, github, llm).
         operation: Operation name.
         error_type: Type of error (timeout, rate_limit, auth, etc.).
     """

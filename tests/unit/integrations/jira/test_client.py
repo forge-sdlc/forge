@@ -37,6 +37,8 @@ class TestJiraClientInit:
             redis_url="redis://localhost:6379",
             github_token="token",
             github_webhook_secret="secret",
+            llm_backend="anthropic",
+            llm_model="claude-sonnet-4-5-20250929",
             anthropic_api_key="key",
         )
 
