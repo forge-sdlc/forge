@@ -2802,28 +2802,34 @@ If not configured, Forge will block the workflow and post detailed instructions 
 </code></pre></div>
 <hr />
 <h2 id="5-running-tests">5. Running Tests<a class="headerlink" href="#5-running-tests" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Full test suite</span>
-<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Fast PR suites</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>make<span class="w"> </span>test-pr
 <a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
 <a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Unit tests only (fast)</span>
 <a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/<span class="w"> </span>-v
 <a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
 <a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Flow/scenario tests</span>
-<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/flows/<span class="w"> </span>-v
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>make<span class="w"> </span>test-flow
 <a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>
-<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="c1"># Single file</span>
-<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/workflow/test_ci_gate_skip.py<span class="w"> </span>-v
-<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>
-<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="c1"># With output (useful for debugging)</span>
-<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/<span class="w"> </span>-s
-<a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a>
-<a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a><span class="c1"># Linting</span>
-<a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a>uv<span class="w"> </span>run<span class="w"> </span>ruff<span class="w"> </span>check<span class="w"> </span>src/
-<a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a>
-<a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a><span class="c1"># Type checking</span>
-<a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>src/forge/
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="c1"># Redis-backed integration and deterministic E2E tests</span>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>make<span class="w"> </span>test-integration
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>make<span class="w"> </span>test-e2e
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a>
+<a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a><span class="c1"># Single file</span>
+<a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/workflow/test_ci_gate_skip.py<span class="w"> </span>-v
+<a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a>
+<a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a><span class="c1"># With output (useful for debugging)</span>
+<a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/<span class="w"> </span>-s
+<a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a>
+<a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a><span class="c1"># Linting and formatting checks</span>
+<a id="__codelineno-16-21" name="__codelineno-16-21" href="#__codelineno-16-21"></a>make<span class="w"> </span>lint
+<a id="__codelineno-16-22" name="__codelineno-16-22" href="#__codelineno-16-22"></a>
+<a id="__codelineno-16-23" name="__codelineno-16-23" href="#__codelineno-16-23"></a><span class="c1"># Type checking</span>
+<a id="__codelineno-16-24" name="__codelineno-16-24" href="#__codelineno-16-24"></a>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>src/forge/
 </code></pre></div>
-<p>The pre-existing failures in <code>tests/flows/status_transitions/</code> and a few other files are known issues unrelated to current work — ignore them.</p>
+<p>Tests marked <code>quarantine</code> document obsolete scenarios that still need an
+architecture rewrite; required gates exclude them explicitly. New failures in
+unit, contract, flow, integration, or E2E gates must not be ignored.</p>
 <hr />
 <h2 id="6-testing-with-payloads">6. Testing with Payloads<a class="headerlink" href="#6-testing-with-payloads" title="Permanent link">&para;</a></h2>
 <p>Sample Jira webhook payloads live in <code>tests/payloads/</code>. They simulate the full feature workflow from creation to task approval.</p>
