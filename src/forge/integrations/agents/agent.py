@@ -1186,7 +1186,11 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         """
         artifact_type = context.get("artifact_type", "document")
         generation_context = context.get("generation_context", {})
-        raw_requirements = generation_context.get("raw_requirements", "Not available")
+        raw_requirements = (
+            generation_context.get("raw_requirements")
+            or context.get("description")
+            or "Not available"
+        )
 
         ticket_type = context.get("ticket_type")
         ticket_type_str = ""
@@ -1214,6 +1218,8 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
                 "answer-question",
                 artifact_type=artifact_type,
                 artifact_content=artifact_content,
+                summary=context.get("summary", ""),
+                description=context.get("description", ""),
                 raw_requirements=raw_requirements,
                 question=question,
             )

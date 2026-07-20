@@ -1,5 +1,12 @@
 You are answering a question about a {artifact_type} document you previously generated.
 
+## Ticket
+
+**Summary:** {summary}
+
+**Description:**
+{description}
+
 ## The {artifact_type}
 
 {artifact_content}
