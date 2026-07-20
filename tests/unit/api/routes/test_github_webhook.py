@@ -41,7 +41,7 @@ class TestGitHubWebhookRoute:
         mock_settings.github_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with patch("forge.api.routes.github.get_settings", return_value=mock_settings):
             with patch("forge.api.routes.github.QueueProducer", return_value=mock_producer):
@@ -122,7 +122,7 @@ class TestGitHubWebhookRoute:
         mock_settings.github_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with patch("forge.api.routes.github.get_settings", return_value=mock_settings):
             with patch("forge.api.routes.github.QueueProducer", return_value=mock_producer):
@@ -142,7 +142,7 @@ class TestGitHubWebhookRoute:
                     )
 
         assert response.status_code == 202
-        mock_producer.publish.assert_called_once()
+        mock_producer.publish_once.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_check_run_failure_published(self):
@@ -155,7 +155,7 @@ class TestGitHubWebhookRoute:
         mock_settings.github_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with patch("forge.api.routes.github.get_settings", return_value=mock_settings):
             with patch("forge.api.routes.github.QueueProducer", return_value=mock_producer):
@@ -175,7 +175,7 @@ class TestGitHubWebhookRoute:
                     )
 
         assert response.status_code == 202
-        mock_producer.publish.assert_called_once()
+        mock_producer.publish_once.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_pr_review_approved_published(self):
@@ -188,7 +188,7 @@ class TestGitHubWebhookRoute:
         mock_settings.github_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with patch("forge.api.routes.github.get_settings", return_value=mock_settings):
             with patch("forge.api.routes.github.QueueProducer", return_value=mock_producer):

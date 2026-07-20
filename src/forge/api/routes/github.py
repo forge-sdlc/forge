@@ -117,13 +117,22 @@ async def receive_github_webhook(
 
         # Queue for async processing
         producer = QueueProducer()
-        await producer.publish(
+        message_id = await producer.publish_once(
             event_id=webhook_event.event_id,
             source=EventSource.GITHUB,
             event_type=webhook_event.event_type,
             ticket_key=webhook_event.ticket_key,
             payload=webhook_event.payload,
         )
+
+        if message_id is None:
+            span.set_attribute("forge.skipped", True)
+            span.set_attribute("forge.skip_reason", "duplicate event")
+            return {
+                "status": "duplicate",
+                "event_id": event_id,
+                "ticket_key": webhook_data.ticket_key or "",
+            }
 
         span.set_attribute("forge.queued", True)
         logger.info(f"Queued GitHub event {event_id} for {webhook_data.ticket_key}")

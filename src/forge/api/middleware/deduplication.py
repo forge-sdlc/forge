@@ -6,14 +6,9 @@ import logging
 import redis.asyncio as redis
 
 from forge.orchestrator.checkpointer import get_redis_client
+from forge.queue.deduplication import DEDUP_KEY_PREFIX, DEDUP_TTL_SECONDS
 
 logger = logging.getLogger(__name__)
-
-# TTL for deduplication keys (24 hours)
-DEDUP_TTL_SECONDS = 86400
-
-# Redis key prefix for deduplication
-DEDUP_KEY_PREFIX = "forge:dedup:"
 
 
 class DeduplicationService:

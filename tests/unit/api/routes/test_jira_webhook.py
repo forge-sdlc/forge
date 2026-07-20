@@ -42,7 +42,7 @@ class TestJiraWebhookRoute:
         mock_settings.jira_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with (
             patch("forge.api.routes.jira.get_settings", return_value=mock_settings),
@@ -117,7 +117,7 @@ class TestJiraWebhookRoute:
         mock_settings.jira_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with (
             patch("forge.api.routes.jira.get_settings", return_value=mock_settings),
@@ -139,7 +139,7 @@ class TestJiraWebhookRoute:
         data = response.json()
         assert data["status"] == "skipped"
         assert "forge:managed" in data["reason"]
-        mock_producer.publish.assert_not_called()
+        mock_producer.publish_once.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_duplicate_event_dropped(self):
@@ -158,7 +158,7 @@ class TestJiraWebhookRoute:
         mock_settings.jira_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with (
             patch("forge.api.routes.jira.get_settings", return_value=mock_settings),
@@ -177,7 +177,7 @@ class TestJiraWebhookRoute:
                 )
 
         assert response.status_code == 202
-        mock_producer.publish.assert_called_once()
+        mock_producer.publish_once.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_standalone_managed_task_without_parent_is_queued(self) -> None:
@@ -191,7 +191,7 @@ class TestJiraWebhookRoute:
         mock_settings.jira_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with (
             patch("forge.api.routes.jira.get_settings", return_value=mock_settings),
@@ -212,8 +212,8 @@ class TestJiraWebhookRoute:
         assert response.status_code == 202
         data = response.json()
         assert data["status"] == "accepted"
-        mock_producer.publish.assert_called_once()
-        called_kwargs = mock_producer.publish.call_args.kwargs
+        mock_producer.publish_once.assert_called_once()
+        called_kwargs = mock_producer.publish_once.call_args.kwargs
         assert called_kwargs["ticket_key"] == "TEST-123"
         assert "source_ticket_key" not in called_kwargs["payload"]
 
@@ -231,7 +231,7 @@ class TestJiraWebhookRoute:
         mock_settings.jira_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with (
             patch("forge.api.routes.jira.get_settings", return_value=mock_settings),
@@ -252,8 +252,8 @@ class TestJiraWebhookRoute:
         assert response.status_code == 202
         data = response.json()
         assert data["status"] == "accepted"
-        mock_producer.publish.assert_called_once()
-        called_kwargs = mock_producer.publish.call_args.kwargs
+        mock_producer.publish_once.assert_called_once()
+        called_kwargs = mock_producer.publish_once.call_args.kwargs
         assert called_kwargs["ticket_key"] == "PARENT-123"
         assert called_kwargs["payload"]["source_ticket_key"] == "TEST-123"
 
@@ -272,7 +272,7 @@ class TestJiraWebhookRoute:
         mock_settings.jira_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with (
             patch("forge.api.routes.jira.get_settings", return_value=mock_settings),
@@ -293,8 +293,8 @@ class TestJiraWebhookRoute:
         assert response.status_code == 202
         data = response.json()
         assert data["status"] == "accepted"
-        mock_producer.publish.assert_called_once()
-        called_kwargs = mock_producer.publish.call_args.kwargs
+        mock_producer.publish_once.assert_called_once()
+        called_kwargs = mock_producer.publish_once.call_args.kwargs
         assert called_kwargs["ticket_key"] == "TEST-123"
         assert "source_ticket_key" not in called_kwargs["payload"]
 
@@ -316,7 +316,7 @@ class TestJiraWebhookRoute:
         mock_settings.jira_webhook_secret = SecretStr(secret)
 
         mock_producer = MagicMock()
-        mock_producer.publish = AsyncMock()
+        mock_producer.publish_once = AsyncMock()
 
         with (
             patch("forge.api.routes.jira.get_settings", return_value=mock_settings),
@@ -337,8 +337,8 @@ class TestJiraWebhookRoute:
         assert response.status_code == 202
         data = response.json()
         assert data["status"] == "accepted"
-        mock_producer.publish.assert_called_once()
-        called_kwargs = mock_producer.publish.call_args.kwargs
+        mock_producer.publish_once.assert_called_once()
+        called_kwargs = mock_producer.publish_once.call_args.kwargs
         assert called_kwargs["ticket_key"] == "TEST-123"
 
 class TestJiraWebhookParsing:
