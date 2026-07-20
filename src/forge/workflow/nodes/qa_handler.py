@@ -235,11 +235,27 @@ def _get_artifact_content(state: WorkflowState, artifact_type: str) -> str:
     mapping = {
         "prd": "prd_content",
         "spec": "spec_content",
-        "rca": "rca_content",
     }
     field = mapping.get(artifact_type)
     if field:
         return state.get(field, "")
+
+    # The RCA reviewed at rca_option_gate consists of both the analysis and the
+    # proposed fix options. Passing only rca_content leaves the Q&A agent unable
+    # to answer the option-comparison questions invited by the gate comment.
+    if artifact_type == "rca":
+        rca_content = state.get("rca_content") or ""
+        rca_options = state.get("rca_options") or []
+        if not rca_options:
+            return rca_content
+
+        options = "\n\n".join(
+            f"### Option {index}: {option.get('title', '')}\n"
+            f"{option.get('description', '')}\n"
+            f"Tradeoffs: {option.get('tradeoffs', '')}"
+            for index, option in enumerate(rca_options, start=1)
+        )
+        return f"{rca_content}\n\n## Fix Options\n\n{options}".strip()
 
     # Plan: check plan_content first (bug workflow), fall back to generation_context (feature workflow)
     if artifact_type == "plan":

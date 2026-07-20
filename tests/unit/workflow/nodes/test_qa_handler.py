@@ -574,6 +574,30 @@ class TestGetArtifactContentBugGates:
         state = {"ticket_key": "BUG-1", "rca_content": "## Root Cause"}
         assert _get_artifact_content(state, "rca") == "## Root Cause"
 
+    def test_rca_includes_fix_options(self):
+        state = {
+            "ticket_key": "BUG-1",
+            "rca_content": "## Root Cause\nA stale cache causes the failure.",
+            "rca_options": [
+                {
+                    "title": "Invalidate eagerly",
+                    "description": "Clear the cache after every update.",
+                    "tradeoffs": "Simple, with additional cache churn.",
+                },
+                {
+                    "title": "Version cache entries",
+                    "description": "Reject entries created for an older version.",
+                    "tradeoffs": "More robust, but more complex.",
+                },
+            ],
+        }
+
+        content = _get_artifact_content(state, "rca")
+
+        assert "A stale cache causes the failure." in content
+        assert "Option 1: Invalidate eagerly" in content
+        assert "Option 2: Version cache entries" in content
+
 
 
 class TestAnswerQuestionBugGates:
@@ -620,6 +644,18 @@ class TestAnswerQuestionBugGates:
         """answer_question at rca_option_gate returns is_paused=True, node unchanged."""
         state = self._make_bug_state("rca_option_gate")
         state["feedback_comment"] = "?Why is Option 1 lower risk than Option 2?"
+        state["rca_options"] = [
+            {
+                "title": "Targeted fix",
+                "description": "Change only the failing path.",
+                "tradeoffs": "Lower risk but narrower coverage.",
+            },
+            {
+                "title": "Refactor",
+                "description": "Replace the shared abstraction.",
+                "tradeoffs": "Broader fix with greater regression risk.",
+            },
+        ]
 
         mock_jira = create_mock_jira_client()
         mock_agent = create_mock_forge_agent()
@@ -634,6 +670,10 @@ class TestAnswerQuestionBugGates:
         assert result["current_node"] == "rca_option_gate"
         assert result["is_question"] is False
         assert result["feedback_comment"] is None
+        artifact_content = mock_agent.answer_question.call_args.kwargs["artifact_content"]
+        assert "## Root Cause" in artifact_content
+        assert "Option 1: Targeted fix" in artifact_content
+        assert "Option 2: Refactor" in artifact_content
 
     @pytest.mark.asyncio
     async def test_answer_question_at_plan_approval_gate_stays_paused(self):
