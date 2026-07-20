@@ -67,6 +67,11 @@ async def _local_review_bug(state: BugState) -> BugState:
     return await local_review_changes(state)  # type: ignore[return-value]
 
 
+async def _answer_question_bug(state: BugState) -> BugState:
+    """Run shared Q&A without filtering bug-specific artifact fields."""
+    return await answer_question(state)  # type: ignore[arg-type, return-value]
+
+
 def route_entry(state: BugState) -> str:
     """Route workflow based on current progress for resume/retry.
 
@@ -437,7 +442,7 @@ def build_bug_graph() -> StateGraph:
     graph.add_node("post_merge_summary", post_merge_summary)
 
     # ── Q&A ──
-    graph.add_node("answer_question", answer_question)
+    graph.add_node("answer_question", _answer_question_bug)
 
     # ── Implementation stage ──
     graph.add_node("setup_workspace", setup_workspace)

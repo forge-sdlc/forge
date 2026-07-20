@@ -1,10 +1,13 @@
 """Unit tests for bug workflow graph structure — new pipeline nodes."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from langgraph.graph import END
+from langgraph.graph import END, START, StateGraph
 
 from forge.models.workflow import TicketType
 from forge.workflow.bug.graph import (
+    _answer_question_bug,
     _route_after_answer_bug,
     _route_after_decompose_plan,
     _route_after_local_review,
@@ -16,7 +19,39 @@ from forge.workflow.bug.graph import (
     build_bug_graph,
     route_entry,
 )
-from forge.workflow.bug.state import create_initial_bug_state
+from forge.workflow.bug.state import BugState, create_initial_bug_state
+
+
+@pytest.mark.asyncio
+async def test_answer_question_node_receives_bug_rca_artifact_fields():
+    """The compiled bug graph must not filter RCA fields from shared Q&A."""
+    graph = StateGraph(BugState)
+    graph.add_node("answer_question", _answer_question_bug)
+    graph.add_edge(START, "answer_question")
+    graph.add_edge("answer_question", END)
+
+    state = {
+        "ticket_key": "BUG-42",
+        "current_node": "rca_option_gate",
+        "rca_content": "A nil port mapping causes the exporter error.",
+        "rca_options": [
+            {
+                "title": "Guard the mapping",
+                "description": "Handle the missing port explicitly.",
+                "tradeoffs": "Small targeted change.",
+            }
+        ],
+    }
+
+    with patch(
+        "forge.workflow.bug.graph.answer_question", new_callable=AsyncMock
+    ) as mock_answer:
+        mock_answer.side_effect = lambda received: received
+        await graph.compile().ainvoke(state)
+
+    received = mock_answer.call_args.args[0]
+    assert received["rca_content"] == state["rca_content"]
+    assert received["rca_options"] == state["rca_options"]
 
 
 def _bug_state(**overrides):
