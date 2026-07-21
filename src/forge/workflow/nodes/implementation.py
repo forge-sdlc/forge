@@ -288,6 +288,12 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             "retry_count": state.get("retry_count", 0) + 1,
         }
     finally:
+        logger.info(
+            'Implementation completed: task_name="%s" feature_id="%s" task_id="%s"',
+            task_name,
+            feature_id,
+            task_id_log,
+        )
         await jira.close()
 
 
