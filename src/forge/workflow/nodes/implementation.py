@@ -298,6 +298,36 @@ def _build_implementation_trace_context(
     }
 
 
+def _log_step_start(
+    ticket_key: str | None,
+    task_key: str | None,
+    task_name: str | None,
+) -> None:
+    """Log the start of an implementation step."""
+    feature_id = ticket_key or "unknown"
+    task_id = task_key or "unknown"
+    name = task_name or "unknown"
+    logger.info(
+        f"Implementation step started for task {task_id} ({name}) on feature {feature_id}"
+    )
+
+
+def _log_step_end(
+    ticket_key: str | None,
+    task_key: str | None,
+    task_name: str | None,
+    success: bool,
+) -> None:
+    """Log the end of an implementation step."""
+    feature_id = ticket_key or "unknown"
+    task_id = task_key or "unknown"
+    name = task_name or "unknown"
+    status = "completed" if success else "ended"
+    logger.info(
+        f"Implementation step {status} for task {task_id} ({name}) on feature {feature_id}"
+    )
+
+
 def _build_task_description(
     task_summary: str,
     task_description: str,
