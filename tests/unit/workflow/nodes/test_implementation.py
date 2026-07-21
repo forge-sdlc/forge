@@ -370,3 +370,122 @@ class TestImplementationNodeRouting:
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "container failed"
         assert result["retry_count"] == 1
+
+
+class TestImplementationStartLogging:
+    """Tests for structured logging at implementation start."""
+
+    @pytest.mark.asyncio
+    async def test_logs_implementation_started_with_correct_format(self, caplog):
+        """Implementation started log is emitted with correct values."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Fix null pointer in AuthService")
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(
+                _make_state(
+                    ticket_key="FEAT-99",
+                    current_task_key="TASK-100",
+                    tasks_by_repo={"acme/backend": ["TASK-100"]},
+                )
+            )
+
+        # Verify the start log was emitted with correct format
+        start_logs = [r for r in caplog.records if "Implementation started:" in r.message]
+        assert len(start_logs) == 1
+        log_record = start_logs[0]
+        assert 'task_name="Fix null pointer in AuthService"' in log_record.message
+        assert 'feature_id="FEAT-99"' in log_record.message
+        assert 'task_id="TASK-100"' in log_record.message
+
+    @pytest.mark.asyncio
+    async def test_start_log_emitted_before_container_execution(self, caplog):
+        """Start log is emitted before container runner is called."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        mock_jira = _make_mock_jira(summary="Add retry logic")
+        runner = _make_successful_runner()
+        run_call_time = None
+
+        async def track_run_call(*_args, **_kwargs):
+            nonlocal run_call_time
+            run_call_time = len(caplog.records)
+            result = MagicMock()
+            result.success = True
+            result.error_message = None
+            return result
+
+        runner.run = track_run_call
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(_make_state())
+
+        # Find the start log position
+        start_log_positions = [
+            i for i, r in enumerate(caplog.records) if "Implementation started:" in r.message
+        ]
+        assert len(start_log_positions) == 1
+        start_log_position = start_log_positions[0]
+
+        # Verify start log was emitted before container run was called
+        assert start_log_position < run_call_time
+
+    @pytest.mark.asyncio
+    async def test_start_log_uses_na_defaults_when_values_missing(self, caplog):
+        """Start log falls back to N/A for missing values (edge case test)."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        # Create a mock that returns None/empty for summary
+        mock_jira = AsyncMock()
+        issue = MagicMock()
+        issue.summary = None
+        issue.description = None
+        mock_jira.get_issue = AsyncMock(return_value=issue)
+        mock_jira.add_comment = AsyncMock()
+        mock_jira.close = AsyncMock()
+
+        runner = _make_successful_runner()
+
+        with (
+            patch(
+                "forge.workflow.nodes.implementation.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.implementation.ContainerRunner",
+                return_value=runner,
+            ),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+            caplog.at_level("INFO", logger="forge.workflow.nodes.implementation"),
+        ):
+            await implement_task(_make_state())
+
+        # Verify the start log uses N/A for None task_name
+        start_logs = [r for r in caplog.records if "Implementation started:" in r.message]
+        assert len(start_logs) == 1
+        log_record = start_logs[0]
+        assert 'task_name="N/A"' in log_record.message

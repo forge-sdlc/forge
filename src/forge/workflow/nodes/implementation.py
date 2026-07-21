@@ -166,11 +166,28 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
     settings = get_settings()
     jira = JiraClient(settings)
 
+    # Initialize logging variables with defaults
+    feature_id = "N/A"
+    task_id_log = "N/A"
+    task_name = "N/A"
+
     try:
         # Get Task details from Jira
         task_issue = await jira.get_issue(current_task)
         task_description = task_issue.description or ""
         task_summary = task_issue.summary
+
+        # Update logging variables with actual values
+        feature_id = state.get("ticket_key") or "N/A"
+        task_id_log = current_task or "N/A"
+        task_name = task_summary or "N/A"
+
+        logger.info(
+            'Implementation started: task_name="%s" feature_id="%s" task_id="%s"',
+            task_name,
+            feature_id,
+            task_id_log,
+        )
 
         # Post status comment at task implementation start
         await post_status_comment(
