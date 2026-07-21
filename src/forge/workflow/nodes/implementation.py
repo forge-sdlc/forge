@@ -11,6 +11,7 @@ Architecture:
 - Orchestrator (this node) handles git push after container exits
 """
 
+import contextlib
 import logging
 from pathlib import Path
 
@@ -179,6 +180,10 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             f"🔨 Forge started implementing [{current_task}]: {task_summary}",
         )
 
+        # Log step start boundary
+        with contextlib.suppress(Exception):
+            _log_step_start(ticket_key, current_task, task_summary)
+
         # Get guardrails context
         guardrails = state.get("context", {}).get("guardrails", "")
 
@@ -212,6 +217,10 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
         if result.success:
             logger.info(f"Container completed successfully for {current_task}")
+
+            # Log step end boundary (success)
+            with contextlib.suppress(Exception):
+                _log_step_end(ticket_key, current_task, task_summary, success=True)
 
             # Persist each task commit before checkpointing. A subsequent task
             # or local review may resume on a worker with a different filesystem.
@@ -260,6 +269,11 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             # committing when they pass. If we get here, implementation failed.
             error_msg = result.error_message or "Unknown container error"
             logger.error(f"Implementation failed for {current_task}: {error_msg}")
+
+            # Log step end boundary (failure)
+            with contextlib.suppress(Exception):
+                _log_step_end(ticket_key, current_task, task_summary, success=False)
+
             raise RuntimeError(error_msg)
 
     except Exception as e:
@@ -307,9 +321,7 @@ def _log_step_start(
     feature_id = ticket_key or "unknown"
     task_id = task_key or "unknown"
     name = task_name or "unknown"
-    logger.info(
-        f"Implementation step started for task {task_id} ({name}) on feature {feature_id}"
-    )
+    logger.info(f"Implementation step started for task {task_id} ({name}) on feature {feature_id}")
 
 
 def _log_step_end(
@@ -323,9 +335,7 @@ def _log_step_end(
     task_id = task_key or "unknown"
     name = task_name or "unknown"
     status = "completed" if success else "ended"
-    logger.info(
-        f"Implementation step {status} for task {task_id} ({name}) on feature {feature_id}"
-    )
+    logger.info(f"Implementation step {status} for task {task_id} ({name}) on feature {feature_id}")
 
 
 def _build_task_description(
