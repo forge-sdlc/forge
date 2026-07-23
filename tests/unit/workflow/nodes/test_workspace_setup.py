@@ -319,3 +319,63 @@ class TestPrepareWorkspaceRecovery:
         new_git.clone.assert_called_once()
         new_git.add_fork_remote.assert_called_once_with("forge-bot", "repo")
         new_git.checkout_branch.assert_called_once_with("forge/test-123", remote="fork")
+
+    def test_no_fork_state_uses_origin_remote(self, tmp_path):
+        """Without fork_owner/fork_repo, pull_rebase should use 'origin'."""
+        workspace_path = tmp_path / "forge-TEST-200-org-repo"
+        workspace_path.mkdir()
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-200",
+            current_repo="org/repo",
+            workspace_path=str(workspace_path),
+            context={"branch_name": "forge/test-200"},
+        )
+
+        mock_git = MagicMock()
+
+        with patch(
+            "forge.workflow.nodes.workspace_setup.GitOperations",
+            return_value=mock_git,
+        ):
+            result_path, result_git = prepare_workspace(state)
+
+        assert result_path == str(workspace_path)
+        assert result_git is mock_git
+        mock_git.pull_rebase.assert_called_once_with(remote="origin")
+
+    def test_no_fork_state_sync_failure_raises(self, tmp_path):
+        """Without fork state, origin sync failures raise instead of attempting fork recreation."""
+        workspace_path = tmp_path / "forge-TEST-201-org-repo"
+        workspace_path.mkdir()
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-201",
+            current_repo="org/repo",
+            workspace_path=str(workspace_path),
+            context={"branch_name": "forge/test-201"},
+        )
+
+        mock_git = MagicMock()
+        mock_git.pull_rebase.side_effect = RuntimeError("origin unreachable")
+
+        with (
+            patch(
+                "forge.workflow.nodes.workspace_setup.GitOperations",
+                return_value=mock_git,
+            ),
+            pytest.raises(RuntimeError, match="origin unreachable"),
+        ):
+            prepare_workspace(state)
+
+    def test_no_fork_missing_workspace_raises(self):
+        """Without fork state and no workspace on disk, raises ValueError."""
+        state = create_initial_feature_state(
+            ticket_key="TEST-202",
+            current_repo="org/repo",
+            workspace_path="/nonexistent/path",
+            context={"branch_name": "forge/test-202"},
+        )
+
+        with pytest.raises(ValueError, match="fork is not configured"):
+            prepare_workspace(state)
