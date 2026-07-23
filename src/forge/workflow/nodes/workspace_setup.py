@@ -91,6 +91,9 @@ def prepare_workspace(
     fork_repo = state.get("fork_repo", "")
     ticket_key = state["ticket_key"]
 
+    has_fork = bool(fork_owner and fork_repo)
+    effective_remote = remote if has_fork else "origin"
+
     if workspace_path and Path(workspace_path).exists():
         workspace = Workspace(
             path=Path(workspace_path),
@@ -100,8 +103,10 @@ def prepare_workspace(
         )
         git = GitOperations(workspace)
         try:
-            git.pull_rebase(remote=remote)
+            git.pull_rebase(remote=effective_remote)
         except Exception as e:
+            if not has_fork:
+                raise
             logger.warning(
                 "Workspace sync failed for %s; recreating workspace from fork: %s",
                 ticket_key,
@@ -116,6 +121,12 @@ def prepare_workspace(
                 stale_workspace_path=workspace_path,
             )
         return workspace_path, git
+
+    if not has_fork:
+        raise ValueError(
+            f"Cannot prepare workspace for {ticket_key}: "
+            "workspace path does not exist and fork is not configured"
+        )
 
     # Workspace is missing — recreate from fork branch.
     return _recreate_workspace_from_fork(
