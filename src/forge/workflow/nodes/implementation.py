@@ -66,6 +66,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             **state,
             "last_error": str(exc),
             "current_node": implementation_node,
+            "retry_count": state.get("retry_count", 0) + 1,
         }
 
     same_workspace_survived = local_workspace_survived and workspace_path == recorded_workspace
