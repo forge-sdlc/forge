@@ -131,6 +131,11 @@ class GitOperations:
         branch = self.workspace.branch_name
         logger.info(f"Syncing with {remote}/{branch} before implementing changes")
         self._run_git("fetch", remote)
+        if not self.remote_branch_exists(branch, remote=remote):
+            logger.info(
+                f"Remote branch {remote}/{branch} does not exist yet; skipping rebase"
+            )
+            return
         self._run_git("rebase", f"{remote}/{branch}")
         logger.info(f"Rebase onto {remote}/{branch} complete")
 
