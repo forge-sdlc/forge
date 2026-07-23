@@ -17,13 +17,14 @@ def _make_state(
     current_repo="acme/backend",
     tasks_by_repo=None,
     implemented_tasks=None,
+    retry_count=0,
 ):
     return {
         "ticket_key": ticket_key,
         "ticket_type": ticket_type,
         "current_node": "implement_task",
         "is_paused": False,
-        "retry_count": 0,
+        "retry_count": retry_count,
         "last_error": None,
         "workspace_path": workspace_path,
         "current_task_key": current_task_key,
@@ -210,6 +211,17 @@ class TestImplementationNodeRouting:
 
         assert result["current_node"] == "implement_bug_fix"
         assert result["last_error"] == "Workspace not set up"
+
+    @pytest.mark.asyncio
+    async def test_prepare_workspace_failure_increments_retry_count(self):
+        """Workspace setup failures must increment retry_count to avoid unbounded loops."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        state = _make_state(workspace_path=None, retry_count=1)
+        result = await implement_task(state)
+
+        assert result["retry_count"] == 2
+        assert result["last_error"] is not None
 
     @pytest.mark.asyncio
     async def test_feature_container_failure_uses_feature_implementation_node(self):
