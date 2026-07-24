@@ -141,6 +141,9 @@ class ContainerRunner:
         if container_skill_paths:
             env["AGENT_SKILL_PATHS"] = container_skill_paths
 
+        # Pass GitHub token for git push and API access
+        env["GITHUB_TOKEN"] = self.settings.github_token.get_secret_value()
+
         # Pass git configuration for commits
         env["GIT_USER_NAME"] = self.settings.git_user_name
         env["GIT_USER_EMAIL"] = self.settings.git_user_email
