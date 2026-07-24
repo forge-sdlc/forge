@@ -1,6 +1,7 @@
 """CI/CD evaluator node for monitoring and responding to CI results."""
 
 import io
+import json
 import logging
 import zipfile
 from pathlib import Path
@@ -20,8 +21,6 @@ from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import (
     post_status_comment,
-    remove_implementing_label,
-    set_ci_pending_label,
     set_review_pending_label,
 )
 from forge.workspace.git_ops import GitOperations
@@ -77,6 +76,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                 **state,
                 "ci_status": "no_prs",
                 "current_node": "complete",
+                "pending_ci_event": False,
             }
         )
 
@@ -130,6 +130,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                         **state,
                         "ci_status": "pending",
                         "current_node": "ci_evaluator",  # Stay here, wait for webhook
+                        "pending_ci_event": False,
                     }
                 )
 
@@ -183,6 +184,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                     "current_node": "human_review_gate",
                     "last_error": None,
                     "ci_fix_attempt": 0,
+                    "pending_ci_event": False,
                 }
             )
 
@@ -198,6 +200,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                     **state,
                     "ci_status": "pending",
                     "current_node": "ci_evaluator",
+                    "pending_ci_event": False,
                 }
             )
 
@@ -210,6 +213,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                     **state,
                     "ci_status": "pending",
                     "current_node": "ci_evaluator",
+                    "pending_ci_event": False,
                 }
             )
 
@@ -224,6 +228,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                     "ci_failed_checks": failed_checks,
                     "current_node": "ci_evaluator",
                     "last_error": "CI fix attempt limit reached",
+                    "pending_ci_event": False,
                 }
             )
 
@@ -236,6 +241,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                 "ci_failed_checks": failed_checks,
                 "ci_fix_attempt": next_attempt,
                 "current_node": "attempt_ci_fix",
+                "pending_ci_event": False,
             }
         )
 
@@ -246,6 +252,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
             "last_error": str(e),
             "current_node": "ci_evaluator",
             "retry_count": state.get("retry_count", 0) + 1,
+            "pending_ci_event": False,
         }
     finally:
         await github.close()
@@ -268,25 +275,25 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     """
     ticket_key = state["ticket_key"]
     failed_checks = state.get("ci_failed_checks", [])
-    workspace_path = state.get("workspace_path")
 
     if not failed_checks:
         return update_state_timestamp(
             {
                 **state,
-                "current_node": "ci_evaluator",
+                "ci_status": "passed",
+                "current_node": "human_review_gate",
+                "pending_ci_event": False,
             }
         )
 
-    logger.info(f"Attempting CI fix for {ticket_key}")
-
-    # Post status comment to feature ticket at start of CI fix attempt
     ci_fix_attempt = state.get("ci_fix_attempt", 0)
     ci_fix_max = state.get("ci_fix_max_attempts", 5)
 
     jira = JiraClient()
     try:
-        message = f"🔧 CI checks failed. Analyzing failure and attempting fix ({ci_fix_attempt}/{ci_fix_max})."
+        message = (
+            f"🔧 CI checks failed. Analyzing failure attribution ({ci_fix_attempt}/{ci_fix_max})."
+        )
         await post_status_comment(jira, ticket_key, message)
     finally:
         await jira.close()
@@ -294,50 +301,109 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     settings = get_settings()
     fork_owner = state.get("fork_owner", "")
     fork_repo = state.get("fork_repo", "")
-    attempt = ci_fix_attempt
-
     try:
         workspace_path, _ = prepare_workspace(state)
         state = {**state, "workspace_path": workspace_path}
-
     except Exception as _setup_err:
         logger.error(f"Workspace setup failed for {ticket_key}: {_setup_err}")
         return {
             **state,
             "last_error": str(_setup_err),
             "current_node": "attempt_ci_fix",
+            "pending_ci_event": False,
         }
 
     try:
-        # ── Phase 1: Analysis ────────────────────────────────────────────────
-        # ForgeAgent with MCP access fetches the Prow logs and produces a
-        # ── Phase 1: Analysis (container) ────────────────────────────────────
-        # Runs in a container so the agent has gh CLI and shell access to fetch
-        # real GitHub Actions / Prow logs. Writes the fix plan to a file so
-        # Phase 2 can read it without hitting token limits.
-        logger.info(f"Phase 1: Analyzing CI failures for {ticket_key} (attempt {attempt})")
-
         failures_file = Path(workspace_path) / ".forge" / "ci-failures.md"
+        attribution_file = Path(workspace_path) / ".forge" / "ci-attribution.json"
         fix_plan_file = Path(workspace_path) / ".forge" / "fix-plan.md"
         logs_dir = Path(workspace_path) / ".forge" / "logs"
         failures_file.parent.mkdir(parents=True, exist_ok=True)
 
-        # Download job logs and artifacts before the container starts so the
-        # agent can read them directly without needing gh CLI authentication.
-        await _fetch_ci_logs_and_artifacts(failed_checks, logs_dir, GitHubClient())
-
+        github = GitHubClient()
+        try:
+            await _fetch_ci_logs_and_artifacts(failed_checks, logs_dir, github)
+        finally:
+            await github.close()
         failures_file.write_text(_collect_error_info(failed_checks))
+
+        # ── Phase 0: Attribution ─────────────────────────────────────────────
+        logger.info(f"Phase 0: Attributing CI failures for {ticket_key}")
+        attribution_prompt = load_prompt(
+            "ci-attribution",
+            failures_file_path=str(failures_file),
+        )
+        runner = ContainerRunner(settings)
+        await runner.run(
+            workspace_path=Path(workspace_path),
+            task_summary=f"Attribute CI failure (attempt {ci_fix_attempt})",
+            task_description=attribution_prompt,
+            ticket_key=ticket_key,
+            task_key=f"{ticket_key}-ci-attribution",
+            repo_name=state.get("current_repo", ""),
+        )
+
+        attributable = True  # fail-safe default
+        attribution_reason = ""
+        if attribution_file.exists():
+            try:
+                verdict = json.loads(attribution_file.read_text())
+                attributable = verdict.get("attributable", True)
+                attribution_reason = verdict.get("reason", "")
+            except (ValueError, KeyError):
+                logger.warning(
+                    f"Could not parse ci-attribution.json for {ticket_key}, assuming attributable"
+                )
+
+        if not attributable:
+            logger.info(f"CI failure attributed as external for {ticket_key}: {attribution_reason}")
+            jira = JiraClient()
+            try:
+                check_names = ", ".join(c.get("name", "unknown") for c in failed_checks)
+                await post_status_comment(
+                    jira,
+                    ticket_key,
+                    f"⚠️ CI check(s) `{check_names}` are failing due to issues outside this PR "
+                    f"({attribution_reason}). "
+                    "The workflow will continue waiting. "
+                    "Use `/forge skip-gate <name>` on the PR to bypass if needed.",
+                )
+            finally:
+                await jira.close()
+            return update_state_timestamp(
+                {
+                    **state,
+                    "ci_status": "external_failure",
+                    "current_node": "human_review_gate",
+                    "pending_ci_event": False,
+                    "last_error": None,
+                }
+            )
+
+        # ── Phase 1: Analysis ────────────────────────────────────────────────
+        logger.info(
+            f"Phase 1: Analyzing CI failures for {ticket_key} (fix attempt {ci_fix_attempt}/{ci_fix_max})"
+        )
+
+        jira = JiraClient()
+        try:
+            await post_status_comment(
+                jira,
+                ticket_key,
+                f"🔧 Attempting CI fix ({ci_fix_attempt}/{ci_fix_max}).",
+            )
+        finally:
+            await jira.close()
 
         analysis_prompt = load_prompt(
             "analyze-ci",
             failures_file_path=str(failures_file),
-            attempt=attempt,
+            attempt=ci_fix_attempt,
         )
-
         runner = ContainerRunner(settings)
         result = await runner.run(
             workspace_path=Path(workspace_path),
-            task_summary=f"Analyze CI failures (attempt {attempt})",
+            task_summary=f"Analyze CI failures (attempt {ci_fix_attempt})",
             task_description=analysis_prompt,
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-ci-analyze",
@@ -353,7 +419,8 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             return update_state_timestamp(
                 {
                     **state,
-                    "current_node": "wait_for_ci_gate",
+                    "current_node": "human_review_gate",
+                    "pending_ci_event": False,
                     "last_error": None,
                 }
             )
@@ -362,14 +429,12 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         logger.info(f"Phase 1 complete: fix plan generated ({len(fix_plan)} chars)")
 
         # ── Phase 2: Fix ─────────────────────────────────────────────────────
-        # Container applies the fix plan written by Phase 1.
         logger.info(f"Phase 2: Applying fixes for {ticket_key}")
         fix_prompt = load_prompt("fix-ci", fix_plan=fix_plan)
-
         runner = ContainerRunner(settings)
         result = await runner.run(
             workspace_path=Path(workspace_path),
-            task_summary=f"Apply CI fix plan (attempt {attempt})",
+            task_summary=f"Apply CI fix plan (attempt {ci_fix_attempt})",
             task_description=fix_prompt,
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-ci-fix",
@@ -387,15 +452,12 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
         )
         git = GitOperations(workspace)
-
         branch_name = state.get("context", {}).get("branch_name", "")
 
-        # Commit any files the container left uncommitted (safety net)
         if git.has_uncommitted_changes():
             git.stage_all()
-            git.commit(f"[{ticket_key}] fix: address CI failures (attempt {attempt})")
+            git.commit(f"[{ticket_key}] fix: address CI failures (attempt {ci_fix_attempt})")
 
-        # Check for changes before doing anything expensive
         if fork_owner and fork_repo:
             git.add_fork_remote(fork_owner, fork_repo)
             remote_ref = f"fork/{branch_name}"
@@ -407,31 +469,25 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         ).stdout.strip()
 
         if not unpushed:
-            logger.warning(f"Container made no changes for {ticket_key} (attempt {attempt})")
+            logger.warning(f"Container made no changes for {ticket_key} (attempt {ci_fix_attempt})")
         else:
-            # Only run the expensive review pass when the fix actually changed code
-            _, review_result = await run_post_change_review(
+            await run_post_change_review(
                 workspace_path=str(workspace_path),
                 ticket_key=ticket_key,
                 current_repo=state.get("current_repo", ""),
                 branch_name=branch_name,
                 spec_content=state.get("spec_content", ""),
                 guardrails=state.get("context", {}).get("guardrails", ""),
-                label=f"ci-fix-{attempt}",
+                label=f"ci-fix-{ci_fix_attempt}",
             )
-            if review_result is not None:
-                state = merge_review_exhaustion(state, review_result, ticket_key, "code_review")
-
-            # Push all commits (CI fix + any review corrections)
             if fork_owner and fork_repo:
                 git.push_to_fork(force=False)
             else:
                 logger.warning("Fork info not in state — pushing to origin instead")
                 git.push(force=False)
-            logger.info(f"CI fix pushed for {ticket_key} (attempt {attempt})")
+            logger.info(f"CI fix pushed for {ticket_key} (attempt {ci_fix_attempt})")
             record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="pushed")
 
-            # Sync PR description to reflect what actually changed
             _repo = state.get("current_repo", "/")
             _owner, _repo_name = (_repo.split("/") + [""])[:2]
             await sync_pr_description(
@@ -440,13 +496,14 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 owner=_owner,
                 repo=_repo_name,
                 pr_number=state.get("current_pr_number"),
-                attempt=attempt,
+                attempt=ci_fix_attempt,
             )
 
         return update_state_timestamp(
             {
                 **state,
-                "current_node": "wait_for_ci_gate",
+                "current_node": "human_review_gate",
+                "pending_ci_event": False,
                 "last_error": None,
             }
         )
@@ -456,77 +513,9 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": str(e),
-            "current_node": "attempt_ci_fix",  # preserved so retry resumes here,
+            "current_node": "attempt_ci_fix",
+            "pending_ci_event": False,
         }
-
-
-async def wait_for_ci_gate(state: WorkflowState) -> WorkflowState:
-    """Pause the workflow until a GitHub CI webhook arrives.
-
-    Inserted after PR creation and after each CI fix push. The workflow
-    resumes when GitHub sends a check_run or check_suite webhook, at which
-    point ci_evaluator re-checks the actual CI results without any
-    polling delay.
-
-    On initial entry (after PR creation), posts a status comment to the feature
-    ticket and transitions labels from forge:implementing to forge:ci-pending.
-
-    Args:
-        state: Current workflow state.
-
-    Returns:
-        Updated state with is_paused=True.
-    """
-    ticket_key = state["ticket_key"]
-    ci_fix_attempt = state.get("ci_fix_attempt", 0)
-
-    # Detect initial entry (after PR creation) vs re-entry (after CI fix)
-    is_initial_entry = ci_fix_attempt == 0
-
-    if is_initial_entry:
-        # Post status comment and update labels on initial entry
-        jira = JiraClient()
-        try:
-            # Build status message with PR number if available
-            pr_number = state.get("current_pr_number")
-            pr_url = state.get("current_pr_url")
-            if not pr_url:
-                pr_urls = state.get("pr_urls", [])
-                pr_url = pr_urls[-1] if pr_urls else None
-            if pr_number is not None:
-                pr_label = f"Pull request #{pr_number}"
-                if pr_url:
-                    pr_label = f"[{pr_label}]({pr_url})"
-                message = f"🚀 {pr_label} created and submitted. Waiting for CI checks to complete."
-            else:
-                message = (
-                    "🚀 Pull request created and submitted. Waiting for CI checks to complete."
-                )
-
-            # Post status comment to feature ticket
-            await post_status_comment(jira, ticket_key, message)
-
-            # Transition labels: remove forge:implementing, add forge:ci-pending
-            await remove_implementing_label(jira, ticket_key)
-            await set_ci_pending_label(jira, ticket_key)
-
-        finally:
-            await jira.close()
-
-        logger.info(f"Pausing {ticket_key} after PR creation, waiting for GitHub CI webhook")
-    else:
-        logger.info(
-            f"Pausing {ticket_key} after CI fix attempt {ci_fix_attempt}, "
-            "waiting for GitHub CI webhook"
-        )
-
-    return update_state_timestamp(
-        {
-            **state,
-            "is_paused": True,
-            "current_node": "wait_for_ci_gate",
-        }
-    )
 
 
 async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:

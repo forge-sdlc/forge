@@ -4,7 +4,6 @@ from forge.workflow.nodes.ci_evaluator import (
     attempt_ci_fix,
     escalate_to_blocked,
     evaluate_ci_status,
-    wait_for_ci_gate,
 )
 from forge.workflow.nodes.docs_updater import update_documentation
 from forge.workflow.nodes.epic_decomposition import (
@@ -114,7 +113,6 @@ __all__ = [
     "attempt_ci_fix",
     "escalate_to_blocked",
     "evaluate_ci_status",
-    "wait_for_ci_gate",
     # Documentation update
     "update_documentation",
     # Local code review

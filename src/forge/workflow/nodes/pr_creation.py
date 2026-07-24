@@ -697,6 +697,6 @@ async def teardown_and_route(state: WorkflowState) -> WorkflowState:
         {
             **state,
             "repos_completed": repos_completed,
-            "current_node": "wait_for_ci_gate",
+            "current_node": "human_review_gate",
         }
     )
