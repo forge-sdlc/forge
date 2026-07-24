@@ -64,6 +64,18 @@ def create_mock_guardrails_loader():
     return mock
 
 
+def create_mock_github_client():
+    """Create a mock GitHubClient for fork/repo operations."""
+    mock = MagicMock()
+    mock.get_repository = AsyncMock(return_value={"default_branch": "main"})
+    mock.get_or_create_fork = AsyncMock(
+        return_value={"owner": {"login": "fork-owner"}, "name": "test-repo"}
+    )
+    mock.sync_fork_with_upstream = AsyncMock()
+    mock.close = AsyncMock()
+    return mock
+
+
 class TestWorkspaceSetupStatusComment:
     """Test cases for workspace setup posting status comments."""
 
@@ -74,6 +86,7 @@ class TestWorkspaceSetupStatusComment:
         mock_manager, mock_workspace = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
         mock_guardrails_loader = create_mock_guardrails_loader()
+        mock_github = create_mock_github_client()
 
         state = create_initial_feature_state(
             ticket_key="TEST-123",
@@ -89,6 +102,7 @@ class TestWorkspaceSetupStatusComment:
             ),
             patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
             patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+            patch("forge.workflow.nodes.workspace_setup.GitHubClient", return_value=mock_github),
         ):
             result = await setup_workspace(state)
 
@@ -120,6 +134,7 @@ class TestWorkspaceSetupStatusComment:
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
         mock_guardrails_loader = create_mock_guardrails_loader()
+        mock_github = create_mock_github_client()
 
         state = create_initial_feature_state(
             ticket_key="TEST-123",
@@ -135,6 +150,7 @@ class TestWorkspaceSetupStatusComment:
             ),
             patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
             patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+            patch("forge.workflow.nodes.workspace_setup.GitHubClient", return_value=mock_github),
         ):
             await setup_workspace(state)
 
@@ -149,6 +165,7 @@ class TestWorkspaceSetupStatusComment:
         mock_manager, mock_workspace = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
         mock_guardrails_loader = create_mock_guardrails_loader()
+        mock_github = create_mock_github_client()
 
         state = create_initial_feature_state(
             ticket_key="TEST-456",
@@ -164,6 +181,7 @@ class TestWorkspaceSetupStatusComment:
             ),
             patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
             patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+            patch("forge.workflow.nodes.workspace_setup.GitHubClient", return_value=mock_github),
         ):
             await setup_workspace(state)
 
@@ -184,6 +202,7 @@ class TestWorkspaceSetupLabelAndTransitions:
         mock_manager, mock_workspace = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
         mock_guardrails_loader = create_mock_guardrails_loader()
+        mock_github = create_mock_github_client()
 
         state = create_initial_feature_state(
             ticket_key="TEST-789",
@@ -198,6 +217,7 @@ class TestWorkspaceSetupLabelAndTransitions:
             ),
             patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
             patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+            patch("forge.workflow.nodes.workspace_setup.GitHubClient", return_value=mock_github),
         ):
             await setup_workspace(state)
 
@@ -213,6 +233,7 @@ class TestWorkspaceSetupLabelAndTransitions:
         mock_manager, mock_workspace = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
         mock_guardrails_loader = create_mock_guardrails_loader()
+        mock_github = create_mock_github_client()
 
         state = create_initial_feature_state(
             ticket_key="TEST-101",
@@ -228,6 +249,7 @@ class TestWorkspaceSetupLabelAndTransitions:
             ),
             patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
             patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+            patch("forge.workflow.nodes.workspace_setup.GitHubClient", return_value=mock_github),
         ):
             await setup_workspace(state)
 
@@ -249,6 +271,7 @@ class TestWorkspaceSetupErrorHandling:
         mock_manager, mock_workspace = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
         mock_guardrails_loader = create_mock_guardrails_loader()
+        mock_github = create_mock_github_client()
 
         state = create_initial_feature_state(
             ticket_key="TEST-999",
@@ -263,6 +286,7 @@ class TestWorkspaceSetupErrorHandling:
             ),
             patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
             patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+            patch("forge.workflow.nodes.workspace_setup.GitHubClient", return_value=mock_github),
         ):
             # Should not raise an exception
             result = await setup_workspace(state)
