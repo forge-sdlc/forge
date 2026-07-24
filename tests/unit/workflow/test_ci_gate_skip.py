@@ -70,7 +70,7 @@ def base_message():
 @pytest.fixture
 def ci_state():
     return make_workflow_state(
-        current_node="wait_for_ci_gate",
+        current_node="human_review_gate",
         current_repo="org/repo",
         current_pr_number=42,
         ci_failed_checks=[

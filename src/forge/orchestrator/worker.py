@@ -651,6 +651,7 @@ class OrchestratorWorker:
 
         # GitHub issue_comment events: detect /forge skip-gate and /forge unskip-gate
         # commands posted as PR comments.
+        _CI_STAGES = ("ci_evaluator", "attempt_ci_fix", "human_review_gate")
         if message.source == EventSource.GITHUB and "issue_comment" in message.event_type:
             gh_comment_body = payload.get("comment", {}).get("body", "").strip()
             repo_full = payload.get("repository", {}).get("full_name", "")
@@ -1631,6 +1632,12 @@ class OrchestratorWorker:
         elif is_ci_webhook:
             # GitHub CI event — unpause the gate and let ci_evaluator check the results
             updated_state["is_paused"] = False
+
+            if current_node == "human_review_gate":
+                # Keep current_node as human_review_gate so review webhooks arriving
+                # during the CI cycle are still accepted from the queue.
+                updated_state["pending_ci_event"] = True
+
         elif is_yolo:
             updated_state["yolo_mode"] = True
             updated_state["is_paused"] = False
@@ -1750,8 +1757,6 @@ class OrchestratorWorker:
                 "ci_evaluator",
                 "attempt_ci_fix",
                 "human_review_gate",
-                "wait_for_ci_gate",
-                "review_response_gate",
             )
             if (
                 not current_state.get("is_paused", True)
