@@ -31,7 +31,6 @@ _SHARED_RESUME_MAP: dict[str, str] = {
     "human_review_gate": "human_review_gate",
     "implement_review": "implement_review",
     "review_response_gate": "review_response_gate",
-    "wait_for_ci_gate": "wait_for_ci_gate",
     "ci_evaluator": "ci_evaluator",
     "attempt_ci_fix": "ci_evaluator",
     "rebase_pr": "rebase_pr",

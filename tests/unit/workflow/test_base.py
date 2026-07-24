@@ -78,6 +78,20 @@ class TestCIIntegrationState:
         assert "ci_failed_checks" in hints
         assert "ci_fix_attempt" in hints
 
+    def test_ci_state_has_pending_ci_event_field(self):
+        """CIIntegrationState includes pending_ci_event field."""
+        from forge.workflow.base import CIIntegrationState
+
+        hints = get_type_hints(CIIntegrationState)
+        assert "pending_ci_event" in hints
+
+    def test_pending_ci_event_is_bool_type(self):
+        """pending_ci_event field is typed as bool."""
+        from forge.workflow.base import CIIntegrationState
+
+        hints = get_type_hints(CIIntegrationState)
+        assert hints["pending_ci_event"] is bool
+
 
 class TestReviewIntegrationState:
     """Tests for review integration mixin."""
@@ -156,3 +170,14 @@ class TestBaseWorkflow:
 
         # Kwargs preserved
         assert state["extra_field"] == "value"
+
+
+class TestSharedResumeMap:
+    """Tests for resolve_shared_resume_node."""
+
+    def test_wait_for_ci_gate_is_not_mapped(self):
+        """wait_for_ci_gate was removed — it must not resolve to any node."""
+        from forge.workflow.utils import resolve_shared_resume_node
+
+        result = resolve_shared_resume_node("wait_for_ci_gate")
+        assert result is None

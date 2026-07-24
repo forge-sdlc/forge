@@ -77,6 +77,7 @@ class CIIntegrationState(TypedDict, total=False):
     ci_skipped_checks: list[str]
     ci_fix_attempt: int
     ci_fix_max_attempts: int
+    pending_ci_event: bool
 
 
 class ReviewIntegrationState(TypedDict, total=False):
