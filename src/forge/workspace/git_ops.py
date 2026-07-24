@@ -159,17 +159,24 @@ class GitOperations:
         self._run_git("fetch", "fork", check=False)
 
     def push_to_fork(self, force: bool = False) -> None:
-        """Push the current branch to the fork remote.
+        """Push the current branch to the fork remote, falling back to origin.
 
         Args:
             force: Force push (use with caution).
         """
-        args = ["push", "-u", "fork", self.workspace.branch_name]
+        remote = self._effective_push_remote()
+        args = ["push", "-u", remote, self.workspace.branch_name]
         if force:
             args.insert(1, "--force")
 
         self._run_git(*args)
-        logger.info(f"Pushed branch {self.workspace.branch_name} to fork")
+        logger.info(f"Pushed branch {self.workspace.branch_name} to {remote}")
+
+    def _effective_push_remote(self) -> str:
+        """Return 'fork' if that remote exists, otherwise 'origin'."""
+        result = self._run_git("remote", check=False)
+        remotes = result.stdout.split()
+        return "fork" if "fork" in remotes else "origin"
 
     def create_branch(self, base_branch: str = "main") -> None:
         """Create and checkout a new branch.
