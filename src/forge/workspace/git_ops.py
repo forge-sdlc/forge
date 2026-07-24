@@ -161,10 +161,18 @@ class GitOperations:
     def push_to_fork(self, force: bool = False) -> None:
         """Push the current branch to the fork remote, falling back to origin.
 
+        When force=True the fork remote is required — force-pushing to origin
+        could overwrite upstream history, so we raise instead of falling back.
+
         Args:
             force: Force push (use with caution).
         """
         remote = self._effective_push_remote()
+        if force and remote != "fork":
+            raise GitError(
+                "Refusing to force-push: 'fork' remote is not configured. "
+                "Force-pushing to origin could overwrite upstream history."
+            )
         args = ["push", "-u", remote, self.workspace.branch_name]
         if force:
             args.insert(1, "--force")
@@ -176,6 +184,8 @@ class GitOperations:
         """Return 'fork' if that remote exists, otherwise 'origin'."""
         result = self._run_git("remote", check=False)
         remotes = result.stdout.split()
+        if "fork" not in remotes:
+            logger.warning("Fork remote not configured; falling back to origin for push")
         return "fork" if "fork" in remotes else "origin"
 
     def create_branch(self, base_branch: str = "main") -> None:
