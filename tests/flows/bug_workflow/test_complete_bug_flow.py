@@ -11,12 +11,10 @@ from forge.workflow.bug.graph import (
     _route_after_answer_bug,
     _route_after_implementation,
     _route_after_local_review,
-    _route_after_pr_creation,
+    route_after_pr_creation,
     _route_after_reflect_rca,
-    _route_after_teardown,
     _route_after_triage_check,
     _route_after_workspace_setup,
-    _route_ci_evaluation,
     _route_human_review_bug,
     route_entry,
 )
@@ -144,7 +142,6 @@ class TestBugWorkflowResumeRouting:
         ("teardown_workspace", "teardown_workspace"),
         ("ci_evaluator", "ci_evaluator"),
         ("attempt_ci_fix", "ci_evaluator"),
-        ("wait_for_ci_gate", "wait_for_ci_gate"),
         ("local_review", "local_review"),
         ("ai_review", "human_review_gate"),
         ("human_review_gate", "human_review_gate"),
@@ -721,106 +718,35 @@ class TestRouteAfterLocalReview:
 
 
 class TestRouteAfterPrCreation:
-    """_route_after_pr_creation routes based on last_error and pr_urls."""
+    """route_after_pr_creation routes based on last_error and pr_urls."""
 
     def test_success_routes_to_teardown(self):
         state = make_workflow_state(
             ticket_key="BUG-PR1", ticket_type=TicketType.BUG, current_node="create_pr",
             last_error=None, pr_urls=["https://github.com/org/repo/pull/1"],
         )
-        assert _route_after_pr_creation(state) == "teardown_workspace"
+        assert route_after_pr_creation(state) == "teardown_workspace"
 
     def test_error_with_no_pr_urls_escalates(self):
         state = make_workflow_state(
             ticket_key="BUG-PR2", ticket_type=TicketType.BUG, current_node="create_pr",
             last_error="PR creation failed", pr_urls=[],
         )
-        assert _route_after_pr_creation(state) == "escalate_blocked"
+        assert route_after_pr_creation(state) == "escalate_blocked"
 
     def test_error_with_existing_pr_urls_routes_to_teardown(self):
         state = make_workflow_state(
             ticket_key="BUG-PR3", ticket_type=TicketType.BUG, current_node="create_pr",
             last_error="partial failure", pr_urls=["https://github.com/org/repo/pull/1"],
         )
-        assert _route_after_pr_creation(state) == "teardown_workspace"
+        assert route_after_pr_creation(state) == "teardown_workspace"
 
     def test_no_error_no_pr_urls_routes_to_teardown(self):
         state = make_workflow_state(
             ticket_key="BUG-PR4", ticket_type=TicketType.BUG, current_node="create_pr",
             last_error=None, pr_urls=[],
         )
-        assert _route_after_pr_creation(state) == "teardown_workspace"
-
-
-class TestRouteAfterTeardown:
-    """_route_after_teardown loops back for remaining repos or proceeds to CI."""
-
-    def test_remaining_repos_loops_to_setup_workspace(self):
-        state = make_workflow_state(
-            ticket_key="BUG-TD1", ticket_type=TicketType.BUG, current_node="teardown_workspace",
-            repos_to_process=["org/a", "org/b"], repos_completed=["org/a"],
-        )
-        assert _route_after_teardown(state) == "setup_workspace"
-
-    def test_all_repos_done_routes_to_wait_for_ci_gate(self):
-        state = make_workflow_state(
-            ticket_key="BUG-TD2", ticket_type=TicketType.BUG, current_node="teardown_workspace",
-            repos_to_process=["org/a"], repos_completed=["org/a"],
-        )
-        assert _route_after_teardown(state) == "wait_for_ci_gate"
-
-    def test_empty_repos_routes_to_wait_for_ci_gate(self):
-        state = make_workflow_state(
-            ticket_key="BUG-TD3", ticket_type=TicketType.BUG, current_node="teardown_workspace",
-            repos_to_process=[], repos_completed=[],
-        )
-        assert _route_after_teardown(state) == "wait_for_ci_gate"
-
-    def test_multiple_remaining_repos_loops(self):
-        state = make_workflow_state(
-            ticket_key="BUG-TD4", ticket_type=TicketType.BUG, current_node="teardown_workspace",
-            repos_to_process=["org/a", "org/b", "org/c"], repos_completed=[],
-        )
-        assert _route_after_teardown(state) == "setup_workspace"
-
-
-class TestRouteCiEvaluation:
-    """_route_ci_evaluation routes based on ci_status."""
-
-    def test_passed_routes_to_human_review_gate(self):
-        state = make_workflow_state(
-            ticket_key="BUG-CI1", ticket_type=TicketType.BUG, current_node="ci_evaluator",
-            ci_status="passed",
-        )
-        assert _route_ci_evaluation(state) == "human_review_gate"
-
-    def test_fixing_routes_to_attempt_ci_fix(self):
-        state = make_workflow_state(
-            ticket_key="BUG-CI2", ticket_type=TicketType.BUG, current_node="ci_evaluator",
-            ci_status="fixing",
-        )
-        assert _route_ci_evaluation(state) == "attempt_ci_fix"
-
-    def test_pending_routes_to_end(self):
-        state = make_workflow_state(
-            ticket_key="BUG-CI3", ticket_type=TicketType.BUG, current_node="ci_evaluator",
-            ci_status="pending",
-        )
-        assert _route_ci_evaluation(state) == END
-
-    def test_failed_routes_to_escalate_blocked(self):
-        state = make_workflow_state(
-            ticket_key="BUG-CI4", ticket_type=TicketType.BUG, current_node="ci_evaluator",
-            ci_status="failed",
-        )
-        assert _route_ci_evaluation(state) == "escalate_blocked"
-
-    def test_empty_status_routes_to_escalate_blocked(self):
-        state = make_workflow_state(
-            ticket_key="BUG-CI5", ticket_type=TicketType.BUG, current_node="ci_evaluator",
-            ci_status="",
-        )
-        assert _route_ci_evaluation(state) == "escalate_blocked"
+        assert route_after_pr_creation(state) == "teardown_workspace"
 
 
 class TestRouteHumanReviewBug:

@@ -357,7 +357,7 @@ class TestFeatureWorkflow:
         targets = {e.target for e in compiled.get_graph().edges if e.source == "rebase_pr"}
 
         assert {
-            "wait_for_ci_gate",
+            "ci_evaluator",
             "implement_review",
             "review_response_gate",
             "create_pr",

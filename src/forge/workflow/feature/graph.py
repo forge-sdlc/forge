@@ -22,41 +22,34 @@ from forge.workflow.gates import (
 from forge.workflow.nodes import (
     aggregate_epic_status,
     aggregate_feature_status,
-    attempt_ci_fix,
     complete_tasks,
     create_pull_request,
     decompose_epics,
-    escalate_to_blocked,
-    evaluate_ci_status,
     generate_prd,
     generate_spec,
     generate_tasks,
-    human_review_gate,
     implement_task,
     local_review_changes,
     regenerate_all_epics,
     regenerate_prd_with_feedback,
     regenerate_spec_with_feedback,
-    route_human_review,
     route_tasks_by_repo,
     route_tasks_parallel,
     setup_workspace,
     teardown_and_route,
     update_documentation,
     update_single_epic,
-    wait_for_ci_gate,
-)
-from forge.workflow.nodes.implement_review import (
-    implement_review,
-    review_response_gate,
-    route_review_response,
 )
 from forge.workflow.nodes.qa_handler import answer_question
-from forge.workflow.nodes.rebase import rebase_pr
 from forge.workflow.nodes.task_generation import (
     regenerate_all_tasks,
     regenerate_epic_tasks,
     update_single_task,
+)
+from forge.workflow.post_pr import (
+    add_post_pr_edges,
+    add_post_pr_nodes,
+    route_after_pr_creation,
 )
 from forge.workflow.utils import resolve_shared_resume_node
 
@@ -121,8 +114,6 @@ def route_by_ticket_type(state: FeatureState) -> str:
             return "regenerate_epic_tasks"
         elif current_node == "task_approval_gate":
             return "task_approval_gate"
-        elif current_node == "wait_for_ci_gate":
-            return "wait_for_ci_gate"
         elif current_node in ("implement_task", "implementation", "implement_bug_fix"):
             return "implement_task"
         elif current_node == "setup_workspace":
@@ -336,56 +327,6 @@ def _route_implementation(
     return "implement_task"
 
 
-def _route_after_pr_creation(
-    state: FeatureState,
-) -> Literal["teardown_workspace", "escalate_blocked"]:
-    """Route after PR creation attempt.
-
-    On success: proceed to teardown workspace
-    On failure: escalate to blocked status
-
-    Args:
-        state: Current workflow state.
-
-    Returns:
-        Next node name.
-    """
-    last_error = state.get("last_error")
-    pr_urls = state.get("pr_urls", [])
-
-    # If there's an error and no PR was created, escalate
-    if last_error and not pr_urls:
-        return "escalate_blocked"
-
-    # Success or partial success - proceed to teardown
-    return "teardown_workspace"
-
-
-def _route_after_teardown(state: FeatureState) -> Literal["setup_workspace", "wait_for_ci_gate"]:
-    """Route after workspace teardown."""
-    repos_to_process = state.get("repos_to_process", [])
-    repos_completed = state.get("repos_completed", [])
-
-    remaining = [r for r in repos_to_process if r not in repos_completed]
-    if remaining:
-        return "setup_workspace"
-    return "wait_for_ci_gate"
-
-
-def _route_ci_evaluation(
-    state: FeatureState,
-) -> Literal["human_review_gate", "attempt_ci_fix", "escalate_blocked", "__end__"]:
-    """Route based on CI evaluation results."""
-    ci_status = state.get("ci_status", "")
-
-    routes = {
-        "passed": "human_review_gate",
-        "fixing": "attempt_ci_fix",
-        "pending": "__end__",  # Pause workflow until CI webhook
-    }
-    return routes.get(ci_status, "escalate_blocked")
-
-
 def _route_after_answer(state: FeatureState) -> str:
     """Route back to the original gate after answering a question.
 
@@ -422,11 +363,11 @@ def build_feature_graph() -> StateGraph:
     17. local_review: reviews git diff vs main, fixes breaking issues in-place (up to 2 passes)
     18. local_review -> create_pr
     19. create_pr -> teardown_workspace
-    20. teardown_workspace -> wait_for_ci_gate (pause) or next repo
-    21. wait_for_ci_gate: resumes on GitHub CI webhook
+    20. teardown_workspace -> human_review_gate (pause) or next repo
+    21. human_review_gate: resumes on GitHub CI or review webhook
     22. ci_evaluator: checks CI status, attempts autonomous fixes on failure (up to 5 retries)
-    23. ci_evaluator (passed) -> human_review_gate
-    24. human_review_gate -> complete_tasks
+    23. ci_evaluator -> human_review_gate
+    24. human_review_gate (approved) -> complete_tasks
     25. complete_tasks -> aggregate_epic_status -> aggregate_feature_status -> END
 
     Returns:
@@ -474,16 +415,10 @@ def build_feature_graph() -> StateGraph:
     # Documentation update node (pre-PR, updates stale docs)
     graph.add_node("update_documentation", update_documentation)
 
-    # CI/CD Validation nodes (US7)
-    graph.add_node("wait_for_ci_gate", wait_for_ci_gate)
-    graph.add_node("ci_evaluator", evaluate_ci_status)
-    graph.add_node("attempt_ci_fix", attempt_ci_fix)
-    graph.add_node("escalate_blocked", escalate_to_blocked)
+    # Post-PR nodes (CI/review) - shared across all workflows
+    add_post_pr_nodes(graph)
 
-    # Human Review nodes (US9)
-    graph.add_node("human_review_gate", human_review_gate)
-    graph.add_node("implement_review", implement_review)
-    graph.add_node("review_response_gate", review_response_gate)
+    # Feature workflow completion nodes
     graph.add_node("complete_tasks", complete_tasks)
     graph.add_node("aggregate_epic_status", aggregate_epic_status)
     graph.add_node("aggregate_feature_status", aggregate_feature_status)
@@ -525,7 +460,6 @@ def build_feature_graph() -> StateGraph:
             # Resume routing for pre-PR and CI/review stages
             "local_review": "local_review",
             "update_documentation": "update_documentation",
-            "wait_for_ci_gate": "wait_for_ci_gate",
             "ci_evaluator": "ci_evaluator",
             "human_review_gate": "human_review_gate",
             "implement_review": "implement_review",
@@ -715,82 +649,16 @@ def build_feature_graph() -> StateGraph:
     graph.add_edge("update_documentation", "create_pr")
     graph.add_conditional_edges(
         "create_pr",
-        _route_after_pr_creation,
+        route_after_pr_creation,
         {
             "teardown_workspace": "teardown_workspace",
             "escalate_blocked": "escalate_blocked",
         },
     )
-    graph.add_conditional_edges(
-        "teardown_workspace",
-        _route_after_teardown,
-        {
-            "setup_workspace": "setup_workspace",
-            "wait_for_ci_gate": "wait_for_ci_gate",
-        },
-    )
+    # Post-PR edges (CI/review) - shared across all workflows
+    add_post_pr_edges(graph, on_complete_node="complete_tasks")
 
-    # CI/CD flow (US7)
-    graph.add_conditional_edges(
-        "wait_for_ci_gate",
-        lambda s: END if s.get("is_paused") else "ci_evaluator",
-        {END: END, "ci_evaluator": "ci_evaluator"},
-    )
-    graph.add_conditional_edges(
-        "ci_evaluator",
-        _route_ci_evaluation,
-        {
-            "human_review_gate": "human_review_gate",
-            "attempt_ci_fix": "attempt_ci_fix",
-            "escalate_blocked": "escalate_blocked",
-            END: END,  # Pause: CI still running, wait for next webhook
-        },
-    )
-    graph.add_conditional_edges(
-        "attempt_ci_fix",
-        lambda s: s.get("current_node", "wait_for_ci_gate"),
-        {
-            "wait_for_ci_gate": "wait_for_ci_gate",
-            "escalate_blocked": "escalate_blocked",
-            "ci_evaluator": "ci_evaluator",
-            # Exception handlers set current_node="attempt_ci_fix" so resume routing
-            # can map it back to ci_evaluator. Escalate within the current invocation
-            # so the graph doesn't crash on an unmapped key.
-            "attempt_ci_fix": "escalate_blocked",
-        },
-    )
-    graph.add_edge("escalate_blocked", END)
-
-    # Human Review flow (US9)
-    graph.add_conditional_edges(
-        "human_review_gate",
-        route_human_review,
-        {
-            "implement_review": "implement_review",
-            "complete_tasks": "complete_tasks",
-            END: END,  # Pause workflow until review webhook
-        },
-    )
-    graph.add_conditional_edges(
-        "implement_review",
-        lambda s: s.get("current_node", "wait_for_ci_gate"),
-        {
-            "wait_for_ci_gate": "wait_for_ci_gate",
-            "review_response_gate": "review_response_gate",
-            "implement_review": "implement_review",
-            "human_review_gate": "human_review_gate",
-            "escalate_blocked": "escalate_blocked",
-        },
-    )
-    graph.add_conditional_edges(
-        "review_response_gate",
-        route_review_response,
-        {
-            "implement_review": "implement_review",
-            "human_review_gate": "human_review_gate",
-            END: END,
-        },
-    )
+    # Feature workflow completion chain
     graph.add_edge("complete_tasks", "aggregate_epic_status")
     graph.add_edge("aggregate_epic_status", "aggregate_feature_status")
     graph.add_edge("aggregate_feature_status", END)
@@ -808,7 +676,6 @@ def build_feature_graph() -> StateGraph:
     )
 
     # ── Rebase (merge conflict resolution, triggered by /forge rebase) ──
-    graph.add_node("rebase_pr", rebase_pr)
     graph.add_conditional_edges(
         "rebase_pr",
         lambda s: s.get("current_node", END),
@@ -824,7 +691,6 @@ def build_feature_graph() -> StateGraph:
             "update_documentation": "update_documentation",
             "create_pr": "create_pr",
             "teardown_workspace": "teardown_workspace",
-            "wait_for_ci_gate": "wait_for_ci_gate",
             "ci_evaluator": "ci_evaluator",
             "attempt_ci_fix": "ci_evaluator",
             "human_review_gate": "human_review_gate",
