@@ -464,7 +464,7 @@
                       },
                       "spec": {
                         "format": "table",
-                        "rawSql": "SELECT any(if(metadata['ticket_type'] = 'Feature', 1, 0)) as value FROM traces FINAL WHERE session_id = '${jira_issue}'"
+                        "rawSql": "SELECT any(nullIf(metadata['ticket_type'], '')) as value FROM traces FINAL WHERE session_id = '${jira_issue}'"
                       }
                     },
                     "refId": "A",
@@ -490,21 +490,7 @@
                 "textMode": "value"
               },
               "fieldConfig": {
-                "defaults": {
-                  "mappings": [
-                    {
-                      "type": "value",
-                      "options": {
-                        "0": {
-                          "text": "Bug"
-                        },
-                        "1": {
-                          "text": "Feature"
-                        }
-                      }
-                    }
-                  ]
-                },
+                "defaults": {},
                 "overrides": []
               }
             }
