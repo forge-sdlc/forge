@@ -303,6 +303,49 @@ class TestWorkspaceSetupErrorHandling:
         mock_jira.close.assert_called_once()
 
 
+class TestWorkspaceSetupForkCreation:
+    """Test that setup_workspace ensures fork when fork_owner/fork_repo not in state."""
+
+    @pytest.mark.asyncio
+    async def test_workspace_setup_creates_fork_when_not_in_state(self):
+        """Should call get_or_create_fork and persist fork info in state."""
+        mock_jira = create_mock_jira_client()
+        mock_manager, mock_workspace = create_mock_workspace_manager()
+        mock_git = create_mock_git_operations()
+        mock_guardrails_loader = create_mock_guardrails_loader()
+        mock_github = create_mock_github_client()
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-FORK",
+            current_repo="upstream-org/my-repo",
+        )
+        assert not state.get("fork_owner")
+        assert not state.get("fork_repo")
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.JiraClient", return_value=mock_jira),
+            patch(
+                "forge.workflow.nodes.workspace_setup.get_workspace_manager",
+                return_value=mock_manager,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+            patch("forge.workflow.nodes.workspace_setup.GitHubClient", return_value=mock_github),
+        ):
+            result = await setup_workspace(state)
+
+        mock_github.get_or_create_fork.assert_called_once_with(
+            "upstream-org", "my-repo"
+        )
+        mock_github.sync_fork_with_upstream.assert_called_once_with(
+            "fork-owner", "test-repo"
+        )
+        assert result["fork_owner"] == "fork-owner"
+        assert result["fork_repo"] == "test-repo"
+        mock_git.add_fork_remote.assert_called_once_with("fork-owner", "test-repo")
+        mock_github.close.assert_called_once()
+
+
 class TestPrepareWorkspaceRecovery:
     """Tests for prepare_workspace workspace sync/recreation behavior."""
 

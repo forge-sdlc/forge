@@ -241,23 +241,26 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
             owner, repo_name = current_repo.split("/", 1)
             github = GitHubClient()
             try:
-                repo_data = await github.get_repository(owner, repo_name)
-                default_branch = repo_data.get("default_branch", "main")
-                logger.info(f"Detected default branch for {current_repo}: {default_branch}")
-            except Exception as exc:
-                logger.warning(f"Could not detect default branch for {current_repo}: {exc}")
-
-            if not fork_owner or not fork_repo_name:
                 try:
-                    fork_data = await github.get_or_create_fork(owner, repo_name)
-                    fork_owner = fork_data["owner"]["login"]
-                    fork_repo_name = fork_data["name"]
-                    await github.sync_fork_with_upstream(fork_owner, fork_repo_name)
-                    logger.info(f"Ensured fork {fork_owner}/{fork_repo_name} for workspace push")
+                    repo_data = await github.get_repository(owner, repo_name)
+                    default_branch = repo_data.get("default_branch", "main")
+                    logger.info(f"Detected default branch for {current_repo}: {default_branch}")
                 except Exception as exc:
-                    logger.warning(f"Could not ensure fork for {current_repo}: {exc}")
+                    logger.warning(f"Could not detect default branch for {current_repo}: {exc}")
 
-            await github.close()
+                if not fork_owner or not fork_repo_name:
+                    try:
+                        fork_data = await github.get_or_create_fork(owner, repo_name)
+                        fork_owner = fork_data["owner"]["login"]
+                        fork_repo_name = fork_data["name"]
+                        await github.sync_fork_with_upstream(fork_owner, fork_repo_name)
+                        logger.info(
+                            f"Ensured fork {fork_owner}/{fork_repo_name} for workspace push"
+                        )
+                    except Exception as exc:
+                        logger.warning(f"Could not ensure fork for {current_repo}: {exc}")
+            finally:
+                await github.close()
 
         # Set up feature branch.
         # If fork is available, add the fork remote so implementation pushes
