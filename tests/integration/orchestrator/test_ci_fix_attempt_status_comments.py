@@ -80,14 +80,14 @@ class TestCIFixAttemptStatusCommentsTS007:
                                             with patch("pathlib.Path.exists", return_value=False):
                                                 await attempt_ci_fix(state)
 
-        # Verify status comment posted with correct format
-        assert mock_jira.add_comment.call_count == 1
-        comment_call = mock_jira.add_comment.call_args
-        assert comment_call[0][0] == "FEAT-300"
-        assert comment_call[0][1] == "🔧 CI checks failed. Analyzing failure and attempting fix (1/3)."
-
-        # Verify JiraClient closed
-        assert mock_jira.close.call_count == 1
+        # Verify both phase comments posted (attribution + fix attempt)
+        assert mock_jira.add_comment.call_count == 2
+        attribution_call = mock_jira.add_comment.call_args_list[0]
+        assert attribution_call[0][0] == "FEAT-300"
+        assert attribution_call[0][1] == "🔧 CI checks failed. Analyzing failure attribution (1/3)."
+        fix_call = mock_jira.add_comment.call_args_list[1]
+        assert fix_call[0][0] == "FEAT-300"
+        assert fix_call[0][1] == "🔧 Attempting CI fix (1/3)."
 
     @pytest.mark.asyncio
     async def test_second_attempt_posts_comment_with_2_of_max(self):
@@ -127,11 +127,14 @@ class TestCIFixAttemptStatusCommentsTS007:
                                             with patch("pathlib.Path.exists", return_value=False):
                                                 await attempt_ci_fix(state)
 
-        # Verify status comment posted with correct format
-        assert mock_jira.add_comment.call_count == 1
-        comment_call = mock_jira.add_comment.call_args
-        assert comment_call[0][0] == "FEAT-301"
-        assert comment_call[0][1] == "🔧 CI checks failed. Analyzing failure and attempting fix (2/3)."
+        # Verify both phase comments posted (attribution + fix attempt)
+        assert mock_jira.add_comment.call_count == 2
+        attribution_call = mock_jira.add_comment.call_args_list[0]
+        assert attribution_call[0][0] == "FEAT-301"
+        assert attribution_call[0][1] == "🔧 CI checks failed. Analyzing failure attribution (2/3)."
+        fix_call = mock_jira.add_comment.call_args_list[1]
+        assert fix_call[0][0] == "FEAT-301"
+        assert fix_call[0][1] == "🔧 Attempting CI fix (2/3)."
 
     @pytest.mark.asyncio
     async def test_final_attempt_posts_comment_with_max_of_max(self):
@@ -171,11 +174,14 @@ class TestCIFixAttemptStatusCommentsTS007:
                                             with patch("pathlib.Path.exists", return_value=False):
                                                 await attempt_ci_fix(state)
 
-        # Verify status comment posted with correct format
-        assert mock_jira.add_comment.call_count == 1
-        comment_call = mock_jira.add_comment.call_args
-        assert comment_call[0][0] == "FEAT-302"
-        assert comment_call[0][1] == "🔧 CI checks failed. Analyzing failure and attempting fix (3/3)."
+        # Verify both phase comments posted (attribution + fix attempt)
+        assert mock_jira.add_comment.call_count == 2
+        attribution_call = mock_jira.add_comment.call_args_list[0]
+        assert attribution_call[0][0] == "FEAT-302"
+        assert attribution_call[0][1] == "🔧 CI checks failed. Analyzing failure attribution (3/3)."
+        fix_call = mock_jira.add_comment.call_args_list[1]
+        assert fix_call[0][0] == "FEAT-302"
+        assert fix_call[0][1] == "🔧 Attempting CI fix (3/3)."
 
     @pytest.mark.asyncio
     async def test_comment_posted_to_feature_ticket_not_task(self):
@@ -215,12 +221,12 @@ class TestCIFixAttemptStatusCommentsTS007:
                                             with patch("pathlib.Path.exists", return_value=False):
                                                 await attempt_ci_fix(state)
 
-        # Verify comment posted to feature ticket (FEAT-303), not task tickets (TASK-001, TASK-002)
-        assert mock_jira.add_comment.call_count == 1
-        comment_call = mock_jira.add_comment.call_args
-        assert comment_call[0][0] == "FEAT-303"
-        assert "TASK-001" not in comment_call[0][0]
-        assert "TASK-002" not in comment_call[0][0]
+        # Verify comments posted to feature ticket (FEAT-303), not task tickets
+        assert mock_jira.add_comment.call_count == 2
+        for call in mock_jira.add_comment.call_args_list:
+            assert call[0][0] == "FEAT-303"
+            assert "TASK-001" not in call[0][0]
+            assert "TASK-002" not in call[0][0]
 
 
 class TestCIFixAttemptCommentCounts:
@@ -275,11 +281,14 @@ class TestCIFixAttemptCommentCounts:
                                                 with patch("pathlib.Path.exists", return_value=False):
                                                     await attempt_ci_fix(state)
 
-        # Verify three comments posted with correct counts
-        assert len(comments) == 3
-        assert comments[0][1] == "🔧 CI checks failed. Analyzing failure and attempting fix (1/3)."
-        assert comments[1][1] == "🔧 CI checks failed. Analyzing failure and attempting fix (2/3)."
-        assert comments[2][1] == "🔧 CI checks failed. Analyzing failure and attempting fix (3/3)."
+        # Verify six comments posted (2 per attempt: attribution + fix)
+        assert len(comments) == 6
+        assert comments[0][1] == "🔧 CI checks failed. Analyzing failure attribution (1/3)."
+        assert comments[1][1] == "🔧 Attempting CI fix (1/3)."
+        assert comments[2][1] == "🔧 CI checks failed. Analyzing failure attribution (2/3)."
+        assert comments[3][1] == "🔧 Attempting CI fix (2/3)."
+        assert comments[4][1] == "🔧 CI checks failed. Analyzing failure attribution (3/3)."
+        assert comments[5][1] == "🔧 Attempting CI fix (3/3)."
 
     @pytest.mark.asyncio
     async def test_different_max_attempts_values(self):
@@ -319,10 +328,12 @@ class TestCIFixAttemptCommentCounts:
                                             with patch("pathlib.Path.exists", return_value=False):
                                                 await attempt_ci_fix(state)
 
-        # Verify comment uses max_attempts=5
-        assert mock_jira.add_comment.call_count == 1
-        comment_call = mock_jira.add_comment.call_args
-        assert comment_call[0][1] == "🔧 CI checks failed. Analyzing failure and attempting fix (2/5)."
+        # Verify both phase comments use max_attempts=5
+        assert mock_jira.add_comment.call_count == 2
+        attribution_call = mock_jira.add_comment.call_args_list[0]
+        assert attribution_call[0][1] == "🔧 CI checks failed. Analyzing failure attribution (2/5)."
+        fix_call = mock_jira.add_comment.call_args_list[1]
+        assert fix_call[0][1] == "🔧 Attempting CI fix (2/5)."
 
 
 class TestCIFixAttemptErrorHandling:
@@ -415,8 +426,8 @@ class TestCIFixAttemptErrorHandling:
                                             with patch("pathlib.Path.exists", return_value=False):
                                                 await attempt_ci_fix(state)
 
-        # Verify JiraClient closed despite error
-        assert mock_jira.close.call_count == 1
+        # Verify JiraClient closed for both phases despite error
+        assert mock_jira.close.call_count == 2
 
     @pytest.mark.asyncio
     async def test_no_comment_posted_when_no_failed_checks(self):
@@ -437,5 +448,5 @@ class TestCIFixAttemptErrorHandling:
 
         # Verify no comment posted (early return)
         assert mock_jira.add_comment.call_count == 0
-        # Verify early return
-        assert result["current_node"] == "ci_evaluator"
+        # Verify early return routes to human_review_gate
+        assert result["current_node"] == "human_review_gate"

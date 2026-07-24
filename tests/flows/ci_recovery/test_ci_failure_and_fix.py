@@ -2,9 +2,7 @@
 
 from copy import deepcopy
 
-from langgraph.graph import END
-
-from forge.workflow.feature.graph import _route_ci_evaluation
+from forge.workflow.post_pr import _route_ci_evaluation
 from tests.fixtures.workflow_states import (
     STATE_CI_FAILED,
     make_workflow_state,
@@ -32,14 +30,14 @@ class TestCIEvaluationRouting:
 
         assert _route_ci_evaluation(state) == "attempt_ci_fix"
 
-    def test_pending_ci_pauses_workflow(self):
-        """`ci_status=pending` returns END to pause until the next CI webhook."""
+    def test_pending_ci_routes_to_human_review_gate(self):
+        """`ci_status=pending` routes to human_review_gate to re-pause."""
         state = make_workflow_state(
             current_node="ci_evaluator",
             ci_status="pending",
         )
 
-        assert _route_ci_evaluation(state) == END
+        assert _route_ci_evaluation(state) == "human_review_gate"
 
     def test_unknown_ci_status_escalates_to_blocked(self):
         """An unrecognised ci_status escalates rather than silently continuing."""
@@ -119,12 +117,12 @@ class TestCIFixStateMachineScenarios:
 
         assert _route_ci_evaluation(state) == "attempt_ci_fix"
 
-        # After fix is applied and pushed, workflow waits for new CI results
-        state["current_node"] = "wait_for_ci_gate"
+        # After fix is applied and pushed, workflow re-pauses at human_review_gate
+        state["current_node"] = "human_review_gate"
         state["ci_status"] = "pending"
         state["ci_fix_attempt"] = 1
 
-        assert _route_ci_evaluation(state) == END
+        assert _route_ci_evaluation(state) == "human_review_gate"
 
         # New CI webhook arrives — all checks pass
         state["ci_status"] = "passed"

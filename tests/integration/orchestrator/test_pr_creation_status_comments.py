@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.workflow.feature.state import create_initial_feature_state
-from forge.workflow.nodes.ci_evaluator import wait_for_ci_gate
+from forge.workflow.nodes.human_review import human_review_gate
 
 
 def create_mock_jira_client():
@@ -41,20 +41,20 @@ class TestPRCreationStatusCommentsTS006:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 123
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            result = await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            result = await human_review_gate(state)
 
         # Verify status comment posted with PR number
         assert mock_jira.add_comment.call_count == 1
         comment_call = mock_jira.add_comment.call_args
         assert comment_call[0][0] == "FEAT-200"
-        assert comment_call[0][1] == "🚀 Pull request #123 created and submitted. Waiting for CI checks to complete."
+        assert comment_call[0][1] == "🚀 Pull request #123 created and submitted. Waiting for CI checks and human review."
 
         # Verify workflow paused
         assert result["is_paused"] is True
-        assert result["current_node"] == "wait_for_ci_gate"
+        assert result["current_node"] == "human_review_gate"
 
     @pytest.mark.asyncio
     async def test_pr_creation_removes_implementing_label(self):
@@ -67,10 +67,10 @@ class TestPRCreationStatusCommentsTS006:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 123
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            await human_review_gate(state)
 
         # Verify forge:implementing label removed
         assert mock_jira.remove_labels.call_count == 1
@@ -89,10 +89,10 @@ class TestPRCreationStatusCommentsTS006:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 123
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            await human_review_gate(state)
 
         # Verify forge:ci-pending label added
         assert mock_jira.set_workflow_label.call_count == 1
@@ -113,10 +113,10 @@ class TestPRCreationStatusCommentsTS006:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 123
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            await human_review_gate(state)
 
         # Verify JiraClient closed
         assert mock_jira.close.call_count == 1
@@ -137,20 +137,20 @@ class TestPRCreationStatusCommentsTS014:
         )
         # PR number is None
         state["current_pr_number"] = None
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            result = await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            result = await human_review_gate(state)
 
         # Verify fallback comment posted without PR number
         assert mock_jira.add_comment.call_count == 1
         comment_call = mock_jira.add_comment.call_args
         assert comment_call[0][0] == "FEAT-201"
-        assert comment_call[0][1] == "🚀 Pull request created and submitted. Waiting for CI checks to complete."
+        assert comment_call[0][1] == "🚀 Pull request created and submitted. Waiting for CI checks and human review."
 
         # Verify workflow paused
         assert result["is_paused"] is True
-        assert result["current_node"] == "wait_for_ci_gate"
+        assert result["current_node"] == "human_review_gate"
 
     @pytest.mark.asyncio
     async def test_pr_creation_labels_updated_without_pr_number(self):
@@ -163,10 +163,10 @@ class TestPRCreationStatusCommentsTS014:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = None
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            await human_review_gate(state)
 
         # Verify forge:implementing label removed
         assert mock_jira.remove_labels.call_count == 1
@@ -190,14 +190,14 @@ class TestPRCreationErrorHandling:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 456
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            result = await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            result = await human_review_gate(state)
 
         # Verify workflow continues (doesn't raise exception)
         assert result["is_paused"] is True
-        assert result["current_node"] == "wait_for_ci_gate"
+        assert result["current_node"] == "human_review_gate"
 
         # Verify error logged
         assert any("Failed to post status comment" in record.message for record in caplog.records)
@@ -215,14 +215,14 @@ class TestPRCreationErrorHandling:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 456
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            result = await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            result = await human_review_gate(state)
 
         # Verify workflow continues
         assert result["is_paused"] is True
-        assert result["current_node"] == "wait_for_ci_gate"
+        assert result["current_node"] == "human_review_gate"
 
         # Verify error logged
         assert any("Failed to remove implementing label" in record.message for record in caplog.records)
@@ -240,14 +240,14 @@ class TestPRCreationErrorHandling:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 456
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            result = await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            result = await human_review_gate(state)
 
         # Verify workflow continues
         assert result["is_paused"] is True
-        assert result["current_node"] == "wait_for_ci_gate"
+        assert result["current_node"] == "human_review_gate"
 
         # Verify error logged
         assert any("Failed to set ci-pending label" in record.message for record in caplog.records)
@@ -267,10 +267,10 @@ class TestPRCreationErrorHandling:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 456
-        state["ci_fix_attempt"] = 0  # Initial entry
+        # ci_status defaults to None → initial entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            await human_review_gate(state)
 
         # Verify JiraClient closed despite errors
         assert mock_jira.close.call_count == 1
@@ -290,10 +290,10 @@ class TestCIFixReentryNoStatusUpdate:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 789
-        state["ci_fix_attempt"] = 1  # Re-entry after CI fix
+        state["ci_status"] = "pending"  # Non-None → re-entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            result = await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            result = await human_review_gate(state)
 
         # Verify no comment posted
         assert mock_jira.add_comment.call_count == 0
@@ -303,7 +303,7 @@ class TestCIFixReentryNoStatusUpdate:
 
         # Verify workflow paused
         assert result["is_paused"] is True
-        assert result["current_node"] == "wait_for_ci_gate"
+        assert result["current_node"] == "human_review_gate"
 
     @pytest.mark.asyncio
     async def test_ci_fix_reentry_multiple_attempts_no_comment(self):
@@ -316,10 +316,10 @@ class TestCIFixReentryNoStatusUpdate:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 789
-        state["ci_fix_attempt"] = 3  # Multiple re-entries
+        state["ci_status"] = "passed"  # Non-None → re-entry path
 
-        with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
-            result = await wait_for_ci_gate(state)
+        with patch("forge.workflow.nodes.human_review.JiraClient", return_value=mock_jira):
+            result = await human_review_gate(state)
 
         # Verify no Jira operations performed
         assert mock_jira.add_comment.call_count == 0
@@ -328,4 +328,4 @@ class TestCIFixReentryNoStatusUpdate:
 
         # Verify workflow paused
         assert result["is_paused"] is True
-        assert result["current_node"] == "wait_for_ci_gate"
+        assert result["current_node"] == "human_review_gate"

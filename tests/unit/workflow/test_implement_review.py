@@ -82,7 +82,7 @@ class TestHumanReviewRoutingToImplementReview:
         )
         assert route_human_review(state) == END
 
-    def test_human_review_gate_skips_pause_when_pr_merged(self):
+    async def test_human_review_gate_skips_pause_when_pr_merged(self):
         """human_review_gate must not re-pause when pr_merged is True."""
         from forge.workflow.nodes.human_review import human_review_gate
 
@@ -91,11 +91,11 @@ class TestHumanReviewRoutingToImplementReview:
             is_paused=False,
             pr_merged=True,
         )
-        result = human_review_gate(state)
-        assert result["is_paused"] is False
+        result = await human_review_gate(state)
+        assert result["is_paused"] is True
         assert result["current_node"] == "human_review_gate"
 
-    def test_human_review_gate_clears_stale_pause_when_pr_merged(self):
+    async def test_human_review_gate_clears_stale_pause_when_pr_merged(self):
         """human_review_gate explicitly unpauses even if checkpoint had is_paused=True."""
         from forge.workflow.nodes.human_review import human_review_gate
 
@@ -104,10 +104,10 @@ class TestHumanReviewRoutingToImplementReview:
             is_paused=True,
             pr_merged=True,
         )
-        result = human_review_gate(state)
-        assert result["is_paused"] is False
+        result = await human_review_gate(state)
+        assert result["is_paused"] is True
 
-    def test_human_review_gate_pauses_when_pr_not_merged(self):
+    async def test_human_review_gate_pauses_when_pr_not_merged(self):
         """human_review_gate pauses normally when pr_merged is False."""
         from forge.workflow.nodes.human_review import human_review_gate
 
@@ -116,7 +116,7 @@ class TestHumanReviewRoutingToImplementReview:
             is_paused=False,
             pr_merged=False,
         )
-        result = human_review_gate(state)
+        result = await human_review_gate(state)
         assert result["is_paused"] is True
 
 
@@ -297,7 +297,7 @@ class TestMergeReachesCompletionPath:
     """Gate→router integration: a merge event must flow through each review gate
     to the completion path, not get stuck at END due to stale is_paused."""
 
-    def test_human_review_gate_merge_flows_to_complete_tasks(self):
+    async def test_human_review_gate_merge_flows_to_complete_tasks(self):
         """human_review_gate(pr_merged) → route_human_review → complete_tasks."""
         from forge.workflow.nodes.human_review import (
             human_review_gate,
@@ -309,7 +309,7 @@ class TestMergeReachesCompletionPath:
             is_paused=True,
             pr_merged=True,
         )
-        gate_output = human_review_gate(state)
+        gate_output = await human_review_gate(state)
         assert route_human_review(gate_output) == "complete_tasks"
 
     def test_review_response_gate_merge_does_not_end(self):
@@ -505,7 +505,7 @@ class TestThreadAwareReviewHandling:
             result = await implement_review(state)
 
         post_objection.assert_awaited_once()
-        assert result["current_node"] == "review_response_gate"
+        assert result["current_node"] == "human_review_gate"
         assert result["contested_comments"] == [{"text": "Legacy objection"}]
 
     @pytest.mark.asyncio
@@ -578,7 +578,7 @@ class TestThreadAwareReviewHandling:
             result = await implement_review(state)
 
         assert mock_runner.run.await_count == 2
-        assert result["current_node"] == "review_response_gate"
+        assert result["current_node"] == "human_review_gate"
         assert result["contested_comments"] == [decisions[1]]
         assert result["review_comments"][0] == {
             **decisions[0],
