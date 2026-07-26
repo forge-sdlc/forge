@@ -457,6 +457,7 @@ curl -X POST http://localhost:8000/api/v1/webhooks/github \
   -d '{
     "action": "submitted",
     "review": {
+      "id": 999,
       "state": "approved",
       "body": "LGTM",
       "commit_id": "YOUR_HEAD_SHA"
@@ -816,6 +817,7 @@ curl -X POST http://localhost:8000/api/v1/webhooks/github \
   -d '{
     "action": "submitted",
     "review": {
+      "id": 999,
       "state": "commented",
       "body": "Please fix the jitter constant comment in controller.go.",
       "commit_id": "YOUR_HEAD_SHA"
