@@ -1073,9 +1073,17 @@ class OrchestratorWorker:
                     owner, repo_name = repo_full.split("/", 1)
                     gh = GitHubClient()
                     try:
-                        inline_comments = await gh.get_pull_request_review_comments(
-                            owner, repo_name, pr_number
-                        )
+                        review_id = review.get("id")
+                        if review_id:
+                            inline_comments = await gh.get_review_comments(
+                                owner, repo_name, pr_number, review_id
+                            )
+                        else:
+                            logger.warning(
+                                "Webhook pull_request_review did not include a review ID. "
+                                "Skipping inline comment fetching to prevent historical feedback reintroduction."
+                            )
+                            inline_comments = []
                     finally:
                         await gh.close()
 
@@ -1083,10 +1091,20 @@ class OrchestratorWorker:
                 if review_body.strip():
                     parts.append(review_body.strip())
                 if inline_comments:
-                    inline_text = "\n\n".join(
-                        f"**{c['path']}** (line {c['position']}):\n{c['body']}"
-                        for c in inline_comments
-                    )
+                    formatted_comments = []
+                    for c in inline_comments:
+                        path = c.get("path") or "unknown"
+                        body = c.get("body") or ""
+                        # Safely resolve the line number from potential key candidates
+                        line_val = c.get("position")
+                        if line_val is None:
+                            line_val = c.get("line")
+                        if line_val is None:
+                            line_val = c.get("original_line")
+                        if line_val is None:
+                            line_val = "unknown"
+                        formatted_comments.append(f"**{path}** (line {line_val}):\n{body}")
+                    inline_text = "\n\n".join(formatted_comments)
                     parts.append(f"Inline comments:\n{inline_text}")
 
                 if parts:
