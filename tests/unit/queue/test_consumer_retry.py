@@ -15,6 +15,22 @@ from forge.queue.retry import RetryEntry, RetryQueue
 # ---------------------------------------------------------------------------
 
 
+class _NoopRedisLock:
+    async def acquire(self) -> bool:
+        return True
+
+    async def extend(self, _seconds: int, *, replace_ttl: bool) -> bool:
+        return replace_ttl
+
+    async def release(self) -> None:
+        return None
+
+
+def configure_redis_mock(redis_mock: AsyncMock) -> None:
+    """Make the async Redis mock expose its synchronous lock factory."""
+    redis_mock.lock = MagicMock(side_effect=lambda *_args, **_kwargs: _NoopRedisLock())
+
+
 def make_message(
     event_id: str = "evt-001",
     ticket_key: str = "TEST-123",
@@ -31,7 +47,8 @@ def make_message(
 
 def make_consumer() -> QueueConsumer:
     """Return a QueueConsumer with a mocked RetryQueue."""
-    redis_mock = MagicMock()
+    redis_mock = AsyncMock()
+    configure_redis_mock(redis_mock)
     redis_mock.xack = AsyncMock(return_value=1)
     consumer = QueueConsumer(consumer_name="test-worker", redis_client=redis_mock)
     consumer._running = True
@@ -78,6 +95,7 @@ class TestConsumeStreamSuccess:
             return []
 
         redis_mock = AsyncMock()
+        configure_redis_mock(redis_mock)
         redis_mock.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
         redis_mock.xack = AsyncMock()
         consumer._redis = redis_mock
@@ -113,6 +131,7 @@ class TestConsumeStreamFailure:
             return []
 
         redis_mock = AsyncMock()
+        configure_redis_mock(redis_mock)
         redis_mock.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
         redis_mock.xack = AsyncMock()
         consumer._redis = redis_mock
@@ -150,6 +169,7 @@ class TestConsumeStreamFailure:
             return []
 
         redis_mock = AsyncMock()
+        configure_redis_mock(redis_mock)
         redis_mock.xreadgroup = AsyncMock(side_effect=xreadgroup_side_effect)
         redis_mock.xack = AsyncMock()
         consumer._redis = redis_mock

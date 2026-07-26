@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import forge.queue.consumer as consumer_module
 from forge.models.events import EventSource
 from forge.queue.consumer import CONSUMER_GROUP, QueueConsumer
 from forge.queue.models import QueueMessage
@@ -17,6 +18,26 @@ from forge.queue.models import QueueMessage
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+class _FakeRedisLock:
+    """Small in-memory stand-in that shares ownership by Redis key."""
+
+    def __init__(self, lock: asyncio.Lock) -> None:
+        self._lock = lock
+        self.extend_calls = 0
+
+    async def acquire(self) -> bool:
+        await self._lock.acquire()
+        return True
+
+    async def extend(self, _seconds: int, *, replace_ttl: bool) -> bool:
+        assert replace_ttl is True
+        self.extend_calls += 1
+        return True
+
+    async def release(self) -> None:
+        self._lock.release()
 
 
 def _make_message(
@@ -61,6 +82,16 @@ def _make_consumer(redis_mock: MagicMock, max_tasks: int = 20) -> QueueConsumer:
 def _make_redis_mock() -> MagicMock:
     """Return a mock Redis client with sensible async defaults."""
     mock = MagicMock()
+    locks: dict[str, asyncio.Lock] = {}
+    created_locks: list[_FakeRedisLock] = []
+
+    def make_lock(name: str, **_kwargs) -> _FakeRedisLock:
+        lock = _FakeRedisLock(locks.setdefault(name, asyncio.Lock()))
+        created_locks.append(lock)
+        return lock
+
+    mock.lock = MagicMock(side_effect=make_lock)
+    mock.created_locks = created_locks
     mock.xack = AsyncMock(return_value=1)
     mock.xgroup_create = AsyncMock()
     mock.xreadgroup = AsyncMock(return_value=[])
@@ -157,8 +188,62 @@ class TestFifoOrdering:
 
         assert call_order == [0, 1], (
             f"Expected FIFO order [0, 1] but got {call_order}. "
-            "Per-ticket asyncio.Lock must serialise same-ticket events."
+            "Per-ticket locks must serialise same-ticket events."
         )
+
+    @pytest.mark.asyncio
+    async def test_same_ticket_is_serialized_across_consumer_instances(self) -> None:
+        """Independent worker instances must share the Redis ticket lock."""
+        redis_mock = _make_redis_mock()
+        worker_a = _make_consumer(redis_mock)
+        worker_b = _make_consumer(redis_mock)
+
+        first_started = asyncio.Event()
+        release_first = asyncio.Event()
+        active = 0
+        peak_active = 0
+
+        async def handler(message: QueueMessage) -> None:
+            nonlocal active, peak_active
+            active += 1
+            peak_active = max(peak_active, active)
+            if message.event_id == "evt-first":
+                first_started.set()
+                await release_first.wait()
+            active -= 1
+
+        worker_a.register_handler(EventSource.JIRA, handler)
+        worker_b.register_handler(EventSource.JIRA, handler)
+        first = _make_message("SAME-TICKET", message_id="1-0", event_id="evt-first")
+        second = _make_message("SAME-TICKET", message_id="2-0", event_id="evt-second")
+
+        first_task = asyncio.create_task(worker_a._process_message(first, "jira-events"))
+        await first_started.wait()
+        second_task = asyncio.create_task(worker_b._process_message(second, "jira-events"))
+        await asyncio.sleep(0.02)
+
+        assert peak_active == 1
+        release_first.set()
+        await asyncio.gather(first_task, second_task)
+        assert peak_active == 1
+
+        lock_name = "forge:queue:ticket-lock:SAME-TICKET"
+        assert [call.args[0] for call in redis_mock.lock.call_args_list] == [
+            lock_name,
+            lock_name,
+        ]
+
+    @pytest.mark.asyncio
+    async def test_distributed_lock_lease_is_renewed(self, monkeypatch) -> None:
+        """A long-running handler retains ownership beyond the initial lease."""
+        monkeypatch.setattr(consumer_module, "TICKET_LOCK_RENEW_SECONDS", 0.001)
+        redis_mock = _make_redis_mock()
+        consumer = _make_consumer(redis_mock)
+
+        async with consumer._distributed_ticket_lock("LONG-TICKET"):
+            await asyncio.sleep(0.01)
+
+        assert redis_mock.created_locks[0].extend_calls > 0
 
 
 # ---------------------------------------------------------------------------
