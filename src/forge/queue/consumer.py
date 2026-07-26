@@ -103,9 +103,7 @@ class QueueConsumer:
                     # still-valid ten-minute lease. Retry on the next interval.
                     logger.exception("Failed to renew distributed ticket lock for %s", ticket_key)
 
-        renewal_task = asyncio.create_task(
-            renew_lease(), name=f"renew-ticket-lock-{ticket_key}"
-        )
+        renewal_task = asyncio.create_task(renew_lease(), name=f"renew-ticket-lock-{ticket_key}")
         try:
             yield
         finally:
