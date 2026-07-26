@@ -1378,6 +1378,122 @@ class TestHandleResumeEventReviewGates:
 
     @pytest.mark.asyncio
     @patch("forge.orchestrator.worker.post_status_comment", new_callable=AsyncMock)
+    @patch("forge.orchestrator.worker.GitHubClient")
+    async def test_handle_resume_event_pr_review_with_review_id_at_review_response_gate(
+        self, mock_github_client, _mock_post_comment
+    ):
+        """When at review_response_gate and a pull_request_review payload contains a valid review ID, gh.get_review_comments is called."""
+        mock_gh = AsyncMock()
+        # Mock various position/line structures to verify fallback
+        mock_gh.get_review_comments.return_value = [
+            {"path": "src/file1.py", "position": 10, "body": "Fix position."},
+            {"path": "src/file2.py", "line": 20, "body": "Fix line."},
+            {"path": "src/file3.py", "original_line": 30, "body": "Fix original_line."},
+            {"path": "src/file4.py", "body": "Fix none."},
+        ]
+        mock_github_client.return_value = mock_gh
+
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        state = {
+            "ticket_key": "TEST-123",
+            "current_node": "review_response_gate",
+            "is_paused": True,
+            "context": {},
+        }
+        message = QueueMessage(
+            message_id="msg-123",
+            event_id="evt-123",
+            source=EventSource.GITHUB,
+            event_type="pull_request_review",
+            ticket_key="TEST-123",
+            payload={
+                "review": {
+                    "id": 999,
+                    "state": "changes_requested",
+                    "body": "PR review body",
+                },
+                "pull_request": {
+                    "number": 42,
+                },
+                "repository": {
+                    "full_name": "owner/repo",
+                },
+            },
+        )
+
+        result = await worker._handle_resume_event(message, state)
+
+        assert result is not state
+        assert result["is_paused"] is False
+        assert result["revision_requested"] is True
+        assert "PR review body" in result["feedback_comment"]
+        assert "src/file1.py" in result["feedback_comment"]
+        assert "(line 10)" in result["feedback_comment"]
+        assert "(line 20)" in result["feedback_comment"]
+        assert "(line 30)" in result["feedback_comment"]
+        assert "(line ?)" in result["feedback_comment"]
+        mock_gh.get_review_comments.assert_called_once_with("owner", "repo", 42, 999)
+        mock_gh.get_pull_request_review_comments.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("forge.orchestrator.worker.post_status_comment", new_callable=AsyncMock)
+    @patch("forge.orchestrator.worker.GitHubClient")
+    async def test_handle_resume_event_pr_review_fallback_at_review_response_gate(
+        self, mock_github_client, _mock_post_comment
+    ):
+        """When at review_response_gate and a pull_request_review payload contains NO review ID, gh.get_pull_request_review_comments is called."""
+        mock_gh = AsyncMock()
+        mock_gh.get_pull_request_review_comments.return_value = [
+            {"path": "src/file1.py", "position": 10, "body": "Fix position."},
+            {"path": "src/file2.py", "line": 20, "body": "Fix line."},
+            {"path": "src/file3.py", "original_line": 30, "body": "Fix original_line."},
+            {"path": "src/file4.py", "body": "Fix none."},
+        ]
+        mock_github_client.return_value = mock_gh
+
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        state = {
+            "ticket_key": "TEST-123",
+            "current_node": "review_response_gate",
+            "is_paused": True,
+            "context": {},
+        }
+        message = QueueMessage(
+            message_id="msg-123",
+            event_id="evt-123",
+            source=EventSource.GITHUB,
+            event_type="pull_request_review",
+            ticket_key="TEST-123",
+            payload={
+                "review": {
+                    "state": "changes_requested",
+                    "body": "PR review body",
+                },
+                "pull_request": {
+                    "number": 42,
+                },
+                "repository": {
+                    "full_name": "owner/repo",
+                },
+            },
+        )
+
+        result = await worker._handle_resume_event(message, state)
+
+        assert result is not state
+        assert result["is_paused"] is False
+        assert result["revision_requested"] is True
+        assert "PR review body" in result["feedback_comment"]
+        assert "src/file1.py" in result["feedback_comment"]
+        assert "(line 10)" in result["feedback_comment"]
+        assert "(line 20)" in result["feedback_comment"]
+        assert "(line 30)" in result["feedback_comment"]
+        assert "(line ?)" in result["feedback_comment"]
+        mock_gh.get_pull_request_review_comments.assert_called_once_with("owner", "repo", 42)
+        mock_gh.get_review_comments.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("forge.orchestrator.worker.post_status_comment", new_callable=AsyncMock)
     async def test_handle_resume_event_pr_approve_at_review_response_gate(self, _mock_post_comment):
         """When at review_response_gate and a PR review approved occurs, unpause the workflow."""
         worker = OrchestratorWorker(consumer_name="test-worker")

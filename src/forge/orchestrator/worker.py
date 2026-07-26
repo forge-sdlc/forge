@@ -1073,9 +1073,15 @@ class OrchestratorWorker:
                     owner, repo_name = repo_full.split("/", 1)
                     gh = GitHubClient()
                     try:
-                        inline_comments = await gh.get_pull_request_review_comments(
-                            owner, repo_name, pr_number
-                        )
+                        review_id = review.get("id")
+                        if review_id:
+                            inline_comments = await gh.get_review_comments(
+                                owner, repo_name, pr_number, review_id
+                            )
+                        else:
+                            inline_comments = await gh.get_pull_request_review_comments(
+                                owner, repo_name, pr_number
+                            )
                     finally:
                         await gh.close()
 
@@ -1084,7 +1090,7 @@ class OrchestratorWorker:
                     parts.append(review_body.strip())
                 if inline_comments:
                     inline_text = "\n\n".join(
-                        f"**{c['path']}** (line {c['position']}):\n{c['body']}"
+                        f"**{c['path']}** (line {c.get('position') or c.get('line') or c.get('original_line') or '?'}):\n{c['body']}"
                         for c in inline_comments
                     )
                     parts.append(f"Inline comments:\n{inline_text}")
