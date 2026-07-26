@@ -359,6 +359,7 @@ class TestWorkspaceSetupForkBootstrap:
             "fork-owner", "test-repo", branch="main"
         )
         mock_git.add_fork_remote.assert_called_once_with("fork-owner", "test-repo")
+        mock_git.push_to_fork.assert_called_once_with()
         assert result["fork_owner"] == "fork-owner"
         assert result["fork_repo"] == "test-repo"
         assert result["current_node"] == "implementation"

@@ -9,6 +9,7 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
+from forge.workflow.nodes.git_persistence import push_to_fork_with_retry
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import (
     post_status_comment,
@@ -312,6 +313,10 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
             git.checkout_branch(workspace.branch_name, remote="fork")
         else:
             git.create_branch(default_branch)
+            # The next graph node may run on a worker that cannot see this
+            # local workspace.  Publish the new branch before checkpointing so
+            # that worker can recreate it from the fork on the first attempt.
+            await push_to_fork_with_retry(git)
 
         # Create .forge directory for task handoff
         forge_dir = workspace.path / ".forge"
