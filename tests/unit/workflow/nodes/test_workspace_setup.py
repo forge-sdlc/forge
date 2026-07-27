@@ -397,6 +397,44 @@ class TestWorkspaceSetupForkBootstrap:
         assert result["retry_count"] == 1
         assert "invalid refspec" in result["last_error"]
 
+    @pytest.mark.asyncio
+    async def test_existing_fork_branch_is_checked_out_without_push(
+        self, mock_workspace_github
+    ):
+        mock_jira = create_mock_jira_client()
+        mock_manager, mock_workspace = create_mock_workspace_manager()
+        mock_git = create_mock_git_operations()
+        mock_git.remote_branch_exists.return_value = True
+        mock_guardrails_loader = create_mock_guardrails_loader()
+        state = create_initial_feature_state(
+            ticket_key="TEST-EXISTING-FORK-BRANCH",
+            current_repo="upstream/repo",
+        )
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.JiraClient", return_value=mock_jira),
+            patch(
+                "forge.workflow.nodes.workspace_setup.get_workspace_manager",
+                return_value=mock_manager,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+        ):
+            result = await setup_workspace(state)
+
+        mock_workspace_github.sync_fork_with_upstream.assert_awaited_once_with(
+            "fork-owner", "test-repo", branch="main"
+        )
+        mock_git.remote_branch_exists.assert_called_once_with(
+            mock_workspace.branch_name, remote="fork"
+        )
+        mock_git.checkout_branch.assert_called_once_with(
+            mock_workspace.branch_name, remote="fork"
+        )
+        mock_git.create_branch.assert_not_called()
+        mock_git.push_to_fork.assert_not_called()
+        assert result["current_node"] == "implementation"
+
 
 class TestPrepareWorkspaceRecovery:
     """Tests for prepare_workspace workspace sync/recreation behavior."""
