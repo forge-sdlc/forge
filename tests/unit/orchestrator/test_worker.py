@@ -1388,6 +1388,12 @@ class TestHandleResumeEventReviewGates:
         mock_gh.get_review_comments.return_value = [
             {"path": "src/file1.py", "position": 10, "body": "Fix position."},
             {"path": "src/file2.py", "line": 20, "body": "Fix line."},
+            {
+                "path": "src/file2b.py",
+                "position": 4,
+                "line": 150,
+                "body": "Prefer the file line.",
+            },
             {"path": "src/file3.py", "original_line": 30, "body": "Fix original_line."},
             {"path": "src/file4.py", "body": "Fix none."},
         ]
@@ -1398,6 +1404,9 @@ class TestHandleResumeEventReviewGates:
             "ticket_key": "TEST-123",
             "current_node": "review_response_gate",
             "is_paused": True,
+            "contested_comments": [
+                {"text": "Objection: the requested change conflicts with the spec"}
+            ],
             "context": {},
         }
         message = QueueMessage(
@@ -1426,10 +1435,13 @@ class TestHandleResumeEventReviewGates:
         assert result is not state
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
+        assert result["contested_comments"] == []
         assert "PR review body" in result["feedback_comment"]
         assert "src/file1.py" in result["feedback_comment"]
         assert "(line 10)" in result["feedback_comment"]
         assert "(line 20)" in result["feedback_comment"]
+        assert "(line 150)" in result["feedback_comment"]
+        assert "(line 4)" not in result["feedback_comment"]
         assert "(line 30)" in result["feedback_comment"]
         assert "(line ?)" in result["feedback_comment"]
         mock_gh.get_review_comments.assert_called_once_with("owner", "repo", 42, 999)

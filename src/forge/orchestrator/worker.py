@@ -1090,7 +1090,7 @@ class OrchestratorWorker:
                     parts.append(review_body.strip())
                 if inline_comments:
                     inline_text = "\n\n".join(
-                        f"**{c['path']}** (line {c.get('position') or c.get('line') or c.get('original_line') or '?'}):\n{c['body']}"
+                        f"**{c['path']}** (line {c.get('line') or c.get('original_line') or c.get('position') or '?'}):\n{c['body']}"
                         for c in inline_comments
                     )
                     parts.append(f"Inline comments:\n{inline_text}")
