@@ -40,6 +40,15 @@ class _FakeRedisLock:
         self._lock.release()
 
 
+class _LostLeaseRedisLock(_FakeRedisLock):
+    """Redis lock stand-in whose first renewal reports lost ownership."""
+
+    async def extend(self, _seconds: int, *, replace_ttl: bool) -> bool:
+        assert replace_ttl is True
+        self.extend_calls += 1
+        return False
+
+
 def _make_message(
     ticket_key: str,
     message_id: str = "1234567890-0",
@@ -244,6 +253,38 @@ class TestFifoOrdering:
             await asyncio.sleep(0.01)
 
         assert redis_mock.created_locks[0].extend_calls > 0
+
+    @pytest.mark.asyncio
+    async def test_lost_distributed_lock_aborts_handler_and_retries(self, monkeypatch) -> None:
+        """A handler must not continue after its distributed lease is lost."""
+        monkeypatch.setattr(consumer_module, "TICKET_LOCK_RENEW_SECONDS", 0.001)
+        redis_mock = _make_redis_mock()
+        lost_lock = _LostLeaseRedisLock(asyncio.Lock())
+        redis_mock.lock = MagicMock(return_value=lost_lock)
+        consumer = _make_consumer(redis_mock)
+        handler_started = asyncio.Event()
+        handler_stopped = asyncio.Event()
+
+        async def handler(_message: QueueMessage) -> None:
+            handler_started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                handler_stopped.set()
+
+        consumer.register_handler(EventSource.JIRA, handler)
+        message = _make_message("LOST-LEASE", event_id="evt-lost-lease")
+
+        await asyncio.wait_for(consumer._process_message(message, "jira-events"), timeout=1)
+
+        assert handler_started.is_set()
+        assert handler_stopped.is_set()
+        assert lost_lock.extend_calls == 1
+        consumer._retry_queue.enqueue_for_retry.assert_awaited_once()
+        retry_message, retry_error = consumer._retry_queue.enqueue_for_retry.call_args.args
+        assert retry_message is message
+        assert "Lost distributed ticket lock" in retry_error
+        redis_mock.xack.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

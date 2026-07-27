@@ -37,6 +37,10 @@ TICKET_LOCK_KEY_PREFIX = "forge:queue:ticket-lock:"
 MessageHandler = Callable[[QueueMessage], Coroutine[Any, Any, None]]
 
 
+class TicketLockLostError(RuntimeError):
+    """Raised when a worker loses its distributed per-ticket lease."""
+
+
 class QueueConsumer:
     """Consumes webhook events from Redis Streams with FIFO ordering per ticket.
 
@@ -89,12 +93,18 @@ class QueueConsumer:
         if not acquired:  # Defensive: blocking acquisition normally cannot return False.
             raise RuntimeError(f"Failed to acquire distributed lock for {ticket_key}")
 
+        owner_task = asyncio.current_task()
+        lease_lost = asyncio.Event()
+
         async def renew_lease() -> None:
             while True:
                 await asyncio.sleep(TICKET_LOCK_RENEW_SECONDS)
                 try:
                     if not await lock.extend(TICKET_LOCK_LEASE_SECONDS, replace_ttl=True):
                         logger.critical("Lost distributed ticket lock for %s", ticket_key)
+                        lease_lost.set()
+                        if owner_task is not None:
+                            owner_task.cancel()
                         return
                 except asyncio.CancelledError:
                     raise
@@ -106,6 +116,12 @@ class QueueConsumer:
         renewal_task = asyncio.create_task(renew_lease(), name=f"renew-ticket-lock-{ticket_key}")
         try:
             yield
+        except asyncio.CancelledError:
+            if lease_lost.is_set():
+                raise TicketLockLostError(
+                    f"Lost distributed ticket lock for {ticket_key}"
+                ) from None
+            raise
         finally:
             renewal_task.cancel()
             with suppress(asyncio.CancelledError):
@@ -219,12 +235,28 @@ class QueueConsumer:
 
         # The local lock preserves arrival order within this process. The Redis
         # lease prevents another worker from handling the same ticket at once.
-        async with (
-            self._ticket_locks[message.ticket_key],
-            self._semaphore,
-            self._distributed_ticket_lock(message.ticket_key),
-        ):
-            await self._handle_locked_message(message, stream, handler, raise_on_error, skip_ack)
+        try:
+            async with (
+                self._ticket_locks[message.ticket_key],
+                self._semaphore,
+                self._distributed_ticket_lock(message.ticket_key),
+            ):
+                await self._handle_locked_message(
+                    message, stream, handler, raise_on_error, skip_ack
+                )
+        except TicketLockLostError as exc:
+            logger.error("Aborting %s after ticket lock loss: %s", message.event_id, exc)
+            if raise_on_error:
+                raise
+            try:
+                moved_to_dlq = not await self._retry_queue.enqueue_for_retry(message, str(exc))
+                if moved_to_dlq:
+                    await self._ack(stream, message.message_id)
+            except Exception as retry_err:
+                logger.error(
+                    f"Failed to enqueue {message.event_id} for retry after ticket lock loss: "
+                    f"{retry_err}. Message remains in PEL for reclaim."
+                )
 
     async def _handle_locked_message(
         self,
