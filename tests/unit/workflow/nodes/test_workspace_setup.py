@@ -364,6 +364,39 @@ class TestWorkspaceSetupForkBootstrap:
         assert result["fork_repo"] == "test-repo"
         assert result["current_node"] == "implementation"
 
+    @pytest.mark.asyncio
+    async def test_initial_branch_push_failure_prevents_implementation_handoff(
+        self, mock_workspace_github
+    ):
+        mock_jira = create_mock_jira_client()
+        mock_manager, _ = create_mock_workspace_manager()
+        mock_git = create_mock_git_operations()
+        mock_git.push_to_fork.side_effect = RuntimeError("invalid refspec")
+        mock_guardrails_loader = create_mock_guardrails_loader()
+        state = create_initial_feature_state(
+            ticket_key="TEST-FORK-PUSH-FAIL",
+            current_repo="upstream/repo",
+        )
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.JiraClient", return_value=mock_jira),
+            patch(
+                "forge.workflow.nodes.workspace_setup.get_workspace_manager",
+                return_value=mock_manager,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+        ):
+            result = await setup_workspace(state)
+
+        mock_workspace_github.get_or_create_fork.assert_awaited_once_with(
+            "upstream", "repo"
+        )
+        mock_git.push_to_fork.assert_called_once_with()
+        assert result["current_node"] == "setup_workspace"
+        assert result["retry_count"] == 1
+        assert "invalid refspec" in result["last_error"]
+
 
 class TestPrepareWorkspaceRecovery:
     """Tests for prepare_workspace workspace sync/recreation behavior."""
