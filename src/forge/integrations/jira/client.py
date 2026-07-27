@@ -903,6 +903,30 @@ class JiraClient:
             fields=["summary", "status", "issuetype"],
         )
 
+    async def list_project_properties(self, project_key: str) -> list[str]:
+        """List all property keys for a Jira project.
+
+        Args:
+            project_key: The Jira project key (e.g., "MYPROJ").
+
+        Returns:
+            A list of project property keys.
+
+        Raises:
+            httpx.HTTPStatusError: For non-200 responses (such as 403 or 404).
+            ValueError: If the response JSON structure is malformed.
+        """
+        client = await self._get_client()
+        response = await client.get(f"/project/{project_key}/properties")
+        response.raise_for_status()
+
+        try:
+            data = response.json()
+            keys = data.get("keys", [])
+            return [item["key"] for item in keys if isinstance(item, dict) and "key" in item]
+        except (json.JSONDecodeError, TypeError, KeyError) as e:
+            raise ValueError(f"Malformed Jira project properties response: {e}")
+
     async def get_project_property(self, project_key: str, property_key: str) -> Any | None:
         """Fetch a Jira project property value.
 

@@ -662,6 +662,278 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         await jira.close()
 
 
+async def cmd_get_config(args: argparse.Namespace) -> int:
+    """Display effective configuration for a given project."""
+    import json
+
+    import httpx
+
+    from forge.config import get_settings
+    from forge.integrations.jira.client import JiraClient
+
+    project_key = args.project_key.upper()
+    settings = get_settings()
+
+    jira = JiraClient(settings=settings)
+    try:
+        try:
+            discovered_keys = await jira.list_project_properties(project_key)
+        except httpx.HTTPStatusError as e:
+            print(
+                f"Error: Jira API request failed for project '{project_key}': {e}", file=sys.stderr
+            )
+            return 1
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+        # Filter discovered keys starting with "forge."
+        forge_discovered_keys = [k for k in discovered_keys if k.startswith("forge.")]
+
+        # Expected authoritative keys in correct display order
+        standard_keys = [
+            "forge.repos",
+            "forge.default_repo",
+            "forge.prd_proposals_repo",
+            "forge.prd_proposals_path",
+            "forge.skills",
+            "forge.references",
+        ]
+
+        # Combine standard keys with extra discovered keys (avoid duplicates, preserve order/sort)
+        extra_keys = sorted(set(forge_discovered_keys) - set(standard_keys))
+        all_keys = standard_keys + extra_keys
+
+        # Retrieve raw property values from Jira
+        project_properties_raw = {}
+        for key in all_keys:
+            try:
+                val = await jira.get_project_property(project_key, key)
+                project_properties_raw[key] = val
+            except Exception as e:
+                print(
+                    f"Warning: Failed to retrieve project property '{key}' for project '{project_key}': {e}",
+                    file=sys.stderr,
+                )
+                project_properties_raw[key] = None
+
+        # Clean/type-validate project properties
+        project_properties = {}
+        for key, val in project_properties_raw.items():
+            if val is None:
+                project_properties[key] = None
+                continue
+
+            # Validate list types
+            if key in ["forge.repos", "forge.skills"]:
+                if key == "forge.skills" and isinstance(val, str):
+                    import contextlib
+
+                    with contextlib.suppress(Exception):
+                        val = json.loads(val)
+                if not isinstance(val, list):
+                    print(
+                        f"Warning: Project property '{key}' is malformed (expected list, got {type(val).__name__}). Treating as unset.",
+                        file=sys.stderr,
+                    )
+                    project_properties[key] = None
+                else:
+                    project_properties[key] = val
+            else:
+                # String types/other
+                if not isinstance(val, (str, bool, int, float, list, dict)):
+                    print(
+                        f"Warning: Project property '{key}' is malformed. Treating as unset.",
+                        file=sys.stderr,
+                    )
+                    project_properties[key] = None
+                else:
+                    project_properties[key] = val
+
+        # Evaluate fallback semantics to build the effective configuration
+        effective_config = {}
+
+        # 1. forge.repos
+        repos_val = project_properties.get("forge.repos")
+        if repos_val is not None:
+            effective_config["forge.repos"] = {"value": repos_val, "source": "project"}
+        else:
+            if not settings.forge_require_project_config:
+                effective_config["forge.repos"] = {
+                    "value": settings.known_repos,
+                    "source": "global",
+                }
+            else:
+                effective_config["forge.repos"] = {"value": None, "source": "unset/required"}
+
+        # 2. forge.default_repo
+        default_repo_val = project_properties.get("forge.default_repo")
+        if default_repo_val is not None:
+            effective_config["forge.default_repo"] = {
+                "value": default_repo_val,
+                "source": "project",
+            }
+        else:
+            if not settings.forge_require_project_config:
+                val = settings.github_default_repo or None
+                effective_config["forge.default_repo"] = {
+                    "value": val,
+                    "source": "global" if val else "unset/required",
+                }
+            else:
+                effective_config["forge.default_repo"] = {"value": None, "source": "unset/required"}
+
+        # 3. forge.prd_proposals_repo
+        prd_repo_val = project_properties.get("forge.prd_proposals_repo")
+        if prd_repo_val is not None:
+            effective_config["forge.prd_proposals_repo"] = {
+                "value": prd_repo_val,
+                "source": "project",
+            }
+        else:
+            if not settings.forge_require_project_config:
+                val = settings.prd_proposals_repo or None
+                effective_config["forge.prd_proposals_repo"] = {
+                    "value": val,
+                    "source": "global" if val else "unset/required",
+                }
+            else:
+                effective_config["forge.prd_proposals_repo"] = {
+                    "value": None,
+                    "source": "unset/required",
+                }
+
+        # 4. forge.prd_proposals_path
+        prd_path_val = project_properties.get("forge.prd_proposals_path")
+        if prd_path_val is not None:
+            normalized_path = (
+                prd_path_val.strip("/") if isinstance(prd_path_val, str) else prd_path_val
+            )
+            effective_config["forge.prd_proposals_path"] = {
+                "value": normalized_path,
+                "source": "project",
+            }
+        else:
+            normalized_path = (
+                settings.prd_proposals_path.strip("/") if settings.prd_proposals_path else ""
+            )
+            effective_config["forge.prd_proposals_path"] = {
+                "value": normalized_path,
+                "source": "global",
+            }
+
+        # 5. forge.skills
+        skills_val = project_properties.get("forge.skills")
+        if skills_val is not None:
+            effective_config["forge.skills"] = {"value": skills_val, "source": "project"}
+        else:
+            effective_config["forge.skills"] = {"value": None, "source": "unset"}
+
+        # 6. forge.references
+        refs_val = project_properties.get("forge.references")
+        if refs_val is not None:
+            effective_config["forge.references"] = {"value": refs_val, "source": "project"}
+        else:
+            effective_config["forge.references"] = {"value": None, "source": "unset"}
+
+        # 7. Discovered keys
+        for key in extra_keys:
+            val = project_properties.get(key)
+            if val is not None:
+                effective_config[key] = {"value": val, "source": "project"}
+            else:
+                effective_config[key] = {"value": None, "source": "unset"}
+
+        # Output - Single Property (--property)
+        if args.property:
+            query_key = args.property.lower()
+            effective_keys_lower = {k.lower(): k for k in effective_config}
+            if query_key not in effective_keys_lower:
+                print(f"Error: Unknown property '{args.property}'", file=sys.stderr)
+                return 1
+            canonical_key = effective_keys_lower[query_key]
+            value = effective_config[canonical_key]["value"]
+
+            if value is None:
+                print("")
+            elif isinstance(value, bool):
+                print("true" if value else "false")
+            elif isinstance(value, (list, dict)):
+                print(json.dumps(value))
+            else:
+                print(str(value))
+            return 0
+
+        # Output - JSON (--json)
+        if args.json:
+            global_fallbacks = {
+                "FORGE_REQUIRE_PROJECT_CONFIG": settings.forge_require_project_config,
+                "GITHUB_KNOWN_REPOS": settings.known_repos,
+                "GITHUB_DEFAULT_REPO": settings.github_default_repo or None,
+                "PRD_PROPOSALS_REPO": settings.prd_proposals_repo or None,
+                "PRD_PROPOSALS_PATH": settings.prd_proposals_path.strip("/")
+                if settings.prd_proposals_path
+                else None,
+            }
+            output_data = {
+                "project": project_key,
+                "project_properties": project_properties,
+                "global_fallbacks": global_fallbacks,
+                "effective": effective_config,
+            }
+            print(json.dumps(output_data, indent=2))
+            return 0
+
+        # Output - Human-Readable (Default)
+        def fmt_val(v: Any) -> str:
+            if v is None or v == "":
+                return "(none)"
+            if isinstance(v, (list, dict)):
+                return json.dumps(v)
+            return str(v)
+
+        def fmt_fallback(v: Any) -> str:
+            if v is None or v == "" or v == []:
+                return "(not set)"
+            if isinstance(v, (list, dict)):
+                return json.dumps(v)
+            return str(v)
+
+        print(f"Project: {project_key}")
+        for key in all_keys:
+            val = project_properties.get(key)
+            print(f"  {key + ':':<27} {fmt_val(val)}")
+
+        print("\nGlobal fallbacks (from .env):")
+        print(
+            f"  {'FORGE_REQUIRE_PROJECT_CONFIG:':<29} {str(settings.forge_require_project_config).lower()}"
+        )
+        print(f"  {'GITHUB_KNOWN_REPOS:':<29} {fmt_fallback(settings.known_repos)}")
+        print(f"  {'GITHUB_DEFAULT_REPO:':<29} {fmt_fallback(settings.github_default_repo)}")
+        print(f"  {'PRD_PROPOSALS_REPO:':<29} {fmt_fallback(settings.prd_proposals_repo)}")
+        print(f"  {'PRD_PROPOSALS_PATH:':<29} {fmt_fallback(settings.prd_proposals_path)}")
+
+        print("\nEffective configuration:")
+        for key in all_keys:
+            cfg = effective_config[key]
+            val = cfg["value"]
+            src = cfg["source"]
+
+            if src == "unset/required":
+                print(f"  {key + ':':<27} [required / missing]")
+            elif src == "unset":
+                print(f"  {key + ':':<27} (none) [unset]")
+            elif src == "global":
+                print(f"  {key + ':':<27} {fmt_val(val)} [default]")
+            else:
+                print(f"  {key + ':':<27} {fmt_val(val)} [{src}]")
+
+        return 0
+
+    finally:
+        await jira.close()
+
+
 async def cmd_health(_args: argparse.Namespace) -> int:
     """Check system health."""
     from forge.orchestrator.checkpointer import get_redis_client
@@ -714,7 +986,7 @@ async def cmd_health(_args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         prog="forge",
@@ -971,7 +1243,33 @@ Examples:
         help="Full forge.skills value as a JSON array of SkillEntry objects",
     )
 
-    args = parser.parse_args()
+    # get-config command
+    get_config_parser = subparsers.add_parser(
+        "get-config",
+        aliases=["project-config"],
+        help="Display effective configuration for a given project",
+    )
+    get_config_parser.set_defaults(command="get-config")
+
+    # Positional argument with uppercase normalization converter
+    get_config_parser.add_argument(
+        "project_key", type=lambda s: s.upper(), help="Jira project key (e.g., MYPROJ)"
+    )
+
+    # Mutually exclusive flags
+    group = get_config_parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--json",
+        action="store_true",
+        help="Output effective configuration as structured JSON for scripting",
+    )
+    group.add_argument(
+        "--property",
+        metavar="name",
+        help="Retrieve a single resolved property value (case-insensitive)",
+    )
+
+    args = parser.parse_args(argv)
     setup_logging(args.verbose)
 
     if args.command is None:
@@ -1010,6 +1308,7 @@ Examples:
         "retry": cmd_retry,
         "logs": cmd_logs,
         "project-setup": cmd_project_setup,
+        "get-config": cmd_get_config,
     }
 
     handler = handlers.get(args.command)

@@ -1,0 +1,354 @@
+"""Unit and integration tests for get-config CLI command."""
+
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+import pytest
+
+from forge.cli import cmd_get_config, main
+
+
+class TestCLIConfigParserAndRouting:
+    """Parser and Command Routing Integration Tests."""
+
+    @patch("forge.cli.cmd_get_config", new_callable=AsyncMock)
+    @patch("forge.cli.setup_logging")
+    def test_routing_get_config(self, _mock_setup_logging, mock_cmd):
+        """Calling main(['get-config', 'aisos']) routes to cmd_get_config."""
+        mock_cmd.return_value = 0
+        code = main(["get-config", "aisos"])
+        assert code == 0
+        mock_cmd.assert_called_once()
+        args = mock_cmd.call_args[0][0]
+        assert args.command == "get-config"
+        assert args.project_key == "AISOS"  # converts lowercase to uppercase
+
+    @patch("forge.cli.cmd_get_config", new_callable=AsyncMock)
+    @patch("forge.cli.setup_logging")
+    def test_routing_project_config_alias(self, _mock_setup_logging, mock_cmd):
+        """Calling main(['project-config', 'aisos']) successfully maps to cmd_get_config."""
+        mock_cmd.return_value = 0
+        code = main(["project-config", "aisos"])
+        assert code == 0
+        mock_cmd.assert_called_once()
+        args = mock_cmd.call_args[0][0]
+        assert args.command == "get-config"  # set_defaults maps it to get-config
+        assert args.project_key == "AISOS"
+
+    @patch("forge.cli.setup_logging")
+    def test_mutual_exclusivity(self, _mock_setup_logging):
+        """Assert parser raises a parsing error/exits on mutually exclusive options."""
+        with pytest.raises(SystemExit):
+            main(["get-config", "aisos", "--json", "--property", "forge.repos"])
+
+
+class TestCLIConfigExecution:
+    """Fallback Semantics, Output Serialization, and Discovery."""
+
+    @pytest.fixture
+    def mock_jira_client(self):
+        with patch("forge.integrations.jira.client.JiraClient") as mock:
+            client_inst = MagicMock()
+            client_inst.list_project_properties = AsyncMock(
+                return_value=[
+                    "forge.repos",
+                    "forge.default_repo",
+                    "forge.prd_proposals_repo",
+                    "forge.prd_proposals_path",
+                    "forge.skills",
+                    "forge.references",
+                ]
+            )
+            client_inst.get_project_property = AsyncMock(
+                side_effect=lambda _pk, key: {
+                    "forge.repos": ["org/repo1"],
+                    "forge.default_repo": "org/repo1",
+                    "forge.prd_proposals_repo": "org/prd",
+                    "forge.prd_proposals_path": "/enhancements/",
+                    "forge.skills": [{"source": "http://skill"}],
+                    "forge.references": None,
+                }.get(key)
+            )
+            client_inst.close = AsyncMock()
+            mock.return_value = client_inst
+            yield client_inst
+
+    @pytest.fixture
+    def mock_settings(self):
+        from forge.config import Settings
+
+        settings = Settings(
+            jira_base_url="https://test.atlassian.net",
+            jira_api_token="token",
+            jira_user_email="test@example.com",
+            github_token="github-token",
+            github_known_repos="org/fallback-repo1,org/fallback-repo2",
+            github_default_repo="org/fallback-repo1",
+            prd_proposals_repo="org/global-prd",
+            prd_proposals_path="global-enhancements",
+            forge_require_project_config=True,
+        )
+        with patch("forge.config.get_settings", return_value=settings):
+            yield settings
+
+    @pytest.mark.asyncio
+    async def test_require_project_config_true(self, mock_jira_client, mock_settings, capsys):
+        """Under FORGE_REQUIRE_PROJECT_CONFIG=True, missing props are reported as unset/required."""
+        mock_settings.forge_require_project_config = True
+        # Set project property for forge.repos to None
+        mock_jira_client.get_project_property = AsyncMock(
+            side_effect=lambda _pk, key: {
+                "forge.repos": None,
+                "forge.default_repo": None,
+                "forge.prd_proposals_repo": None,
+                "forge.prd_proposals_path": None,
+                "forge.skills": None,
+                "forge.references": None,
+            }.get(key)
+        )
+
+        class Args:
+            project_key = "MYPROJ"
+            json = False
+            property = None
+
+        code = await cmd_get_config(Args())
+        assert code == 0
+
+        out, err = capsys.readouterr()
+        # Should NOT inherit fallback settings, except for proposals_path
+        assert "forge.repos:" in out and "[required / missing]" in out
+        assert "forge.default_repo:" in out and "[required / missing]" in out
+        assert "forge.prd_proposals_repo:" in out and "[required / missing]" in out
+        assert (
+            "forge.prd_proposals_path:" in out
+            and "global-enhancements" in out
+            and "[default]" in out
+        )
+
+    @pytest.mark.asyncio
+    async def test_require_project_config_false(self, mock_jira_client, mock_settings, capsys):
+        """Under FORGE_REQUIRE_PROJECT_CONFIG=False, missing props fall back to global."""
+        mock_settings.forge_require_project_config = False
+        mock_jira_client.get_project_property = AsyncMock(
+            side_effect=lambda _pk, key: {
+                "forge.repos": None,
+                "forge.default_repo": None,
+                "forge.prd_proposals_repo": None,
+                "forge.prd_proposals_path": None,
+                "forge.skills": None,
+                "forge.references": None,
+            }.get(key)
+        )
+
+        class Args:
+            project_key = "MYPROJ"
+            json = False
+            property = None
+
+        code = await cmd_get_config(Args())
+        assert code == 0
+
+        out, err = capsys.readouterr()
+        # Should inherit fallbacks and mark as [default]
+        assert "forge.repos:" in out and "org/fallback-repo1" in out and "[default]" in out
+        assert "forge.default_repo:" in out and "org/fallback-repo1" in out and "[default]" in out
+        assert "forge.prd_proposals_repo:" in out and "org/global-prd" in out and "[default]" in out
+        assert (
+            "forge.prd_proposals_path:" in out
+            and "global-enhancements" in out
+            and "[default]" in out
+        )
+
+    @pytest.mark.asyncio
+    async def test_output_json_mode(self, mock_jira_client, mock_settings, capsys):  # noqa: ARG002
+        """JSON output mode conforms to schema."""
+
+        class Args:
+            project_key = "MYPROJ"
+            json = True
+            property = None
+
+        code = await cmd_get_config(Args())
+        assert code == 0
+
+        out, err = capsys.readouterr()
+        data = json.loads(out)
+        assert data["project"] == "MYPROJ"
+        assert "project_properties" in data
+        assert "global_fallbacks" in data
+        assert "effective" in data
+        assert (
+            data["effective"]["forge.prd_proposals_path"]["value"] == "enhancements"
+        )  # stripped slashes
+        assert data["effective"]["forge.prd_proposals_path"]["source"] == "project"
+
+    @pytest.mark.asyncio
+    async def test_output_property_queries(self, mock_jira_client, mock_settings, capsys):  # noqa: ARG002
+        """--property queries return clean format based on type."""
+
+        class Args:
+            project_key = "MYPROJ"
+            json = False
+            property = "forge.repos"
+
+        # 1. list type
+        code = await cmd_get_config(Args())
+        assert code == 0
+        out, err = capsys.readouterr()
+        assert out.strip() == '["org/repo1"]'
+
+        # 2. string type
+        Args.property = "forge.default_repo"
+        code = await cmd_get_config(Args())
+        assert code == 0
+        out, err = capsys.readouterr()
+        assert out.strip() == "org/repo1"
+
+        # 3. boolean type (mock a boolean property)
+        mock_jira_client.list_project_properties = AsyncMock(
+            return_value=["forge.repos", "forge.custom_bool"]
+        )
+        mock_jira_client.get_project_property = AsyncMock(
+            side_effect=lambda _pk, key: {
+                "forge.repos": ["org/repo1"],
+                "forge.custom_bool": True,
+            }.get(key)
+        )
+        Args.property = "forge.custom_bool"
+        code = await cmd_get_config(Args())
+        assert code == 0
+        out, err = capsys.readouterr()
+        assert out.strip() == "true"
+
+        # 4. unset/None value prints empty line
+        mock_jira_client.list_project_properties = AsyncMock(
+            return_value=["forge.repos", "forge.references"]
+        )
+        mock_jira_client.get_project_property = AsyncMock(
+            side_effect=lambda _pk, key: {
+                "forge.repos": ["org/repo1"],
+                "forge.references": None,
+            }.get(key)
+        )
+        Args.property = "forge.references"
+        code = await cmd_get_config(Args())
+        assert code == 0
+        out, err = capsys.readouterr()
+        assert out == "\n"
+
+    @pytest.mark.asyncio
+    async def test_dynamic_discovery(self, mock_jira_client, mock_settings, capsys):  # noqa: ARG002
+        """Dynamically discovered forge.* properties are listed and resolved."""
+        mock_jira_client.list_project_properties = AsyncMock(
+            return_value=["forge.repos", "forge.custom_discovered"]
+        )
+        mock_jira_client.get_project_property = AsyncMock(
+            side_effect=lambda _pk, key: {
+                "forge.repos": ["org/repo1"],
+                "forge.custom_discovered": "custom-val",
+            }.get(key)
+        )
+
+        class Args:
+            project_key = "MYPROJ"
+            json = False
+            property = None
+
+        code = await cmd_get_config(Args())
+        assert code == 0
+        out, err = capsys.readouterr()
+        assert "forge.custom_discovered:" in out and "custom-val" in out
+        assert "forge.custom_discovered:" in out and "custom-val" in out and "[project]" in out
+
+
+class TestCLIConfigErrorHandling:
+    """Robust Error Handling Tests."""
+
+    @pytest.fixture
+    def mock_settings(self):
+        from forge.config import Settings
+
+        settings = Settings(
+            jira_base_url="https://test.atlassian.net",
+            jira_api_token="token",
+            jira_user_email="test@example.com",
+            github_token="github-token",
+            forge_require_project_config=True,
+        )
+        with patch("forge.config.get_settings", return_value=settings):
+            yield settings
+
+    @pytest.mark.asyncio
+    async def test_unknown_property_via_flag(self, mock_settings, capsys):  # noqa: ARG002
+        """Querying an unknown property via --property outputs to sys.stderr and exits with code 1."""
+        with patch("forge.integrations.jira.client.JiraClient") as mock:
+            client_inst = MagicMock()
+            client_inst.list_project_properties = AsyncMock(return_value=["forge.repos"])
+            client_inst.get_project_property = AsyncMock(return_value=["org/repo"])
+            client_inst.close = AsyncMock()
+            mock.return_value = client_inst
+
+            class Args:
+                project_key = "MYPROJ"
+                json = False
+                property = "forge.invalid"
+
+            code = await cmd_get_config(Args())
+            assert code == 1
+
+            out, err = capsys.readouterr()
+            assert "Error: Unknown property 'forge.invalid'" in err
+
+    @pytest.mark.asyncio
+    async def test_jira_connectivity_failure(self, mock_settings, capsys):  # noqa: ARG002
+        """Mock Jira connectivity failure, prints to stderr and exits with 1 (no crash)."""
+        with patch("forge.integrations.jira.client.JiraClient") as mock:
+            client_inst = MagicMock()
+            # simulate HTTPStatusError
+            req = httpx.Request(
+                "GET", "https://test.atlassian.net/rest/api/3/project/MYPROJ/properties"
+            )
+            resp = httpx.Response(403, request=req)
+            client_inst.list_project_properties.side_effect = httpx.HTTPStatusError(
+                "Forbidden", request=req, response=resp
+            )
+            client_inst.close = AsyncMock()
+            mock.return_value = client_inst
+
+            class Args:
+                project_key = "MYPROJ"
+                json = False
+                property = None
+
+            code = await cmd_get_config(Args())
+            assert code == 1
+
+            out, err = capsys.readouterr()
+            assert "Error: Jira API request failed for project 'MYPROJ'" in err
+
+    @pytest.mark.asyncio
+    async def test_malformed_properties_payload_graceful_degradation(self, mock_settings, capsys):  # noqa: ARG002
+        """Mock malformed payload for forge.repos (string instead of list), resolutions degrades gracefully."""
+        with patch("forge.integrations.jira.client.JiraClient") as mock:
+            client_inst = MagicMock()
+            client_inst.list_project_properties = AsyncMock(return_value=["forge.repos"])
+            # Return string value "not-a-list" instead of list
+            client_inst.get_project_property = AsyncMock(return_value="not-a-list")
+            client_inst.close = AsyncMock()
+            mock.return_value = client_inst
+
+            class Args:
+                project_key = "MYPROJ"
+                json = False
+                property = None
+
+            code = await cmd_get_config(Args())
+            assert code == 0
+
+            out, err = capsys.readouterr()
+            # It prints a warning
+            assert "Warning: Project property 'forge.repos' is malformed" in err
+            # Under FORGE_REQUIRE_PROJECT_CONFIG=True, degrades to [required / missing]
+            assert "forge.repos:" in out and "[required / missing]" in out
