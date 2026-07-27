@@ -3221,11 +3221,17 @@ unit, contract, flow, integration, or E2E gates must not be ignored.</p>
 </tbody>
 </table>
 <h3 id="forgeretry-label">forge:retry label<a class="headerlink" href="#forgeretry-label" title="Permanent link">&para;</a></h3>
-<p>Add the <code>forge:retry</code> label to a Jira ticket to resume a blocked workflow. Forge will:
+<p>Add the <code>forge:retry</code> label to a Jira ticket to resume a blocked workflow, or to reset and return to the human review gate when paused at <code>review_response_gate</code>. Forge will:</p>
+<p>For blocked workflows:
 - Clear <code>last_error</code>
 - Clear <code>is_blocked</code>
 - Reset <code>ci_fix_attempts</code> to 0
 - Resume from the node that failed</p>
+<p>For workflows paused at <code>review_response_gate</code> (due to contested comments):
+- Transition <code>current_node</code> back to <code>human_review_gate</code>
+- Clear <code>contested_comments</code>, <code>feedback_comment</code>, <code>revision_requested</code>, and other review state
+- Reset <code>is_paused</code> and <code>is_blocked</code> to <code>False</code>
+- Set <code>force_fresh_invoke</code> to <code>True</code> to await a fresh human review</p>
 <h3 id="worker-logs">Worker logs<a class="headerlink" href="#worker-logs" title="Permanent link">&para;</a></h3>
 <p>The worker logs to stdout. Useful log entries to grep for:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a><span class="c1"># Watch for a specific ticket</span>

@@ -1642,6 +1642,9 @@
 <h3 id="9-human-review">9. Human Review<a class="headerlink" href="#9-human-review" title="Permanent link">&para;</a></h3>
 <p>Forge pauses at the human review gate after CI passes. Merge the PR when satisfied.</p>
 <p>If changes are requested in GitHub review, Forge routes to the review implementation node, applies the requested changes, returns to CI, and then pauses for review again.</p>
+<p>If the agent classifies any review comments as <em>contested</em> (e.g., if they contradict the specification or introduce technical issues), it will post its objections on the PR and pause at <code>review_response_gate</code>. To resolve this, you can:
+- <strong>Confirm the request:</strong> Reply on the PR to confirm the change (e.g., "please implement as requested"), and Forge will proceed with the implementation.
+- <strong>Reset/Withdraw:</strong> Add the <code>forge:retry</code> label to the Jira ticket to clear the contested comments and transition the workflow back to <code>human_review_gate</code> to await a fresh review.</p>
 <p>When the PR is merged, Forge marks the Task workflow complete.</p>
 <h2 id="comment-syntax">Comment Syntax<a class="headerlink" href="#comment-syntax" title="Permanent link">&para;</a></h2>
 <p>At the triage and plan gates, Forge classifies comments by prefix:</p>
