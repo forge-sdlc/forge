@@ -215,9 +215,7 @@ class Settings(BaseSettings):
                 raise ValueError("GOOGLE_API_KEY is required for google-genai")
             incompatible = [m for m in models if self.detect_model_provider(m) != "google"]
             if incompatible:
-                raise ValueError(
-                    f"Model '{incompatible[0]}' is not supported by google-genai"
-                )
+                raise ValueError(f"Model '{incompatible[0]}' is not supported by google-genai")
             return self
 
         if not self.anthropic_api_key.get_secret_value():
