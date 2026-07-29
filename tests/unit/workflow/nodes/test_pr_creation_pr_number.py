@@ -91,7 +91,9 @@ class TestPRNumberExtractionSuccess:
     @pytest.mark.asyncio
     async def test_pr_number_extracted_from_github_response(self):
         """Should extract PR number from GitHub API response and store in state."""
-        mock_github = create_mock_github_client(pr_number=456, pr_url="https://github.com/owner/repo/pull/456")
+        mock_github = create_mock_github_client(
+            pr_number=456, pr_url="https://github.com/owner/repo/pull/456"
+        )
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -107,8 +109,12 @@ class TestPRNumberExtractionSuccess:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             result = await create_pull_request(state)
@@ -135,8 +141,12 @@ class TestPRNumberExtractionSuccess:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             await create_pull_request(state)
@@ -165,8 +175,12 @@ class TestPRNumberExtractionSuccess:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             await create_pull_request(state)
@@ -202,8 +216,12 @@ class TestPRNumberExtractionMissing:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             result = await create_pull_request(state)
@@ -230,8 +248,12 @@ class TestPRNumberExtractionMissing:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             result = await create_pull_request(state)
@@ -264,8 +286,12 @@ class TestPRNumberExtractionMissing:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             await create_pull_request(state)
@@ -298,8 +324,12 @@ class TestPRNumberExtractionMissing:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             await create_pull_request(state)
@@ -329,8 +359,12 @@ class TestPRNumberExtractionMissing:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             await create_pull_request(state)
@@ -338,8 +372,7 @@ class TestPRNumberExtractionMissing:
         # Verify info log indicates number unavailable
         info_logs = [r for r in caplog.records if r.levelname == "INFO"]
         assert any(
-            "Created PR (number unavailable):" in record.message
-            and pr_url in record.message
+            "Created PR (number unavailable):" in record.message and pr_url in record.message
             for record in info_logs
         )
 
@@ -367,8 +400,12 @@ class TestPRNumberExtractionEdgeCases:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             result = await create_pull_request(state)
@@ -401,8 +438,12 @@ class TestPRNumberExtractionEdgeCases:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             result = await create_pull_request(state)
@@ -430,27 +471,41 @@ class TestPRNumberExtractionEdgeCases:
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github_1),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             result_1 = await create_pull_request(state)
 
         # Verify first PR has correct number
         assert result_1["current_pr_number"] == 100
+        assert result_1["pull_requests"]["owner/repo"]["number"] == 100
 
         # Simulate second PR creation with different number
-        mock_github_2 = create_mock_github_client(pr_number=200)
+        mock_github_2 = create_mock_github_client(
+            pr_number=200, pr_url="https://github.com/owner/other/pull/200"
+        )
+        result_1["current_repo"] = "owner/other"
 
         with (
             patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github_2),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()),
-            patch("forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
             patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
         ):
             result_2 = await create_pull_request(result_1)
 
         # Verify second PR has correct number
         assert result_2["current_pr_number"] == 200
+        assert result_2["pull_requests"]["owner/repo"]["number"] == 100
+        assert result_2["pull_requests"]["owner/other"]["number"] == 200

@@ -51,6 +51,7 @@ def create_initial_task_takeover_state(ticket_key: str, **kwargs: Any) -> TaskTa
         "updated_at": now,
         "workspace_path": None,
         "pr_urls": [],
+        "pull_requests": {},
         "fork_owner": None,
         "fork_repo": None,
         "merge_conflicts": [],

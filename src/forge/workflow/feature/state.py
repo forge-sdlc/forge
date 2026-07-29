@@ -94,6 +94,7 @@ def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState
         "tasks_by_repo": {},
         "workspace_path": None,
         "pr_urls": [],
+        "pull_requests": {},
         "fork_owner": None,
         "fork_repo": None,
         "merge_conflicts": [],

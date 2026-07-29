@@ -15,6 +15,7 @@ from forge.orchestrator.checkpointer import set_pr_ticket_index
 from forge.prompts import load_prompt
 from forge.workflow.nodes.code_review import sync_pr_description
 from forge.workflow.nodes.post_merge_summary import _extract_impact
+from forge.workflow.pr_state import save_active_pull_request
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workspace.git_ops import GitOperations
@@ -329,16 +330,18 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
                     logger.warning(f"Failed to append review exhaustion section: {e}")
 
         return update_state_timestamp(
-            {
-                **state,
-                "pr_urls": pr_urls,
-                "current_pr_url": pr_url,
-                "current_pr_number": pr_number,
-                "fork_owner": pr_target.fork_owner,
-                "fork_repo": pr_target.fork_repo,
-                "current_node": "teardown_workspace",
-                "last_error": None,
-            }
+            save_active_pull_request(
+                {
+                    **state,
+                    "pr_urls": pr_urls,
+                    "current_pr_url": pr_url,
+                    "current_pr_number": pr_number,
+                    "fork_owner": pr_target.fork_owner,
+                    "fork_repo": pr_target.fork_repo,
+                    "current_node": "teardown_workspace",
+                    "last_error": None,
+                }
+            )
         )
 
     except Exception as e:

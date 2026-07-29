@@ -81,6 +81,7 @@ def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
         "bug_fix_implemented": False,
         "workspace_path": None,
         "pr_urls": [],
+        "pull_requests": {},
         "fork_owner": None,
         "fork_repo": None,
         "merge_conflicts": [],

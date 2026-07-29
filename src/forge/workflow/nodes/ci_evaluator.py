@@ -45,7 +45,12 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
         Updated state with ci_status.
     """
     ticket_key = state["ticket_key"]
-    pr_urls = state.get("pr_urls", [])
+    current_pr_url = state.get("current_pr_url")
+    pr_urls = (
+        [current_pr_url]
+        if state.get("pull_requests") and current_pr_url
+        else state.get("pr_urls", [])
+    )
     ci_fix_attempt = state.get("ci_fix_attempt", 0)
     ci_fix_max = state.get("ci_fix_max_attempts", 5)
     settings = get_settings()

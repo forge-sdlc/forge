@@ -74,6 +74,122 @@ async def test_report_new_workflow_error_skips_non_reportable_errors(
     notify.assert_not_awaited()
 
 
+def _multi_repo_pr_state() -> dict:
+    return {
+        "ticket_key": "TEST-123",
+        "current_node": "human_review_gate",
+        "is_paused": True,
+        "context": {},
+        "current_repo": "acme/frontend",
+        "current_pr_number": 20,
+        "current_pr_url": "https://github.com/acme/frontend/pull/20",
+        "pr_merged": False,
+        "pull_requests": {
+            "acme/backend": {
+                "repo": "acme/backend",
+                "number": 10,
+                "url": "https://github.com/acme/backend/pull/10",
+                "merged": False,
+                "ci_status": "pending",
+            },
+            "acme/frontend": {
+                "repo": "acme/frontend",
+                "number": 20,
+                "url": "https://github.com/acme/frontend/pull/20",
+                "merged": False,
+                "ci_status": "passed",
+            },
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_multi_repo_merge_waits_for_every_pr() -> None:
+    worker = OrchestratorWorker(consumer_name="test-worker")
+    state = _multi_repo_pr_state()
+
+    def merge_message(repo: str, number: int) -> QueueMessage:
+        return QueueMessage(
+            message_id=f"msg-{number}",
+            event_id=f"evt-{number}",
+            source=EventSource.GITHUB,
+            event_type="pull_request",
+            ticket_key="TEST-123",
+            payload={
+                "action": "closed",
+                "pull_request": {"merged": True, "number": number},
+                "repository": {"full_name": repo},
+            },
+        )
+
+    partial = await worker._handle_resume_event(merge_message("acme/backend", 10), state)
+
+    assert partial["current_repo"] == "acme/backend"
+    assert partial["pull_requests"]["acme/backend"]["merged"] is True
+    assert partial["pull_requests"]["acme/frontend"]["merged"] is False
+    assert partial["pr_merged"] is False
+    assert partial["is_paused"] is True
+
+    complete = await worker._handle_resume_event(merge_message("acme/frontend", 20), partial)
+
+    assert complete["pr_merged"] is True
+    assert complete["is_paused"] is False
+
+
+@pytest.mark.asyncio
+async def test_multi_repo_ci_webhook_selects_earlier_pr_from_review_gate() -> None:
+    worker = OrchestratorWorker(consumer_name="test-worker")
+    message = QueueMessage(
+        message_id="msg-ci",
+        event_id="evt-ci",
+        source=EventSource.GITHUB,
+        event_type="check_suite",
+        ticket_key="TEST-123",
+        payload={
+            "check_suite": {"status": "completed", "pull_requests": [{"number": 10}]},
+            "repository": {"full_name": "acme/backend"},
+        },
+    )
+
+    result = await worker._handle_resume_event(message, _multi_repo_pr_state())
+
+    assert result["current_repo"] == "acme/backend"
+    assert result["current_pr_number"] == 10
+    assert result["current_node"] == "ci_evaluator"
+    assert result["is_paused"] is False
+
+
+@pytest.mark.asyncio
+@patch("forge.orchestrator.worker.GitHubClient")
+async def test_multi_repo_review_selects_earlier_pr(mock_github_client: MagicMock) -> None:
+    github = AsyncMock()
+    github.get_review_comments.return_value = []
+    mock_github_client.return_value = github
+    worker = OrchestratorWorker(consumer_name="test-worker")
+    state = _multi_repo_pr_state()
+    state["current_node"] = "wait_for_ci_gate"
+    message = QueueMessage(
+        message_id="msg-review",
+        event_id="evt-review",
+        source=EventSource.GITHUB,
+        event_type="pull_request_review",
+        ticket_key="TEST-123",
+        payload={
+            "review": {"id": 5, "state": "changes_requested", "body": "Fix backend"},
+            "pull_request": {"number": 10},
+            "repository": {"full_name": "acme/backend"},
+        },
+    )
+
+    result = await worker._handle_resume_event(message, state)
+
+    assert result["current_repo"] == "acme/backend"
+    assert result["current_pr_number"] == 10
+    assert result["current_node"] == "human_review_gate"
+    assert result["revision_requested"] is True
+    assert result["feedback_comment"] == "Fix backend"
+
+
 class TestQuestionDetection:
     """Tests for Q&A mode question detection."""
 

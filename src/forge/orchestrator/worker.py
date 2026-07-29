@@ -29,6 +29,13 @@ from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
 from forge.workflow.nodes.error_handler import notify_error
+from forge.workflow.pr_state import (
+    activate_pull_request_for_event,
+    all_pull_requests_merged,
+    event_targets_pull_request,
+    mark_active_pull_request_merged,
+    save_active_pull_request,
+)
 from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.automated_review_triage import (
@@ -439,6 +446,15 @@ class OrchestratorWorker:
                 # Run the workflow from the beginning
                 result = await compiled_workflow.ainvoke(state, config=config)
 
+            # Nodes continue to use scalar PR fields as a compatibility view.
+            # Persist that view back into the selected per-repository record
+            # after every invocation so subsequent webhooks restore fresh CI,
+            # review, and merge state for the PR they target.
+            persisted_result = save_active_pull_request(result)
+            if persisted_result != result:
+                await compiled_workflow.aupdate_state(config, persisted_result)
+                result = persisted_result
+
             final_node = result.get("current_node", "unknown")
             is_paused = result.get("is_paused", False)
             logger.info(
@@ -480,6 +496,8 @@ class OrchestratorWorker:
             Updated state for workflow resumption.
         """
         payload = message.payload
+        current_state = activate_pull_request_for_event(current_state, payload)
+        targets_implementation_pr = event_targets_pull_request(current_state, payload)
         changelog = payload.get("changelog", {})
         comment = payload.get("comment", {})
 
@@ -556,12 +574,12 @@ class OrchestratorWorker:
         # GitHub fires check_suite webhooks for created/in_progress/completed — evaluating
         # on the earlier actions would see a partial set of check runs and could
         # prematurely declare success. Other event types (push, pull_request) always wake up.
-        if (
+        event = message.event_type
+        is_check_event = "check_suite" in event or "check_run" in event
+        if message.source == EventSource.GITHUB and (
             current_node in ("wait_for_ci_gate", "ci_evaluator")
-            and message.source == EventSource.GITHUB
+            or (targets_implementation_pr and is_check_event)
         ):
-            event = message.event_type
-            is_check_event = "check_suite" in event or "check_run" in event
             if is_check_event:
                 suite_status = payload.get("check_suite", {}).get("status") or payload.get(
                     "check_run", {}
@@ -574,7 +592,11 @@ class OrchestratorWorker:
                 else:
                     is_ci_webhook = True
                     logger.info(f"Detected GitHub CI webhook signal for {current_node}")
-            elif "issue_comment" not in event:
+            elif (
+                "issue_comment" not in event
+                and "pull_request_review" not in event
+                and payload.get("pull_request", {}).get("merged") is not True
+            ):
                 is_ci_webhook = True
                 logger.info(f"Detected GitHub CI webhook signal for {current_node}")
 
@@ -1320,7 +1342,7 @@ class OrchestratorWorker:
         if (
             message.source == EventSource.GITHUB
             and "pull_request_review" in message.event_type
-            and current_node in _REVIEW_GATES
+            and (current_node in _REVIEW_GATES or targets_implementation_pr)
             and current_state.get("is_paused", True)
         ):
             review = payload.get("review", {})
@@ -1328,7 +1350,14 @@ class OrchestratorWorker:
             review_body = review.get("body", "") or ""
 
             if review_state == "approved":
-                # PR approved — advance to complete_tasks (via route_human_review default)
+                if targets_implementation_pr:
+                    approved_state = {
+                        **current_state,
+                        "human_review_status": "approved",
+                        "is_paused": True,
+                    }
+                    return save_active_pull_request(approved_state)
+                # Legacy single-PR checkpoints retain their existing behavior.
                 is_approved = True
                 logger.info(f"Detected PR review approval for {message.ticket_key}")
             elif review_state in ("changes_requested", "commented"):
@@ -1383,7 +1412,7 @@ class OrchestratorWorker:
             message.source == EventSource.GITHUB
             and "pull_request" in message.event_type
             and payload.get("pull_request", {}).get("merged") is True
-            and current_node in _REVIEW_GATES
+            and (current_node in _REVIEW_GATES or targets_implementation_pr)
         ):
             is_approved = True
             pr_merged = True
@@ -1401,6 +1430,12 @@ class OrchestratorWorker:
                 "payload": payload,
             },
         }
+        if targets_implementation_pr and is_ci_webhook:
+            updated_state["current_node"] = "ci_evaluator"
+        elif targets_implementation_pr and (
+            "pull_request_review" in message.event_type or pr_merged
+        ):
+            updated_state["current_node"] = "human_review_gate"
 
         was_errored = _is_workflow_errored(current_state)
 
@@ -1512,6 +1547,11 @@ class OrchestratorWorker:
             updated_state["last_error"] = None
             if pr_merged:
                 updated_state["pr_merged"] = True
+                if event_targets_pull_request(updated_state, payload):
+                    updated_state = mark_active_pull_request_merged(updated_state)
+                    updated_state["pr_merged"] = all_pull_requests_merged(updated_state)
+                    if not updated_state["pr_merged"]:
+                        updated_state["is_paused"] = True
                 if is_prd_review:
                     # Specification review is a separate artifact cycle and must
                     # receive its own automated revision budget.
@@ -1634,7 +1674,7 @@ class OrchestratorWorker:
                 )
                 return current_state
 
-        return updated_state
+        return save_active_pull_request(updated_state)
 
     async def _post_resume_ack_comment(
         self,

@@ -9,6 +9,7 @@ from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 
 from forge.models.workflow import TicketType
+from forge.workflow.pr_state import PullRequestState
 
 
 class BaseState(TypedDict, total=False):
@@ -47,6 +48,7 @@ class PRIntegrationState(TypedDict, total=False):
 
     workspace_path: str | None
     pr_urls: list[str]
+    pull_requests: dict[str, PullRequestState]
     current_pr_url: str | None
     current_pr_number: int | None
     current_repo: str | None
