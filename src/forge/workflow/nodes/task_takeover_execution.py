@@ -121,6 +121,10 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
             f"6. Make sure all compilation and local tests pass successfully before finishing.\n"
         )
 
+        from forge.workflow.utils.references import fetch_and_inject_references
+
+        task_prompt = await fetch_and_inject_references(state, jira, task_prompt)
+
         # Let ContainerRunner derive container limits from application settings.
         runner = ContainerRunner(settings)
 

@@ -795,6 +795,46 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             await jira.delete_project_property(project_key, "forge.model_default")
             print("[OK] forge.model_default deleted")
 
+        # forge.references property processing
+        from forge.workflow.utils.references import normalize_url
+
+        references_updated = False
+        current_references = await jira.get_project_references(project_key)
+        if args.add_reference:
+            for i, url in enumerate(args.add_reference):
+                desc = args.description[i] if args.description and i < len(args.description) else ""
+                norm_url = normalize_url(url)
+                existing = next(
+                    (r for r in current_references if normalize_url(r.get("url")) == norm_url),
+                    None,
+                )
+                if existing:
+                    existing["description"] = desc
+                    existing["url"] = norm_url
+                else:
+                    current_references.append({"url": norm_url, "description": desc})
+            references_updated = True
+        if args.remove_reference:
+            for url in args.remove_reference:
+                norm_remove_url = normalize_url(url)
+                current_references = [
+                    r
+                    for r in current_references
+                    if normalize_url(r.get("url")) != norm_remove_url
+                ]
+            references_updated = True
+        if references_updated:
+            await jira.set_project_references(project_key, current_references)
+            print(f"[OK] forge.references = {current_references}")
+        if args.list_references:
+            print(f"Standing references for project {project_key}:")
+            if not current_references:
+                print("  (none)")
+            else:
+                for ref in current_references:
+                    desc_str = f" - {ref.get('description')}" if ref.get("description") else ""
+                    print(f"  {ref.get('url')}{desc_str}")
+
         if not any(
             [
                 args.repo,
@@ -814,6 +854,9 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 remove_models,
                 clear_model_policy,
                 clear_model_default,
+                args.add_reference,
+                args.remove_reference,
+                args.list_references,
             ]
         ):
             print(
@@ -825,6 +868,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 ", --model-policy, --model, --model-all"
                 ", --remove-model, --clear-model-policy"
                 ", --clear-model-default"
+                ", --add-reference, --remove-reference, --list-references"
             )
             return 1
 
@@ -1738,6 +1782,29 @@ Examples:
         "--clear-model-default",
         action="store_true",
         help="Delete the project-wide forge.model_default fallback",
+    )
+    setup_parser.add_argument(
+        "--add-reference",
+        action="append",
+        metavar="URL",
+        help="Add a project-level standing reference by its URL (repeatable).",
+    )
+    setup_parser.add_argument(
+        "--description",
+        action="append",
+        metavar="TEXT",
+        help="Description for a standing reference; positionally pairs with --add-reference.",
+    )
+    setup_parser.add_argument(
+        "--remove-reference",
+        action="append",
+        metavar="URL",
+        help="Remove a project-level standing reference by its URL (repeatable).",
+    )
+    setup_parser.add_argument(
+        "--list-references",
+        action="store_true",
+        help="List all project-level standing references.",
     )
 
     # get-config command

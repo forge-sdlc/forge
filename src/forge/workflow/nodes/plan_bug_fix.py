@@ -15,7 +15,11 @@ from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.bug.state import BugState
-from forge.workflow.utils import merge_review_exhaustion, set_paused, update_state_timestamp
+from forge.workflow.utils import (
+    merge_review_exhaustion,
+    set_paused,
+    update_state_timestamp,
+)
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.repo_resolution import get_effective_repos
 
@@ -61,7 +65,9 @@ async def regenerate_plan(state: BugState) -> BugState:
     Returns:
         Updated state with new plan_content, routed to plan_approval_gate.
     """
-    result = await _run_plan_container(state, "regenerate-plan", retry_node="regenerate_plan")
+    result = await _run_plan_container(
+        state, "regenerate-plan", retry_node="regenerate_plan"
+    )
     if result["current_node"] == "plan_approval_gate":
         return {
             **result,
@@ -133,6 +139,13 @@ async def _run_plan_container(
             known_repos="\n".join(known_repos),
         )
 
+        # Fetch and inject external references
+        from forge.workflow.utils.references import fetch_and_inject_references
+
+        task_description = await fetch_and_inject_references(
+            state, jira, task_description
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace_path = Path(tmpdir)
             runner = ContainerRunner(settings)
@@ -172,7 +185,9 @@ async def _run_plan_container(
         )
 
     except Exception as e:
-        logger.error(f"_run_plan_container ({prompt_name}) failed for {ticket_key}: {e}")
+        logger.error(
+            f"_run_plan_container ({prompt_name}) failed for {ticket_key}: {e}"
+        )
         new_retry = retry_count + 1
         return {
             **state,
@@ -201,7 +216,9 @@ def _harvest_plan(workspace_path: Path) -> str:
     return content
 
 
-def _truncate_plan_comment(plan_content: str, max_chars: int = _MAX_COMMENT_CHARS) -> str:
+def _truncate_plan_comment(
+    plan_content: str, max_chars: int = _MAX_COMMENT_CHARS
+) -> str:
     """Truncate plan comment at last paragraph boundary before the character limit."""
     if len(plan_content) <= max_chars:
         return plan_content

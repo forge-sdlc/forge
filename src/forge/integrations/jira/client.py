@@ -1247,6 +1247,24 @@ class JiraClient:
         logger.info(f"Project {project_key}: proposals path: {value!r}")
         return value
 
+    async def get_project_references(self, project_key: str) -> list[dict[str, str]]:
+        """Fetch the forge.references project property.
+
+        Returns:
+            List of reference dicts, e.g., [{"url": "https://...", "description": "..."}]
+        """
+        value = await self.get_project_property(project_key, "forge.references")
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            logger.warning(f"forge.references for project {project_key} is malformed: {value!r}")
+            return []
+        return [ref for ref in value if isinstance(ref, dict) and "url" in ref]
+
+    async def set_project_references(self, project_key: str, references: list[dict[str, str]]) -> None:
+        """Set the forge.references project property."""
+        await self.set_project_property(project_key, "forge.references", references)
+
     async def get_skills_config(self, project_key: str) -> list[SkillEntry] | None:
         """Fetch and parse the forge.skills project property.
 

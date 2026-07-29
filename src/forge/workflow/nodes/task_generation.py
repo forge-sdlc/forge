@@ -65,6 +65,10 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
     spec_content = state.get("spec_content", "")
 
     try:
+        from forge.workflow.utils.references import fetch_and_inject_references
+
+        spec_content = await fetch_and_inject_references(state, jira, spec_content)
+
         # Get project key from parent Feature
         parent_issue = await jira.get_issue(ticket_key)
         project_key = parent_issue.project_key
@@ -82,13 +86,17 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 )
             except Exception as e:
                 logger.warning(f"Failed to pre-fetch Epic {ek}: {e}")
-                all_epics_details.append({"epic_key": ek, "epic_summary": ek, "epic_plan": ""})
+                all_epics_details.append(
+                    {"epic_key": ek, "epic_summary": ek, "epic_plan": ""}
+                )
 
         for epic_key in epic_keys:
             logger.info(f"Generating Tasks for Epic {epic_key}")
 
             # Get Epic details from pre-fetched data
-            epic_detail = next((e for e in all_epics_details if e["epic_key"] == epic_key), {})
+            epic_detail = next(
+                (e for e in all_epics_details if e["epic_key"] == epic_key), {}
+            )
             epic_plan = epic_detail.get("epic_plan", "")
             epic_summary = epic_detail.get("epic_summary", epic_key)
 
@@ -197,7 +205,9 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 except Exception as e:
                     # Log but continue creating remaining Tasks
                     jira_error = str(e)
-                    logger.warning(f"Failed to create Task '{summary}' for {ticket_key}: {e}")
+                    logger.warning(
+                        f"Failed to create Task '{summary}' for {ticket_key}: {e}"
+                    )
 
         logger.info(
             f"Created {len(all_task_keys)} Tasks for {ticket_key}, awaiting implementation approval"
@@ -230,7 +240,9 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                     "current_task_key": None,
                     "current_epic_key": None,
                     "current_node": "task_approval_gate",
-                    "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
+                    "last_error": (
+                        f"Partial Jira failure: {jira_error}" if jira_error else None
+                    ),
                 }
             )
         else:
@@ -363,7 +375,9 @@ def _format_existing_tasks(existing_tasks: list[dict[str, str]] | None) -> str:
         epic_summary = tasks[0].get("epic_summary", "")
         lines.append(f"{epic_key} ({epic_summary}):")
         for task in tasks:
-            lines.append(f"- {task.get('task_key', '???')}: {task.get('summary', 'Untitled')}")
+            lines.append(
+                f"- {task.get('task_key', '???')}: {task.get('summary', 'Untitled')}"
+            )
         lines.append("")
 
     return "\n".join(lines)
@@ -431,7 +445,9 @@ def _parse_tasks_response(response: str) -> list[dict[str, str]]:
         elif current_section == "acceptance_criteria":
             criteria = "\n".join(section_lines).strip()
             current_task["description"] = (
-                current_task.get("description", "") + "\n\nAcceptance Criteria:\n" + criteria
+                current_task.get("description", "")
+                + "\n\nAcceptance Criteria:\n"
+                + criteria
             ).strip()
         tasks.append(current_task)
 
@@ -525,7 +541,9 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
     existing_tasks_by_repo = dict(state.get("tasks_by_repo", {}))
 
     if not epic_key:
-        logger.warning(f"No current_epic_key for epic task regeneration on {ticket_key}")
+        logger.warning(
+            f"No current_epic_key for epic task regeneration on {ticket_key}"
+        )
         return {
             **state,
             "feedback_comment": None,
@@ -558,7 +576,9 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 logger.warning(f"Could not check parent of {task_key}: {e}")
                 return None
 
-        parent_results = await asyncio.gather(*(_check_task_parent(k) for k in existing_task_keys))
+        parent_results = await asyncio.gather(
+            *(_check_task_parent(k) for k in existing_task_keys)
+        )
         epic_task_keys = [k for k in parent_results if k is not None]
 
         # Compute remaining tasks from other epics
@@ -592,8 +612,12 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 logger.warning(f"Failed to fetch sibling epic {ek}: {e}")
                 return None
 
-        sibling_results = await asyncio.gather(*(_fetch_sibling(ek) for ek in sibling_keys))
-        sibling_epics: list[dict[str, str]] = [s for s in sibling_results if s is not None]
+        sibling_results = await asyncio.gather(
+            *(_fetch_sibling(ek) for ek in sibling_keys)
+        )
+        sibling_epics: list[dict[str, str]] = [
+            s for s in sibling_results if s is not None
+        ]
 
         # Fetch remaining tasks for existing-tasks context (dedup)
         existing_tasks_ctx: list[dict[str, str]] = []
@@ -627,6 +651,9 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
         }
 
         spec_content = state.get("spec_content", "")
+        from forge.workflow.utils.references import fetch_and_inject_references
+
+        spec_content = await fetch_and_inject_references(state, jira, spec_content)
 
         tasks_data = await _generate_tasks_for_epic(
             agent,
@@ -707,7 +734,9 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
             for task_key in new_task_keys:
                 try:
                     await jira.archive_issue(task_key, archive_subtasks=False)
-                    logger.info(f"Archived partially created replacement Task {task_key}")
+                    logger.info(
+                        f"Archived partially created replacement Task {task_key}"
+                    )
                 except Exception as e:
                     cleanup_errors.append(f"{task_key}: {e}")
                     logger.warning(
@@ -715,7 +744,9 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                     )
 
             cleanup_suffix = (
-                f"; cleanup failures: {'; '.join(cleanup_errors)}" if cleanup_errors else ""
+                f"; cleanup failures: {'; '.join(cleanup_errors)}"
+                if cleanup_errors
+                else ""
             )
             return {
                 **state,
@@ -740,7 +771,9 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 logger.warning(f"Failed to archive Task {task_key}: {e}")
 
         all_task_keys = remaining_task_keys + new_task_keys
-        logger.info(f"Regenerated {len(new_task_keys)} tasks for Epic {epic_key} on {ticket_key}")
+        logger.info(
+            f"Regenerated {len(new_task_keys)} tasks for Epic {epic_key} on {ticket_key}"
+        )
 
         return update_state_timestamp(
             {
@@ -751,12 +784,16 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 "revision_requested": False,
                 "current_epic_key": None,
                 "current_node": "task_approval_gate",
-                "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
+                "last_error": (
+                    f"Partial Jira failure: {jira_error}" if jira_error else None
+                ),
             }
         )
 
     except Exception as e:
-        logger.error(f"Epic task regeneration failed for {epic_key} on {ticket_key}: {e}")
+        logger.error(
+            f"Epic task regeneration failed for {epic_key} on {ticket_key}: {e}"
+        )
         return {
             **state,
             "last_error": str(e),
@@ -801,9 +838,16 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         task_issue = await jira.get_issue(task_key)
         original_description = task_issue.description or ""
 
+        # Fetch and inject external references
+        from forge.workflow.utils.references import fetch_and_inject_references
+
+        original_description_with_refs = await fetch_and_inject_references(
+            state, jira, original_description
+        )
+
         # Regenerate description with feedback
         new_description = await agent.regenerate_with_feedback(
-            original_content=original_description,
+            original_content=original_description_with_refs,
             feedback=feedback,
             content_type="task",
             ticket_key=ticket_key,

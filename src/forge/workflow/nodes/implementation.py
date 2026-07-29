@@ -54,14 +54,18 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
     task_keys = state.get("task_keys", [])
     implementation_node = _implementation_node_name(state)
     recorded_workspace = state.get("workspace_path")
-    local_workspace_survived = bool(recorded_workspace and Path(recorded_workspace).exists())
+    local_workspace_survived = bool(
+        recorded_workspace and Path(recorded_workspace).exists()
+    )
 
     try:
         git: GitOperations
         workspace_path, git = prepare_workspace(state)
         state = {**state, "workspace_path": workspace_path}
     except Exception as exc:
-        logger.error("Unable to prepare implementation workspace for %s: %s", ticket_key, exc)
+        logger.error(
+            "Unable to prepare implementation workspace for %s: %s", ticket_key, exc
+        )
         return {
             **state,
             "last_error": str(exc),
@@ -79,7 +83,9 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             await push_to_fork_with_retry(git)
         except PushPersistenceError as exc:
             return update_state_timestamp(
-                build_persistence_error_state(state, exc, retry_node=implementation_node)
+                build_persistence_error_state(
+                    state, exc, retry_node=implementation_node
+                )
             )
 
         pending_task = state.get("implementation_push_pending_task")
@@ -136,11 +142,15 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
                     "committing as fallback"
                 )
                 git.stage_all()
-                git.commit(f"[{ticket_key}] chore: commit uncommitted changes after implementation")
+                git.commit(
+                    f"[{ticket_key}] chore: commit uncommitted changes after implementation"
+                )
             await push_to_fork_with_retry(git)
         except PushPersistenceError as exc:
             return update_state_timestamp(
-                build_persistence_error_state(state, exc, retry_node=implementation_node)
+                build_persistence_error_state(
+                    state, exc, retry_node=implementation_node
+                )
             )
         except Exception as exc:
             logger.error(
@@ -192,6 +202,13 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             task_summary=task_summary,
             task_description=task_description,
             guardrails=guardrails,
+        )
+
+        # Fetch and inject external references
+        from forge.workflow.utils.references import fetch_and_inject_references
+
+        full_description = await fetch_and_inject_references(
+            state, jira, full_description
         )
 
         # Run implementation in container sandbox
@@ -287,7 +304,11 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
 def _implementation_node_name(state: WorkflowState) -> str:
     """Return the implementation node name for the active workflow graph."""
-    return "implement_bug_fix" if state.get("ticket_type") == TicketType.BUG else "implement_task"
+    return (
+        "implement_bug_fix"
+        if state.get("ticket_type") == TicketType.BUG
+        else "implement_task"
+    )
 
 
 def _build_implementation_trace_context(
