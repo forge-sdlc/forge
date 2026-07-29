@@ -19,29 +19,30 @@ sys.path.insert(0, str(Path(__file__).parents[3] / "containers"))
 class TestCreateLlmModel:
     def test_raises_without_credentials(self, monkeypatch):
         """Test that missing credentials raises RuntimeError."""
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("ANTHROPIC_VERTEX_PROJECT_ID", raising=False)
+        monkeypatch.setenv("LLM_BACKEND", "vertex-ai")
+        monkeypatch.setenv("LLM_MODEL", "gemini-3.5-flash")
+        monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
 
         from entrypoint import _create_llm_model
 
-        with pytest.raises(RuntimeError, match="No API credentials"):
+        with pytest.raises(RuntimeError, match="GOOGLE_CLOUD_PROJECT is required"):
             _create_llm_model()
 
     def test_raises_gemini_without_vertex(self, monkeypatch):
         """Test that Gemini model without Vertex AI raises RuntimeError."""
+        monkeypatch.setenv("LLM_BACKEND", "anthropic")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-        monkeypatch.delenv("ANTHROPIC_VERTEX_PROJECT_ID", raising=False)
         monkeypatch.setenv("LLM_MODEL", "gemini-pro")
 
         from entrypoint import _create_llm_model
 
-        with pytest.raises(RuntimeError, match="requires Vertex AI"):
+        with pytest.raises(RuntimeError, match="not supported by anthropic"):
             _create_llm_model()
 
     def test_creates_anthropic_model_with_api_key(self, monkeypatch):
         """Test model creation with direct Anthropic API key."""
+        monkeypatch.setenv("LLM_BACKEND", "anthropic")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-        monkeypatch.delenv("ANTHROPIC_VERTEX_PROJECT_ID", raising=False)
         monkeypatch.setenv("LLM_MODEL", "claude-sonnet-4-5@20250929")
 
         from entrypoint import _create_llm_model
@@ -52,8 +53,8 @@ class TestCreateLlmModel:
 
     def test_respects_max_tokens_env_override(self, monkeypatch):
         """Test that LLM_MAX_TOKENS env var overrides default."""
+        monkeypatch.setenv("LLM_BACKEND", "anthropic")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-        monkeypatch.delenv("ANTHROPIC_VERTEX_PROJECT_ID", raising=False)
         monkeypatch.setenv("LLM_MODEL", "claude-sonnet-4-5@20250929")
         monkeypatch.setenv("LLM_MAX_TOKENS", "4096")
 
@@ -64,9 +65,9 @@ class TestCreateLlmModel:
 
     def test_creates_vertex_claude_model(self, monkeypatch):
         """Test model creation with Vertex AI for Claude."""
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.setenv("ANTHROPIC_VERTEX_PROJECT_ID", "my-project")
-        monkeypatch.setenv("ANTHROPIC_VERTEX_REGION", "us-east5")
+        monkeypatch.setenv("LLM_BACKEND", "vertex-ai")
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "my-project")
+        monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-east5")
         monkeypatch.setenv("LLM_MODEL", "claude-sonnet-4-5@20250929")
 
         from entrypoint import _create_llm_model

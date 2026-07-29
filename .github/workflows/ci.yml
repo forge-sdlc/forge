@@ -98,6 +98,8 @@ jobs:
           JIRA_API_TOKEN: dummy
           JIRA_USER_EMAIL: dummy@example.com
           GITHUB_TOKEN: dummy
+          LLM_BACKEND: vertex-ai
+          LLM_MODEL: gemini-3.5-flash
         run: uv run pytest tests/contracts tests/flows -q --strict-markers
 
   integration:
@@ -135,6 +137,8 @@ jobs:
           JIRA_API_TOKEN: dummy
           JIRA_USER_EMAIL: dummy@example.com
           GITHUB_TOKEN: dummy
+          LLM_BACKEND: vertex-ai
+          LLM_MODEL: gemini-3.5-flash
           FORGE_TEST_REDIS_URL: redis://localhost:6379/0
           FORGE_REQUIRE_TEST_REDIS: "1"
         run: uv run pytest tests/integration -q --strict-markers -m "integration and not quarantine"
@@ -164,6 +168,8 @@ jobs:
           JIRA_API_TOKEN: dummy
           JIRA_USER_EMAIL: dummy@example.com
           GITHUB_TOKEN: dummy
+          LLM_BACKEND: vertex-ai
+          LLM_MODEL: gemini-3.5-flash
         run: uv run pytest tests/e2e -q --strict-markers -m "e2e and not external"
 
   container-build:

@@ -494,6 +494,8 @@ class TestSettingsConfiguration:
                 jira_api_token="token",
                 jira_user_email="user@example.com",
                 github_token="ghtoken",
+                llm_backend="vertex-ai",
+                llm_model="gemini-3.5-flash",
             )
             assert settings.auto_review_record_polled_files is None
 
