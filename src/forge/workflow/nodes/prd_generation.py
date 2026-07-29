@@ -149,9 +149,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
         # Fetch and inject external references
         from forge.workflow.utils.references import fetch_and_inject_references
 
-        raw_requirements = await fetch_and_inject_references(
-            state, jira, raw_requirements
-        )
+        raw_requirements = await fetch_and_inject_references(state, jira, raw_requirements)
 
         # Build context from issue metadata
         context: dict[str, Any] = {
@@ -193,9 +191,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
                     )
                 else:
                     await jira.update_description(ticket_key, prd_content)
-                    await jira.add_comment(
-                        ticket_key, artifact_interaction_options("prd")
-                    )
+                    await jira.add_comment(ticket_key, artifact_interaction_options("prd"))
                 await jira.set_workflow_label(ticket_key, ForgeLabel.PRD_PENDING)
         except Exception as e:
             jira_error = str(e)
@@ -218,9 +214,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
                 "prd_content": prd_content,
                 "generation_context": generation_context,
                 "current_node": "prd_approval_gate",
-                "last_error": (
-                    f"PRD publish pending: {jira_error}" if jira_error else None
-                ),
+                "last_error": (f"PRD publish pending: {jira_error}" if jira_error else None),
             }
         )
         if prd_pr_result:
@@ -273,9 +267,7 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
     try:
         from forge.workflow.utils.references import fetch_and_inject_references
 
-        original_prd_with_refs = await fetch_and_inject_references(
-            state, jira, original_prd
-        )
+        original_prd_with_refs = await fetch_and_inject_references(state, jira, original_prd)
 
         # Regenerate PRD with feedback
         new_prd = await agent.regenerate_with_feedback(
@@ -329,9 +321,7 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
 
         logger.info(f"PRD regenerated for {ticket_key} ({len(new_prd)} chars)")
 
-        automated_review_revision_count = state.get(
-            "automated_review_revision_count", 0
-        )
+        automated_review_revision_count = state.get("automated_review_revision_count", 0)
         if state.get("automated_review_revision_pending"):
             automated_review_revision_count += 1
         proposal_review_decisions = [

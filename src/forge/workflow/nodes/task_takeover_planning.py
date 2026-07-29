@@ -40,9 +40,7 @@ def _repo_labels(repos: list[str]) -> list[str]:
     return [f"repo:{repo}" for repo in repos if repo and "/" in repo]
 
 
-def _truncate_plan_comment(
-    plan_content: str, max_chars: int = _MAX_COMMENT_CHARS
-) -> str:
+def _truncate_plan_comment(plan_content: str, max_chars: int = _MAX_COMMENT_CHARS) -> str:
     """Truncate plan comment at last paragraph boundary before the character limit."""
     if len(plan_content) <= max_chars:
         return plan_content
@@ -68,8 +66,7 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
     ticket_key = state["ticket_key"]
     retry_count = state.get("retry_count", 0)
     is_revision = (
-        state.get("revision_requested", False)
-        or state.get("feedback_comment") is not None
+        state.get("revision_requested", False) or state.get("feedback_comment") is not None
     )
     feedback_comment = state.get("feedback_comment") or ""
     original_plan = state.get("plan_content") or ""
@@ -106,9 +103,7 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
             known_repos = await get_effective_repos(jira, issue.project_key)
 
         if not known_repos:
-            raise ValueError(
-                f"No repositories configured for project {issue.project_key}"
-            )
+            raise ValueError(f"No repositories configured for project {issue.project_key}")
 
         # 2. Formulate prompt
         task_description = load_prompt(
@@ -132,9 +127,7 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         # Fetch and inject external references
         from forge.workflow.utils.references import fetch_and_inject_references
 
-        task_description = await fetch_and_inject_references(
-            state, jira, task_description
-        )
+        task_description = await fetch_and_inject_references(state, jira, task_description)
 
         # 3. Generate the plan directly with the planning agent. This mirrors
         # feature workflow planning and lets the agent use read-only repository
@@ -218,9 +211,7 @@ def plan_approval_gate(state: TaskTakeoverState) -> TaskTakeoverState:
     Returns:
         State with is_paused=True and current_node=plan_approval_gate.
     """
-    return cast(
-        TaskTakeoverState, set_paused(cast(dict[str, Any], state), "plan_approval_gate")
-    )
+    return cast(TaskTakeoverState, set_paused(cast(dict[str, Any], state), "plan_approval_gate"))
 
 
 def route_plan_approval(state: TaskTakeoverState) -> str:

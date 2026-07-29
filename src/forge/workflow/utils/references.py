@@ -58,12 +58,12 @@ def resolve_and_verify_hostname(hostname: str) -> str:
         raise ValueError(f"No IP addresses found for {hostname}")
 
     for _family, _ltype, _proto, _canonname, sockaddr in addrinfo:
-        ip = sockaddr[0]
+        ip = str(sockaddr[0])
         if not is_safe_ip(ip):
             raise ValueError(f"Unsafe IP address resolved: {ip} for {hostname}")
 
     # Return the first resolved IP address (which is safe)
-    return addrinfo[0][4][0]
+    return str(addrinfo[0][4][0])
 
 
 def normalize_url(url: str) -> str:
@@ -107,7 +107,7 @@ class PinnedAsyncNetworkBackend(httpcore.AsyncNetworkBackend):
         port: int,
         timeout: float | None = None,
         local_address: str | None = None,
-        socket_options=None,
+        socket_options: Any = None,
     ) -> httpcore.AsyncNetworkStream:
         pinned_ip = self.pinned_ips.get(host, host)
         return await self._backend.connect_tcp(
@@ -122,7 +122,7 @@ class PinnedAsyncNetworkBackend(httpcore.AsyncNetworkBackend):
         self,
         path: str,
         timeout: float | None = None,
-        socket_options=None,
+        socket_options: Any = None,
     ) -> httpcore.AsyncNetworkStream:
         return await self._backend.connect_unix_socket(
             path=path,
@@ -135,7 +135,7 @@ class PinnedAsyncNetworkBackend(httpcore.AsyncNetworkBackend):
 
 
 class PinnedAsyncHTTPTransport(httpx.AsyncHTTPTransport):
-    def __init__(self, pinned_backend: httpcore.AsyncNetworkBackend, **kwargs):
+    def __init__(self, pinned_backend: httpcore.AsyncNetworkBackend, **kwargs: Any):
         super().__init__(**kwargs)
         if isinstance(self._pool, httpcore.AsyncConnectionPool):
             self._pool = httpcore.AsyncConnectionPool(
@@ -217,7 +217,7 @@ async def fetch_reference_url(
                 chunks.append(chunk)
 
             body_bytes = b"".join(chunks)
-            encoding = response.encoding or response.apparent_encoding or "utf-8"
+            encoding = response.encoding or getattr(response, "apparent_encoding", "utf-8") or "utf-8"
             try:
                 body_text = body_bytes.decode(encoding, errors="replace")
             except Exception:
@@ -227,15 +227,15 @@ async def fetch_reference_url(
 
 
 class HTMLToMarkdownParser(HTMLParser):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.result = []
-        self.tag_stack = []
+        self.result: list[str] = []
+        self.tag_stack: list[str] = []
         self.in_script_or_style = False
-        self.current_href = None
-        self.link_text = []
+        self.current_href: str | None = None
+        self.link_text: list[str] = []
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.tag_stack.append(tag)
         if tag in ("script", "style"):
             self.in_script_or_style = True
@@ -259,7 +259,7 @@ class HTMLToMarkdownParser(HTMLParser):
             self.current_href = attrs_dict.get("href")
             self.link_text = []
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         if self.tag_stack:
             self.tag_stack.pop()
 
@@ -282,7 +282,7 @@ class HTMLToMarkdownParser(HTMLParser):
         elif tag in ("p", "h1", "h2", "h3", "h4", "h5", "h6"):
             self.result.append("\n")
 
-    def handle_data(self, data):
+    def handle_data(self, data: str) -> None:
         if self.in_script_or_style:
             return
 
@@ -342,7 +342,7 @@ async def read_from_cache(run_id: str, norm_url: str) -> tuple[str, str] | None:
         return None
 
 
-def enforce_cache_folder_size(cache_dir: str, new_file_size: int, max_size: int = 10 * 1024 * 1024):
+def enforce_cache_folder_size(cache_dir: str, new_file_size: int, max_size: int = 10 * 1024 * 1024) -> None:
     if not os.path.exists(cache_dir):
         return
 
@@ -369,7 +369,7 @@ def enforce_cache_folder_size(cache_dir: str, new_file_size: int, max_size: int 
         logger.warning(f"Error enforcing cache size for {cache_dir}: {e}")
 
 
-async def write_to_cache(run_id: str, norm_url: str, content_type: str, body_text: str):
+async def write_to_cache(run_id: str, norm_url: str, content_type: str, body_text: str) -> None:
     cache_dir = get_cache_dir(run_id)
     os.makedirs(cache_dir, exist_ok=True)
 
@@ -495,12 +495,20 @@ async def fetch_and_inject_references(
         logger.warning(f"get_comments returned non-list: {comments!r}")
         comments = []
 
-    def _comment_sort_key(c):
+    def _comment_sort_key(c: Any) -> datetime:
         if hasattr(c, "assert_called") or hasattr(c, "called") or "Mock" in c.__class__.__name__:
             return datetime.min
         created = getattr(c, "created", None)
-        if isinstance(created, (datetime, str)):
+        if isinstance(created, datetime):
             return created
+        if isinstance(created, str):
+            try:
+                cleaned = created
+                if len(created) > 4 and created[-5] in ("+", "-") and ":" not in created[-3:]:
+                    cleaned = created[:-2] + ":" + created[-2:]
+                return datetime.fromisoformat(cleaned)
+            except ValueError:
+                return datetime.min
         return datetime.min
 
     comments.sort(key=_comment_sort_key)
@@ -545,7 +553,7 @@ async def fetch_and_inject_references(
         if cached is not None:
             content_type, body_text = cached
         else:
-            pinned_ips = {}
+            pinned_ips: dict[str, str] = {}
             backend = PinnedAsyncNetworkBackend(pinned_ips)
             try:
                 content_type, body_text = await fetch_reference_url(

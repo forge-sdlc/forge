@@ -1261,7 +1261,9 @@ class JiraClient:
             return []
         return [ref for ref in value if isinstance(ref, dict) and "url" in ref]
 
-    async def set_project_references(self, project_key: str, references: list[dict[str, str]]) -> None:
+    async def set_project_references(
+        self, project_key: str, references: list[dict[str, str]]
+    ) -> None:
         """Set the forge.references project property."""
         await self.set_project_property(project_key, "forge.references", references)
 

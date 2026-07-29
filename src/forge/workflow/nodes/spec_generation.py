@@ -162,9 +162,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                         settings.jira_spec_custom_field,
                         spec_content,
                     )
-                    await jira.add_comment(
-                        ticket_key, artifact_interaction_options("spec")
-                    )
+                    await jira.add_comment(ticket_key, artifact_interaction_options("spec"))
                 else:
                     await jira.add_attachment(
                         ticket_key,
@@ -172,9 +170,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                         content=spec_content,
                         content_type="text/markdown",
                     )
-                    await jira.add_comment(
-                        ticket_key, artifact_interaction_options("spec")
-                    )
+                    await jira.add_comment(ticket_key, artifact_interaction_options("spec"))
                 await jira.set_workflow_label(ticket_key, ForgeLabel.SPEC_PENDING)
         except Exception as e:
             jira_error = str(e)
@@ -195,9 +191,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                 "spec_content": spec_content,
                 "generation_context": generation_context,
                 "current_node": "spec_approval_gate",
-                "last_error": (
-                    f"Spec publish pending: {jira_error}" if jira_error else None
-                ),
+                "last_error": (f"Spec publish pending: {jira_error}" if jira_error else None),
             }
         )
         if spec_pr_result:
@@ -246,9 +240,7 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
     try:
         from forge.workflow.utils.references import fetch_and_inject_references
 
-        original_spec_with_refs = await fetch_and_inject_references(
-            state, jira, original_spec
-        )
+        original_spec_with_refs = await fetch_and_inject_references(state, jira, original_spec)
 
         # Regenerate spec with feedback
         new_spec = await agent.regenerate_with_feedback(
@@ -301,13 +293,9 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
                 )
             else:
                 old_filename = f"{ticket_key}-spec.md"
-                deleted = await jira.delete_attachments_by_name(
-                    ticket_key, old_filename
-                )
+                deleted = await jira.delete_attachments_by_name(ticket_key, old_filename)
                 if deleted:
-                    logger.info(
-                        f"Deleted {deleted} old spec attachment(s) for {ticket_key}"
-                    )
+                    logger.info(f"Deleted {deleted} old spec attachment(s) for {ticket_key}")
                 await jira.add_attachment(
                     ticket_key,
                     filename=old_filename,
@@ -324,9 +312,7 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
 
         logger.info(f"Spec regenerated for {ticket_key} ({len(new_spec)} chars)")
 
-        automated_review_revision_count = state.get(
-            "automated_review_revision_count", 0
-        )
+        automated_review_revision_count = state.get("automated_review_revision_count", 0)
         if state.get("automated_review_revision_pending"):
             automated_review_revision_count += 1
         proposal_review_decisions = [
