@@ -805,7 +805,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 desc = args.description[i] if args.description and i < len(args.description) else ""
                 norm_url = normalize_url(url)
                 existing = next(
-                    (r for r in current_references if normalize_url(r.get("url")) == norm_url),
+                    (r for r in current_references if normalize_url(r["url"]) == norm_url),
                     None,
                 )
                 if existing:
@@ -818,9 +818,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             for url in args.remove_reference:
                 norm_remove_url = normalize_url(url)
                 current_references = [
-                    r
-                    for r in current_references
-                    if normalize_url(r.get("url")) != norm_remove_url
+                    r for r in current_references if normalize_url(r["url"]) != norm_remove_url
                 ]
             references_updated = True
         if references_updated:
