@@ -1,6 +1,7 @@
 from forge.workflow.pr_state import (
     activate_pull_request_for_event,
     all_pull_requests_merged,
+    event_targets_pull_request,
     save_active_pull_request,
 )
 
@@ -69,6 +70,41 @@ def test_event_for_unknown_pr_does_not_change_active_repo() -> None:
     assert activate_pull_request_for_event(state, payload) == state
 
 
+def test_event_without_pr_number_does_not_target_record_without_number() -> None:
+    state = _multi_repo_state()
+    state["pull_requests"]["acme/backend"].pop("number")
+    payload = {"repository": {"full_name": "acme/backend"}}
+
+    assert not event_targets_pull_request(state, payload)
+    assert activate_pull_request_for_event(state, payload) == state
+
+
+def test_check_run_event_activates_matching_repo_pr() -> None:
+    state = _multi_repo_state()
+    payload = {
+        "repository": {"full_name": "acme/backend"},
+        "check_run": {"pull_requests": [{"number": 10}]},
+    }
+
+    activated = activate_pull_request_for_event(state, payload)
+
+    assert activated["current_repo"] == "acme/backend"
+    assert activated["current_pr_number"] == 10
+
+
+def test_same_repo_event_preserves_existing_workspace() -> None:
+    state = _multi_repo_state()
+    state["workspace_path"] = "/tmp/forge-AISOS-1-active"
+    payload = {
+        "repository": {"full_name": "acme/frontend"},
+        "pull_request": {"number": 20},
+    }
+
+    activated = activate_pull_request_for_event(state, payload)
+
+    assert activated["workspace_path"] == "/tmp/forge-AISOS-1-active"
+
+
 def test_issue_comment_event_activates_matching_repo_pr() -> None:
     state = _multi_repo_state()
     payload = {
@@ -104,3 +140,59 @@ def test_merge_completion_requires_every_pr() -> None:
 
     state["pull_requests"]["acme/frontend"]["merged"] = True
     assert all_pull_requests_merged(state)
+
+
+def test_url_only_pr_blocks_aggregate_merge_completion() -> None:
+    state = _multi_repo_state()
+    state["pull_requests"]["acme/backend"]["merged"] = True
+    state["pull_requests"]["acme/frontend"]["merged"] = True
+    state["pull_requests"]["acme/docs"] = {
+        "repo": "acme/docs",
+        "url": "https://github.com/acme/docs/pull/30",
+        "number": None,
+        "merged": False,
+    }
+
+    assert not all_pull_requests_merged(state)
+
+
+def test_later_webhook_hydrates_url_only_pr_number() -> None:
+    state = _multi_repo_state()
+    state["pull_requests"]["acme/docs"] = {
+        "repo": "acme/docs",
+        "url": "https://github.com/acme/docs/pull/30",
+        "number": None,
+        "merged": False,
+    }
+    payload = {
+        "repository": {"full_name": "acme/docs"},
+        "pull_request": {
+            "number": 30,
+            "html_url": "https://github.com/acme/docs/pull/30",
+        },
+    }
+
+    activated = activate_pull_request_for_event(state, payload)
+
+    assert activated["current_repo"] == "acme/docs"
+    assert activated["current_pr_number"] == 30
+    assert activated["pull_requests"]["acme/docs"]["number"] == 30
+
+
+def test_url_only_pr_rejects_different_pr_in_same_repo() -> None:
+    state = _multi_repo_state()
+    state["pull_requests"]["acme/docs"] = {
+        "repo": "acme/docs",
+        "url": "https://github.com/acme/docs/pull/30",
+        "number": None,
+        "merged": False,
+    }
+    payload = {
+        "repository": {"full_name": "acme/docs"},
+        "pull_request": {
+            "number": 31,
+            "html_url": "https://github.com/acme/docs/pull/31",
+        },
+    }
+
+    assert not event_targets_pull_request(state, payload)

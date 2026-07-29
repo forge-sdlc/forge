@@ -46,9 +46,12 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
     """
     ticket_key = state["ticket_key"]
     current_pr_url = state.get("current_pr_url")
+    active_pr = state.get("pull_requests", {}).get(state.get("current_repo", ""))
     pr_urls = (
         [current_pr_url]
-        if state.get("pull_requests") and current_pr_url
+        if isinstance(active_pr, dict)
+        and active_pr.get("number") == state.get("current_pr_number")
+        and current_pr_url
         else state.get("pr_urls", [])
     )
     ci_fix_attempt = state.get("ci_fix_attempt", 0)

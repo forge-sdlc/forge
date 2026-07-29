@@ -25,7 +25,6 @@ class PullRequestState(TypedDict, total=False):
 _ACTIVE_FIELDS = {
     "current_pr_url": "url",
     "current_pr_number": "number",
-    "current_repo": "repo",
     "fork_owner": "fork_owner",
     "fork_repo": "fork_repo",
     "ci_status": "ci_status",
@@ -50,7 +49,9 @@ _PR_LIFECYCLE_NODES = {
 
 
 def _event_pr_number(payload: dict[str, Any]) -> int | None:
-    number = payload.get("pull_request", {}).get("number") or payload.get("issue", {}).get("number")
+    number = payload.get("pull_request", {}).get("number")
+    if number is None:
+        number = payload.get("issue", {}).get("number")
     if isinstance(number, int):
         return number
     for container in (payload.get("check_suite", {}), payload.get("check_run", {})):
@@ -65,17 +66,31 @@ def _event_pr_number(payload: dict[str, Any]) -> int | None:
     return None
 
 
+def _event_pr_url(payload: dict[str, Any]) -> str | None:
+    url = payload.get("pull_request", {}).get("html_url")
+    return url if isinstance(url, str) and url else None
+
+
+def _record_matches_event(record: dict[str, Any], payload: dict[str, Any]) -> bool:
+    number = _event_pr_number(payload)
+    if number is None:
+        return False
+    if record.get("number") == number:
+        return True
+    return record.get("number") is None and _event_pr_url(payload) == record.get("url")
+
+
 def save_active_pull_request(state: dict[str, Any]) -> dict[str, Any]:
     """Copy the scalar compatibility view into its per-repository PR record."""
     repo = state.get("current_repo")
-    if not repo or state.get("current_pr_number") is None:
+    if not repo or (state.get("current_pr_number") is None and not state.get("current_pr_url")):
         return state
 
     pull_requests = deepcopy(state.get("pull_requests", {}))
-    record = deepcopy(pull_requests.get(repo, {}))
+    record = pull_requests.get(repo, {})
     for scalar, per_pr in _ACTIVE_FIELDS.items():
         if scalar in state:
-            record[per_pr] = deepcopy(state[scalar])
+            record[per_pr] = state[scalar]
     record["repo"] = repo
     current_node = state.get("current_node")
     if current_node in _PR_LIFECYCLE_NODES:
@@ -94,10 +109,17 @@ def activate_pull_request_for_event(
     number = _event_pr_number(payload)
     pull_requests = state.get("pull_requests", {})
     record = pull_requests.get(repo) if repo else None
-    if not isinstance(record, dict) or (number is not None and record.get("number") != number):
+    if not isinstance(record, dict) or not _record_matches_event(record, payload):
         return state
 
-    activated = {**state, "workspace_path": None}
+    activated = {**state, "current_repo": repo, "current_pr_number": number}
+    if record.get("number") is None:
+        updated_pull_requests = deepcopy(pull_requests)
+        updated_pull_requests[repo]["number"] = number
+        activated["pull_requests"] = updated_pull_requests
+        record = updated_pull_requests[repo]
+    if state.get("current_repo") != repo:
+        activated["workspace_path"] = None
     for scalar, per_pr in _ACTIVE_FIELDS.items():
         if per_pr in record:
             activated[scalar] = deepcopy(record[per_pr])
@@ -118,7 +140,7 @@ def mark_active_pull_request_merged(state: dict[str, Any]) -> dict[str, Any]:
     """Mark the selected per-repository PR merged without changing other records."""
     repo = state.get("current_repo")
     pull_requests = deepcopy(state.get("pull_requests", {}))
-    record = deepcopy(pull_requests.get(repo)) if repo else None
+    record = pull_requests.get(repo) if repo else None
     if not isinstance(record, dict):
         return state
     record["merged"] = True
@@ -129,6 +151,5 @@ def mark_active_pull_request_merged(state: dict[str, Any]) -> dict[str, Any]:
 def event_targets_pull_request(state: dict[str, Any], payload: dict[str, Any]) -> bool:
     """Return whether a webhook identifies one of the implementation PR records."""
     repo = payload.get("repository", {}).get("full_name")
-    number = _event_pr_number(payload)
     record = state.get("pull_requests", {}).get(repo)
-    return isinstance(record, dict) and record.get("number") == number
+    return isinstance(record, dict) and _record_matches_event(record, payload)

@@ -228,6 +228,8 @@ class TestPRNumberExtractionMissing:
 
         # Verify PR number is None in state
         assert result["current_pr_number"] is None
+        assert result["pull_requests"]["owner/repo"]["number"] is None
+        assert result["pull_requests"]["owner/repo"]["url"] == result["current_pr_url"]
 
     @pytest.mark.asyncio
     async def test_workflow_continues_when_pr_number_unavailable(self):
