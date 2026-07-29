@@ -217,7 +217,9 @@ async def fetch_reference_url(
                 chunks.append(chunk)
 
             body_bytes = b"".join(chunks)
-            encoding = response.encoding or getattr(response, "apparent_encoding", "utf-8") or "utf-8"
+            encoding = (
+                response.encoding or getattr(response, "apparent_encoding", "utf-8") or "utf-8"
+            )
             try:
                 body_text = body_bytes.decode(encoding, errors="replace")
             except Exception:
@@ -342,7 +344,9 @@ async def read_from_cache(run_id: str, norm_url: str) -> tuple[str, str] | None:
         return None
 
 
-def enforce_cache_folder_size(cache_dir: str, new_file_size: int, max_size: int = 10 * 1024 * 1024) -> None:
+def enforce_cache_folder_size(
+    cache_dir: str, new_file_size: int, max_size: int = 10 * 1024 * 1024
+) -> None:
     if not os.path.exists(cache_dir):
         return
 
