@@ -1,5 +1,6 @@
 """Workspace setup node for LangGraph workflow."""
 
+import json
 import logging
 import shutil
 import tempfile
@@ -23,6 +24,17 @@ from forge.workspace.manager import Workspace, WorkspaceManager
 WorkflowState = dict[str, Any]
 
 logger = logging.getLogger(__name__)
+
+_WORKSPACE_IDENTITY_FILE = ".forge/workspace.json"
+
+
+def _write_workspace_identity(path: Path, *, ticket_key: str, repo_name: str) -> None:
+    """Persist identity used to safely recover a workspace after process loss."""
+    identity_path = path / _WORKSPACE_IDENTITY_FILE
+    identity_path.parent.mkdir(parents=True, exist_ok=True)
+    identity_path.write_text(
+        json.dumps({"ticket_key": ticket_key, "repo_name": repo_name}, sort_keys=True) + "\n"
+    )
 
 
 def _recreate_workspace_from_fork(
@@ -93,6 +105,7 @@ def _recreate_workspace_from_fork(
 
     git.workspace.path = target_path
     git.workspace_recreated = True
+    _write_workspace_identity(target_path, ticket_key=ticket_key, repo_name=current_repo)
     logger.info(f"Workspace recreated at {target_path} for {ticket_key}")
     return str(target_path), git
 
@@ -322,6 +335,11 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         forge_dir = workspace.path / ".forge"
         forge_dir.mkdir(exist_ok=True)
         (forge_dir / "history").mkdir(exist_ok=True)
+        _write_workspace_identity(
+            workspace.path,
+            ticket_key=ticket_key,
+            repo_name=current_repo,
+        )
 
         # Keep Forge handoff files local to this clone without modifying the
         # target repository's tracked .gitignore.
@@ -399,6 +417,47 @@ async def teardown_workspace(state: WorkflowState) -> WorkflowState:
         if workspace:
             manager.destroy_workspace(workspace)
             logger.info(f"Workspace destroyed: {workspace}")
+        else:
+            # The manager registry is process-local. A restart or worker handoff
+            # can therefore leave a valid workspace on disk without a registry
+            # entry. Fall back to the path persisted in workflow state, but only
+            # after verifying that it is one of Forge's workspace directories.
+            path = Path(workspace_path)
+            settings = get_settings()
+            allowed_parent = (
+                Path(settings.workspace_base_dir)
+                if settings.workspace_base_dir
+                else Path(tempfile.gettempdir())
+            ).resolve()
+            resolved_path = path.resolve()
+            expected_prefix = f"forge-{ticket_key}-"
+            identity_path = resolved_path / _WORKSPACE_IDENTITY_FILE
+            try:
+                identity = json.loads(identity_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                identity = None
+
+            if (
+                path.is_symlink()
+                or not path.is_dir()
+                or resolved_path.parent != allowed_parent
+                or not resolved_path.name.startswith(expected_prefix)
+                or not isinstance(identity, dict)
+                or identity.get("ticket_key") != ticket_key
+                or identity.get("repo_name") != current_repo
+            ):
+                raise ValueError(
+                    f"Refusing to destroy unrecognized workspace path: {workspace_path}"
+                )
+
+            recovered_workspace = Workspace(
+                path=resolved_path,
+                repo_name=current_repo,
+                branch_name=state.get("context", {}).get("branch_name", ""),
+                ticket_key=ticket_key,
+            )
+            manager.destroy_workspace(recovered_workspace)
+            logger.info("Destroyed unregistered workspace: %s", resolved_path)
 
         return update_state_timestamp(
             {

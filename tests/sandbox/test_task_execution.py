@@ -1,5 +1,6 @@
 """Integrated and sandbox tests for task execution in container environments."""
 
+import json
 import tempfile
 from collections.abc import Generator
 from pathlib import Path
@@ -269,3 +270,88 @@ class TestTaskExecutionSandbox:
         assert teardown_state["current_node"] == "workspace_complete"
         mock_manager.get_workspace.assert_called_once_with("TASK-123", "acme/backend")
         mock_manager.destroy_workspace.assert_called_once_with(mock_workspace)
+
+    @pytest.mark.asyncio
+    @patch("forge.workflow.nodes.workspace_setup.get_settings")
+    @patch("forge.workflow.nodes.workspace_setup.get_workspace_manager")
+    async def test_teardown_workspace_destroys_unregistered_state_path(
+        self,
+        mock_get_manager: MagicMock,
+        mock_get_settings: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """A worker restart must not leak a workspace missing from the registry."""
+        workspace_path = tmp_path / "forge-TASK-123-restarted"
+        workspace_path.mkdir()
+        forge_dir = workspace_path / ".forge"
+        forge_dir.mkdir()
+        (forge_dir / "workspace.json").write_text(
+            json.dumps({"ticket_key": "TASK-123", "repo_name": "acme/backend"})
+        )
+        state = _make_state(workspace_path=str(workspace_path))
+        mock_manager = MagicMock()
+        mock_manager.get_workspace.return_value = None
+        mock_get_manager.return_value = mock_manager
+        mock_get_settings.return_value.workspace_base_dir = str(tmp_path)
+
+        teardown_state = await teardown_workspace(state)
+
+        assert teardown_state["workspace_path"] is None
+        recovered = mock_manager.destroy_workspace.call_args.args[0]
+        assert recovered.path == workspace_path
+        assert recovered.ticket_key == "TASK-123"
+        assert recovered.repo_name == "acme/backend"
+
+    @pytest.mark.asyncio
+    @patch("forge.workflow.nodes.workspace_setup.get_settings")
+    @patch("forge.workflow.nodes.workspace_setup.get_workspace_manager")
+    async def test_teardown_workspace_rejects_unrecognized_state_path(
+        self,
+        mock_get_manager: MagicMock,
+        mock_get_settings: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """The registry fallback cannot recursively delete an arbitrary path."""
+        workspace_path = tmp_path / "not-a-forge-workspace"
+        workspace_path.mkdir()
+        state = _make_state(workspace_path=str(workspace_path))
+        mock_manager = MagicMock()
+        mock_manager.get_workspace.return_value = None
+        mock_get_manager.return_value = mock_manager
+        mock_get_settings.return_value.workspace_base_dir = str(tmp_path)
+
+        teardown_state = await teardown_workspace(state)
+
+        assert workspace_path.exists()
+        assert teardown_state["workspace_path"] is None
+        assert "Refusing to destroy unrecognized workspace path" in teardown_state["last_error"]
+        mock_manager.destroy_workspace.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("forge.workflow.nodes.workspace_setup.get_settings")
+    @patch("forge.workflow.nodes.workspace_setup.get_workspace_manager")
+    async def test_teardown_workspace_rejects_other_repo_identity(
+        self,
+        mock_get_manager: MagicMock,
+        mock_get_settings: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Cross-repo feature state cannot delete a different repo's workspace."""
+        workspace_path = tmp_path / "forge-TASK-123-other-repo"
+        workspace_path.mkdir()
+        forge_dir = workspace_path / ".forge"
+        forge_dir.mkdir()
+        (forge_dir / "workspace.json").write_text(
+            json.dumps({"ticket_key": "TASK-123", "repo_name": "acme/frontend"})
+        )
+        state = _make_state(workspace_path=str(workspace_path), current_repo="acme/backend")
+        mock_manager = MagicMock()
+        mock_manager.get_workspace.return_value = None
+        mock_get_manager.return_value = mock_manager
+        mock_get_settings.return_value.workspace_base_dir = str(tmp_path)
+
+        teardown_state = await teardown_workspace(state)
+
+        assert workspace_path.exists()
+        assert "Refusing to destroy unrecognized workspace path" in teardown_state["last_error"]
+        mock_manager.destroy_workspace.assert_not_called()
