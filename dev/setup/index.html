@@ -1508,7 +1508,7 @@
 </tr>
 </tbody>
 </table>
-<p>External accounts needed: Jira Cloud, GitHub, and Anthropic API key (or Vertex AI).</p>
+<p>External accounts needed: Jira Cloud, GitHub, and LLM backend access through a direct model provider API or Vertex AI.</p>
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/forge-sdlc/forge.git
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>forge
@@ -1523,10 +1523,11 @@
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nv">GITHUB_TOKEN</span><span class="o">=</span>github_pat_your_token
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-your-key<span class="w">   </span><span class="c1"># or Vertex AI — see developer guide</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>claude-opus-4-5@20251101
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nv">REDIS_URL</span><span class="o">=</span>redis://localhost:6380/0
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nv">LLM_BACKEND</span><span class="o">=</span>vertex-ai
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span>your-gcp-project
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="nv">GOOGLE_CLOUD_LOCATION</span><span class="o">=</span>global
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>gemini-3.5-flash
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nv">REDIS_URL</span><span class="o">=</span>redis://localhost:6380/0
 </code></pre></div>
 <p>For local development, also set:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">FORGE_REQUIRE_PROJECT_CONFIG</span><span class="o">=</span><span class="nb">false</span>

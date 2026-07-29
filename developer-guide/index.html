@@ -2772,7 +2772,7 @@
 <li><strong>Docker Compose</strong> — for Redis and API gateway (<code>dnf install docker-compose</code> / included with Docker Desktop)</li>
 <li><strong>Jira Cloud</strong> account with API access</li>
 <li><strong>GitHub</strong> account with a Personal Access Token (scopes: <code>repo</code>, <code>read:org</code>)</li>
-<li><strong>Claude API key</strong> (Anthropic direct) OR Google Cloud project with Vertex AI enabled</li>
+<li><strong>LLM backend access</strong> through a direct model provider API OR Google Cloud project with Vertex AI enabled</li>
 </ul>
 <hr />
 <h2 id="2-initial-setup">2. Initial Setup<a class="headerlink" href="#2-initial-setup" title="Permanent link">&para;</a></h2>
@@ -2800,17 +2800,11 @@
 <a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># GitHub</span>
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nv">GITHUB_TOKEN</span><span class="o">=</span>github_pat_your_token
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># LLM — choose one backend</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="c1"># Option A: Anthropic direct</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>sk-ant-your-key
-<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>
-<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="c1"># Option B: Google Vertex AI (supports Claude + Gemini)</span>
-<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="nv">ANTHROPIC_VERTEX_PROJECT_ID</span><span class="o">=</span>your-gcp-project
-<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="nv">ANTHROPIC_VERTEX_REGION</span><span class="o">=</span>us-east5
-<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>
-<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="c1"># Which model to use</span>
-<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>claude-opus-4-5@20251101
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1"># Required LLM configuration (recommended Vertex AI setup)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nv">LLM_BACKEND</span><span class="o">=</span>vertex-ai
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span>your-gcp-project
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="nv">GOOGLE_CLOUD_LOCATION</span><span class="o">=</span>global
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>gemini-3.5-flash
 </code></pre></div>
 <hr />
 <h3 id="per-project-repository-configuration-required-in-production">⚠️ Per-Project Repository Configuration (Required in Production)<a class="headerlink" href="#per-project-repository-configuration-required-in-production" title="Permanent link">&para;</a></h3>
@@ -3181,7 +3175,7 @@ unit, contract, flow, integration, or E2E gates must not be ignored.</p>
 <a id="__codelineno-26-18" name="__codelineno-26-18" href="#__codelineno-26-18"></a># External API latency
 <a id="__codelineno-26-19" name="__codelineno-26-19" href="#__codelineno-26-19"></a>forge_external_api_latency_seconds{service=&quot;jira&quot;}
 <a id="__codelineno-26-20" name="__codelineno-26-20" href="#__codelineno-26-20"></a>forge_external_api_latency_seconds{service=&quot;github&quot;}
-<a id="__codelineno-26-21" name="__codelineno-26-21" href="#__codelineno-26-21"></a>forge_external_api_latency_seconds{service=&quot;claude&quot;}
+<a id="__codelineno-26-21" name="__codelineno-26-21" href="#__codelineno-26-21"></a>forge_external_api_latency_seconds{service=&quot;llm&quot;}
 </code></pre></div>
 <h3 id="adding-worker-metrics-to-prometheus">Adding worker metrics to Prometheus<a class="headerlink" href="#adding-worker-metrics-to-prometheus" title="Permanent link">&para;</a></h3>
 <p>The default <code>prometheus.yml</code> only scrapes the API server. Add this to scrape the worker:</p>

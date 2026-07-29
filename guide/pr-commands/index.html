@@ -1526,7 +1526,7 @@
 <li>Clones the repository and checks out the PR branch from the fork</li>
 <li>Attempts <code>git merge origin/main</code></li>
 <li>If no conflicts: pushes the merge commit to the fork branch</li>
-<li>If conflicts: spawns a container with Claude to resolve them using the PR description and changed files as context</li>
+<li>If conflicts: spawns a container agent to resolve them using the PR description and changed files as context</li>
 <li>Verifies no conflict markers remain, commits, and force-pushes to the fork</li>
 <li>Returns the workflow to the node it was at before the rebase</li>
 </ol>
