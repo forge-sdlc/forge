@@ -11,8 +11,8 @@ from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
-from forge.workflow.utils.repo_resolution import get_effective_repos
 from forge.workflow.utils.references import fetch_and_inject_references
+from forge.workflow.utils.repo_resolution import get_effective_repos
 
 logger = logging.getLogger(__name__)
 

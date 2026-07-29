@@ -722,9 +722,6 @@ class TestCLIConfigErrorHandling:
             assert "forge.repos:" in out and "[required / missing]" in out
 
 
-from forge.cli import cmd_project_setup  # noqa: E402
-
-
 class TestCLIReferencesConfig:
     @pytest.mark.asyncio
     async def test_cmd_project_setup_add_references(self, capsys) -> None:

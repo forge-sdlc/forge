@@ -698,16 +698,19 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         # workstations validate syntax only; the Forge runtime owns and
         # authorizes the deployment's connection/model allowlist.
         model_policy: dict[str, Any] = {}
+        model_policy_arg = getattr(args, "model_policy", None)
+        model_args = getattr(args, "model", None)
+        model_all = getattr(args, "model_all", None)
         remove_models = getattr(args, "remove_model", None) or []
         clear_model_policy = getattr(args, "clear_model_policy", False)
         clear_model_default = getattr(args, "clear_model_default", False)
-        if clear_model_policy and (args.model_policy or args.model or remove_models):
+        if clear_model_policy and (model_policy_arg or model_args or remove_models):
             print(
                 "Error: --clear-model-policy cannot be combined with stage model options",
                 file=sys.stderr,
             )
             return 1
-        if clear_model_default and args.model_all:
+        if clear_model_default and model_all:
             print(
                 "Error: --clear-model-default cannot be combined with --model-all",
                 file=sys.stderr,
@@ -716,16 +719,16 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         if clear_model_policy:
             await jira.delete_project_property(project_key, "forge.model_policy")
             print("[OK] forge.model_policy deleted")
-        elif args.model_policy:
+        elif model_policy_arg:
             try:
-                model_policy = json.loads(args.model_policy)
+                model_policy = json.loads(model_policy_arg)
             except json.JSONDecodeError as exc:
                 print(f"Error: --model-policy is not valid JSON: {exc}", file=sys.stderr)
                 return 1
             if not isinstance(model_policy, dict):
                 print("Error: --model-policy must be a JSON object", file=sys.stderr)
                 return 1
-        elif args.model or remove_models:
+        elif model_args or remove_models:
             existing_policy = await jira.get_project_property(project_key, "forge.model_policy")
             if existing_policy is not None and not isinstance(existing_policy, dict):
                 print(
@@ -739,7 +742,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 print("Error: --remove-model requires a non-empty policy key", file=sys.stderr)
                 return 1
             model_policy.pop(policy_key, None)
-        for raw in args.model or []:
+        for raw in model_args or []:
             policy_key, separator, target = raw.partition("=")
             connection, target_separator, model = target.partition(":")
             if (
@@ -755,7 +758,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 )
                 return 1
             model_policy[policy_key] = {"connection": connection, "model": model}
-        if args.model_policy or args.model or remove_models:
+        if model_policy_arg or model_args or remove_models:
             from forge.models.model_policy import KNOWN_MODEL_POLICY_KEYS, ModelTarget
 
             try:
@@ -776,10 +779,10 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 await jira.delete_project_property(project_key, "forge.model_policy")
                 print("[OK] forge.model_policy deleted (no overrides remain)")
 
-        if args.model_all:
+        if model_all:
             from forge.models.model_policy import ModelTarget
 
-            connection, separator, model = args.model_all.partition(":")
+            connection, separator, model = model_all.partition(":")
             if not separator or not connection or not model:
                 print("Error: --model-all must use CONNECTION:MODEL", file=sys.stderr)
                 return 1
@@ -802,7 +805,11 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             ref_desc = getattr(args, "description", None)
             ref_desc_arg_name = "--description"
 
-        if ref_desc and (not args.add_reference or len(ref_desc) != len(args.add_reference)):
+        add_reference = getattr(args, "add_reference", None)
+        remove_reference = getattr(args, "remove_reference", None)
+        list_references = getattr(args, "list_references", False)
+
+        if ref_desc and (not add_reference or len(ref_desc) != len(add_reference)):
             print(
                 f"Error: {ref_desc_arg_name} requires matching number of --add-reference items.",
                 file=sys.stderr,
@@ -812,9 +819,13 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         from forge.workflow.utils.references import normalize_url
 
         references_updated = False
-        current_references = await jira.get_project_references(project_key)
-        if args.add_reference:
-            for i, url in enumerate(args.add_reference):
+        current_references = (
+            await jira.get_project_references(project_key)
+            if add_reference or remove_reference or list_references
+            else []
+        )
+        if add_reference:
+            for i, url in enumerate(add_reference):
                 desc = ref_desc[i] if ref_desc and i < len(ref_desc) else ""
                 # Normalise URL for lookup
                 norm_url = normalize_url(url)
@@ -828,8 +839,8 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 else:
                     current_references.append({"url": norm_url, "description": desc})
             references_updated = True
-        if args.remove_reference:
-            for url in args.remove_reference:
+        if remove_reference:
+            for url in remove_reference:
                 norm_remove_url = normalize_url(url)
                 current_references = [
                     r for r in current_references if normalize_url(r["url"]) != norm_remove_url
@@ -838,7 +849,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         if references_updated:
             await jira.set_project_references(project_key, current_references)
             print(f"[OK] forge.references = {current_references}")
-        if args.list_references:
+        if list_references:
             print(f"Standing references for project {project_key}:")
             if not current_references:
                 print("  (none)")
@@ -860,15 +871,15 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 remove_prd_repo,
                 remove_prd_path,
                 remove_skills,
-                args.model_policy,
-                args.model,
-                args.model_all,
+                model_policy_arg,
+                model_args,
+                model_all,
                 remove_models,
                 clear_model_policy,
                 clear_model_default,
-                args.add_reference,
-                args.remove_reference,
-                args.list_references,
+                add_reference,
+                remove_reference,
+                list_references,
             ]
         ):
             print(

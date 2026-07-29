@@ -21,8 +21,8 @@ from forge.workflow.utils import (
     update_state_timestamp,
 )
 from forge.workflow.utils.jira_status import post_status_comment
-from forge.workflow.utils.repo_resolution import get_effective_repos
 from forge.workflow.utils.references import fetch_and_inject_references
+from forge.workflow.utils.repo_resolution import get_effective_repos
 
 logger = logging.getLogger(__name__)
 

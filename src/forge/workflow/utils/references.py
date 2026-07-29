@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import io
 import ipaddress
 import json
 import logging
@@ -9,12 +10,13 @@ import socket
 import time
 import urllib.parse
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 from typing import Any
 
 import httpcore
 import httpx
+from pypdf import PdfReader
 
 from forge.integrations.jira.client import JiraClient
 from forge.skills.utils import extract_project_key
@@ -84,6 +86,8 @@ async def resolve_and_verify_hostname(hostname: str) -> str:
 
 def normalize_url(url: str) -> str:
     """Trim whitespace, convert scheme/host to lowercase, strip redundant default ports and trailing root slash."""
+    if not isinstance(url, str):
+        raise ValueError("URL must be a string")
     url = url.strip()
     parsed = urllib.parse.urlparse(url)
     scheme = parsed.scheme.lower()
@@ -173,6 +177,39 @@ class PinnedAsyncHTTPTransport(httpx.AsyncHTTPTransport):
             )
 
 
+def extract_pdf_text(
+    pdf_bytes: bytes,
+    *,
+    max_pages: int = 100,
+    max_chars: int = 10_000,
+) -> str:
+    """Extract bounded text from a PDF already constrained by the download limit."""
+    reader = PdfReader(io.BytesIO(pdf_bytes), strict=False)
+    if reader.is_encrypted:
+        try:
+            if reader.decrypt("") == 0:
+                raise ValueError("PDF is encrypted")
+        except Exception as exc:
+            raise ValueError("PDF is encrypted and cannot be read") from exc
+
+    parts: list[str] = []
+    chars = 0
+    for page in reader.pages[:max_pages]:
+        page_text = page.extract_text() or ""
+        remaining = max_chars - chars
+        if remaining <= 0:
+            break
+        parts.append(page_text[:remaining])
+        chars += min(len(page_text), remaining)
+
+    text = "\n\n".join(part.strip() for part in parts if part.strip()).strip()
+    if not text:
+        return "[WARNING: PDF contains no extractable text.]"
+    if len(reader.pages) > max_pages or chars >= max_chars:
+        text += "\n... [TRUNCATED - PDF extraction limit exceeded]"
+    return text
+
+
 async def fetch_reference_url(
     url: str, pinned_ips: dict[str, str], backend: PinnedAsyncNetworkBackend
 ) -> tuple[str, str]:
@@ -203,13 +240,8 @@ async def fetch_reference_url(
                     safe_ip = await resolve_and_verify_hostname(hostname)
                     pinned_ips[hostname] = safe_ip
 
-                    if parsed_current.path.lower().endswith(".pdf"):
-                        return "application/pdf", ""
-
                     async with client.stream("GET", current_url) as response:
                         content_type = response.headers.get("content-type", "").lower()
-                        if "application/pdf" in content_type:
-                            return "application/pdf", ""
 
                         if response.status_code in (301, 302, 303, 307, 308):
                             if hops >= max_hops:
@@ -239,6 +271,10 @@ async def fetch_reference_url(
                             chunks.append(chunk)
 
                         body_bytes = b"".join(chunks)
+                        if "application/pdf" in content_type or body_bytes.startswith(b"%PDF-"):
+                            body_text = await asyncio.to_thread(extract_pdf_text, body_bytes)
+                            return "application/pdf", body_text
+
                         encoding = (
                             response.encoding
                             or getattr(response, "apparent_encoding", "utf-8")
@@ -348,7 +384,14 @@ def get_cache_dir(run_id: str) -> str:
         prefix = f"/tmp/forge_references_cache_{uid}"
     except (AttributeError, OSError):
         prefix = "/tmp/forge_references_cache"
-    return os.path.join(prefix, run_id)
+    safe_run_id = run_id
+    if (
+        not isinstance(run_id, str)
+        or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", run_id)
+        or run_id in {".", ".."}
+    ):
+        safe_run_id = hashlib.sha256(str(run_id).encode("utf-8")).hexdigest()
+    return os.path.join(prefix, safe_run_id)
 
 
 def get_cache_filepath(run_id: str, norm_url: str) -> str:
@@ -464,6 +507,13 @@ def format_and_truncate_aggregate_references(
         desc = ref["description"]
         body = ref["body_text"]
 
+        # Prevent fetched text from terminating the explicit untrusted-content
+        # boundary used by downstream prompts.
+        body = body.replace(
+            "</untrusted-reference-content>",
+            "&lt;/untrusted-reference-content&gt;",
+        )
+
         if len(body) > 10000:
             body = body[:10000] + "\n... [TRUNCATED - Reference exceeded character limit]"
 
@@ -489,6 +539,11 @@ def format_and_truncate_aggregate_references(
 
 async def fetch_and_inject_references(state: Any, jira: JiraClient, base_text: str) -> str:
     """Gather project-level and ticket-level references, fetch contents securely, and append context."""
+    if base_text is None:
+        base_text = ""
+    if not state or not hasattr(state, "get"):
+        return base_text
+
     ticket_key = state.get("ticket_key")
     if not ticket_key:
         return base_text
@@ -530,24 +585,38 @@ async def fetch_and_inject_references(state: Any, jira: JiraClient, base_text: s
 
     def _comment_sort_key(c: Any) -> datetime:
         created = getattr(c, "created", None)
+        if created is None and isinstance(c, dict):
+            created = c.get("created")
+
+        parsed_dt = None
         if isinstance(created, datetime):
-            return created
-        if isinstance(created, str):
+            parsed_dt = created
+        elif isinstance(created, str):
             try:
                 cleaned = created
                 if len(created) > 4 and created[-5] in ("+", "-") and ":" not in created[-3:]:
                     cleaned = created[:-2] + ":" + created[-2:]
-                return datetime.fromisoformat(cleaned)
+                parsed_dt = datetime.fromisoformat(cleaned)
             except ValueError:
-                return datetime.min
+                pass
+
+        if parsed_dt is not None:
+            if parsed_dt.tzinfo is not None:
+                parsed_dt = parsed_dt.astimezone(UTC).replace(tzinfo=None)
+            return parsed_dt
+
         return datetime.min
 
     comments.sort(key=_comment_sort_key)
 
     ticket_refs = []
     for comment in comments:
-        extracted = extract_references_from_comment(comment.body)
-        ticket_refs.extend(extracted)
+        body = getattr(comment, "body", None)
+        if body is None and isinstance(comment, dict):
+            body = comment.get("body")
+        if isinstance(body, str):
+            extracted = extract_references_from_comment(body)
+            ticket_refs.extend(extracted)
 
     # 3. Deduplicate & order references
     unique_norm_urls = []
@@ -592,8 +661,6 @@ async def fetch_and_inject_references(state: Any, jira: JiraClient, base_text: s
                 )
                 if "text/html" in content_type:
                     body_text = html_to_markdown(body_text)
-                elif "application/pdf" in content_type:
-                    body_text = f"[WARNING: PDF reference deferred. Automatic text extraction from PDF URL is not supported: {original_url}]"
 
                 await write_to_cache(run_id, norm, content_type, body_text)
             except Exception as e:
