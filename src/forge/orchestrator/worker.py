@@ -517,6 +517,7 @@ class OrchestratorWorker:
         automated_review_revision_pending = None
         proposal_review_threads: list[dict[str, Any]] = []
         proposal_review_decisions: list[dict[str, Any]] = []
+        implementation_pr_approved = False
 
         current_node = current_state.get("current_node", "")
 
@@ -1351,13 +1352,7 @@ class OrchestratorWorker:
 
             if review_state == "approved":
                 if targets_implementation_pr:
-                    approved_state = {
-                        **current_state,
-                        "human_review_status": "approved",
-                        "is_paused": True,
-                    }
-                    return save_active_pull_request(approved_state)
-                # Legacy single-PR checkpoints retain their existing behavior.
+                    implementation_pr_approved = True
                 is_approved = True
                 logger.info(f"Detected PR review approval for {message.ticket_key}")
             elif review_state in ("changes_requested", "commented"):
@@ -1541,10 +1536,12 @@ class OrchestratorWorker:
             updated_state["feedback_comment"] = None
             updated_state["last_error"] = None
         elif is_approved:
-            updated_state["is_paused"] = False
+            updated_state["is_paused"] = implementation_pr_approved
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
             updated_state["last_error"] = None
+            if implementation_pr_approved:
+                updated_state["human_review_status"] = "approved"
             if pr_merged:
                 updated_state["pr_merged"] = True
                 if event_targets_pull_request(updated_state, payload):

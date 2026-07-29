@@ -160,6 +160,37 @@ async def test_multi_repo_ci_webhook_selects_earlier_pr_from_review_gate() -> No
 
 
 @pytest.mark.asyncio
+async def test_multi_repo_approval_uses_common_state_cleanup_path() -> None:
+    worker = OrchestratorWorker(consumer_name="test-worker")
+    state = _multi_repo_pr_state()
+    state["last_error"] = "stale review failure"
+    state["revision_requested"] = True
+    state["feedback_comment"] = "old feedback"
+    message = QueueMessage(
+        message_id="msg-approved",
+        event_id="evt-approved",
+        source=EventSource.GITHUB,
+        event_type="pull_request_review",
+        ticket_key="TEST-123",
+        payload={
+            "review": {"state": "approved", "body": "Looks good"},
+            "pull_request": {"number": 10},
+            "repository": {"full_name": "acme/backend"},
+        },
+    )
+
+    result = await worker._handle_resume_event(message, state)
+
+    assert result["current_repo"] == "acme/backend"
+    assert result["is_paused"] is True
+    assert result["last_error"] is None
+    assert result["revision_requested"] is False
+    assert result["feedback_comment"] is None
+    assert result["human_review_status"] == "approved"
+    assert result["pull_requests"]["acme/backend"]["human_review_status"] == "approved"
+
+
+@pytest.mark.asyncio
 @patch("forge.orchestrator.worker.GitHubClient")
 async def test_multi_repo_review_selects_earlier_pr(mock_github_client: MagicMock) -> None:
     github = AsyncMock()

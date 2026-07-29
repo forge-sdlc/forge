@@ -86,8 +86,9 @@ def save_active_pull_request(state: dict[str, Any]) -> dict[str, Any]:
     if not repo or (state.get("current_pr_number") is None and not state.get("current_pr_url")):
         return state
 
-    pull_requests = deepcopy(state.get("pull_requests", {}))
-    record = pull_requests.get(repo, {})
+    existing_pull_requests = state.get("pull_requests", {})
+    pull_requests = dict(existing_pull_requests)
+    record = deepcopy(existing_pull_requests.get(repo, {}))
     for scalar, per_pr in _ACTIVE_FIELDS.items():
         if scalar in state:
             record[per_pr] = state[scalar]
@@ -112,7 +113,7 @@ def activate_pull_request_for_event(
     if not isinstance(record, dict) or not _record_matches_event(record, payload):
         return state
 
-    activated = {**state, "current_repo": repo, "current_pr_number": number}
+    activated = {**state, "current_repo": repo}
     if record.get("number") is None:
         updated_pull_requests = deepcopy(pull_requests)
         updated_pull_requests[repo]["number"] = number
@@ -123,6 +124,9 @@ def activate_pull_request_for_event(
     for scalar, per_pr in _ACTIVE_FIELDS.items():
         if per_pr in record:
             activated[scalar] = deepcopy(record[per_pr])
+    # The webhook is authoritative for the number. Set it after restoring the
+    # compatibility fields so correctness does not depend on dict iteration order.
+    activated["current_pr_number"] = number
     if record.get("lifecycle_node") in _PR_LIFECYCLE_NODES:
         activated["current_node"] = record["lifecycle_node"]
     return activated
@@ -139,8 +143,9 @@ def all_pull_requests_merged(state: dict[str, Any]) -> bool:
 def mark_active_pull_request_merged(state: dict[str, Any]) -> dict[str, Any]:
     """Mark the selected per-repository PR merged without changing other records."""
     repo = state.get("current_repo")
-    pull_requests = deepcopy(state.get("pull_requests", {}))
-    record = pull_requests.get(repo) if repo else None
+    existing_pull_requests = state.get("pull_requests", {})
+    pull_requests = dict(existing_pull_requests)
+    record = deepcopy(existing_pull_requests.get(repo)) if repo else None
     if not isinstance(record, dict):
         return state
     record["merged"] = True

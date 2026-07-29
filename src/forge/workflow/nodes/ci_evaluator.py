@@ -46,14 +46,26 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
     """
     ticket_key = state["ticket_key"]
     current_pr_url = state.get("current_pr_url")
-    active_pr = state.get("pull_requests", {}).get(state.get("current_repo", ""))
-    pr_urls = (
-        [current_pr_url]
-        if isinstance(active_pr, dict)
-        and active_pr.get("number") == state.get("current_pr_number")
-        and current_pr_url
-        else state.get("pr_urls", [])
-    )
+    pull_requests = state.get("pull_requests", {})
+    active_pr = pull_requests.get(state.get("current_repo", ""))
+    if pull_requests:
+        if not (
+            isinstance(active_pr, dict)
+            and active_pr.get("number") == state.get("current_pr_number")
+            and current_pr_url
+        ):
+            logger.error("Cannot evaluate CI: active PR state is inconsistent for %s", ticket_key)
+            return update_state_timestamp(
+                {
+                    **state,
+                    "ci_status": "failed",
+                    "current_node": "ci_evaluator",
+                    "last_error": "Active pull request state is inconsistent",
+                }
+            )
+        pr_urls = [current_pr_url]
+    else:
+        pr_urls = state.get("pr_urls", [])
     ci_fix_attempt = state.get("ci_fix_attempt", 0)
     ci_fix_max = state.get("ci_fix_max_attempts", 5)
     settings = get_settings()

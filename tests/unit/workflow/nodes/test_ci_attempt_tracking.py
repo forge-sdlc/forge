@@ -36,6 +36,28 @@ def create_base_state(**kwargs) -> FeatureState:
     return FeatureState(**defaults)
 
 
+@pytest.mark.asyncio
+async def test_multi_pr_ci_rejects_inconsistent_active_view() -> None:
+    state = create_base_state(
+        current_repo="org/other",
+        current_pr_number=99,
+        current_pr_url="https://github.com/org/other/pull/99",
+        pull_requests={
+            "org/repo": {
+                "repo": "org/repo",
+                "number": 42,
+                "url": "https://github.com/org/repo/pull/42",
+            }
+        },
+    )
+
+    result = await evaluate_ci_status(state)
+
+    assert result["ci_status"] == "failed"
+    assert result["current_node"] == "ci_evaluator"
+    assert result["last_error"] == "Active pull request state is inconsistent"
+
+
 # ── State Initialization Tests ────────────────────────────────────────────────
 
 
@@ -45,22 +67,26 @@ class TestCIAttemptTrackingStateFields:
     def test_current_attempt_in_ci_integration_state(self):
         """current_attempt must be a field in CIIntegrationState."""
         from forge.workflow.base import CIIntegrationState
+
         assert "ci_fix_attempt" in CIIntegrationState.__annotations__
 
     def test_max_attempts_in_ci_integration_state(self):
         """max_attempts must be a field in CIIntegrationState."""
         from forge.workflow.base import CIIntegrationState
+
         assert "ci_fix_max_attempts" in CIIntegrationState.__annotations__
 
     def test_feature_state_initializes_current_attempt_to_zero(self):
         """Feature state should initialize current_attempt to 0."""
         from forge.workflow.feature.state import create_initial_feature_state
+
         state = create_initial_feature_state(ticket_key="TEST-1")
         assert state.get("ci_fix_attempt") == 0
 
     def test_feature_state_initializes_max_attempts_from_config(self):
         """Feature state should initialize max_attempts from config."""
         from forge.workflow.feature.state import create_initial_feature_state
+
         state = create_initial_feature_state(ticket_key="TEST-1")
         # Default config value is 5
         assert state.get("ci_fix_max_attempts") is not None
@@ -69,12 +95,14 @@ class TestCIAttemptTrackingStateFields:
     def test_bug_state_initializes_current_attempt_to_zero(self):
         """Bug state should initialize current_attempt to 0."""
         from forge.workflow.bug.state import create_initial_bug_state
+
         state = create_initial_bug_state(ticket_key="TEST-2")
         assert state.get("ci_fix_attempt") == 0
 
     def test_bug_state_initializes_max_attempts_from_config(self):
         """Bug state should initialize max_attempts from config."""
         from forge.workflow.bug.state import create_initial_bug_state
+
         state = create_initial_bug_state(ticket_key="TEST-2")
         # Default config value is 5
         assert state.get("ci_fix_max_attempts") is not None
@@ -91,7 +119,7 @@ class TestCIAttemptIncrement:
     async def test_first_ci_failure_increments_attempt_to_one(self):
         """First CI failure should increment current_attempt from 0 to 1."""
         state = create_base_state(ci_fix_attempt=0, ci_fix_max_attempts=3)
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -117,7 +145,7 @@ class TestCIAttemptIncrement:
     async def test_second_ci_failure_increments_attempt_to_two(self):
         """Second CI failure should increment current_attempt from 1 to 2."""
         state = create_base_state(ci_fix_attempt=1, ci_fix_max_attempts=3)
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -143,7 +171,7 @@ class TestCIAttemptIncrement:
     async def test_third_ci_failure_increments_attempt_to_three(self):
         """Third CI failure should increment current_attempt from 2 to 3."""
         state = create_base_state(ci_fix_attempt=2, ci_fix_max_attempts=3)
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -176,7 +204,7 @@ class TestCIAttemptLimitValidation:
     async def test_attempt_at_max_limit_blocks_further_attempts(self):
         """When current_attempt equals max_attempts, no more attempts should be made."""
         state = create_base_state(ci_fix_attempt=3, ci_fix_max_attempts=3)
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -193,7 +221,9 @@ class TestCIAttemptLimitValidation:
             with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
                 mock_settings.return_value.ci_fix_max_retries = 5
                 mock_settings.return_value.ignored_ci_checks = ["tide"]
-                with patch("forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt") as mock_record:
+                with patch(
+                    "forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt"
+                ) as mock_record:
                     result = await evaluate_ci_status(state)
 
         # Should not increment or route to attempt_ci_fix
@@ -206,7 +236,7 @@ class TestCIAttemptLimitValidation:
     async def test_attempt_exceeding_max_limit_blocks_further_attempts(self):
         """When current_attempt exceeds max_attempts, no more attempts should be made."""
         state = create_base_state(ci_fix_attempt=4, ci_fix_max_attempts=3)
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -223,7 +253,9 @@ class TestCIAttemptLimitValidation:
             with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
                 mock_settings.return_value.ci_fix_max_retries = 5
                 mock_settings.return_value.ignored_ci_checks = ["tide"]
-                with patch("forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt") as mock_record:
+                with patch(
+                    "forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt"
+                ) as mock_record:
                     result = await evaluate_ci_status(state)
 
         # Should not increment or route to attempt_ci_fix
@@ -236,7 +268,7 @@ class TestCIAttemptLimitValidation:
     async def test_attempt_one_below_max_allows_final_attempt(self):
         """When current_attempt is one below max, one more attempt should be allowed."""
         state = create_base_state(ci_fix_attempt=2, ci_fix_max_attempts=3)
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -271,7 +303,7 @@ class TestCIAttemptReset:
     async def test_current_attempt_resets_on_ci_success(self):
         """When CI passes, current_attempt should reset to 0."""
         state = create_base_state(ci_fix_attempt=2, ci_fix_max_attempts=3)
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -308,7 +340,7 @@ class TestCIAttemptReset:
     async def test_current_attempt_resets_on_workflow_completion(self):
         """When workflow completes (tasks complete), current_attempt should reset to 0."""
         from forge.workflow.nodes.human_review import complete_tasks
-        
+
         state = create_base_state(
             ci_fix_attempt=2,
             implemented_tasks=["TASK-1", "TASK-2"],
@@ -339,7 +371,7 @@ class TestCIAttemptEdgeCases:
         state = create_base_state()
         # Remove current_attempt from state
         del state["ci_fix_attempt"]
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -367,7 +399,7 @@ class TestCIAttemptEdgeCases:
         state = create_base_state(ci_fix_attempt=0)
         # Remove max_attempts from state
         del state["ci_fix_max_attempts"]
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
@@ -394,7 +426,7 @@ class TestCIAttemptEdgeCases:
     async def test_max_attempts_one_allows_single_attempt(self):
         """When max_attempts is 1, only one attempt should be allowed."""
         state = create_base_state(ci_fix_attempt=0, ci_fix_max_attempts=1)
-        
+
         github = create_mock_github_client()
         github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
         github.get_check_runs.return_value = [
