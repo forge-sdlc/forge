@@ -449,9 +449,7 @@ def format_and_truncate_aggregate_references(
     return current_text
 
 
-async def fetch_and_inject_references(
-    state: Any, jira: JiraClient, base_text: str
-) -> str:
+async def fetch_and_inject_references(state: Any, jira: JiraClient, base_text: str) -> str:
     """Gather project-level and ticket-level references, fetch contents securely, and append context."""
     ticket_key = state.get("ticket_key")
     if not ticket_key:
