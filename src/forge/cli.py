@@ -796,6 +796,15 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             print("[OK] forge.model_default deleted")
 
         # forge.references property processing
+        if args.description and (
+            not args.add_reference or len(args.description) != len(args.add_reference)
+        ):
+            print(
+                "Error: --description requires matching number of --add-reference items.",
+                file=sys.stderr,
+            )
+            return 1
+
         from forge.workflow.utils.references import normalize_url
 
         references_updated = False
