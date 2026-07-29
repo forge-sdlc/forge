@@ -8,7 +8,7 @@ import pytest
 from forge.models.events import EventSource
 from forge.queue.consumer import CONSUMER_GROUP, QueueConsumer
 from forge.queue.models import QueueMessage
-from forge.queue.retry import RetryEntry, RetryQueue
+from forge.queue.retry import RetryEntry, RetryQueue, TerminalNotification
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -56,8 +56,11 @@ def make_consumer() -> QueueConsumer:
     consumer._retry_queue = MagicMock(spec=RetryQueue)
     consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=True)
     consumer._retry_queue.claim_due_messages = AsyncMock(return_value=[])
+    consumer._retry_queue.renew_retry_claim = AsyncMock(return_value=True)
     consumer._retry_queue.remove_from_retry = AsyncMock()
     consumer._retry_queue.remove_from_retry_without_counter_reset = AsyncMock()
+    consumer._retry_queue.claim_due_terminal_notifications = AsyncMock(return_value=[])
+    consumer._retry_queue.remove_terminal_notification = AsyncMock()
     return consumer
 
 
@@ -183,15 +186,15 @@ class TestConsumeStreamFailure:
         redis_mock.xack.assert_called_once_with("stream:jira", CONSUMER_GROUP, "1-0")
 
     @pytest.mark.asyncio
-    async def test_terminal_callback_failure_does_not_block_dlq_ack(self):
-        """A notification failure must not prevent acknowledging a DLQ message."""
+    async def test_dlq_ack_does_not_wait_for_terminal_callback(self):
+        """Durable notification delivery is independent from stream acknowledgement."""
         callback = AsyncMock(side_effect=RuntimeError("Jira unavailable"))
         consumer = QueueConsumer("test-worker", terminal_failure_handler=callback)
         consumer._retry_queue = MagicMock(spec=RetryQueue)
         consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=False)
 
         redis_mock = AsyncMock()
-        redis_mock.set = AsyncMock(return_value=True)
+        configure_redis_mock(redis_mock)
         redis_mock.xack = AsyncMock()
         consumer._redis = redis_mock
         consumer.register_handler(
@@ -201,23 +204,32 @@ class TestConsumeStreamFailure:
 
         await consumer._process_message(make_message(), "stream:jira")
 
-        callback.assert_awaited_once()
+        callback.assert_not_awaited()
         redis_mock.xack.assert_awaited_once_with("stream:jira", CONSUMER_GROUP, "1-0")
 
     @pytest.mark.asyncio
-    async def test_terminal_callback_is_claimed_once_per_event(self):
-        """Duplicate terminal handling must not invoke the callback twice."""
-        callback = AsyncMock()
-        consumer = QueueConsumer("test-worker", terminal_failure_handler=callback)
-        redis_mock = AsyncMock()
-        redis_mock.set = AsyncMock(side_effect=[True, None, False])
-        consumer._redis = redis_mock
+    async def test_terminal_callback_failure_is_retried_until_success(self):
+        """An outbox entry remains after failure and is removed after later success."""
+        callback = AsyncMock(side_effect=[RuntimeError("Jira unavailable"), None])
+        consumer = make_consumer()
+        consumer._terminal_failure_handler = callback
         message = make_message()
+        notification = TerminalNotification(
+            message=message,
+            error="failed",
+            serialized=b'{"event":"evt-001"}',
+            lease_until=0,
+        )
+        consumer._retry_queue.claim_due_terminal_notifications = AsyncMock(
+            side_effect=[[notification], [notification]]
+        )
 
-        await consumer._notify_terminal_failure(message, "failed")
-        await consumer._notify_terminal_failure(message, "failed again")
+        await consumer._process_terminal_notifications_once()
+        consumer._retry_queue.remove_terminal_notification.assert_not_awaited()
 
-        callback.assert_awaited_once_with(message, "failed")
+        await consumer._process_terminal_notifications_once()
+        assert callback.await_count == 2
+        consumer._retry_queue.remove_terminal_notification.assert_awaited_once_with(notification)
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +312,7 @@ class TestProcessRetryQueue:
 
     @pytest.mark.asyncio
     async def test_exhausted_retry_invokes_terminal_callback(self):
-        """The retry poller notifies only after re-enqueue moves the event to DLQ."""
+        """The outbox poller delivers after the retry moves the event to the DLQ."""
         callback = AsyncMock()
         consumer = make_consumer()
         consumer._terminal_failure_handler = callback
@@ -311,33 +323,30 @@ class TestProcessRetryQueue:
             next_retry=datetime.utcnow(),
             last_error="still broken",
         )
-
-        call_count = 0
-
-        async def claim_due_side_effect(*_args, **_kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return [entry]
-            consumer._running = False
-            return []
-
-        consumer._retry_queue.claim_due_messages = AsyncMock(side_effect=claim_due_side_effect)
+        notification = TerminalNotification(
+            message=message,
+            error="retries exhausted",
+            serialized=b'{"event":"evt-001"}',
+            lease_until=0,
+        )
+        consumer._retry_queue.claim_due_messages = AsyncMock(return_value=[entry])
+        consumer._retry_queue.claim_due_terminal_notifications = AsyncMock(
+            return_value=[notification]
+        )
         consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=False)
-        consumer._redis = AsyncMock()
-        consumer._redis.set = AsyncMock(side_effect=[True, None])
         consumer.register_handler(
             EventSource.JIRA,
             AsyncMock(side_effect=RuntimeError("retries exhausted")),
         )
 
-        with patch("forge.queue.consumer.asyncio.sleep", new_callable=AsyncMock):
-            await consumer._process_retry_queue()
+        await consumer._process_due_retries_once()
+        await consumer._process_terminal_notifications_once()
 
         callback.assert_awaited_once_with(message, "retries exhausted")
         consumer._redis.xack.assert_awaited_once_with(
             "forge:events:jira", CONSUMER_GROUP, message.message_id
         )
+        consumer._retry_queue.remove_terminal_notification.assert_awaited_once_with(notification)
 
     @pytest.mark.asyncio
     async def test_terminal_callback_failure_still_acknowledges_retry(self):
@@ -353,32 +362,30 @@ class TestProcessRetryQueue:
             last_error="still broken",
         )
 
-        call_count = 0
-
-        async def claim_due_side_effect(*_args, **_kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return [entry]
-            consumer._running = False
-            return []
-
-        consumer._retry_queue.claim_due_messages = AsyncMock(side_effect=claim_due_side_effect)
+        notification = TerminalNotification(
+            message=message,
+            error="retries exhausted",
+            serialized=b'{"event":"evt-001"}',
+            lease_until=0,
+        )
+        consumer._retry_queue.claim_due_messages = AsyncMock(return_value=[entry])
+        consumer._retry_queue.claim_due_terminal_notifications = AsyncMock(
+            return_value=[notification]
+        )
         consumer._retry_queue.enqueue_for_retry = AsyncMock(return_value=False)
-        consumer._redis = AsyncMock()
-        consumer._redis.set = AsyncMock(return_value=True)
         consumer.register_handler(
             EventSource.JIRA,
             AsyncMock(side_effect=RuntimeError("retries exhausted")),
         )
 
-        with patch("forge.queue.consumer.asyncio.sleep", new_callable=AsyncMock):
-            await consumer._process_retry_queue()
+        await consumer._process_due_retries_once()
+        await consumer._process_terminal_notifications_once()
 
         callback.assert_awaited_once_with(message, "retries exhausted")
         consumer._redis.xack.assert_awaited_once_with(
             "forge:events:jira", CONSUMER_GROUP, message.message_id
         )
+        consumer._retry_queue.remove_terminal_notification.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_empty_retry_queue_no_action(self):

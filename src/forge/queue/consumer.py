@@ -2,9 +2,8 @@
 
 import asyncio
 import logging
-import uuid
 from collections import defaultdict
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import asynccontextmanager, suppress
 from typing import Any
 
@@ -17,7 +16,7 @@ from forge.models.events import EventSource
 from forge.orchestrator.checkpointer import get_redis_client
 from forge.queue.models import QueueMessage
 from forge.queue.producer import GITHUB_STREAM, JIRA_STREAM
-from forge.queue.retry import RetryQueue
+from forge.queue.retry import RETRY_CLAIM_RENEW_SECONDS, RetryEntry, RetryQueue
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +33,6 @@ TICKET_LOCK_LEASE_SECONDS = 600
 TICKET_LOCK_RENEW_SECONDS = 60
 TICKET_LOCK_KEY_PREFIX = "forge:queue:ticket-lock:"
 
-# Terminal-failure callbacks are claimed across workers because every worker
-# polls the shared retry sorted set. The short lease recovers if a worker dies
-# while posting the notification; completed claims are retained for idempotency.
-TERMINAL_FAILURE_CLAIM_PREFIX = "forge:queue:terminal-failure:"
-TERMINAL_FAILURE_CLAIM_TTL_SECONDS = 300
-
 # Handler type for message processing
 MessageHandler = Callable[[QueueMessage], Coroutine[Any, Any, None]]
 TerminalFailureHandler = Callable[[QueueMessage, str], Coroutine[Any, Any, None]]
@@ -47,6 +40,10 @@ TerminalFailureHandler = Callable[[QueueMessage, str], Coroutine[Any, Any, None]
 
 class TicketLockLostError(RuntimeError):
     """Raised when a worker loses its distributed per-ticket lease."""
+
+
+class RetryLeaseLostError(RuntimeError):
+    """Raised when a worker loses ownership of a claimed retry entry."""
 
 
 class QueueConsumer:
@@ -92,7 +89,7 @@ class QueueConsumer:
         self._terminal_failure_handler = terminal_failure_handler
 
     @asynccontextmanager
-    async def _distributed_ticket_lock(self, ticket_key: str):
+    async def _distributed_ticket_lock(self, ticket_key: str) -> AsyncIterator[None]:
         """Hold a renewable, deployment-wide lease for one ticket."""
         redis_client = await self._get_redis()
         lock = redis_client.lock(
@@ -211,49 +208,6 @@ class QueueConsumer:
         redis_client = await self._get_redis()
         await redis_client.xack(stream, CONSUMER_GROUP, message_id)
 
-    async def _notify_terminal_failure(self, message: QueueMessage, error: str) -> None:
-        """Invoke the terminal callback once per event without blocking DLQ handling."""
-        if self._terminal_failure_handler is None:
-            return
-
-        claim_key = f"{TERMINAL_FAILURE_CLAIM_PREFIX}{message.event_id}"
-        claim_token = uuid.uuid4().hex
-        try:
-            redis_client = await self._get_redis()
-            claimed = await redis_client.set(
-                claim_key,
-                claim_token,
-                ex=TERMINAL_FAILURE_CLAIM_TTL_SECONDS,
-                nx=True,
-            )
-        except Exception as claim_error:
-            logger.error(
-                f"Could not claim terminal failure callback for {message.event_id}: {claim_error}"
-            )
-            return
-
-        if not claimed:
-            logger.info(f"Terminal failure already handled for event {message.event_id}")
-            return
-
-        try:
-            await self._terminal_failure_handler(message, error)
-        except Exception as callback_error:
-            logger.error(
-                f"Terminal failure callback failed for {message.event_id}: {callback_error}"
-            )
-            return
-
-        try:
-            # A completed claim intentionally has no expiry: DLQ entries are
-            # retained too, and replaying one must not create another comment.
-            await redis_client.set(claim_key, "completed")
-        except Exception as completion_error:
-            logger.error(
-                f"Could not complete terminal failure claim for "
-                f"{message.event_id}: {completion_error}"
-            )
-
     async def _ack_terminal_message(self, message: QueueMessage, stream: str) -> None:
         """Best-effort acknowledge a message after it has reached the DLQ."""
         try:
@@ -316,7 +270,6 @@ class QueueConsumer:
             try:
                 moved_to_dlq = not await self._retry_queue.enqueue_for_retry(message, str(exc))
                 if moved_to_dlq:
-                    await self._notify_terminal_failure(message, str(exc))
                     await self._ack_terminal_message(message, stream)
             except Exception as retry_err:
                 logger.error(
@@ -356,7 +309,6 @@ class QueueConsumer:
             try:
                 moved_to_dlq = not await self._retry_queue.enqueue_for_retry(message, str(e))
                 if moved_to_dlq:
-                    await self._notify_terminal_failure(message, str(e))
                     await self._ack_terminal_message(message, stream)
             except Exception as retry_err:
                 logger.error(
@@ -404,6 +356,48 @@ class QueueConsumer:
         if self._active_tasks:
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
 
+    @asynccontextmanager
+    async def _renew_retry_claim(self, entry: RetryEntry) -> AsyncIterator[None]:
+        """Renew a retry lease and abort processing if ownership is lost."""
+        if entry.lease_until is None:
+            yield
+            return
+
+        owner_task = asyncio.current_task()
+        lease_lost = asyncio.Event()
+
+        async def renew() -> None:
+            while True:
+                await asyncio.sleep(RETRY_CLAIM_RENEW_SECONDS)
+                try:
+                    if not await self._retry_queue.renew_retry_claim(entry):
+                        lease_lost.set()
+                        if owner_task is not None:
+                            owner_task.cancel()
+                        return
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("Failed to renew retry lease for %s", entry.message.event_id)
+                    lease_lost.set()
+                    if owner_task is not None:
+                        owner_task.cancel()
+                    return
+
+        renewal_task = asyncio.create_task(renew(), name=f"renew-retry-{entry.message.event_id}")
+        try:
+            yield
+        except asyncio.CancelledError:
+            if lease_lost.is_set():
+                raise RetryLeaseLostError(
+                    f"Lost retry lease for {entry.message.event_id}"
+                ) from None
+            raise
+        finally:
+            renewal_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await renewal_task
+
     async def _process_due_retries_once(self) -> None:
         """Dispatch one batch of due retries.
 
@@ -416,9 +410,16 @@ class QueueConsumer:
                 JIRA_STREAM if entry.message.source == EventSource.JIRA else GITHUB_STREAM
             )
             try:
-                await self._process_message(
-                    entry.message, retry_stream, raise_on_error=True, skip_ack=True
+                async with self._renew_retry_claim(entry):
+                    await self._process_message(
+                        entry.message, retry_stream, raise_on_error=True, skip_ack=True
+                    )
+            except RetryLeaseLostError:
+                logger.error(
+                    "Stopped retry processing after losing ownership of %s",
+                    entry.message.event_id,
                 )
+                continue
             except Exception as e:
                 logger.warning(
                     f"Retry attempt {entry.attempt} failed for "
@@ -431,7 +432,6 @@ class QueueConsumer:
                 if not queued:
                     # Terminal failure: the DLQ now owns the message, so clear
                     # its original stream PEL entry.
-                    await self._notify_terminal_failure(entry.message, str(e))
                     await self._ack_terminal_message(entry.message, retry_stream)
                 continue
 
@@ -449,11 +449,30 @@ class QueueConsumer:
                     f"retry (PEL entry may linger): {xack_err}"
                 )
 
+    async def _process_terminal_notifications_once(self) -> None:
+        """Deliver one leased batch from the terminal-notification outbox."""
+        if self._terminal_failure_handler is None:
+            return
+
+        entries = await self._retry_queue.claim_due_terminal_notifications()
+        for entry in entries:
+            try:
+                await self._terminal_failure_handler(entry.message, entry.error)
+            except Exception as exc:
+                logger.error(
+                    "Terminal failure callback failed for %s: %s",
+                    entry.message.event_id,
+                    exc,
+                )
+                continue
+            await self._retry_queue.remove_terminal_notification(entry)
+
     async def _process_retry_queue(self) -> None:
         """Poll the retry queue and re-dispatch due messages."""
         while self._running:
             try:
                 await self._process_due_retries_once()
+                await self._process_terminal_notifications_once()
             except asyncio.CancelledError:
                 break
             except Exception as e:

@@ -697,10 +697,28 @@ class JiraClient:
             List of JiraComment objects.
         """
         client = await self._get_client()
-        response = await client.get(f"/issue/{issue_key}/comment")
-        response.raise_for_status()
-        data = response.json()
-        return [JiraComment.from_api_response(c) for c in data.get("comments", [])]
+        comments: list[JiraComment] = []
+        start_at = 0
+        max_results = 100
+
+        while True:
+            response = await client.get(
+                f"/issue/{issue_key}/comment",
+                params={"startAt": start_at, "maxResults": max_results},
+            )
+            response.raise_for_status()
+            data = response.json()
+            page = data.get("comments", [])
+            comments.extend(JiraComment.from_api_response(comment) for comment in page)
+
+            page_start = int(data.get("startAt", start_at))
+            total = int(data.get("total", page_start + len(page)))
+            next_start = page_start + len(page)
+            if not page or next_start >= total:
+                break
+            start_at = next_start
+
+        return comments
 
     async def get_labels(self, issue_key: str) -> list[str]:
         """Get labels for a Jira issue.

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 RETRY_QUEUE_KEY = "forge:retry:queue"
 DEAD_LETTER_KEY = "forge:retry:dlq"
 RETRY_ATTEMPTS_KEY = "forge:retry:attempts"
+TERMINAL_NOTIFICATION_QUEUE_KEY = "forge:retry:terminal-notifications"
 
 # Retry configuration
 MAX_RETRY_ATTEMPTS = 3
@@ -23,6 +24,8 @@ RETRY_BACKOFF_MULTIPLIER = 2
 INITIAL_RETRY_DELAY_SECONDS = 30
 MAX_RETRY_DELAY_SECONDS = 3600  # 1 hour
 RETRY_CLAIM_LEASE_SECONDS = 900  # 15 minutes
+RETRY_CLAIM_RENEW_SECONDS = RETRY_CLAIM_LEASE_SECONDS // 3
+TERMINAL_NOTIFICATION_LEASE_SECONDS = 300
 
 # Atomically move due entries beyond the visibility window before returning
 # them. Other pollers cannot claim the same entries while this lease is active;
@@ -37,6 +40,25 @@ end
 return entries
 """
 
+_RENEW_CLAIM_SCRIPT = """
+local score = redis.call("ZSCORE", KEYS[1], ARGV[1])
+if score and tonumber(score) == tonumber(ARGV[2]) then
+    redis.call("ZADD", KEYS[1], ARGV[3], ARGV[1])
+    return 1
+end
+return 0
+"""
+
+_MOVE_TO_DEAD_LETTER_SCRIPT = """
+redis.call("RPUSH", KEYS[1], ARGV[1])
+redis.call("ZADD", KEYS[2], ARGV[2], ARGV[1])
+return 1
+"""
+
+
+def _now_timestamp() -> float:
+    return datetime.utcnow().timestamp()
+
 
 @dataclass
 class RetryEntry:
@@ -46,6 +68,7 @@ class RetryEntry:
     attempt: int
     next_retry: datetime
     last_error: str
+    lease_until: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for Redis storage."""
@@ -72,14 +95,24 @@ class RetryEntry:
         )
 
 
+@dataclass
+class TerminalNotification:
+    """A leased terminal-failure notification from the durable outbox."""
+
+    message: QueueMessage
+    error: str
+    serialized: str | bytes
+    lease_until: float
+
+
 class RetryQueue:
     """Manages webhook retry queue with exponential backoff and dead-letter."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize retry queue."""
-        self._redis = None
+        self._redis: Any = None
 
-    async def _get_redis(self):
+    async def _get_redis(self) -> Any:
         """Get Redis client."""
         if self._redis is None:
             self._redis = await get_redis_client()
@@ -161,7 +194,15 @@ class RetryQueue:
             "failed_at": datetime.utcnow().isoformat(),
         }
 
-        await redis.rpush(DEAD_LETTER_KEY, json.dumps(entry))
+        serialized = json.dumps(entry)
+        await redis.eval(
+            _MOVE_TO_DEAD_LETTER_SCRIPT,
+            2,
+            DEAD_LETTER_KEY,
+            TERMINAL_NOTIFICATION_QUEUE_KEY,
+            serialized,
+            _now_timestamp(),
+        )
         logger.warning(
             f"Message {message_id} moved to dead-letter queue after "
             f"{attempt} attempts. Error: {error}"
@@ -178,7 +219,7 @@ class RetryQueue:
             visibility window.
         """
         redis = await self._get_redis()
-        now = datetime.utcnow().timestamp()
+        now = _now_timestamp()
         lease_until = now + RETRY_CLAIM_LEASE_SECONDS
 
         entries = await redis.eval(
@@ -194,11 +235,69 @@ class RetryQueue:
         for entry_json in entries:
             try:
                 data = json.loads(entry_json)
-                results.append(RetryEntry.from_dict(data))
+                entry = RetryEntry.from_dict(data)
+                entry.lease_until = lease_until
+                results.append(entry)
             except (json.JSONDecodeError, KeyError) as e:
                 logger.error(f"Failed to parse retry entry: {e}")
 
         return results
+
+    async def renew_retry_claim(self, entry: RetryEntry) -> bool:
+        """Extend a retry lease only while this worker still owns it."""
+        if entry.lease_until is None:
+            return False
+
+        redis = await self._get_redis()
+        lease_until = _now_timestamp() + RETRY_CLAIM_LEASE_SECONDS
+        renewed = await redis.eval(
+            _RENEW_CLAIM_SCRIPT,
+            1,
+            RETRY_QUEUE_KEY,
+            json.dumps(entry.to_dict()),
+            entry.lease_until,
+            lease_until,
+        )
+        if renewed:
+            entry.lease_until = lease_until
+        return bool(renewed)
+
+    async def claim_due_terminal_notifications(self, limit: int = 10) -> list[TerminalNotification]:
+        """Lease due terminal notifications for exclusive delivery."""
+        redis = await self._get_redis()
+        now = _now_timestamp()
+        lease_until = now + TERMINAL_NOTIFICATION_LEASE_SECONDS
+        entries = await redis.eval(
+            _CLAIM_DUE_MESSAGES_SCRIPT,
+            1,
+            TERMINAL_NOTIFICATION_QUEUE_KEY,
+            now,
+            lease_until,
+            limit,
+        )
+
+        results = []
+        for serialized in entries:
+            try:
+                data = json.loads(serialized)
+                msg_data = dict(data["message"])
+                message_id = msg_data.pop("message_id", "")
+                results.append(
+                    TerminalNotification(
+                        message=QueueMessage.from_redis(message_id, msg_data),
+                        error=data["error"],
+                        serialized=serialized,
+                        lease_until=lease_until,
+                    )
+                )
+            except (json.JSONDecodeError, KeyError) as exc:
+                logger.error(f"Failed to parse terminal notification: {exc}")
+        return results
+
+    async def remove_terminal_notification(self, entry: TerminalNotification) -> None:
+        """Remove an outbox entry after successful delivery."""
+        redis = await self._get_redis()
+        await redis.zrem(TERMINAL_NOTIFICATION_QUEUE_KEY, entry.serialized)
 
     async def remove_from_retry(self, entry: RetryEntry) -> None:
         """Remove a message from the retry queue after successful processing.
@@ -277,6 +376,7 @@ class RetryQueue:
             # Reset attempt counter
             message_id = f"{message.source}:{message.ticket_key}:{message.event_id}"
             await redis.delete(f"{RETRY_ATTEMPTS_KEY}:{message_id}")
+            await redis.zrem(TERMINAL_NOTIFICATION_QUEUE_KEY, entries[0])
 
             # Add back to retry queue
             entry = RetryEntry(

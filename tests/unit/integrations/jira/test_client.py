@@ -129,6 +129,44 @@ class TestJiraClientStructuredComments:
         assert "## 🤖 Forge interaction options" not in body[:marker_end]
 
 
+class TestJiraClientComments:
+    """Tests for paginated comment retrieval."""
+
+    @pytest.mark.asyncio
+    async def test_get_comments_reads_marker_from_later_page(self):
+        with patch("forge.integrations.jira.client.get_settings") as mock_settings:
+            mock_settings.return_value.jira_base_url = "https://test.atlassian.net"
+            mock_settings.return_value.jira_api_token = MagicMock()
+            mock_settings.return_value.jira_api_token.get_secret_value.return_value = "token"
+            mock_settings.return_value.jira_user_email = "test@example.com"
+            jira = JiraClient()
+
+        first_response = MagicMock()
+        first_response.json.return_value = {
+            "startAt": 0,
+            "maxResults": 1,
+            "total": 2,
+            "comments": [{"id": "1", "body": "Older comment"}],
+        }
+        second_response = MagicMock()
+        second_response.json.return_value = {
+            "startAt": 1,
+            "maxResults": 1,
+            "total": 2,
+            "comments": [{"id": "2", "body": "Event/correlation ID: evt-terminal-1"}],
+        }
+        http = AsyncMock()
+        http.get = AsyncMock(side_effect=[first_response, second_response])
+
+        with patch.object(jira, "_get_client", return_value=http):
+            comments = await jira.get_comments("TEST-123")
+
+        assert [comment.id for comment in comments] == ["1", "2"]
+        assert "evt-terminal-1" in comments[1].body
+        assert http.get.await_args_list[0].kwargs["params"]["startAt"] == 0
+        assert http.get.await_args_list[1].kwargs["params"]["startAt"] == 1
+
+
 class TestJiraClientLabels:
     """Tests for label operations."""
 
