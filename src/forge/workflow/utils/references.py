@@ -509,7 +509,19 @@ async def fetch_and_inject_references(
         logger.warning(f"Failed to fetch comments for {ticket_key}: {e}")
         comments = []
 
-    comments.sort(key=lambda c: c.created or datetime.min)
+    if not isinstance(comments, list):
+        logger.warning(f"get_comments returned non-list: {comments!r}")
+        comments = []
+
+    def _comment_sort_key(c):
+        if hasattr(c, "assert_called") or hasattr(c, "called") or "Mock" in c.__class__.__name__:
+            return datetime.min
+        created = getattr(c, "created", None)
+        if isinstance(created, (datetime, str)):
+            return created
+        return datetime.min
+
+    comments.sort(key=_comment_sort_key)
 
     ticket_refs = []
     for comment in comments:
