@@ -5,6 +5,7 @@ import time
 import socket
 import tempfile
 import asyncio
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -310,3 +311,57 @@ async def test_pdf_deferrals_warning() -> None:
             "[WARNING: PDF reference deferred. Automatic text extraction from PDF URL is not supported"
             in injected
         )
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_inject_references_mock_sorting_and_validation() -> None:
+    state = {
+        "ticket_key": "PROJ-123",
+        "spec_content": "Specs",
+        "context": {"run_id": "test-uuid"},
+    }
+
+    mock_jira = MagicMock()
+    mock_jira.get_project_references = AsyncMock(return_value=[])
+
+    # 1. Normal comment
+    comment_normal = MagicMock()
+    comment_normal.body = "@forge ref https://example.com/normal Normal Doc"
+    comment_normal.created = datetime(2026, 1, 1)
+
+    # 2. Mock comment that triggers assert_called / called check
+    comment_mock = MagicMock(spec=["body", "created", "assert_called"])
+    comment_mock.body = "@forge ref https://example.com/mock Mock Doc"
+    comment_mock.created = None
+
+    # Provide comments in unsorted order to verify sorting is invoked safely
+    mock_jira.get_comments = AsyncMock(return_value=[comment_mock, comment_normal])
+
+    with (
+        patch("forge.workflow.utils.references.read_from_cache", AsyncMock(return_value=None)),
+        patch("forge.workflow.utils.references.fetch_reference_url", AsyncMock(return_value=("text/plain", "body"))),
+        patch("forge.workflow.utils.references.write_to_cache", AsyncMock()),
+    ):
+        injected = await fetch_and_inject_references(state, mock_jira, "Base specs.")
+        assert "Base specs." in injected
+        assert "https://example.com/normal" in injected
+        assert "https://example.com/mock" in injected
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_inject_references_non_list_comments() -> None:
+    state = {
+        "ticket_key": "PROJ-123",
+        "spec_content": "Specs",
+        "context": {"run_id": "test-uuid"},
+    }
+    mock_jira = MagicMock()
+    mock_jira.get_project_references = AsyncMock(return_value=[])
+    mock_jira.get_comments = AsyncMock(return_value="not a list")
+
+    with (
+        patch("forge.workflow.utils.references.read_from_cache", AsyncMock(return_value=None)),
+        patch("forge.workflow.utils.references.fetch_reference_url", AsyncMock(return_value=("text/plain", "body"))),
+    ):
+        injected = await fetch_and_inject_references(state, mock_jira, "Base specs.")
+        assert injected == "Base specs."
