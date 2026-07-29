@@ -21,6 +21,7 @@ def clear_prd_proposal_env(monkeypatch):
 def make_settings(**kwargs) -> Settings:
     kwargs.setdefault("llm_backend", "vertex-ai")
     kwargs.setdefault("llm_model", "gemini-3.5-flash")
+    kwargs.setdefault("google_cloud_project", "test-project")
     return Settings(_env_file=None, **kwargs)
 
 
@@ -80,6 +81,42 @@ class TestLlmConfig:
         assert settings.llm_backend == "vertex-ai"
         assert settings.llm_model == "gemini-3.5-flash"
         assert Settings.detect_model_provider(settings.llm_model) == "google"
+
+    @pytest.mark.parametrize(
+        ("backend", "model", "credential", "message"),
+        [
+            ("vertex-ai", "gemini-3.5-flash", {}, "GOOGLE_CLOUD_PROJECT is required"),
+            ("google-genai", "gemini-3.5-flash", {}, "GOOGLE_API_KEY is required"),
+            ("anthropic", "claude-sonnet-4-6", {}, "ANTHROPIC_API_KEY is required"),
+        ],
+    )
+    def test_backend_credentials_are_validated_at_startup(
+        self, backend, model, credential, message
+    ):
+        with pytest.raises(ValueError, match=message):
+            Settings(
+                _env_file=None,
+                jira_base_url="https://test.atlassian.net",
+                jira_api_token="test",
+                jira_user_email="test@example.com",
+                github_token="test",
+                llm_backend=backend,
+                llm_model=model,
+                **credential,
+            )
+
+    def test_container_model_must_match_backend(self):
+        with pytest.raises(ValueError, match="not supported by google-genai"):
+            make_settings(
+                jira_base_url="https://test.atlassian.net",
+                jira_api_token="test",
+                jira_user_email="test@example.com",
+                github_token="test",
+                llm_backend="google-genai",
+                llm_model="gemini-3.5-flash",
+                container_llm_model="claude-sonnet-4-6",
+                google_api_key="google-key",
+            )
 
     def test_google_api_key_is_provider_specific(self):
         settings = make_settings(

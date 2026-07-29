@@ -4,7 +4,7 @@ import logging
 from functools import cached_property, lru_cache
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 if TYPE_CHECKING:
@@ -197,6 +197,35 @@ class Settings(BaseSettings):
             return "google"
         # Default to anthropic for claude-* or unknown direct-provider models.
         return "anthropic"
+
+    @model_validator(mode="after")
+    def validate_llm_configuration(self) -> "Settings":
+        """Fail at startup when the selected backend cannot serve its models."""
+        models = [self.llm_model]
+        if self.container_llm_model:
+            models.append(self.container_llm_model)
+
+        if self.llm_backend == "vertex-ai":
+            if not self.google_cloud_project:
+                raise ValueError("GOOGLE_CLOUD_PROJECT is required for vertex-ai")
+            return self
+
+        if self.llm_backend == "google-genai":
+            if not self.google_api_key.get_secret_value():
+                raise ValueError("GOOGLE_API_KEY is required for google-genai")
+            incompatible = [m for m in models if self.detect_model_provider(m) != "google"]
+            if incompatible:
+                raise ValueError(
+                    f"Model '{incompatible[0]}' is not supported by google-genai"
+                )
+            return self
+
+        if not self.anthropic_api_key.get_secret_value():
+            raise ValueError("ANTHROPIC_API_KEY is required for anthropic")
+        incompatible = [m for m in models if self.detect_model_provider(m) != "anthropic"]
+        if incompatible:
+            raise ValueError(f"Model '{incompatible[0]}' is not supported by anthropic")
+        return self
 
     # Langfuse Configuration
     langfuse_enabled_setting: bool = Field(

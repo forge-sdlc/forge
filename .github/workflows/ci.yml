@@ -58,6 +58,7 @@ jobs:
           GITHUB_TOKEN: dummy
           LLM_BACKEND: vertex-ai
           LLM_MODEL: gemini-3.5-flash
+          GOOGLE_CLOUD_PROJECT: test-project
         run: >-
           uv run pytest tests/unit/ tests/contracts tests/flows -q --strict-markers
           --cov=forge --cov-branch
@@ -100,6 +101,7 @@ jobs:
           GITHUB_TOKEN: dummy
           LLM_BACKEND: vertex-ai
           LLM_MODEL: gemini-3.5-flash
+          GOOGLE_CLOUD_PROJECT: test-project
         run: uv run pytest tests/contracts tests/flows -q --strict-markers
 
   integration:
@@ -139,6 +141,7 @@ jobs:
           GITHUB_TOKEN: dummy
           LLM_BACKEND: vertex-ai
           LLM_MODEL: gemini-3.5-flash
+          GOOGLE_CLOUD_PROJECT: test-project
           FORGE_TEST_REDIS_URL: redis://localhost:6379/0
           FORGE_REQUIRE_TEST_REDIS: "1"
         run: uv run pytest tests/integration -q --strict-markers -m "integration and not quarantine"
@@ -170,6 +173,7 @@ jobs:
           GITHUB_TOKEN: dummy
           LLM_BACKEND: vertex-ai
           LLM_MODEL: gemini-3.5-flash
+          GOOGLE_CLOUD_PROJECT: test-project
         run: uv run pytest tests/e2e -q --strict-markers -m "e2e and not external"
 
   container-build:
@@ -190,6 +194,7 @@ jobs:
           --env GITHUB_TOKEN=dummy
           --env LLM_BACKEND=vertex-ai
           --env LLM_MODEL=gemini-3.5-flash
+          --env GOOGLE_CLOUD_PROJECT=test-project
           forge-ci:${{ github.sha }}
           python -c "import forge; from forge.main import app; assert app is not None"
 

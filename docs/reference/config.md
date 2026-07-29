@@ -51,6 +51,12 @@ Choose one backend explicitly. Gemini 3.5 Flash through Vertex AI is recommended
 
 `LLM_BACKEND` and `LLM_MODEL` are required. Provider credentials must use the
 provider-native variables shown above; legacy aliases are not supported.
+Forge validates the backend, credentials, and model compatibility at startup.
+
+`CONTAINER_LLM_MODEL` may override the model used for implementation tasks, but
+it does not select a separate backend. The override must be compatible with
+`LLM_BACKEND`; using different orchestrator and container backends is not
+currently supported.
 
 ### Redis
 
