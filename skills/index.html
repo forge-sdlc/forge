@@ -1080,6 +1080,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Available Skills">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#optional-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Optional Files
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1374,6 +1391,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Available Skills">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#optional-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Optional Files
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1442,7 +1476,8 @@
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>│   └── review-code/
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>└── {project}/            # Per-project overrides (Jira key, lowercase)
 <a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    └── {skill-name}/
-<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        └── SKILL.md
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        ├── SKILL.md
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>        └── review.md     # Optional auto-review config
 </code></pre></div>
 <h2 id="available-skills">Available Skills<a class="headerlink" href="#available-skills" title="Permanent link">&para;</a></h2>
 <table>
@@ -1496,6 +1531,21 @@
 <tr>
 <td><code>analyze-bug</code></td>
 <td>Bug RCA generation</td>
+</tr>
+</tbody>
+</table>
+<h3 id="optional-files">Optional Files<a class="headerlink" href="#optional-files" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>review.md</code></td>
+<td>Auto-review configuration — when present, Forge spawns a reviewer agent after skill execution. See <a href="../guide/auto-review/">Auto-Review Guide</a>.</td>
 </tr>
 </tbody>
 </table>

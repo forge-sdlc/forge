@@ -1322,6 +1322,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#auto-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Auto-Review
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#observability" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1553,6 +1564,17 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         Container Execution
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#auto-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Auto-Review
       </span>
     </span>
   </a>
@@ -1811,6 +1833,34 @@
 <tr>
 <td><code>CONTAINER_CPU_LIMIT</code></td>
 <td>CPU limit for task containers (default: <code>2</code>)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="auto-review">Auto-Review<a class="headerlink" href="#auto-review" title="Permanent link">&para;</a></h2>
+<p>Settings for the automatic review loop that runs after skill execution. See the <a href="../../guide/auto-review/">Auto-Review Guide</a> for details.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AUTO_REVIEW_MAX_RETRIES</code></td>
+<td><code>3</code></td>
+<td>Default maximum retry attempts when a skill's <code>review.md</code> doesn't specify <code>max_retries</code></td>
+</tr>
+<tr>
+<td><code>AUTO_REVIEW_POLL_INTERVAL</code></td>
+<td><code>5.0</code></td>
+<td>Polling interval in seconds for detecting review cycle files during container execution</td>
+</tr>
+<tr>
+<td><code>AUTO_REVIEW_RECORD_POLLED_FILES</code></td>
+<td>(none)</td>
+<td>Recording mode for polled review cycle files: <code>log</code> logs cycle data at INFO level, <code>copy</code> copies files to recording directory</td>
 </tr>
 </tbody>
 </table>

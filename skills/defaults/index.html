@@ -1646,10 +1646,12 @@
 <h3 id="implement-task"><code>implement-task</code><a class="headerlink" href="#implement-task" title="Permanent link">&para;</a></h3>
 <p>Drives the code implementation agent running inside an ephemeral container.</p>
 <p><strong>Scope:</strong> Given a task file at <code>.forge/task.json</code>, implement the code, run tests, and commit. No external network access.</p>
+<p><strong>Auto-review:</strong> Includes <code>review.md</code> that checks test coverage, error handling, documentation, and debug code before PR creation. See <a href="../../guide/auto-review/">Auto-Review Guide</a>.</p>
 <hr />
 <h3 id="local-code-review"><code>local-code-review</code><a class="headerlink" href="#local-code-review" title="Permanent link">&para;</a></h3>
 <p>Reviews the implementation diff against <code>main</code> before PR creation.</p>
 <p><strong>Focus:</strong> Breaking changes, test failures, security issues, and spec mismatches. Up to 2 fix passes.</p>
+<p><strong>Auto-review:</strong> Includes <code>review.md</code> that validates test suite execution and checks for breaking changes, security issues, and spec alignment. See <a href="../../guide/auto-review/">Auto-Review Guide</a>.</p>
 <hr />
 <h3 id="analyze-ci"><code>analyze-ci</code><a class="headerlink" href="#analyze-ci" title="Permanent link">&para;</a></h3>
 <p>Categorizes CI failures into actionable categories.</p>
