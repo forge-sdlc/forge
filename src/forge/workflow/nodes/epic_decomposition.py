@@ -12,6 +12,7 @@ from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
 from forge.workflow.utils.repo_resolution import get_effective_repos
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -135,8 +136,6 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
             "available_repos": available_repos,
             "feedback": state.get("feedback_comment", ""),
         }
-
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         spec_content_with_refs = await fetch_and_inject_references(state, jira, spec_content)
 
@@ -341,8 +340,6 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
         # Get current Epic description
         epic_issue = await jira.get_issue(epic_key)
         original_plan = epic_issue.description or ""
-
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         original_plan_with_refs = await fetch_and_inject_references(state, jira, original_plan)
 

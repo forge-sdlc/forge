@@ -862,7 +862,7 @@ class TestCLIReferencesConfig:
     @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
     @patch("forge.cli.setup_logging")
     def test_cli_parser_registers_references(self, _mock_setup_logging, mock_cmd):
-        """Verify argparse parser registers --add-reference, --description, --remove-reference, and --list-references."""
+        """Verify argparse parser registers --add-reference, --ref-description, --description, --remove-reference, and --list-references."""
         mock_cmd.return_value = 0
         code = main(
             [
@@ -870,7 +870,7 @@ class TestCLIReferencesConfig:
                 "myproj",
                 "--add-reference",
                 "https://example.com/ref1",
-                "--description",
+                "--ref-description",
                 "Desc 1",
                 "--add-reference",
                 "https://example.com/ref2",
@@ -888,6 +888,6 @@ class TestCLIReferencesConfig:
             "https://example.com/ref1",
             "https://example.com/ref2",
         ]
-        assert args.description == ["Desc 1", "Desc 2"]
+        assert args.ref_description == ["Desc 1", "Desc 2"]
         assert args.remove_reference == ["https://example.com/ref3"]
         assert args.list_references is True

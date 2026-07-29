@@ -27,6 +27,7 @@ from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.proposal_review_threads import reply_to_proposal_decisions
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -125,9 +126,6 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
             "event_source": state.get("context", {}).get("source", ""),
             "retry_count": state.get("retry_count", 0),
         }
-
-        # Fetch and inject external references
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         prd_content = await fetch_and_inject_references(state, jira, prd_content)
 
@@ -238,8 +236,6 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
     agent = ForgeAgent()
 
     try:
-        from forge.workflow.utils.references import fetch_and_inject_references
-
         original_spec_with_refs = await fetch_and_inject_references(state, jira, original_spec)
 
         # Regenerate spec with feedback

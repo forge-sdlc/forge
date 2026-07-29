@@ -21,6 +21,7 @@ from forge.workflow.nodes.proposal_pr import (
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.proposal_review_threads import reply_to_proposal_decisions
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -146,9 +147,6 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
                 "current_node": "generate_prd",
             }
 
-        # Fetch and inject external references
-        from forge.workflow.utils.references import fetch_and_inject_references
-
         raw_requirements = await fetch_and_inject_references(state, jira, raw_requirements)
 
         # Build context from issue metadata
@@ -265,8 +263,6 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
     agent = ForgeAgent()
 
     try:
-        from forge.workflow.utils.references import fetch_and_inject_references
-
         original_prd_with_refs = await fetch_and_inject_references(state, jira, original_prd)
 
         # Regenerate PRD with feedback

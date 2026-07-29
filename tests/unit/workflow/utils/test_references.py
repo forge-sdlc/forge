@@ -405,3 +405,42 @@ async def test_fetch_reference_url_timeout() -> None:
             asyncio.TimeoutError, match="Fetch reference URL timed out after 10.0 seconds"
         ):
             await fetch_reference_url("https://example.com", pinned_ips, backend)
+
+
+def test_normalize_url_scheme_validation() -> None:
+    # Invalid or missing schemes should raise ValueError
+    with pytest.raises(ValueError, match="Invalid URL scheme"):
+        normalize_url("ftp://example.com")
+    with pytest.raises(ValueError, match="Invalid URL scheme"):
+        normalize_url("www.example.com")
+
+
+def test_get_cache_dir_uid() -> None:
+    from forge.workflow.utils.references import get_cache_dir
+
+    with patch("os.getuid", return_value=1234):
+        cache_dir = get_cache_dir("test-run")
+        assert "forge_references_cache_1234" in cache_dir
+        assert cache_dir.endswith("test-run")
+
+    with patch("os.getuid", side_effect=AttributeError):
+        cache_dir = get_cache_dir("test-run")
+        assert "forge_references_cache" in cache_dir
+        assert "1234" not in cache_dir
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_inject_references_no_state_mutation() -> None:
+    state = {
+        "ticket_key": "PROJ-123",
+        "spec_content": "Specs",
+        # Explicitly omit context to test fallback/no mutation of input state
+    }
+    mock_jira = MagicMock()
+    mock_jira.get_project_references = AsyncMock(return_value=[])
+    mock_jira.get_comments = AsyncMock(return_value=[])
+
+    injected = await fetch_and_inject_references(state, mock_jira, "Base specs.")
+    assert injected == "Base specs."
+    # State must not be mutated inline (no "context" should be added to input state dict)
+    assert "context" not in state

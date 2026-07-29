@@ -22,6 +22,7 @@ from forge.workflow.utils import (
 )
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.repo_resolution import get_effective_repos
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +137,6 @@ async def _run_plan_container(
             original_plan=original_plan,
             known_repos="\n".join(known_repos),
         )
-
-        # Fetch and inject external references
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         task_description = await fetch_and_inject_references(state, jira, task_description)
 

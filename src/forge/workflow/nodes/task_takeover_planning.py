@@ -14,6 +14,7 @@ from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import set_paused, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.repo_resolution import get_effective_repos
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -123,9 +124,6 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         # If this is a revision, append the feedback details to task_description
         if is_revision:
             task_description += f"\n\n## Revision Request\nThis is a revision request. Please update the original plan based on the feedback below.\n\n### Original Plan\n{original_plan}\n\n### Feedback Comment\n{feedback_comment}\n"
-
-        # Fetch and inject external references
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         task_description = await fetch_and_inject_references(state, jira, task_description)
 

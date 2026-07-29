@@ -13,6 +13,7 @@ from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.repo_resolution import get_effective_default_repo
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,6 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
     spec_content = state.get("spec_content", "")
 
     try:
-        from forge.workflow.utils.references import fetch_and_inject_references
-
         spec_content = await fetch_and_inject_references(state, jira, spec_content)
 
         # Get project key from parent Feature
@@ -631,7 +630,6 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
         }
 
         spec_content = state.get("spec_content", "")
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         spec_content = await fetch_and_inject_references(state, jira, spec_content)
 
@@ -807,9 +805,6 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         # Get current Task description
         task_issue = await jira.get_issue(task_key)
         original_description = task_issue.description or ""
-
-        # Fetch and inject external references
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         original_description_with_refs = await fetch_and_inject_references(
             state, jira, original_description

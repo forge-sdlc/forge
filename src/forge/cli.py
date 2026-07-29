@@ -796,11 +796,15 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             print("[OK] forge.model_default deleted")
 
         # forge.references property processing
-        if args.description and (
-            not args.add_reference or len(args.description) != len(args.add_reference)
-        ):
+        ref_desc = getattr(args, "ref_description", None)
+        ref_desc_arg_name = "--ref-description"
+        if ref_desc is None:
+            ref_desc = getattr(args, "description", None)
+            ref_desc_arg_name = "--description"
+
+        if ref_desc and (not args.add_reference or len(ref_desc) != len(args.add_reference)):
             print(
-                "Error: --description requires matching number of --add-reference items.",
+                f"Error: {ref_desc_arg_name} requires matching number of --add-reference items.",
                 file=sys.stderr,
             )
             return 1
@@ -811,7 +815,8 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         current_references = await jira.get_project_references(project_key)
         if args.add_reference:
             for i, url in enumerate(args.add_reference):
-                desc = args.description[i] if args.description and i < len(args.description) else ""
+                desc = ref_desc[i] if ref_desc and i < len(ref_desc) else ""
+                # Normalise URL for lookup
                 norm_url = normalize_url(url)
                 existing = next(
                     (r for r in current_references if normalize_url(r["url"]) == norm_url),
@@ -1797,10 +1802,12 @@ Examples:
         help="Add a project-level standing reference by its URL (repeatable).",
     )
     setup_parser.add_argument(
+        "--ref-description",
         "--description",
+        dest="ref_description",
         action="append",
         metavar="TEXT",
-        help="Description for a standing reference; positionally pairs with --add-reference.",
+        help="Description for the standing reference. Positionally pairs with --add-reference flags. (Note: --description is a deprecated alias)",
     )
     setup_parser.add_argument(
         "--remove-reference",

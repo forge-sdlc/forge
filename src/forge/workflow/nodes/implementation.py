@@ -27,6 +27,7 @@ from forge.workflow.nodes.git_persistence import (
 from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
+from forge.workflow.utils.references import fetch_and_inject_references
 from forge.workspace.git_ops import GitOperations
 
 logger = logging.getLogger(__name__)
@@ -193,9 +194,6 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             task_description=task_description,
             guardrails=guardrails,
         )
-
-        # Fetch and inject external references
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         full_description = await fetch_and_inject_references(state, jira, full_description)
 

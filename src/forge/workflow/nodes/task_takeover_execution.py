@@ -15,6 +15,7 @@ from forge.workflow.nodes.git_persistence import (
 from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -120,8 +121,6 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
             f"5. Feed any build/test error and failure logs directly back to your reasoning process to enable iterative self-correction.\n"
             f"6. Make sure all compilation and local tests pass successfully before finishing.\n"
         )
-
-        from forge.workflow.utils.references import fetch_and_inject_references
 
         task_prompt = await fetch_and_inject_references(state, jira, task_prompt)
 

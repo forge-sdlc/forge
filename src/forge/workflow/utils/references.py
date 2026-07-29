@@ -21,7 +21,15 @@ from forge.skills.utils import extract_project_key
 
 logger = logging.getLogger(__name__)
 
-CACHE_LOCK = asyncio.Lock()
+_CACHE_LOCK: asyncio.Lock | None = None
+
+
+def _get_cache_lock() -> asyncio.Lock:
+    global _CACHE_LOCK
+    if _CACHE_LOCK is None:
+        _CACHE_LOCK = asyncio.Lock()
+    return _CACHE_LOCK
+
 
 BLOCKED_NETWORKS = [
     ipaddress.ip_network("127.0.0.0/8"),
@@ -79,6 +87,10 @@ def normalize_url(url: str) -> str:
     url = url.strip()
     parsed = urllib.parse.urlparse(url)
     scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(
+            f"Invalid URL scheme: {parsed.scheme or '(none)'}. Only http and https are supported."
+        )
     netloc = parsed.netloc.lower()
 
     if ":" in netloc:
@@ -175,71 +187,69 @@ async def fetch_reference_url(
             hops = 0
             max_hops = 5
 
-            while True:
-                parsed_current = urllib.parse.urlparse(current_url)
-                if parsed_current.scheme not in ("http", "https"):
-                    raise ValueError(f"Unsupported redirect scheme: {parsed_current.scheme}")
+            transport = PinnedAsyncHTTPTransport(pinned_backend=backend)
+            async with httpx.AsyncClient(
+                transport=transport, follow_redirects=False, timeout=10.0
+            ) as client:
+                while True:
+                    parsed_current = urllib.parse.urlparse(current_url)
+                    if parsed_current.scheme not in ("http", "https"):
+                        raise ValueError(f"Unsupported redirect scheme: {parsed_current.scheme}")
 
-                hostname = parsed_current.hostname
-                if not hostname:
-                    raise ValueError(f"Invalid hostname in URL: {current_url}")
+                    hostname = parsed_current.hostname
+                    if not hostname:
+                        raise ValueError(f"Invalid hostname in URL: {current_url}")
 
-                safe_ip = await resolve_and_verify_hostname(hostname)
-                pinned_ips[hostname] = safe_ip
+                    safe_ip = await resolve_and_verify_hostname(hostname)
+                    pinned_ips[hostname] = safe_ip
 
-                if parsed_current.path.lower().endswith(".pdf"):
-                    return "application/pdf", ""
-
-                transport = PinnedAsyncHTTPTransport(pinned_backend=backend)
-                async with (
-                    httpx.AsyncClient(
-                        transport=transport, follow_redirects=False, timeout=10.0
-                    ) as client,
-                    client.stream("GET", current_url) as response,
-                ):
-                    content_type = response.headers.get("content-type", "").lower()
-                    if "application/pdf" in content_type:
+                    if parsed_current.path.lower().endswith(".pdf"):
                         return "application/pdf", ""
 
-                    if response.status_code in (301, 302, 303, 307, 308):
-                        if hops >= max_hops:
-                            raise ValueError(f"Max redirect hops ({max_hops}) exceeded.")
-                        redirect_location = response.headers.get("location")
-                        if not redirect_location:
-                            raise ValueError(
-                                f"Redirect status {response.status_code} with no location header."
-                            )
-                        current_url = urllib.parse.urljoin(current_url, redirect_location)
-                        hops += 1
-                        continue
+                    async with client.stream("GET", current_url) as response:
+                        content_type = response.headers.get("content-type", "").lower()
+                        if "application/pdf" in content_type:
+                            return "application/pdf", ""
 
-                    response.raise_for_status()
+                        if response.status_code in (301, 302, 303, 307, 308):
+                            if hops >= max_hops:
+                                raise ValueError(f"Max redirect hops ({max_hops}) exceeded.")
+                            redirect_location = response.headers.get("location")
+                            if not redirect_location:
+                                raise ValueError(
+                                    f"Redirect status {response.status_code} with no location header."
+                                )
+                            current_url = urllib.parse.urljoin(current_url, redirect_location)
+                            hops += 1
+                            continue
 
-                    chunks = []
-                    bytes_read = 0
-                    max_bytes = 5 * 1024 * 1024  # 5 MB
+                        response.raise_for_status()
 
-                    async for chunk in response.aiter_bytes(chunk_size=1024 * 64):
-                        bytes_read += len(chunk)
-                        if bytes_read > max_bytes:
-                            logger.warning(
-                                f"Response size exceeded 5 MB limit for {current_url}. Truncating."
-                            )
-                            break
-                        chunks.append(chunk)
+                        chunks = []
+                        bytes_read = 0
+                        max_bytes = 5 * 1024 * 1024  # 5 MB
 
-                    body_bytes = b"".join(chunks)
-                    encoding = (
-                        response.encoding
-                        or getattr(response, "apparent_encoding", "utf-8")
-                        or "utf-8"
-                    )
-                    try:
-                        body_text = body_bytes.decode(encoding, errors="replace")
-                    except Exception:
-                        body_text = body_bytes.decode("utf-8", errors="replace")
+                        async for chunk in response.aiter_bytes(chunk_size=1024 * 64):
+                            bytes_read += len(chunk)
+                            if bytes_read > max_bytes:
+                                logger.warning(
+                                    f"Response size exceeded 5 MB limit for {current_url}. Truncating."
+                                )
+                                break
+                            chunks.append(chunk)
 
-                    return content_type, body_text
+                        body_bytes = b"".join(chunks)
+                        encoding = (
+                            response.encoding
+                            or getattr(response, "apparent_encoding", "utf-8")
+                            or "utf-8"
+                        )
+                        try:
+                            body_text = body_bytes.decode(encoding, errors="replace")
+                        except Exception:
+                            body_text = body_bytes.decode("utf-8", errors="replace")
+
+                        return content_type, body_text
     except TimeoutError as e:
         raise TimeoutError("Fetch reference URL timed out after 10.0 seconds") from e
 
@@ -333,7 +343,12 @@ def html_to_markdown(html_content: str) -> str:
 
 
 def get_cache_dir(run_id: str) -> str:
-    return f"/tmp/forge_references_cache/{run_id}"
+    try:
+        uid = os.getuid()
+        prefix = f"/tmp/forge_references_cache_{uid}"
+    except (AttributeError, OSError):
+        prefix = "/tmp/forge_references_cache"
+    return os.path.join(prefix, run_id)
 
 
 def get_cache_filepath(run_id: str, norm_url: str) -> str:
@@ -351,7 +366,7 @@ async def read_from_cache(run_id: str, norm_url: str) -> tuple[str, str] | None:
         if time.time() - mtime > 3600:
             return None
 
-        async with CACHE_LOCK:
+        async with _get_cache_lock():
             with open(filepath, encoding="utf-8") as f:
                 data = json.load(f)
             return data["content_type"], data["body_text"]
@@ -403,9 +418,8 @@ async def write_to_cache(run_id: str, norm_url: str, content_type: str, body_tex
     payload_bytes = payload_str.encode("utf-8")
     new_file_size = len(payload_bytes)
 
-    enforce_cache_folder_size(cache_dir, new_file_size)
-
-    async with CACHE_LOCK:
+    async with _get_cache_lock():
+        enforce_cache_folder_size(cache_dir, new_file_size)
         try:
             temp_filepath = filepath + ".tmp"
             with open(temp_filepath, "w", encoding="utf-8") as f:
@@ -484,15 +498,8 @@ async def fetch_and_inject_references(state: Any, jira: JiraClient, base_text: s
     except ValueError:
         project_key = ticket_key.upper()
 
-    context = state.get("context")
-    if context is None:
-        context = {}
-        state["context"] = context
-
-    if "run_id" not in context or not context["run_id"]:
-        context["run_id"] = str(uuid.uuid4())
-
-    run_id = context["run_id"]
+    context = state.get("context") or {}
+    run_id = context.get("run_id") or str(uuid.uuid4())
 
     # 1. Fetch project-level standing references
     try:
@@ -522,8 +529,6 @@ async def fetch_and_inject_references(state: Any, jira: JiraClient, base_text: s
         comments = []
 
     def _comment_sort_key(c: Any) -> datetime:
-        if hasattr(c, "assert_called") or hasattr(c, "called") or "Mock" in c.__class__.__name__:
-            return datetime.min
         created = getattr(c, "created", None)
         if isinstance(created, datetime):
             return created
