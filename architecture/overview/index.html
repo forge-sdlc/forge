@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://forge-sdlc.github.io/forge/dev/testing/">
+        <link rel="canonical" href="https://forge-sdlc.github.io/forge/architecture/overview/">
       
       
-        <link rel="prev" href="../setup/">
+        <link rel="prev" href="../">
       
       
-        <link rel="next" href="../contributing/">
+        <link rel="next" href="../internals/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Testing - Forge SDLC Guide</title>
+        <title>System & Components - Forge SDLC Guide</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#testing" class="md-skip">
+        <a href="#system-components" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Testing
+              System &amp; Components
             
           </span>
         </div>
@@ -680,8 +680,10 @@
                 
   
   
+    
   
   
+  
     
     
     
@@ -695,13 +697,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4_2" checked>
         
           
           <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="">
@@ -721,7 +721,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -738,7 +738,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -746,122 +746,6 @@
     
   
   Overview
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../architecture/overview/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  System & Components
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../architecture/internals/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Internals
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../architecture/reference/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Reference
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../setup/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Local Setup
 
     
   </span>
@@ -897,7 +781,7 @@
   <span class="md-ellipsis">
     
   
-  Testing
+  System & Components
 
     
   </span>
@@ -914,7 +798,7 @@
   <span class="md-ellipsis">
     
   
-  Testing
+  System & Components
 
     
   </span>
@@ -940,10 +824,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#running-the-test-suite" class="md-nav__link">
+  <a href="#system-context" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Running the Test Suite
+        System Context
       </span>
     </span>
   </a>
@@ -951,85 +835,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#linting-and-type-checking" class="md-nav__link">
+  <a href="#component-responsibilities" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Linting and Type Checking
+        Component Responsibilities
       </span>
     </span>
   </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#payload-based-testing" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Payload-Based Testing
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#testing-ci-skip-commands" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Testing CI Skip Commands
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#debugging" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Debugging
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Debugging">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#snapshot-and-restore-checkpoints" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Snapshot and Restore Checkpoints
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#inspect-redis-state" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Inspect Redis State
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#worker-logs" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Worker Logs
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1049,7 +861,123 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+      <a href="../internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Local Setup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Testing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/contributing/" class="md-nav__link">
         
   
   
@@ -1397,10 +1325,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#running-the-test-suite" class="md-nav__link">
+  <a href="#system-context" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Running the Test Suite
+        System Context
       </span>
     </span>
   </a>
@@ -1408,85 +1336,13 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#linting-and-type-checking" class="md-nav__link">
+  <a href="#component-responsibilities" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Linting and Type Checking
+        Component Responsibilities
       </span>
     </span>
   </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#payload-based-testing" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Payload-Based Testing
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#testing-ci-skip-commands" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Testing CI Skip Commands
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#debugging" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Debugging
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Debugging">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#snapshot-and-restore-checkpoints" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Snapshot and Restore Checkpoints
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#inspect-redis-state" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Inspect Redis State
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#worker-logs" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Worker Logs
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
   
 </li>
       
@@ -1505,7 +1361,7 @@
                 
                   
   
-    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/dev/testing.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/architecture/overview.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
     </a>
@@ -1513,75 +1369,77 @@
   
 
 
-<h1 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h1>
-<h2 id="running-the-test-suite">Running the Test Suite<a class="headerlink" href="#running-the-test-suite" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Fast PR suites</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>make<span class="w"> </span>test-pr
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Redis-backed component integration tests</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>make<span class="w"> </span>test-integration
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
-<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Deterministic end-to-end smoke tests</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>make<span class="w"> </span>test-e2e
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="c1"># Specific test file</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/test_workflow.py<span class="w"> </span>-v
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="c1"># With coverage</span>
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>make<span class="w"> </span>coverage
-</code></pre></div>
-<p>Integration tests use <code>FORGE_TEST_REDIS_URL</code> when set and otherwise start a
-pinned Redis Stack testcontainer. CI sets <code>FORGE_REQUIRE_TEST_REDIS=1</code>, so a
-missing infrastructure dependency fails the gate instead of silently skipping it.</p>
-<h2 id="linting-and-type-checking">Linting and Type Checking<a class="headerlink" href="#linting-and-type-checking" title="Permanent link">&para;</a></h2>
-<p>Before submitting a PR, these must all pass:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>make<span class="w"> </span>lint
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>src/forge/<span class="w">       </span><span class="c1"># type check</span>
-</code></pre></div>
-<h2 id="payload-based-testing">Payload-Based Testing<a class="headerlink" href="#payload-based-testing" title="Permanent link">&para;</a></h2>
-<p>Test workflow stages without live webhooks using sample payloads from <code>tests/payloads/</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Trigger a Jira issue-created event</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/jira-feature-created.json
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="c1"># Trigger a GitHub PR review</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/github-pr-approved.json
-</code></pre></div>
-<p>See the <a href="../../developer-guide/#6-testing-with-payloads">Developer Guide</a> for the full set of payloads and how to trigger specific workflow stages.</p>
-<h2 id="testing-ci-skip-commands">Testing CI Skip Commands<a class="headerlink" href="#testing-ci-skip-commands" title="Permanent link">&para;</a></h2>
-<p>Post a PR comment via the GitHub API:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="s2">&quot;https://api.github.com/repos/your-org/your-repo/issues/123/comments&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;body&quot;: &quot;/forge skip-gate e2e-openstack&quot;}&#39;</span>
-</code></pre></div>
-<p>Then trigger a check run webhook to see Forge re-evaluate CI with the skip applied.</p>
-<h2 id="debugging">Debugging<a class="headerlink" href="#debugging" title="Permanent link">&para;</a></h2>
-<h3 id="snapshot-and-restore-checkpoints">Snapshot and Restore Checkpoints<a class="headerlink" href="#snapshot-and-restore-checkpoints" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Capture current workflow state</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>snapshot<span class="w"> </span>--ticket<span class="w"> </span>PROJ-123
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Restore to a previous snapshot</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>restore<span class="w"> </span>--ticket<span class="w"> </span>PROJ-123<span class="w"> </span>--snapshot<span class="w"> </span>snapshots/PROJ-123-2024-01-01.json
-</code></pre></div>
-<h3 id="inspect-redis-state">Inspect Redis State<a class="headerlink" href="#inspect-redis-state" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>redis-cli<span class="w"> </span>-p<span class="w"> </span><span class="m">6380</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># List all workflow checkpoints</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>KEYS<span class="w"> </span>forge:checkpoint:*
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="c1"># View a specific checkpoint</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>GET<span class="w"> </span>forge:checkpoint:PROJ-123
-</code></pre></div>
-<h3 id="worker-logs">Worker Logs<a class="headerlink" href="#worker-logs" title="Permanent link">&para;</a></h3>
-<p>The worker logs each node execution with the ticket key and node name. Use these to trace where a workflow stopped:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;PROJ-123&quot;</span>
-</code></pre></div>
-<p>See the <a href="../../developer-guide/#10-debugging-tools">Developer Guide</a> for patching checkpoints directly and other advanced debugging tools.</p>
+<h1 id="system-components">System &amp; Components<a class="headerlink" href="#system-components" title="Permanent link">&para;</a></h1>
+<h2 id="system-context">System Context<a class="headerlink" href="#system-context" title="Permanent link">&para;</a></h2>
+<p>Forge sits between project management (Jira), source control (GitHub), and LLM providers, orchestrating work from ticket creation through merged PR.</p>
+<pre class="mermaid"><code>flowchart LR
+    A["Jira / GitHub\n(webhooks)"] --&gt; B["Gateway\n(FastAPI)"]
+    B --&gt; C["Redis\n(Streams + State)"]
+    C --&gt; D["Workers\n(LangGraph)"]
+    D --&gt; E["Podman\nContainers"]
+    D &lt;--&gt; F["LLM\n(Claude / Gemini)"]
+    E &lt;--&gt; F
+    D --&gt; A</code></pre>
+<p><strong>External actors:</strong></p>
+<ul>
+<li><strong>Jira</strong>: Source of ticket lifecycle events (issue and comment webhooks)</li>
+<li><strong>GitHub</strong>: Source of PR, CI, and code review events (PR, check suite, and review webhooks)</li>
+<li><strong>LLM providers</strong>: Anthropic (direct API) and Google Vertex AI (Claude and Gemini models)</li>
+<li><strong>Langfuse</strong>: Optional observability for LLM call tracing and cost tracking</li>
+<li><strong>Human reviewers</strong>: Approve or revise artifacts at defined workflow gates</li>
+</ul>
+<h2 id="component-responsibilities">Component Responsibilities<a class="headerlink" href="#component-responsibilities" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart TD
+    subgraph External["External Systems"]
+        Jira
+        GitHub
+        Langfuse["Langfuse (Observability)"]
+    end
+
+    subgraph Gateway["FastAPI Gateway (:8000)"]
+        JiraWH["POST /api/v1/webhooks/jira"]
+        GitHubWH["POST /api/v1/webhooks/github"]
+    end
+
+    subgraph Queue["Redis"]
+        Streams["Streams: forge:events:jira\nforge:events:github"]
+        State["AsyncRedisSaver\nLangGraph checkpointing"]
+    end
+
+    subgraph Workers["Worker Processes (consumer group: forge-workers)"]
+        Router{"WorkflowRouter\nroute by issue type"}
+        Feature["FeatureWorkflow\n(Feature/Story)"]
+        Bug["BugWorkflow\n(Bug)"]
+        Task["TaskTakeoverWorkflow\n(Task/Epic)"]
+    end
+
+    subgraph Container["Podman Container (ephemeral)"]
+        Agent["Deep Agents + MCP\n/workspace (repo mounted)"]
+    end
+
+    LLM["LLM Backends\nAnthropic API (Claude)\nVertex AI (Claude/Gemini)"]
+
+    Jira -- webhooks --&gt; JiraWH
+    GitHub -- webhooks --&gt; GitHubWH
+    JiraWH --&gt; Streams
+    GitHubWH --&gt; Streams
+    Streams --&gt; Router
+    Router --&gt; Feature
+    Router --&gt; Bug
+    Router --&gt; Task
+    Feature --&gt; Container
+    Bug --&gt; Container
+    Task --&gt; Container
+    Workers &lt;--&gt; LLM
+    Container &lt;--&gt; LLM
+    Workers --&gt; Jira
+    Workers --&gt; GitHub
+    Workers --&gt; Langfuse</code></pre>
+<p><strong>Gateway (FastAPI)</strong>: Accepts webhooks over HTTPS, validates HMAC-SHA256 signatures, and publishes events to Redis Streams. Performs no workflow logic.</p>
+<p><strong>Worker</strong>: Consumes events from Redis Streams via the <code>forge-workers</code> consumer group. The <code>WorkflowRouter</code> resolves the target LangGraph workflow (Feature, Bug, or Task Takeover) based on Jira issue type and drives execution through planning, implementation, CI repair, and human review stages.</p>
+<p><strong>Redis</strong>: Event bus (Redis Streams), workflow state store (LangGraph <code>AsyncRedisSaver</code> checkpoints per ticket), retry queue, dead-letter queue, and supporting indexes (PR-to-ticket mapping, deduplication keys).</p>
+<p><strong>Podman Container</strong>: Ephemeral rootless containers that execute implementation tasks. Each container receives the repo at <code>/workspace</code> (read-write), a task file at <code>/task.json</code> (read-only), and LLM credentials. Runs Deep Agents with MCP tool access. The orchestrator handles pushing and PR creation after the container exits.</p>
+<p><strong>LLM Backends</strong>: Claude and Gemini models called by both orchestrator nodes (planning, review) and container agents (code generation). Supports Anthropic direct API and Google Vertex AI, selected automatically based on configured credentials.</p>
 
 
 
