@@ -1,21 +1,23 @@
-import re
-import os
-import json
-import time
-import uuid
-import urllib.parse
-import socket
-import ipaddress
 import asyncio
-import logging
 import hashlib
+import ipaddress
+import json
+import logging
+import os
+import re
+import socket
+import time
+import urllib.parse
+import uuid
 from datetime import datetime
-import httpx
-import httpcore
+from html.parser import HTMLParser
 from typing import Any
 
-from forge.skills.utils import extract_project_key
+import httpcore
+import httpx
+
 from forge.integrations.jira.client import JiraClient
+from forge.skills.utils import extract_project_key
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +44,7 @@ def is_safe_ip(ip_str: str) -> bool:
         ip = ipaddress.ip_address(ip_str)
     except ValueError:
         return False
-    for network in BLOCKED_NETWORKS:
-        if ip in network:
-            return False
-    return True
+    return all(ip not in network for network in BLOCKED_NETWORKS)
 
 
 def resolve_and_verify_hostname(hostname: str) -> str:
@@ -58,7 +57,7 @@ def resolve_and_verify_hostname(hostname: str) -> str:
     if not addrinfo:
         raise ValueError(f"No IP addresses found for {hostname}")
 
-    for family, ltype, proto, canonname, sockaddr in addrinfo:
+    for _family, _ltype, _proto, _canonname, sockaddr in addrinfo:
         ip = sockaddr[0]
         if not is_safe_ip(ip):
             raise ValueError(f"Unsafe IP address resolved: {ip} for {hostname}")
@@ -81,15 +80,11 @@ def normalize_url(url: str) -> str:
             port_part = parts[1]
             if port_part.startswith(":"):
                 port = port_part[1:]
-                if (scheme == "http" and port == "80") or (
-                    scheme == "https" and port == "443"
-                ):
+                if (scheme == "http" and port == "80") or (scheme == "https" and port == "443"):
                     netloc = host
         else:
             host, port = netloc.rsplit(":", 1)
-            if (scheme == "http" and port == "80") or (
-                scheme == "https" and port == "443"
-            ):
+            if (scheme == "http" and port == "80") or (scheme == "https" and port == "443"):
                 netloc = host
 
     path = parsed.path
@@ -186,52 +181,49 @@ async def fetch_reference_url(
             return "application/pdf", ""
 
         transport = PinnedAsyncHTTPTransport(pinned_backend=backend)
-        async with httpx.AsyncClient(
-            transport=transport, follow_redirects=False, timeout=10.0
-        ) as client:
-            async with client.stream("GET", current_url) as response:
-                content_type = response.headers.get("content-type", "").lower()
-                if "application/pdf" in content_type:
-                    return "application/pdf", ""
+        async with (
+            httpx.AsyncClient(transport=transport, follow_redirects=False, timeout=10.0) as client,
+            client.stream("GET", current_url) as response,
+        ):
+            content_type = response.headers.get("content-type", "").lower()
+            if "application/pdf" in content_type:
+                return "application/pdf", ""
 
-                if response.status_code in (301, 302, 303, 307, 308):
-                    if hops >= max_hops:
-                        raise ValueError(f"Max redirect hops ({max_hops}) exceeded.")
-                    redirect_location = response.headers.get("location")
-                    if not redirect_location:
-                        raise ValueError(
-                            f"Redirect status {response.status_code} with no location header."
-                        )
-                    current_url = urllib.parse.urljoin(current_url, redirect_location)
-                    hops += 1
-                    continue
+            if response.status_code in (301, 302, 303, 307, 308):
+                if hops >= max_hops:
+                    raise ValueError(f"Max redirect hops ({max_hops}) exceeded.")
+                redirect_location = response.headers.get("location")
+                if not redirect_location:
+                    raise ValueError(
+                        f"Redirect status {response.status_code} with no location header."
+                    )
+                current_url = urllib.parse.urljoin(current_url, redirect_location)
+                hops += 1
+                continue
 
-                response.raise_for_status()
+            response.raise_for_status()
 
-                chunks = []
-                bytes_read = 0
-                max_bytes = 5 * 1024 * 1024  # 5 MB
+            chunks = []
+            bytes_read = 0
+            max_bytes = 5 * 1024 * 1024  # 5 MB
 
-                async for chunk in response.aiter_bytes(chunk_size=1024 * 64):
-                    bytes_read += len(chunk)
-                    if bytes_read > max_bytes:
-                        logger.warning(
-                            f"Response size exceeded 5 MB limit for {current_url}. Truncating."
-                        )
-                        break
-                    chunks.append(chunk)
+            async for chunk in response.aiter_bytes(chunk_size=1024 * 64):
+                bytes_read += len(chunk)
+                if bytes_read > max_bytes:
+                    logger.warning(
+                        f"Response size exceeded 5 MB limit for {current_url}. Truncating."
+                    )
+                    break
+                chunks.append(chunk)
 
-                body_bytes = b"".join(chunks)
-                encoding = response.encoding or response.apparent_encoding or "utf-8"
-                try:
-                    body_text = body_bytes.decode(encoding, errors="replace")
-                except Exception:
-                    body_text = body_bytes.decode("utf-8", errors="replace")
+            body_bytes = b"".join(chunks)
+            encoding = response.encoding or response.apparent_encoding or "utf-8"
+            try:
+                body_text = body_bytes.decode(encoding, errors="replace")
+            except Exception:
+                body_text = body_bytes.decode("utf-8", errors="replace")
 
-                return content_type, body_text
-
-
-from html.parser import HTMLParser
+            return content_type, body_text
 
 
 class HTMLToMarkdownParser(HTMLParser):
@@ -272,9 +264,7 @@ class HTMLToMarkdownParser(HTMLParser):
             self.tag_stack.pop()
 
         if tag in ("script", "style"):
-            self.in_script_or_style = any(
-                t in ("script", "style") for t in self.tag_stack
-            )
+            self.in_script_or_style = any(t in ("script", "style") for t in self.tag_stack)
 
         if self.in_script_or_style:
             return
@@ -344,7 +334,7 @@ async def read_from_cache(run_id: str, norm_url: str) -> tuple[str, str] | None:
             return None
 
         async with CACHE_LOCK:
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, encoding="utf-8") as f:
                 data = json.load(f)
             return data["content_type"], data["body_text"]
     except Exception as e:
@@ -352,9 +342,7 @@ async def read_from_cache(run_id: str, norm_url: str) -> tuple[str, str] | None:
         return None
 
 
-def enforce_cache_folder_size(
-    cache_dir: str, new_file_size: int, max_size: int = 10 * 1024 * 1024
-):
+def enforce_cache_folder_size(cache_dir: str, new_file_size: int, max_size: int = 10 * 1024 * 1024):
     if not os.path.exists(cache_dir):
         return
 
@@ -437,9 +425,7 @@ def format_and_truncate_aggregate_references(
         body = ref["body_text"]
 
         if len(body) > 10000:
-            body = (
-                body[:10000] + "\n... [TRUNCATED - Reference exceeded character limit]"
-            )
+            body = body[:10000] + "\n... [TRUNCATED - Reference exceeded character limit]"
 
         ref_block = f"### Reference: {url}\n"
         if desc:
@@ -486,9 +472,7 @@ async def fetch_and_inject_references(
     try:
         standing_refs = await jira.get_project_references(project_key)
     except Exception as e:
-        logger.warning(
-            f"Failed to fetch project standing references for {project_key}: {e}"
-        )
+        logger.warning(f"Failed to fetch project standing references for {project_key}: {e}")
         standing_refs = []
 
     if not isinstance(standing_refs, list):
@@ -498,9 +482,7 @@ async def fetch_and_inject_references(
         standing_refs = []
 
     # Filter malformed entries
-    standing_refs = [
-        ref for ref in standing_refs if isinstance(ref, dict) and "url" in ref
-    ]
+    standing_refs = [ref for ref in standing_refs if isinstance(ref, dict) and "url" in ref]
 
     # 2. Fetch ticket comments
     try:
@@ -539,9 +521,7 @@ async def fetch_and_inject_references(
                 unique_norm_urls.append(norm)
             latest_ref_by_norm[norm] = ref
         except Exception as e:
-            logger.warning(
-                f"Failed to normalize standing reference URL {ref.get('url')}: {e}"
-            )
+            logger.warning(f"Failed to normalize standing reference URL {ref.get('url')}: {e}")
 
     for ref in ticket_refs:
         try:
@@ -550,9 +530,7 @@ async def fetch_and_inject_references(
                 unique_norm_urls.append(norm)
             latest_ref_by_norm[norm] = ref
         except Exception as e:
-            logger.warning(
-                f"Failed to normalize comment reference URL {ref.get('url')}: {e}"
-            )
+            logger.warning(f"Failed to normalize comment reference URL {ref.get('url')}: {e}")
 
     # Process up to 10 reference resources
     selected_norms = unique_norm_urls[:10]
