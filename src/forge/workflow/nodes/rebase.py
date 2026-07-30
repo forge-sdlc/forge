@@ -15,7 +15,10 @@ from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
-from forge.workflow.nodes.workspace_setup import get_workspace_manager
+from forge.workflow.nodes.workspace_setup import (
+    get_workspace_manager,
+    write_workspace_identity,
+)
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workspace.git_ops import GitOperations
@@ -61,6 +64,11 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         workspace = manager.create_workspace(repo_name=current_repo, ticket_key=ticket_key)
         git = GitOperations(workspace)
         git.clone()
+        write_workspace_identity(
+            workspace.path,
+            ticket_key=ticket_key,
+            repo_name=current_repo,
+        )
         git.add_fork_remote(fork_owner, fork_repo)
 
         if git.remote_branch_exists(workspace.branch_name, remote="fork"):

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 _WORKSPACE_IDENTITY_FILE = ".forge/workspace.json"
 
 
-def _write_workspace_identity(path: Path, *, ticket_key: str, repo_name: str) -> None:
+def write_workspace_identity(path: Path, *, ticket_key: str, repo_name: str) -> None:
     """Persist identity used to safely recover a workspace after process loss."""
     identity_path = path / _WORKSPACE_IDENTITY_FILE
     identity_path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,7 +105,7 @@ def _recreate_workspace_from_fork(
 
     git.workspace.path = target_path
     git.workspace_recreated = True
-    _write_workspace_identity(target_path, ticket_key=ticket_key, repo_name=current_repo)
+    write_workspace_identity(target_path, ticket_key=ticket_key, repo_name=current_repo)
     logger.info(f"Workspace recreated at {target_path} for {ticket_key}")
     return str(target_path), git
 
@@ -335,7 +335,7 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         forge_dir = workspace.path / ".forge"
         forge_dir.mkdir(exist_ok=True)
         (forge_dir / "history").mkdir(exist_ok=True)
-        _write_workspace_identity(
+        write_workspace_identity(
             workspace.path,
             ticket_key=ticket_key,
             repo_name=current_repo,
