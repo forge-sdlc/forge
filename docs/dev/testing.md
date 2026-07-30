@@ -97,3 +97,17 @@ uv run forge worker 2>&1 | grep "PROJ-123"
 ```
 
 See the [Developer Guide](../developer-guide.md#10-debugging-tools) for patching checkpoints directly and other advanced debugging tools.
+
+## End-to-End Smoke Testing
+
+Forge provides an automated end-to-end smoke test CLI command to verify that state checkpointing, the container runtime sandbox, model provider API connectivity, and the Deep Agent system are fully functional.
+
+```bash
+uv run forge smoke-test
+```
+
+This command runs completely offline from Jira/production branches, performing all actions in a disposable workspace:
+1. **Diagnostic Graph Execution**: Compiles a 2-node LangGraph and executes it with the configured Redis state checkpointer, verifying workflow resumption.
+2. **Workspace Setup & Container Verification**: Launches a rootless Podman environment inside a temporary folder with a mocked Git tree.
+3. **Container Agent Execution & Verification**: Spawns the real agent inside the container, instructs it to create a specific verification file, and asserts that the file is successfully populated.
+```

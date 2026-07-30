@@ -997,6 +997,15 @@ async def cmd_health(_args: argparse.Namespace) -> int:
     return 0
 
 
+async def cmd_smoke_test(_args: argparse.Namespace) -> int:
+    """Run an end-to-end smoke test to verify Forge runtime connectivity and execution."""
+    from forge.config import get_settings
+    from forge.smoke_test import run_smoke_test
+
+    settings = get_settings()
+    return await run_smoke_test(settings)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -1110,6 +1119,12 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=50,
         help="Number of log entries to show (default: 50)",
+    )
+
+    # smoke-test command
+    subparsers.add_parser(
+        "smoke-test",
+        help="Run an end-to-end smoke test to verify Forge runtime connectivity and execution",
     )
 
     # skills subparser group
@@ -1318,6 +1333,7 @@ Examples:
         "list": cmd_list,
         "retry": cmd_retry,
         "logs": cmd_logs,
+        "smoke-test": cmd_smoke_test,
         "project-setup": cmd_project_setup,
         "get-config": cmd_get_config,
     }
