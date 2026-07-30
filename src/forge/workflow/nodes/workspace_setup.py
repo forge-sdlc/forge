@@ -446,6 +446,8 @@ async def teardown_workspace(state: WorkflowState) -> WorkflowState:
                 or identity.get("ticket_key") != ticket_key
                 or identity.get("repo_name") != current_repo
             ):
+                # Caught by the outer except — records last_error and
+                # clears workspace_path without deleting the directory.
                 raise ValueError(
                     f"Refusing to destroy unrecognized workspace path: {workspace_path}"
                 )

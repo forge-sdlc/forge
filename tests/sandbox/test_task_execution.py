@@ -286,7 +286,7 @@ class TestTaskExecutionSandbox:
         forge_dir = workspace_path / ".forge"
         forge_dir.mkdir()
         (forge_dir / "workspace.json").write_text(
-            json.dumps({"ticket_key": "TASK-123", "repo_name": "acme/backend"})
+            json.dumps({"ticket_key": "TASK-123", "repo_name": "acme/backend"}, sort_keys=True)
         )
         state = _make_state(workspace_path=str(workspace_path))
         mock_manager = MagicMock()
@@ -342,7 +342,7 @@ class TestTaskExecutionSandbox:
         forge_dir = workspace_path / ".forge"
         forge_dir.mkdir()
         (forge_dir / "workspace.json").write_text(
-            json.dumps({"ticket_key": "TASK-123", "repo_name": "acme/frontend"})
+            json.dumps({"ticket_key": "TASK-123", "repo_name": "acme/frontend"}, sort_keys=True)
         )
         state = _make_state(workspace_path=str(workspace_path), current_repo="acme/backend")
         mock_manager = MagicMock()
@@ -353,5 +353,36 @@ class TestTaskExecutionSandbox:
         teardown_state = await teardown_workspace(state)
 
         assert workspace_path.exists()
+        assert "Refusing to destroy unrecognized workspace path" in teardown_state["last_error"]
+        mock_manager.destroy_workspace.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("forge.workflow.nodes.workspace_setup.get_settings")
+    @patch("forge.workflow.nodes.workspace_setup.get_workspace_manager")
+    async def test_teardown_workspace_rejects_symlink_to_valid_workspace(
+        self,
+        mock_get_manager: MagicMock,
+        mock_get_settings: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """A symlink pointing at a valid workspace must be rejected."""
+        real_path = tmp_path / "forge-TASK-123-real"
+        real_path.mkdir()
+        forge_dir = real_path / ".forge"
+        forge_dir.mkdir()
+        (forge_dir / "workspace.json").write_text(
+            json.dumps({"ticket_key": "TASK-123", "repo_name": "acme/backend"}, sort_keys=True)
+        )
+        symlink_path = tmp_path / "forge-TASK-123-link"
+        symlink_path.symlink_to(real_path)
+        state = _make_state(workspace_path=str(symlink_path))
+        mock_manager = MagicMock()
+        mock_manager.get_workspace.return_value = None
+        mock_get_manager.return_value = mock_manager
+        mock_get_settings.return_value.workspace_base_dir = str(tmp_path)
+
+        teardown_state = await teardown_workspace(state)
+
+        assert real_path.exists()
         assert "Refusing to destroy unrecognized workspace path" in teardown_state["last_error"]
         mock_manager.destroy_workspace.assert_not_called()
