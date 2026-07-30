@@ -1346,6 +1346,11 @@ class OrchestratorWorker:
             and (current_node in _REVIEW_GATES or targets_implementation_pr)
             and current_state.get("is_paused", True)
         ):
+            sender_login = payload.get("sender", {}).get("login", "")
+            if sender_login and sender_login == await self._get_forge_github_login():
+                logger.debug("Ignoring Forge's own pull request review")
+                return current_state
+
             review = payload.get("review", {})
             review_state = review.get("state", "").lower()
             review_body = review.get("body", "") or ""

@@ -1485,6 +1485,51 @@ class TestHandleResumeEventReviewGates:
         mock_github.close.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_forge_authored_pr_review_does_not_resume_review_workflow(self):
+        """Thread replies create review events that Forge must not consume itself."""
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        state = {
+            "ticket_key": "TEST-236",
+            "current_node": "human_review_gate",
+            "current_repo": "owner/repo",
+            "current_pr_number": 42,
+            "is_paused": True,
+            "context": {},
+        }
+        message = QueueMessage(
+            message_id="msg-forge-review",
+            event_id="evt-forge-review",
+            source=EventSource.GITHUB,
+            event_type="pull_request_review:submitted",
+            ticket_key="TEST-236",
+            payload={
+                "review": {
+                    "id": 99,
+                    "state": "commented",
+                    "body": "",
+                    "user": {"login": "forge-bot", "type": "Bot"},
+                },
+                "pull_request": {"number": 42},
+                "repository": {"full_name": "owner/repo"},
+                "sender": {"login": "forge-bot", "type": "Bot"},
+            },
+        )
+
+        with (
+            patch.object(
+                worker,
+                "_get_forge_github_login",
+                new=AsyncMock(return_value="forge-bot"),
+            ) as get_forge_login,
+            patch("forge.orchestrator.worker.GitHubClient") as github_client,
+        ):
+            result = await worker._handle_resume_event(message, state)
+
+        assert result is state
+        get_forge_login.assert_awaited_once()
+        github_client.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_inline_reply_resumes_only_its_contested_thread(self):
         worker = OrchestratorWorker(consumer_name="test-worker")
         state = {
