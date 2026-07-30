@@ -102,8 +102,7 @@ def _extract_agent_transcript_errors(
     assistant_indices = [
         index
         for index, message in enumerate(messages)
-        if isinstance(message, dict)
-        and message.get("role") in {"ai", "assistant"}
+        if isinstance(message, dict) and message.get("role") in {"ai", "assistant"}
     ]
     start = (
         assistant_indices[-max_assistant_turns]
@@ -119,9 +118,7 @@ def _extract_agent_transcript_errors(
 
         role = str(message.get("role", "unknown"))
         content = message.get("content", "")
-        content_text = (
-            content if isinstance(content, str) else json.dumps(content, default=str)
-        )
+        content_text = content if isinstance(content, str) else json.dumps(content, default=str)
         metadata = message.get("response_metadata")
         metadata = metadata if isinstance(metadata, dict) else {}
         stop_reason = metadata.get("stop_reason") or metadata.get("finish_reason")
