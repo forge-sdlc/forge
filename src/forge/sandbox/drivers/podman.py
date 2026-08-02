@@ -44,9 +44,7 @@ class PodmanDriver(SandboxDriver):
                 timeout=spec.timeout_seconds + 60,
             )
         except TimeoutError:
-            logger.error(
-                "Container execution timed out, stopping %s", spec.container_name
-            )
+            logger.error("Container execution timed out, stopping %s", spec.container_name)
             await self._stop_container(spec.container_name, process)
             return ExecutionResult(
                 exit_code=-1,
@@ -54,9 +52,7 @@ class PodmanDriver(SandboxDriver):
                 stderr="Container execution timed out",
             )
         except asyncio.CancelledError:
-            logger.warning(
-                "Container execution cancelled, stopping %s", spec.container_name
-            )
+            logger.warning("Container execution cancelled, stopping %s", spec.container_name)
             await self._stop_container(spec.container_name, process)
             raise
 
@@ -87,12 +83,14 @@ class PodmanDriver(SandboxDriver):
 
         cmd.append(spec.image)
 
-        cmd.extend([
-            "--task-file",
-            "/task.json",
-            "--max-retries",
-            str(spec.max_retries),
-        ])
+        cmd.extend(
+            [
+                "--task-file",
+                "/task.json",
+                "--max-retries",
+                str(spec.max_retries),
+            ]
+        )
 
         if spec.skip_tests:
             cmd.append("--skip-tests")
@@ -140,16 +138,12 @@ class PodmanDriver(SandboxDriver):
             try:
                 await asyncio.wait_for(kill_process.wait(), timeout=15.0)
             except TimeoutError:
-                logger.warning(
-                    "podman kill for %s did not finish", container_name
-                )
+                logger.warning("podman kill for %s did not finish", container_name)
 
         try:
             await asyncio.wait_for(process.wait(), timeout=15.0)
         except TimeoutError:
-            logger.warning(
-                "podman run process for %s did not exit, killing", container_name
-            )
+            logger.warning("podman run process for %s did not exit, killing", container_name)
             process.kill()
             await process.wait()
 

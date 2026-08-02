@@ -91,49 +91,37 @@ class TestPreviousTaskKeysPassing:
 
     async def test_runner_passes_previous_task_keys_in_task_file(self):
         """ContainerRunner should include previous_task_keys in task file."""
+        from forge.sandbox.driver import ExecutionResult
         from forge.sandbox.runner import ContainerRunner
 
         with tempfile.TemporaryDirectory() as workspace_dir:
             workspace = Path(workspace_dir)
 
-            # Mock podman and settings
-            with (
-                patch("forge.sandbox.runner.shutil.which", return_value="/usr/bin/podman"),
-                patch("forge.sandbox.runner.get_settings") as mock_settings,
-            ):
-                settings = MagicMock()
-                settings.anthropic_api_key.get_secret_value.return_value = "test-key"
-                settings.llm_backend = "anthropic"
-                settings.llm_model = "claude-test"
-                settings.container_image = "test-image"
-                settings.container_timeout = 3600
-                settings.container_memory = "4g"
-                settings.container_cpus = "2"
-                mock_settings.return_value = settings
+            settings = MagicMock()
+            settings.anthropic_api_key.get_secret_value.return_value = "test-key"
+            settings.llm_backend = "anthropic"
+            settings.llm_model = "claude-test"
+            settings.container_image = "test-image"
+            settings.container_timeout = 3600
+            settings.container_memory = "4g"
+            settings.container_cpus = "2"
 
-                runner = ContainerRunner(settings)
+            mock_driver = MagicMock()
+            mock_driver.execute = AsyncMock(
+                return_value=ExecutionResult(exit_code=0, stdout="", stderr="")
+            )
 
-                # Mock the actual run to just create the task file
-                with (
-                    patch.object(runner, "_build_podman_command", return_value=["echo", "test"]),
-                    patch("asyncio.create_subprocess_exec") as mock_exec,
-                ):
-                    mock_process = AsyncMock()
-                    mock_process.communicate = AsyncMock(return_value=(b"", b""))
-                    mock_process.returncode = 0
-                    mock_exec.return_value = mock_process
+            runner = ContainerRunner(settings, driver=mock_driver)
 
-                    await runner.run(
-                        workspace_path=workspace,
-                        task_summary="Test task",
-                        task_description="Test description",
-                        previous_task_keys=["TASK-1", "TASK-2"],
-                    )
+            with patch.object(runner, "_build_execution_spec", return_value=MagicMock()):
+                await runner.run(
+                    workspace_path=workspace,
+                    task_summary="Test task",
+                    task_description="Test description",
+                    previous_task_keys=["TASK-1", "TASK-2"],
+                )
 
-                    # Check the task file content (created before the command runs)
-                    workspace / ".forge-task.json"
-                    # File is cleaned up, but we can verify the call was made
-                    # by checking _build_podman_command was called
+                mock_driver.execute.assert_awaited_once()
 
     async def test_implementation_node_passes_implemented_tasks(self):
         """Implementation node should pass implemented_tasks as previous_task_keys."""

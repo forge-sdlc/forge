@@ -59,13 +59,9 @@ class SandboxDriver(ABC):
         """Check if this driver's runtime is available."""
         ...
 
-    async def build_image(
-        self, containerfile_path: Path | None = None, tag: str = ""
-    ) -> bool:
+    async def build_image(self, containerfile_path: Path | None = None, tag: str = "") -> bool:
         """Build a container image. Optional — not all drivers support this."""
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support local image building"
-        )
+        raise NotImplementedError(f"{type(self).__name__} does not support local image building")
 
     async def image_exists(self, tag: str) -> bool:  # noqa: ARG002
         """Check if an image exists locally."""
@@ -73,6 +69,4 @@ class SandboxDriver(ABC):
 
     async def pull_image(self, image: str) -> bool:
         """Pull a container image."""
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support image pulling"
-        )
+        raise NotImplementedError(f"{type(self).__name__} does not support image pulling")

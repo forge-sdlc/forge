@@ -340,11 +340,13 @@ class ContainerRunner:
         if selected_backend == "vertex-ai":
             gcloud_creds = self._get_gcloud_credentials_path()
             if gcloud_creds:
-                mounts.append((
-                    gcloud_creds,
-                    "/root/.config/gcloud/application_default_credentials.json",
-                    "ro,Z",
-                ))
+                mounts.append(
+                    (
+                        gcloud_creds,
+                        "/root/.config/gcloud/application_default_credentials.json",
+                        "ro,Z",
+                    )
+                )
 
         for host_path, container_path in skill_mounts:
             mounts.append((host_path, container_path, "ro,Z"))
@@ -652,8 +654,7 @@ class ContainerRunner:
                 logger.debug(f"Container stdout:\n{stdout_str}")
             if self.settings.container_keep:
                 logger.warning(
-                    f"Container kept for debugging (FORGE_CONTAINER_KEEP=true): "
-                    f"{container_name}"
+                    f"Container kept for debugging (FORGE_CONTAINER_KEEP=true): {container_name}"
                 )
         else:
             # Success: stderr at DEBUG only
@@ -828,6 +829,4 @@ class ContainerRunner:
 
     async def pull_base_image(self) -> bool:
         """Pull the devcontainers/universal base image via the active driver."""
-        return await self._driver.pull_image(
-            "mcr.microsoft.com/devcontainers/universal:linux"
-        )
+        return await self._driver.pull_image("mcr.microsoft.com/devcontainers/universal:linux")

@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.models.workflow import TicketType
-from forge.sandbox.runner import ContainerConfig, ContainerRunner
+from forge.sandbox.runner import ContainerConfig, ContainerResult, ContainerRunner
 from forge.workflow.nodes.task_takeover_execution import execute_task_changes
 from forge.workflow.nodes.workspace_setup import teardown_workspace
 
@@ -67,7 +67,7 @@ class TestTaskExecutionSandbox:
             yield
 
     @pytest.mark.asyncio
-    @patch("asyncio.create_subprocess_exec")
+    @patch("forge.sandbox.drivers.podman.asyncio.create_subprocess_exec")
     async def test_container_runner_successful_execution(self, mock_create_proc: AsyncMock) -> None:
         """Test ContainerRunner correctly runs a task with successful output."""
         # Arrange
@@ -110,19 +110,8 @@ class TestTaskExecutionSandbox:
             assert "--cpus" in cmd_args
 
     @pytest.mark.asyncio
-    @patch("asyncio.create_subprocess_exec")
-    async def test_execute_task_changes_successful_workflow(
-        self, mock_create_proc: AsyncMock
-    ) -> None:
+    async def test_execute_task_changes_successful_workflow(self) -> None:
         """Test the execute_task_changes workflow node with successful container execution."""
-        # Arrange
-        mock_proc = AsyncMock()
-        mock_proc.communicate = AsyncMock(
-            return_value=(b"Implementing changes...\nTests passed!", b"")
-        )
-        mock_proc.returncode = 0
-        mock_create_proc.return_value = mock_proc
-
         mock_jira = _make_mock_jira()
         mock_git = _make_mock_git(has_changes=True, sha="9876543210abcdef")
 
@@ -139,7 +128,22 @@ class TestTaskExecutionSandbox:
                     "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
                     return_value=(str(workspace_path), mock_git),
                 ),
+                patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
+                patch(
+                    "forge.workflow.nodes.task_takeover_execution.ContainerRunner",
+                ) as MockRunner,
             ):
+                mock_runner = MagicMock()
+                mock_runner.run = AsyncMock(
+                    return_value=ContainerResult(
+                        success=True,
+                        exit_code=0,
+                        stdout="Implementing changes...\nTests passed!",
+                        stderr="",
+                    )
+                )
+                MockRunner.return_value = mock_runner
+
                 # Act
                 updated_state = await execute_task_changes(state)
 
@@ -164,34 +168,35 @@ class TestTaskExecutionSandbox:
             )
 
     @pytest.mark.asyncio
-    @patch("asyncio.create_subprocess_exec")
-    async def test_build_and_test_recovery_workflow_iterative_self_correction(
-        self, mock_create_proc: AsyncMock
-    ) -> None:
+    async def test_build_and_test_recovery_workflow_iterative_self_correction(self) -> None:
         """Test build-and-test recovery workflow where compilation errors/test failures are fed back.
 
         We simulate a container execution that first fails (representing compilation/test failures),
         captures the failure logs back to the state, and on the subsequent retry/run,
         successfully implements self-correction and passes.
         """
-        # --- FIRST RUN: Simulated compilation/test failure ---
-        mock_proc_fail = AsyncMock()
-        mock_proc_fail.communicate = AsyncMock(
-            return_value=(
-                b"Compiling and running tests...\nFailed!",
-                b"SyntaxError: invalid syntax at auth.py line 25",
-            )
-        )
-        mock_proc_fail.returncode = 2  # EXIT_TESTS_FAILED or EXIT_TASK_FAILED
-        mock_create_proc.return_value = mock_proc_fail
-
         mock_jira = _make_mock_jira()
         mock_git_fail = _make_mock_git(has_changes=False)
+
+        fail_result = ContainerResult(
+            success=False,
+            exit_code=2,
+            stdout="Compiling and running tests...\nFailed!",
+            stderr="SyntaxError: invalid syntax at auth.py line 25",
+            error_message="Tests failed after max retries",
+        )
+        success_result = ContainerResult(
+            success=True,
+            exit_code=0,
+            stdout="Self-corrected auth.py.\nAll compilation checks and tests passed successfully!",
+            stderr="",
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace_path = Path(tmpdir)
             state_initial = _make_state(workspace_path=str(workspace_path))
 
+            # --- FIRST RUN: Simulated compilation/test failure ---
             with (
                 patch(
                     "forge.workflow.nodes.task_takeover_execution.JiraClient",
@@ -201,11 +206,17 @@ class TestTaskExecutionSandbox:
                     "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
                     return_value=(str(workspace_path), mock_git_fail),
                 ),
+                patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
+                patch(
+                    "forge.workflow.nodes.task_takeover_execution.ContainerRunner",
+                ) as MockRunner,
             ):
-                # Act
+                mock_runner = MagicMock()
+                mock_runner.run = AsyncMock(return_value=fail_result)
+                MockRunner.return_value = mock_runner
                 state_after_fail = await execute_task_changes(state_initial)
 
-            # Assert first run failed as expected, recording logs and error feedback
+            # Assert first run failed as expected
             assert state_after_fail["task_execution_results"]["success"] is False
             assert state_after_fail["task_execution_results"]["exit_code"] == 2
             assert "SyntaxError" in state_after_fail["task_execution_logs"]["stderr"]
@@ -213,19 +224,8 @@ class TestTaskExecutionSandbox:
             assert state_after_fail["commit_info"]["committed"] is False
 
             # --- SECOND RUN: Simulated self-correction and success ---
-            mock_proc_success = AsyncMock()
-            mock_proc_success.communicate = AsyncMock(
-                return_value=(
-                    b"Self-corrected auth.py.\nAll compilation checks and tests passed successfully!",
-                    b"",
-                )
-            )
-            mock_proc_success.returncode = 0
-            mock_create_proc.return_value = mock_proc_success
-
             mock_git_success = _make_mock_git(has_changes=True, sha="abcdef1234567890")
 
-            # We pass the state containing the failure logs and incremented retry count back to simulate the self-correction step
             with (
                 patch(
                     "forge.workflow.nodes.task_takeover_execution.JiraClient",
@@ -235,11 +235,17 @@ class TestTaskExecutionSandbox:
                     "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
                     return_value=(str(workspace_path), mock_git_success),
                 ),
+                patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
+                patch(
+                    "forge.workflow.nodes.task_takeover_execution.ContainerRunner",
+                ) as MockRunner2,
             ):
-                # Act
+                mock_runner2 = MagicMock()
+                mock_runner2.run = AsyncMock(return_value=success_result)
+                MockRunner2.return_value = mock_runner2
                 state_after_success = await execute_task_changes(state_after_fail)
 
-            # Assert second run succeeded after self-correction, resetting retry and committing changes
+            # Assert second run succeeded after self-correction
             assert state_after_success["task_execution_results"]["success"] is True
             assert state_after_success["task_execution_results"]["exit_code"] == 0
             assert "All compilation checks" in state_after_success["task_execution_logs"]["stdout"]

@@ -32,8 +32,7 @@ def create_driver(settings: Settings) -> SandboxDriver:
             driver = KubernetesDriver(settings)
         case _:
             raise ValueError(
-                f"Unknown sandbox driver: {driver_name!r}. "
-                f"Valid options: podman, kubernetes"
+                f"Unknown sandbox driver: {driver_name!r}. Valid options: podman, kubernetes"
             )
 
     if not driver.is_available():

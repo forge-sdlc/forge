@@ -33,9 +33,7 @@ class KubernetesDriver(SandboxDriver):
         self._workspace_pvc = settings.k8s_workspace_pvc
         self._workspace_base_path = settings.k8s_workspace_base_path
         self._image_pull_secrets = [
-            s.strip()
-            for s in settings.k8s_image_pull_secrets.split(",")
-            if s.strip()
+            s.strip() for s in settings.k8s_image_pull_secrets.split(",") if s.strip()
         ]
         self._service_account = settings.k8s_service_account
         self._poll_interval = _DEFAULT_POLL_INTERVAL
@@ -104,9 +102,7 @@ class KubernetesDriver(SandboxDriver):
     def _build_job_manifest(self, spec: ExecutionSpec) -> dict[str, Any]:
         from kubernetes import client as k8s_client
 
-        env_vars = [
-            k8s_client.V1EnvVar(name=k, value=v) for k, v in spec.env_vars.items()
-        ]
+        env_vars = [k8s_client.V1EnvVar(name=k, value=v) for k, v in spec.env_vars.items()]
 
         volume_mounts = [
             k8s_client.V1VolumeMount(
@@ -158,8 +154,7 @@ class KubernetesDriver(SandboxDriver):
 
         if self._image_pull_secrets:
             pod_spec.image_pull_secrets = [
-                k8s_client.V1LocalObjectReference(name=s)
-                for s in self._image_pull_secrets
+                k8s_client.V1LocalObjectReference(name=s) for s in self._image_pull_secrets
             ]
 
         template = k8s_client.V1PodTemplateSpec(
@@ -257,7 +252,11 @@ class KubernetesDriver(SandboxDriver):
         try:
             conditions = job.status.conditions or []
             for cond in conditions:
-                if cond.type == "Failed" and cond.status == "True" and cond.reason == "DeadlineExceeded":
+                if (
+                    cond.type == "Failed"
+                    and cond.status == "True"
+                    and cond.reason == "DeadlineExceeded"
+                ):
                     return -1
         except AttributeError:
             pass
