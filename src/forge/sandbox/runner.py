@@ -1,15 +1,15 @@
 """Container runner for sandbox code execution.
 
-This module handles spawning and managing podman containers for
-AI-powered code implementation. The orchestrator uses this to:
+This module handles spawning and managing containers for AI-powered code
+implementation. The orchestrator uses this to:
 
 1. Spawn a container with the workspace mounted
 2. Wait for completion
 3. Retrieve exit status and logs
 4. Clean up the container
 
-The container runs the entrypoint script which invokes Deep Agents
-to implement tasks with full tool access.
+The actual container runtime is pluggable via SandboxDriver implementations
+(Podman, Kubernetes, etc.), selected by the FORGE_SANDBOX_DRIVER setting.
 """
 
 import asyncio
@@ -17,7 +17,6 @@ import contextlib
 import json
 import logging
 import os
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,6 +35,7 @@ from forge.observability import (
     ReviewCycleRecorder,
 )
 from forge.prompts import load_prompt
+from forge.sandbox.driver import ExecutionSpec, SandboxDriver
 from forge.skills.resolver import resolve_skill_paths
 
 logger = logging.getLogger(__name__)
@@ -111,29 +111,36 @@ class ContainerConfig:
 class ContainerRunner:
     """Manages container lifecycle for sandbox execution.
 
-    This class provides the interface between the Forge orchestrator
-    and podman containers. It handles:
-
-    - Container spawning with proper mounts and limits
-    - Passing credentials securely via environment
-    - Waiting for completion with timeout
-    - Capturing logs and exit status
-    - Container cleanup
+    This class orchestrates the execution of tasks in containers. It
+    handles task file creation, environment variable construction,
+    review cycle polling, and result interpretation. The actual
+    container runtime is delegated to a SandboxDriver implementation.
     """
 
-    def __init__(self, settings: Settings | None = None):
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        driver: SandboxDriver | None = None,
+    ):
         """Initialize the container runner.
 
         Args:
             settings: Application settings. Uses default if not provided.
+            driver: Sandbox driver override. If not provided, the driver
+                is selected based on settings.sandbox_driver.
         """
         self.settings = settings or get_settings()
-        self._verify_podman()
+        if driver is not None:
+            self._driver = driver
+        else:
+            from forge.sandbox.drivers import create_driver
 
-    def _verify_podman(self) -> None:
-        """Verify podman is available."""
-        if not shutil.which("podman"):
-            raise RuntimeError("podman not found in PATH")
+            self._driver = create_driver(self.settings)
+
+    @property
+    def driver(self) -> SandboxDriver:
+        """The active sandbox driver."""
+        return self._driver
 
     def _default_config(self) -> ContainerConfig:
         """Create default config from settings."""
@@ -311,7 +318,40 @@ class ContainerRunner:
         name_parts.append(uuid.uuid4().hex[:6])
         return "-".join(name_parts)
 
-    def _build_podman_command(
+    def _build_volume_mounts(
+        self,
+        workspace_path: Path,
+        task_file: Path,
+        _ticket_key: str | None,
+        skill_mounts: list[tuple[Path, str]],
+        model_target: ResolvedModelTarget | None = None,
+    ) -> list[tuple[Path, str, str]]:
+        """Build the list of volume mounts for the execution spec.
+
+        Returns:
+            List of (host_path, container_path, mode) tuples.
+        """
+        mounts: list[tuple[Path, str, str]] = [
+            (workspace_path, "/workspace", "Z"),
+            (task_file, "/task.json", "ro,Z"),
+        ]
+
+        selected_backend = model_target.backend if model_target else self.settings.llm_backend
+        if selected_backend == "vertex-ai":
+            gcloud_creds = self._get_gcloud_credentials_path()
+            if gcloud_creds:
+                mounts.append((
+                    gcloud_creds,
+                    "/root/.config/gcloud/application_default_credentials.json",
+                    "ro,Z",
+                ))
+
+        for host_path, container_path in skill_mounts:
+            mounts.append((host_path, container_path, "ro,Z"))
+
+        return mounts
+
+    def _build_execution_spec(
         self,
         workspace_path: Path,
         task_file: Path,
@@ -319,128 +359,32 @@ class ContainerRunner:
         container_name: str,
         ticket_key: str | None = None,
         model_target: ResolvedModelTarget | None = None,
-    ) -> list[str]:
-        """Build the podman run command."""
+    ) -> ExecutionSpec:
+        """Build an ExecutionSpec from config and mounts.
 
-        cmd = [
-            "podman",
-            "run",
-            "--name",
-            container_name,
-        ]
-        if not self.settings.container_keep:
-            cmd.append("--rm")
-        cmd += [
-            # Mount workspace
-            "-v",
-            f"{workspace_path}:/workspace:Z",
-            # Mount task file
-            "-v",
-            f"{task_file}:/task.json:ro,Z",
-            # Resource limits
-            "--memory",
-            config.memory_limit,
-            "--cpus",
-            config.cpu_limit,
-            # Network (limited)
-            "--network",
-            config.network_mode,
-            # Working directory
-            "-w",
-            "/workspace",
-        ]
-
-        # Mount gcloud credentials for Vertex AI authentication
-        selected_backend = model_target.backend if model_target else self.settings.llm_backend
-        if selected_backend == "vertex-ai":
-            gcloud_creds = self._get_gcloud_credentials_path()
-            if gcloud_creds:
-                # Mount the credentials file to container
-                cmd.extend(
-                    [
-                        "-v",
-                        f"{gcloud_creds}:/root/.config/gcloud/application_default_credentials.json:ro,Z",
-                    ]
-                )
-
-        # Mount skill directories
+        Translates the ContainerConfig and resolved mounts into a
+        runtime-agnostic ExecutionSpec for the driver.
+        """
         skill_mounts, container_skill_paths = self._get_skill_mounts(ticket_key)
-        for host_path, container_path in skill_mounts:
-            cmd.extend(["-v", f"{host_path}:{container_path}:ro,Z"])
-
-        # Add environment variables
-        for key, value in self._build_env_vars(config, container_skill_paths, model_target).items():
-            cmd.extend(["-e", f"{key}={value}"])
-
-        # Add timeout
-        cmd.extend(["--timeout", str(config.timeout_seconds)])
-
-        # Add image
-        cmd.append(config.image)
-
-        # Add entrypoint arguments
-        cmd.extend(
-            [
-                "--task-file",
-                "/task.json",
-                "--max-retries",
-                str(config.max_retries),
-            ]
+        env_vars = self._build_env_vars(config, container_skill_paths, model_target)
+        volume_mounts = self._build_volume_mounts(
+            workspace_path, task_file, ticket_key, skill_mounts, model_target
         )
 
-        if config.skip_tests:
-            cmd.append("--skip-tests")
-
-        return cmd
-
-    async def _stop_timed_out_container(
-        self,
-        container_name: str,
-        process: asyncio.subprocess.Process,
-    ) -> None:
-        """Stop a running container and ensure the podman run process exits."""
-        stop_process = await asyncio.create_subprocess_exec(
-            "podman",
-            "stop",
-            "-t",
-            "10",
-            container_name,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+        return ExecutionSpec(
+            container_name=container_name,
+            image=config.image,
+            workspace_path=workspace_path,
+            task_file=task_file,
+            env_vars=env_vars,
+            memory_limit=config.memory_limit,
+            cpu_limit=config.cpu_limit,
+            timeout_seconds=config.timeout_seconds,
+            skip_tests=config.skip_tests,
+            max_retries=config.max_retries,
+            volume_mounts=volume_mounts,
+            remove_after=not self.settings.container_keep,
         )
-
-        should_kill = False
-        try:
-            await asyncio.wait_for(stop_process.wait(), timeout=15.0)
-            if stop_process.returncode != 0:
-                logger.warning(
-                    f"podman stop failed for {container_name} "
-                    f"(exit {stop_process.returncode}), killing"
-                )
-                should_kill = True
-        except TimeoutError:
-            logger.warning(f"Container {container_name} didn't stop, killing")
-            should_kill = True
-
-        if should_kill:
-            kill_process = await asyncio.create_subprocess_exec(
-                "podman",
-                "kill",
-                container_name,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            try:
-                await asyncio.wait_for(kill_process.wait(), timeout=15.0)
-            except TimeoutError:
-                logger.warning(f"podman kill for {container_name} did not finish")
-
-        try:
-            await asyncio.wait_for(process.wait(), timeout=15.0)
-        except TimeoutError:
-            logger.warning(f"podman run process for {container_name} did not exit, killing")
-            process.kill()
-            await process.wait()
 
     def _sweep_review_cycles(
         self,
@@ -709,10 +653,7 @@ class ContainerRunner:
             if self.settings.container_keep:
                 logger.warning(
                     f"Container kept for debugging (FORGE_CONTAINER_KEEP=true): "
-                    f"{container_name}\n"
-                    f"  Inspect logs:      podman logs {container_name}\n"
-                    f"  Enter filesystem:  podman export {container_name} | tar -xC /tmp/{container_name}\n"
-                    f"  Remove when done:  podman rm {container_name}"
+                    f"{container_name}"
                 )
         else:
             # Success: stderr at DEBUG only
@@ -818,14 +759,13 @@ class ContainerRunner:
         polling_task: asyncio.Task | None = None
 
         try:
-            # Build container name and command
+            # Build container name and execution spec
             container_name = self._build_container_name(ticket_key, repo_name)
-            cmd = self._build_podman_command(
+            spec = self._build_execution_spec(
                 workspace_path, task_file, config, container_name, ticket_key, model_target
             )
 
             logger.info(f"Starting container {container_name} for task: {task_summary}")
-            logger.debug(f"Command: {' '.join(cmd)}")
 
             # Clear artifacts from a prior execution before the container can
             # write review cycles for this execution.
@@ -834,13 +774,6 @@ class ContainerRunner:
                 step_name,
                 task_key or "",
                 skill_name or "",
-            )
-
-            # Run container
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
             )
 
             # Start review polling background task if step_name is provided
@@ -853,25 +786,9 @@ class ContainerRunner:
             )
 
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=config.timeout_seconds + 60,  # Extra buffer
-                )
-            except TimeoutError:
-                logger.error(f"Container execution timed out, stopping {container_name}")
-                await self._stop_timed_out_container(container_name, process)
-                return ContainerResult(
-                    success=False,
-                    exit_code=-1,
-                    stdout="",
-                    stderr="Container execution timed out",
-                    error_message="Timeout exceeded",
-                    review_cycles=collected_cycles,
-                )
+                exec_result = await self._driver.execute(spec)
             except asyncio.CancelledError:
-                logger.warning(f"Container execution cancelled, stopping {container_name}")
-                await self._stop_timed_out_container(container_name, process)
-                raise  # Re-raise CancelledError
+                raise
             finally:
                 await self._finalize_review_polling(
                     poller,
@@ -884,12 +801,12 @@ class ContainerRunner:
                     collected_cycles,
                 )
 
-            exit_code = process.returncode or 0
-            stdout_str = stdout.decode("utf-8", errors="replace")
-            stderr_str = stderr.decode("utf-8", errors="replace")
-
             return self._build_container_result(
-                exit_code, stdout_str, stderr_str, collected_cycles, container_name
+                exec_result.exit_code,
+                exec_result.stdout,
+                exec_result.stderr,
+                collected_cycles,
+                container_name,
             )
 
         finally:
@@ -902,98 +819,15 @@ class ContainerRunner:
         containerfile_path: Path | None = None,
         tag: str = DEFAULT_IMAGE,
     ) -> bool:
-        """Build the container image.
-
-        Args:
-            containerfile_path: Path to Containerfile. Uses default if not provided.
-            tag: Image tag. Defaults to forge-dev:latest.
-
-        Returns:
-            True if build succeeded.
-        """
-        if containerfile_path is None:
-            # Find Containerfile in project
-            project_root = Path(__file__).parent.parent.parent.parent
-            containerfile_path = project_root / "containers" / "Containerfile"
-
-        if not containerfile_path.exists():
-            logger.error(f"Containerfile not found: {containerfile_path}")
-            return False
-
-        context_dir = containerfile_path.parent
-
-        cmd = [
-            "podman",
-            "build",
-            "-t",
-            tag,
-            "-f",
-            str(containerfile_path),
-            str(context_dir),
-        ]
-
-        logger.info(f"Building container image: {tag}")
-
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        stdout, stderr = await process.communicate()
-
-        if process.returncode == 0:
-            logger.info(f"Successfully built image: {tag}")
-            return True
-        else:
-            logger.error(f"Failed to build image: {stderr.decode()}")
-            return False
+        """Build the container image via the active driver."""
+        return await self._driver.build_image(containerfile_path, tag)
 
     async def image_exists(self, tag: str = DEFAULT_IMAGE) -> bool:
-        """Check if the container image exists locally.
-
-        Args:
-            tag: Image tag to check.
-
-        Returns:
-            True if image exists.
-        """
-        cmd = ["podman", "image", "exists", tag]
-
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-
-        await process.wait()
-        return process.returncode == 0
+        """Check if the container image exists via the active driver."""
+        return await self._driver.image_exists(tag)
 
     async def pull_base_image(self) -> bool:
-        """Pull the devcontainers/universal base image.
-
-        Returns:
-            True if pull succeeded.
-        """
-        cmd = [
-            "podman",
-            "pull",
-            "mcr.microsoft.com/devcontainers/universal:linux",
-        ]
-
-        logger.info("Pulling devcontainers/universal base image...")
-
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        """Pull the devcontainers/universal base image via the active driver."""
+        return await self._driver.pull_image(
+            "mcr.microsoft.com/devcontainers/universal:linux"
         )
-
-        stdout, stderr = await process.communicate()
-
-        if process.returncode == 0:
-            logger.info("Successfully pulled base image")
-            return True
-        else:
-            logger.error(f"Failed to pull base image: {stderr.decode()}")
-            return False

@@ -483,6 +483,11 @@ class Settings(BaseSettings):
     )
 
     # Container Configuration
+    sandbox_driver: str = Field(
+        default="podman",
+        alias="forge_sandbox_driver",
+        description="Sandbox driver backend: podman or kubernetes",
+    )
     container_image: str = Field(
         default="localhost/forge-dev:latest",
         description="Container image for task execution (local or registry URL)",
@@ -503,6 +508,28 @@ class Settings(BaseSettings):
     container_cpus: str = Field(
         default="2",
         description="Container CPU limit",
+    )
+
+    # Kubernetes Driver Configuration (only used when sandbox_driver=kubernetes)
+    k8s_namespace: str = Field(
+        default="forge",
+        description="Kubernetes namespace for sandbox Jobs",
+    )
+    k8s_workspace_pvc: str = Field(
+        default="",
+        description="PVC name for workspace storage shared between worker and sandbox pods",
+    )
+    k8s_workspace_base_path: str = Field(
+        default="",
+        description="Mount path on the worker host where the workspace PVC is accessible",
+    )
+    k8s_image_pull_secrets: str = Field(
+        default="",
+        description="Comma-separated image pull secret names for sandbox pods",
+    )
+    k8s_service_account: str = Field(
+        default="",
+        description="Kubernetes service account for sandbox pods",
     )
 
     # Auto Review Configuration

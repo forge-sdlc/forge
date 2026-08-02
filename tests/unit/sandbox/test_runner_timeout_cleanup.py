@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.models.model_policy import ResolvedModelTarget
+from forge.sandbox.driver import ExecutionResult
+from forge.sandbox.drivers.podman import PodmanDriver
 from forge.sandbox.runner import ContainerConfig, ContainerRunner
+
+
+def _driver_without_init() -> PodmanDriver:
+    return object.__new__(PodmanDriver)
 
 
 def _runner_without_init() -> ContainerRunner:
@@ -15,7 +21,7 @@ def _runner_without_init() -> ContainerRunner:
 
 @pytest.mark.asyncio
 async def test_stop_failure_kills_container_and_waits_for_run_process() -> None:
-    runner = _runner_without_init()
+    driver = _driver_without_init()
     stop_process = MagicMock()
     stop_process.returncode = 1
     stop_process.wait = AsyncMock()
@@ -26,10 +32,10 @@ async def test_stop_failure_kills_container_and_waits_for_run_process() -> None:
     run_process.kill = MagicMock()
 
     with patch(
-        "forge.sandbox.runner.asyncio.create_subprocess_exec",
+        "forge.sandbox.drivers.podman.asyncio.create_subprocess_exec",
         new=AsyncMock(side_effect=[stop_process, kill_process]),
     ) as mock_exec:
-        await runner._stop_timed_out_container("forge-ticket-abc123", run_process)
+        await driver._stop_container("forge-ticket-abc123", run_process)
 
     assert mock_exec.call_count == 2
     assert mock_exec.call_args_list[0].args[:3] == ("podman", "stop", "-t")
@@ -40,7 +46,7 @@ async def test_stop_failure_kills_container_and_waits_for_run_process() -> None:
 
 @pytest.mark.asyncio
 async def test_run_process_wait_timeout_kills_run_process() -> None:
-    runner = _runner_without_init()
+    driver = _driver_without_init()
     stop_process = MagicMock()
     stop_process.returncode = 0
     stop_process.wait = AsyncMock()
@@ -59,12 +65,12 @@ async def test_run_process_wait_timeout_kills_run_process() -> None:
 
     with (
         patch(
-            "forge.sandbox.runner.asyncio.create_subprocess_exec",
+            "forge.sandbox.drivers.podman.asyncio.create_subprocess_exec",
             new=AsyncMock(return_value=stop_process),
         ) as mock_exec,
-        patch("forge.sandbox.runner.asyncio.wait_for", side_effect=fake_wait_for),
+        patch("forge.sandbox.drivers.podman.asyncio.wait_for", side_effect=fake_wait_for),
     ):
-        await runner._stop_timed_out_container("forge-ticket-abc123", run_process)
+        await driver._stop_container("forge-ticket-abc123", run_process)
 
     mock_exec.assert_awaited_once()
     run_process.kill.assert_called_once()
@@ -80,15 +86,17 @@ async def test_run_writes_trace_context_to_task_file(tmp_path) -> None:
     runner._build_container_name = MagicMock(return_value="forge-ticket-abc123")
     captured_task_data = {}
 
-    def build_command(_workspace_path, task_file, *_args):  # noqa: ANN001
+    def capture_spec(_workspace_path, task_file, *_args):  # noqa: ANN001
         captured_task_data.update(json.loads(task_file.read_text()))
-        return ["podman", "run", "fake"]
+        return MagicMock()
 
-    runner._build_podman_command = MagicMock(side_effect=build_command)
+    runner._build_execution_spec = MagicMock(side_effect=capture_spec)
 
-    process = MagicMock()
-    process.communicate = AsyncMock(return_value=(b"ok", b""))
-    process.returncode = 0
+    mock_driver = MagicMock()
+    mock_driver.execute = AsyncMock(
+        return_value=ExecutionResult(exit_code=0, stdout="ok", stderr="")
+    )
+    runner._driver = mock_driver
 
     trace_context = {
         "ticket_key": "FEAT-123",
@@ -97,21 +105,17 @@ async def test_run_writes_trace_context_to_task_file(tmp_path) -> None:
         "current_repo": "org/repo",
     }
 
-    with patch(
-        "forge.sandbox.runner.asyncio.create_subprocess_exec",
-        new=AsyncMock(return_value=process),
-    ):
-        result = await runner.run(
-            workspace_path=tmp_path,
-            task_summary="Do it",
-            task_description="Details",
-            config=ContainerConfig(),
-            ticket_key="FEAT-123",
-            task_key="TASK-1",
-            repo_name="org/repo",
-            previous_task_keys=["TASK-0"],
-            trace_context=trace_context,
-        )
+    result = await runner.run(
+        workspace_path=tmp_path,
+        task_summary="Do it",
+        task_description="Details",
+        config=ContainerConfig(),
+        ticket_key="FEAT-123",
+        task_key="TASK-1",
+        repo_name="org/repo",
+        previous_task_keys=["TASK-0"],
+        trace_context=trace_context,
+    )
 
     assert result.success is True
     assert captured_task_data["trace_context"]["current_node"] == "implement_task"
@@ -126,14 +130,16 @@ async def test_run_serializes_model_target_capabilities_to_task_file(tmp_path) -
     runner._build_container_name = MagicMock(return_value="forge-ticket-abc123")
     captured_task_data = {}
 
-    def build_command(_workspace_path, task_file, *_args):  # noqa: ANN001
+    def capture_spec(_workspace_path, task_file, *_args):  # noqa: ANN001
         captured_task_data.update(json.loads(task_file.read_text()))
-        return ["podman", "run", "fake"]
+        return MagicMock()
 
-    runner._build_podman_command = MagicMock(side_effect=build_command)
-    process = MagicMock()
-    process.communicate = AsyncMock(return_value=(b"ok", b""))
-    process.returncode = 0
+    runner._build_execution_spec = MagicMock(side_effect=capture_spec)
+    mock_driver = MagicMock()
+    mock_driver.execute = AsyncMock(
+        return_value=ExecutionResult(exit_code=0, stdout="ok", stderr="")
+    )
+    runner._driver = mock_driver
     model_target = ResolvedModelTarget(
         connection="default",
         model="gemini-2.5-pro",
@@ -143,20 +149,16 @@ async def test_run_serializes_model_target_capabilities_to_task_file(tmp_path) -
         policy_source="default",
     )
 
-    with patch(
-        "forge.sandbox.runner.asyncio.create_subprocess_exec",
-        new=AsyncMock(return_value=process),
-    ):
-        result = await runner.run(
-            workspace_path=tmp_path,
-            task_summary="Do it",
-            task_description="Details",
-            config=ContainerConfig(),
-            ticket_key="AISOS-2385",
-            task_key="AISOS-2385",
-            repo_name="winiciusallan/api",
-            model_target=model_target,
-        )
+    result = await runner.run(
+        workspace_path=tmp_path,
+        task_summary="Do it",
+        task_description="Details",
+        config=ContainerConfig(),
+        ticket_key="AISOS-2385",
+        task_key="AISOS-2385",
+        repo_name="winiciusallan/api",
+        model_target=model_target,
+    )
 
     assert result.success is True
     assert captured_task_data["model_target"]["required_capabilities"] == ["tools"]

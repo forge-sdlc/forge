@@ -8,6 +8,7 @@ import pytest
 
 from forge.observability import ReviewCycleData
 from forge.observability.review_poller import ReviewCyclePoller
+from forge.sandbox.driver import ExecutionResult
 from forge.sandbox.runner import (
     ContainerResult,
     ContainerRunner,
@@ -96,18 +97,16 @@ class TestRunWithStepName:
         runner.settings.auto_review_poll_interval = 1.0
         runner.settings.auto_review_record_polled_files = None
 
-        # Create a mock process that completes immediately
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        # Create a mock driver that completes immediately
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
         ):
             result = await runner.run(
                 workspace_path=tmp_path,
@@ -130,17 +129,15 @@ class TestRunWithStepName:
         runner.settings.container_cpus = "1"
         runner.settings.container_keep = False
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch("forge.sandbox.runner.ReviewCyclePoller") as mock_poller_class,
         ):
             result = await runner.run(
@@ -176,9 +173,11 @@ class TestBackgroundPollingTask:
         runner.settings.auto_review_poll_interval = 1.0
         runner.settings.auto_review_record_polled_files = None
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         # Track if polling was started
         poller_created = False
@@ -195,11 +194,7 @@ class TestBackgroundPollingTask:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 side_effect=create_poller,
@@ -228,9 +223,11 @@ class TestBackgroundPollingTask:
         runner.settings.auto_review_poll_interval = 1.0
         runner.settings.auto_review_record_polled_files = None
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         stop_called = False
 
@@ -249,11 +246,7 @@ class TestBackgroundPollingTask:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 side_effect=create_poller,
@@ -291,9 +284,11 @@ class TestReviewCycleCollection:
         runner.settings.auto_review_poll_interval = 0.1
         runner.settings.auto_review_record_polled_files = "log"
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         # Simulate a review cycle file being detected during final poll
         detected_cycle = ReviewCycleData(
@@ -316,11 +311,7 @@ class TestReviewCycleCollection:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 side_effect=create_poller,
@@ -354,9 +345,13 @@ class TestReviewCycleCollection:
         runner.settings.auto_review_poll_interval = 0.1
         runner.settings.auto_review_record_polled_files = None
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(side_effect=TimeoutError())
-        mock_process.returncode = None
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(
+                exit_code=-1, stdout="", stderr="Container execution timed out"
+            )
+        )
+        runner._driver = mock_driver
 
         # Pre-collected cycle (simulating one detected before timeout)
         timeout_cycle = ReviewCycleData(
@@ -388,12 +383,7 @@ class TestReviewCycleCollection:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
-            patch.object(runner, "_stop_timed_out_container", new=AsyncMock()),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 side_effect=create_poller,
@@ -410,9 +400,9 @@ class TestReviewCycleCollection:
                 step_name="implement_task",
             )
 
-        # Result should indicate failure
+        # Result should indicate failure (driver returns exit_code=-1 on timeout)
         assert result.success is False
-        assert "Timeout" in (result.error_message or "")
+        assert result.error_message is not None
         assert isinstance(result.review_cycles, list)
 
 
@@ -437,9 +427,11 @@ class TestMetricsRecording:
         runner.settings.auto_review_poll_interval = 0.1
         runner.settings.auto_review_record_polled_files = None
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         detected_cycle = ReviewCycleData(
             cycle=1,
@@ -461,11 +453,7 @@ class TestMetricsRecording:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 side_effect=create_poller,
@@ -509,9 +497,11 @@ class TestStepNamePathOrganization:
         runner.settings.auto_review_poll_interval = 1.0
         runner.settings.auto_review_record_polled_files = None
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         captured_step_name = None
 
@@ -530,11 +520,7 @@ class TestStepNamePathOrganization:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 side_effect=create_poller,
@@ -563,9 +549,11 @@ class TestStepNamePathOrganization:
         runner.settings.auto_review_poll_interval = 1.0
         runner.settings.auto_review_record_polled_files = "log"
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         captured_recorder_step_name = None
 
@@ -589,11 +577,7 @@ class TestStepNamePathOrganization:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 side_effect=create_poller,
@@ -999,17 +983,16 @@ class TestSweepIntegrationWithRun:
             "timestamp": "2024-01-15T10:30:00Z",
         }
 
-        mock_process = MagicMock()
-
-        async def write_file_then_exit():
+        async def write_file_then_return(_spec):
             # Write the file during the run (simulates container writing just
             # before exit — after our stale-file clearing has already run).
             cycle_dir.mkdir(parents=True, exist_ok=True)
             (cycle_dir / "review_cycle_1.json").write_text(json.dumps(cycle_data))
-            return b"output", b""
+            return ExecutionResult(exit_code=0, stdout="output", stderr="")
 
-        mock_process.communicate = AsyncMock(side_effect=write_file_then_exit)
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(side_effect=write_file_then_return)
+        runner._driver = mock_driver
 
         mock_poller_class = MagicMock()
         mock_poller_class.build_cycle_dir = ReviewCyclePoller.build_cycle_dir
@@ -1030,11 +1013,7 @@ class TestSweepIntegrationWithRun:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 mock_poller_class,
@@ -1141,9 +1120,11 @@ class TestBuildContainerResult:
         runner.settings.auto_review_poll_interval = 1.0
         runner.settings.auto_review_record_polled_files = None
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(
+            return_value=ExecutionResult(exit_code=0, stdout="output", stderr="")
+        )
+        runner._driver = mock_driver
 
         sweep_called = False
         original_sweep = runner._sweep_review_cycles
@@ -1164,11 +1145,7 @@ class TestBuildContainerResult:
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
             patch(
                 "forge.sandbox.runner.ReviewCyclePoller",
                 side_effect=create_poller,
@@ -1255,21 +1232,17 @@ class TestStaleReviewFilesCleared:
         )
         assert stale_file.exists()
 
-        mock_process = MagicMock()
-        mock_process.communicate = AsyncMock(return_value=(b"output", b""))
-        mock_process.returncode = 0
-
-        async def create_process(*_args, **_kwargs):
+        async def execute_and_check(_spec):
             assert not stale_file.exists(), "stale file still existed at container launch"
-            return mock_process
+            return ExecutionResult(exit_code=0, stdout="output", stderr="")
+
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(side_effect=execute_and_check)
+        runner._driver = mock_driver
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                side_effect=create_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
         ):
             await runner.run(
                 workspace_path=tmp_path,
@@ -1326,24 +1299,19 @@ class TestStaleReviewFilesCleared:
             "timestamp": "2024-06-01T00:00:00Z",
         }
 
-        mock_process = MagicMock()
-
-        async def write_new_cycle_then_exit():
+        async def write_new_cycle_then_return(_spec):
             """Simulate container writing a new cycle file then exiting."""
             await asyncio.sleep(0.1)
             (review_dir / "review_cycle_1.json").write_text(json.dumps(new_data))
-            return b"output", b""
+            return ExecutionResult(exit_code=0, stdout="output", stderr="")
 
-        mock_process.communicate = AsyncMock(side_effect=write_new_cycle_then_exit)
-        mock_process.returncode = 0
+        mock_driver = MagicMock()
+        mock_driver.execute = AsyncMock(side_effect=write_new_cycle_then_return)
+        runner._driver = mock_driver
 
         with (
             patch.object(runner, "_build_container_name", return_value="test-container"),
-            patch.object(runner, "_build_podman_command", return_value=["podman", "run"]),
-            patch(
-                "forge.sandbox.runner.asyncio.create_subprocess_exec",
-                return_value=mock_process,
-            ),
+            patch.object(runner, "_build_execution_spec", return_value=MagicMock()),
         ):
             result = await runner.run(
                 workspace_path=tmp_path,

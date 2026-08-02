@@ -51,6 +51,9 @@ docs = [
     "pymdown-extensions>=10.0",
     "ghp-import>=2.1",
 ]
+k8s = [
+    "kubernetes>=31.0.0",
+]
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
