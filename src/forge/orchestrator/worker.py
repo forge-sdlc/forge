@@ -1014,9 +1014,8 @@ class OrchestratorWorker:
                 if review_state in ("changes_requested", "commented"):
                     repo_full = payload.get("repository", {}).get("full_name", "")
                     pr_number = payload.get("pull_request", {}).get("number")
-                    review_id = review.get("id")
                     inline_comments: list[dict[str, Any]] = []
-                    if repo_full and pr_number and review_id:
+                    if repo_full and pr_number:
                         _owner, _repo = repo_full.split("/", 1)
                         gh = GitHubClient()
                         try:
@@ -1117,9 +1116,8 @@ class OrchestratorWorker:
                 if review_state in ("changes_requested", "commented"):
                     repo_full = payload.get("repository", {}).get("full_name", "")
                     pr_number = payload.get("pull_request", {}).get("number")
-                    review_id = review.get("id")
                     inline_comments: list[dict[str, Any]] = []
-                    if repo_full and pr_number and review_id:
+                    if repo_full and pr_number:
                         _owner, _repo = repo_full.split("/", 1)
                         gh = GitHubClient()
                         try:
