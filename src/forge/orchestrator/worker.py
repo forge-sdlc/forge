@@ -1247,7 +1247,12 @@ class OrchestratorWorker:
         is_spec_review = self._is_spec_pr_event(message, current_state) and current_node in (
             _SPEC_GATE_NODES
         )
-        if is_rejected and proposal_review_threads and (is_prd_review or is_spec_review) and is_bot_sender(payload):
+        if (
+            is_rejected
+            and proposal_review_threads
+            and (is_prd_review or is_spec_review)
+            and is_bot_sender(payload)
+        ):
             previous_decisions = {
                 item.get("thread_id"): item
                 for item in current_state.get("proposal_review_decisions", [])
