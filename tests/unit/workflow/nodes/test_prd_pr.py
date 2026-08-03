@@ -248,3 +248,43 @@ class TestUpdatePrdProposalPr:
         )
         assert mock_gh.create_or_update_file.call_args.kwargs["owner"] == "org"
         assert mock_gh.create_or_update_file.call_args.kwargs["repo"] == "proposals"
+
+    @pytest.mark.asyncio
+    async def test_skips_commit_when_content_unchanged(self):
+        from forge.workflow.nodes.prd_generation import _update_prd_proposal_pr
+        from forge.workflow.nodes.proposal_pr import _git_blob_sha
+
+        unchanged_content = "# Same PRD"
+        matching_sha = _git_blob_sha(unchanged_content)
+
+        mock_gh = MagicMock()
+        mock_gh.get_file_contents = AsyncMock(
+            return_value={"sha": matching_sha, "path": "TEST-123/prd.md"}
+        )
+        mock_gh.create_or_update_file = AsyncMock()
+        mock_gh.create_issue_comment = AsyncMock()
+        mock_gh.close = AsyncMock()
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-123",
+            ticket_type=TicketType.FEATURE,
+            prd_pr_branch="forge/prd/test-123",
+            prd_pr_repo="org/proposals",
+            prd_pr_fork_owner="forge-bot",
+            prd_pr_fork_repo="proposals",
+            prd_pr_number=7,
+            prd_pr_url="https://github.com/org/proposals/pull/7",
+            prd_pr_file_path="TEST-123/prd.md",
+        )
+
+        with patch("forge.workflow.nodes.proposal_pr.GitHubClient", return_value=mock_gh):
+            await _update_prd_proposal_pr(
+                ticket_key="TEST-123",
+                prd_content=unchanged_content,
+                state=state,
+            )
+
+        mock_gh.create_or_update_file.assert_not_called()
+        mock_gh.create_issue_comment.assert_called_once()
+        comment_body = mock_gh.create_issue_comment.call_args[0][3]
+        assert "unchanged" in comment_body

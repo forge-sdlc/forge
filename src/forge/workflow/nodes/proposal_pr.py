@@ -1,5 +1,6 @@
 """Shared publication helpers for PRD and specification proposal PRs."""
 
+import hashlib
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -131,14 +132,25 @@ async def create_proposal_pr(
         await jira.close()
 
 
+def _git_blob_sha(content: str) -> str:
+    """Compute the git blob SHA-1 for a string, matching how Git stores blobs."""
+    content_bytes = content.encode()
+    header = f"blob {len(content_bytes)}\0".encode()
+    return hashlib.sha1(header + content_bytes).hexdigest()
+
+
 async def update_proposal_pr(
     *,
     artifact: ProposalArtifact,
     ticket_key: str,
     content: str,
     state: dict[str, Any],
-) -> None:
-    """Update a fork proposal branch, with fallback for legacy upstream state."""
+) -> bool:
+    """Update a fork proposal branch, with fallback for legacy upstream state.
+
+    Returns:
+        True if the file was updated, False if the content was unchanged.
+    """
     prefix = artifact.state_prefix
     upstream_owner, upstream_repo = state[f"{prefix}_pr_repo"].split("/", 1)
     owner = state.get(f"{prefix}_pr_fork_owner") or upstream_owner
@@ -157,7 +169,24 @@ async def update_proposal_pr(
                 file_path,
                 branch,
             )
-            return
+            return False
+
+        if _git_blob_sha(content) == file_meta["sha"]:
+            logger.warning(
+                "Regenerated %s for %s is unchanged — skipping commit",
+                artifact.title_name,
+                ticket_key,
+            )
+            await gh.create_issue_comment(
+                upstream_owner,
+                upstream_repo,
+                pr_number,
+                f"Forge reviewed the feedback but the regenerated "
+                f"{artifact.published_name} was unchanged. The feedback may "
+                f"require manual revision, or it may have already been "
+                f"addressed in a previous revision.",
+            )
+            return False
 
         await gh.create_or_update_file(
             owner=owner,
@@ -175,5 +204,6 @@ async def update_proposal_pr(
             f"{artifact.published_name} has been revised based on feedback. "
             "Please review the updated version.",
         )
+        return True
     finally:
         await gh.close()

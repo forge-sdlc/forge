@@ -220,7 +220,7 @@ class TestHandlePrdPrReview:
                 "repository": {"full_name": "org/proposals"},
                 "pull_request": {"number": 7},
                 "review": {"id": 101, "state": "changes_requested", "body": "Mixed review"},
-                "sender": {"login": "reviewer", "type": "User"},
+                "sender": {"login": "coderabbitai[bot]", "type": "Bot"},
             },
         )
         threads = [
@@ -289,7 +289,7 @@ class TestHandlePrdPrComment:
                 "repository": {"full_name": "org/proposals"},
                 "issue": {"number": 7},
                 "comment": {
-                    "body": "Please expand the scope section",
+                    "body": "!Please expand the scope section",
                     "user": {"login": "reviewer"},
                 },
                 "sender": {"login": "reviewer"},
@@ -469,7 +469,7 @@ class TestHandlePrdPrComment:
                     "body": "Clarify the authorization behavior.",
                     "commit_id": "abc123",
                 },
-                "sender": {"login": "reviewer"},
+                "sender": {"login": "coderabbitai[bot]", "type": "Bot"},
             },
         )
         decision = {
@@ -505,7 +505,7 @@ class TestHandlePrdPrComment:
             {
                 "repository": {"full_name": "org/proposals"},
                 "issue": {"number": 7},
-                "comment": {"body": "Score: 10/10. Verdict: PASS. Suggestions follow."},
+                "comment": {"body": "!Score: 10/10. Verdict: PASS. Suggestions follow."},
                 "sender": {"login": "reviewer[bot]", "type": "Bot"},
             },
         )
@@ -538,7 +538,7 @@ class TestHandlePrdPrComment:
             {
                 "repository": {"full_name": "org/proposals"},
                 "issue": {"number": 7},
-                "comment": {"body": "The authorization requirement is missing."},
+                "comment": {"body": "!The authorization requirement is missing."},
                 "sender": {"login": "reviewer[bot]", "type": "Bot"},
             },
         )
@@ -570,7 +570,7 @@ class TestHandlePrdPrComment:
 
     @pytest.mark.asyncio
     async def test_uncertain_bot_review_revises_with_original_feedback(self, worker):
-        original_feedback = "The result may still need changes, but the verdict is unclear."
+        original_feedback = "!The result may still need changes, but the verdict is unclear."
         msg = _make_message(
             "issue_comment:created",
             {
@@ -600,7 +600,7 @@ class TestHandlePrdPrComment:
             result = await worker._handle_resume_event(msg, state)
 
         assert result["revision_requested"] is True
-        assert result["feedback_comment"] == original_feedback
+        assert "The result may still need changes" in result["feedback_comment"]
         assert result.get("automated_review_revision_count", 0) == 0
         assert result["automated_review_revision_pending"] is True
 
@@ -611,7 +611,7 @@ class TestHandlePrdPrComment:
             {
                 "repository": {"full_name": "org/proposals"},
                 "issue": {"number": 7},
-                "comment": {"body": "Another blocking request."},
+                "comment": {"body": "!Another blocking request."},
                 "sender": {"login": "reviewer[bot]", "type": "Bot"},
             },
         )
@@ -689,3 +689,103 @@ class TestJiraCommentIgnoredInPrMode:
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
         assert "scope section" in result["feedback_comment"]
+
+
+class TestInformationalCommentIgnored:
+    @pytest.mark.asyncio
+    async def test_plain_comment_on_prd_pr_is_ignored(self, worker):
+        """Comments without ! or ? prefix on PRD PRs should be ignored."""
+        msg = _make_message(
+            "issue_comment:created",
+            {
+                "repository": {"full_name": "org/proposals"},
+                "issue": {"number": 7},
+                "comment": {
+                    "body": "Looks good to me",
+                    "user": {"login": "reviewer"},
+                },
+                "sender": {"login": "reviewer"},
+            },
+        )
+        state = _prd_gate_state()
+
+        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
+            mock_gh = MagicMock()
+            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
+            mock_gh.close = AsyncMock()
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(msg, state)
+
+        assert result.get("is_paused", True) is True
+        assert result.get("revision_requested") is not True
+
+    @pytest.mark.asyncio
+    async def test_bot_informational_comment_on_prd_pr_is_ignored(self, worker):
+        """Bot comments without ! prefix (e.g. Prow, APPROVALNOTIFIER) should be ignored."""
+        msg = _make_message(
+            "issue_comment:created",
+            {
+                "repository": {"full_name": "org/proposals"},
+                "issue": {"number": 7},
+                "comment": {
+                    "body": "@user: changing LGTM is restricted to collaborators",
+                    "user": {"login": "openshift-ci[bot]"},
+                },
+                "sender": {"login": "openshift-ci[bot]", "type": "Bot"},
+            },
+        )
+        state = _prd_gate_state()
+
+        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
+            mock_gh = MagicMock()
+            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
+            mock_gh.close = AsyncMock()
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(msg, state)
+
+        assert result.get("is_paused", True) is True
+        assert result.get("revision_requested") is not True
+
+
+class TestHumanReviewSkipsTriage:
+    @pytest.mark.asyncio
+    async def test_human_review_bypasses_triage(self, worker):
+        """Human pull_request_review should skip triage and always trigger revision."""
+        msg = _make_message(
+            "pull_request_review:submitted",
+            {
+                "repository": {"full_name": "org/proposals"},
+                "pull_request": {"number": 7},
+                "review": {"id": 201, "state": "changes_requested", "body": ""},
+                "sender": {"login": "reviewer", "type": "User"},
+            },
+        )
+        threads = [
+            {
+                "thread_id": "thread-1",
+                "path": "prd.md",
+                "line": 10,
+                "comments": [{"comment_id": 100, "body": "Fix this section."}],
+            },
+        ]
+        state = _prd_gate_state(prd_content="# Current PRD")
+
+        with (
+            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            patch(
+                "forge.orchestrator.worker.triage_proposal_review_threads",
+                new=AsyncMock(),
+            ) as triage,
+        ):
+            mock_gh = MagicMock()
+            mock_gh.get_pull_request_review_threads = AsyncMock(return_value=threads)
+            mock_gh.close = AsyncMock()
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(msg, state)
+
+        assert result["revision_requested"] is True
+        assert "Fix this section" in result["feedback_comment"]
+        triage.assert_not_awaited()

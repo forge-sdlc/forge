@@ -1093,11 +1093,16 @@ class OrchestratorWorker:
                         logger.info(
                             f"PRD PR question for {message.ticket_key}: {comment_body[:100]}..."
                         )
-                    else:
+                    elif comment_type == CommentType.FEEDBACK:
                         is_rejected = True
-                        feedback = comment_body
+                        feedback = re.sub(r"^\s*!\s*", "", comment_body)
                         logger.info(
-                            f"PRD PR feedback for {message.ticket_key}: {comment_body[:100]}..."
+                            f"PRD PR feedback for {message.ticket_key}: {feedback[:100]}..."
+                        )
+                    else:
+                        logger.info(
+                            f"Informational comment on PRD PR for {message.ticket_key}, "
+                            f"ignoring: {comment_body[:100]}..."
                         )
 
         # GitHub events targeting the spec proposals PR — same pattern as PRD PR.
@@ -1220,11 +1225,16 @@ class OrchestratorWorker:
                         logger.info(
                             f"Spec PR question for {message.ticket_key}: {comment_body[:100]}..."
                         )
-                    else:
+                    elif comment_type == CommentType.FEEDBACK:
                         is_rejected = True
-                        feedback = comment_body
+                        feedback = re.sub(r"^\s*!\s*", "", comment_body)
                         logger.info(
-                            f"Spec PR feedback for {message.ticket_key}: {comment_body[:100]}..."
+                            f"Spec PR feedback for {message.ticket_key}: {feedback[:100]}..."
+                        )
+                    else:
+                        logger.info(
+                            f"Informational comment on spec PR for {message.ticket_key}, "
+                            f"ignoring: {comment_body[:100]}..."
                         )
 
         # Automated proposal reviewers often publish detailed suggestions even when
@@ -1237,7 +1247,7 @@ class OrchestratorWorker:
         is_spec_review = self._is_spec_pr_event(message, current_state) and current_node in (
             _SPEC_GATE_NODES
         )
-        if is_rejected and proposal_review_threads and (is_prd_review or is_spec_review):
+        if is_rejected and proposal_review_threads and (is_prd_review or is_spec_review) and is_bot_sender(payload):
             previous_decisions = {
                 item.get("thread_id"): item
                 for item in current_state.get("proposal_review_decisions", [])
