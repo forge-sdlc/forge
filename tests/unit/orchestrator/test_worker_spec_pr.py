@@ -101,7 +101,7 @@ async def test_satisfied_bot_spec_review_stays_paused(worker):
         {
             "repository": {"full_name": "org/proposals"},
             "issue": {"number": 12},
-            "comment": {"body": "The specification passes. Optional suggestions follow."},
+            "comment": {"body": "!The specification passes. Optional suggestions follow."},
             "sender": {"login": "reviewer[bot]", "type": "Bot"},
         },
     )
