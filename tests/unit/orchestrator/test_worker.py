@@ -182,7 +182,8 @@ async def test_multi_repo_ci_webhook_selects_earlier_pr_from_review_gate() -> No
 
     assert result["current_repo"] == "acme/backend"
     assert result["current_pr_number"] == 10
-    assert result["current_node"] == "ci_evaluator"
+    assert result["current_node"] == "human_review_gate"
+    assert result["pending_ci_event"] is True
     assert result["is_paused"] is False
 
 
@@ -1555,6 +1556,7 @@ class TestCiWebhookAtHumanReviewGate:
             "is_paused": True,
             "pending_ci_event": False,
             "context": {},
+            "pull_requests": {"org/repo": {"number": 42}},
         }
         message = QueueMessage(
             message_id="msg-1",
@@ -1563,10 +1565,11 @@ class TestCiWebhookAtHumanReviewGate:
             event_type="check_suite.completed",
             ticket_key="TEST-1",
             payload={
+                "repository": {"full_name": "org/repo"},
                 "check_suite": {
                     "status": "completed",
                     "pull_requests": [{"number": 42}],
-                }
+                },
             },
         )
 

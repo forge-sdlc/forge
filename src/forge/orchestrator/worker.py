@@ -1523,7 +1523,7 @@ class OrchestratorWorker:
                 "payload": payload,
             },
         }
-        if targets_implementation_pr and is_ci_webhook:
+        if targets_implementation_pr and is_ci_webhook and current_node != "human_review_gate":
             updated_state["current_node"] = "ci_evaluator"
         elif targets_implementation_pr and (
             "pull_request_review" in message.event_type or pr_merged
