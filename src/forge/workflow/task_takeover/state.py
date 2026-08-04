@@ -35,6 +35,9 @@ class TaskTakeoverState(
     qualitative_review_failed: bool
     commit_info: CommitInfo
 
+    # Documentation
+    docs_pr_url: str | None
+
 
 def create_initial_task_takeover_state(ticket_key: str, **kwargs: Any) -> TaskTakeoverState:
     """Create initial state for a new Task Takeover workflow run."""
@@ -76,6 +79,7 @@ def create_initial_task_takeover_state(ticket_key: str, **kwargs: Any) -> TaskTa
             "message": None,
             "committed": False,
         },
+        "docs_pr_url": None,
         "implementation_push_pending": False,
         "implementation_push_pending_task": None,
         "persistence_retry_count": 0,

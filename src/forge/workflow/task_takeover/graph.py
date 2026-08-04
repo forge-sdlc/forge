@@ -33,6 +33,7 @@ from forge.workflow.nodes import (
     teardown_and_route,
     triage_gate,
     triage_task,
+    update_docs_repo,
     wait_for_ci_gate,
 )
 from forge.workflow.task_takeover.state import TaskTakeoverState
@@ -86,6 +87,8 @@ def route_entry(state: TaskTakeoverState) -> str:
             return "create_pr"
         elif current_node == "teardown_workspace":
             return "teardown_workspace"
+        elif current_node == "update_docs_repo":
+            return "update_docs_repo"
         elif current_node == "escalate_blocked":
             return "escalate_blocked"
         else:
@@ -231,10 +234,10 @@ def _route_ci_evaluation(state: TaskTakeoverState) -> str:
 def _route_human_review_task_takeover(state: TaskTakeoverState) -> str:
     """Route after human_review_gate for a standalone Task/Epic PR."""
     if state.get("pr_merged"):
-        return "complete_task_takeover"
+        return "update_docs_repo"
     next_node = route_human_review(state)
     if next_node == "complete_tasks":
-        return "complete_task_takeover"
+        return "update_docs_repo"
     return next_node
 
 
@@ -293,6 +296,7 @@ def build_task_takeover_graph() -> StateGraph[TaskTakeoverState, Any, Any]:
     graph.add_node("human_review_gate", human_review_gate)
     graph.add_node("implement_review", implement_review)
     graph.add_node("review_response_gate", review_response_gate)
+    graph.add_node("update_docs_repo", update_docs_repo)
     graph.add_node("complete_task_takeover", complete_task_takeover)
 
     # Set entry point
@@ -318,6 +322,7 @@ def build_task_takeover_graph() -> StateGraph[TaskTakeoverState, Any, Any]:
             "human_review_gate": "human_review_gate",
             "implement_review": "implement_review",
             "review_response_gate": "review_response_gate",
+            "update_docs_repo": "update_docs_repo",
             "escalate_blocked": "escalate_blocked",
             END: END,
         },
@@ -431,7 +436,7 @@ def build_task_takeover_graph() -> StateGraph[TaskTakeoverState, Any, Any]:
         _route_human_review_task_takeover,
         {
             "implement_review": "implement_review",
-            "complete_task_takeover": "complete_task_takeover",
+            "update_docs_repo": "update_docs_repo",
             END: END,
         },
     )
@@ -455,6 +460,7 @@ def build_task_takeover_graph() -> StateGraph[TaskTakeoverState, Any, Any]:
             END: END,
         },
     )
+    graph.add_edge("update_docs_repo", "complete_task_takeover")
     graph.add_edge("complete_task_takeover", END)
 
     # Q&A routing
