@@ -35,6 +35,19 @@ def test_precedence_and_policy_source(resolver: ModelPolicyResolver) -> None:
     assert resolver.resolve("unknown_node").policy_source == "default"
 
 
+def test_project_wildcard_overrides_all_stages_but_not_explicit_stage(
+    resolver: ModelPolicyResolver,
+) -> None:
+    overrides = {
+        "*": {"connection": "vertex", "model": "gemini-flash"},
+        "generate_prd": {"connection": "vertex", "model": "gemini-pro"},
+    }
+
+    assert resolver.resolve("implement_task", overrides).model == "gemini-flash"
+    assert resolver.resolve("generate_prd", overrides).model == "gemini-pro"
+    assert "*" not in resolver.resolve_all(overrides)
+
+
 def test_rejects_unauthorized_connection(resolver: ModelPolicyResolver) -> None:
     override = {"implement_task": {"connection": "locked", "model": "claude-sonnet"}}
     with pytest.raises(ValueError, match="not allowed for project overrides"):

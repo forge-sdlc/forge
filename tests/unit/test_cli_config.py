@@ -42,6 +42,18 @@ class TestCLIConfigParserAndRouting:
         with pytest.raises(SystemExit):
             main(["get-config", "aisos", "--json", "--property", "forge.repos"])
 
+    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.setup_logging")
+    def test_project_setup_model_all_parsing(self, _mock_setup_logging, mock_cmd):
+        mock_cmd.return_value = 0
+
+        code = main(["project-setup", "aisos", "--model-all", "vertex-prod:gemini-pro"])
+
+        assert code == 0
+        args = mock_cmd.call_args.args[0]
+        assert args.project_key == "aisos"
+        assert args.model_all == "vertex-prod:gemini-pro"
+
 
 class TestCLIConfigExecution:
     """Fallback Semantics, Output Serialization, and Discovery."""

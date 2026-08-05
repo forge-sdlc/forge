@@ -65,6 +65,10 @@ forge project-setup MYPROJ \
   --model generate_prd=vertex-production:gemini-3.5-pro \
   --model implement_task=anthropic-production:claude-sonnet-4-6
 
+# Or override every stage at once (individual --model overrides still win)
+forge project-setup MYPROJ \
+  --model-all vertex-production:gemini-3.5-pro
+
 # Validate and print every resolved non-secret target
 forge get-config MYPROJ --models
 ```

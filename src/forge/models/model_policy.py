@@ -152,10 +152,18 @@ class ModelPolicyResolver:
             target = ModelTarget.model_validate(project_policy[key])
             source = "project"
             connection = self._validate_target(target, project_override=True, key=key)
+        elif project_policy and "*" in project_policy:
+            target = ModelTarget.model_validate(project_policy["*"])
+            source = "project"
+            connection = self._validate_target(target, project_override=True, key="*")
         elif key in self.policy:
             target = self.policy[key]
             source = "global"
             connection = self._validate_target(target, project_override=False, key=key)
+        elif "*" in self.policy:
+            target = self.policy["*"]
+            source = "global"
+            connection = self._validate_target(target, project_override=False, key="*")
         else:
             target = self.default
             source = "default"
@@ -172,4 +180,5 @@ class ModelPolicyResolver:
 
     def resolve_all(self, project_policy: dict[str, Any] | None = None) -> dict[str, Any]:
         keys = set(KNOWN_MODEL_POLICY_KEYS) | set(self.policy) | set(project_policy or {})
+        keys.discard("*")
         return {key: self.resolve(key, project_policy).model_dump() for key in sorted(keys)}

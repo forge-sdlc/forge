@@ -665,7 +665,16 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 )
                 return 1
             model_policy[policy_key] = {"connection": connection, "model": model}
-        if args.model_policy or args.model:
+        if args.model_all:
+            connection, separator, model = args.model_all.partition(":")
+            if not separator or not connection or not model:
+                print(
+                    "Error: --model-all must use CONNECTION:MODEL",
+                    file=sys.stderr,
+                )
+                return 1
+            model_policy["*"] = {"connection": connection, "model": model}
+        if args.model_policy or args.model or args.model_all:
             from forge.config import get_settings
 
             resolver = get_settings().model_policy_resolver()
@@ -688,13 +697,14 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 args.add_skill,
                 args.model_policy,
                 args.model,
+                args.model_all,
             ]
         ):
             print(
                 "Nothing to set — specify at least one of: "
                 "--repo, --default-repo, --prd-proposals-repo, "
                 "--prd-proposals-path, --skills-config, --add-skill"
-                ", --model-policy, --model"
+                ", --model-policy, --model, --model-all"
             )
             return 1
 
@@ -1319,6 +1329,12 @@ Examples:
         action="append",
         metavar="NODE_OR_SKILL=CONNECTION:MODEL",
         help="Set an exact model override (repeatable; sets forge.model_policy)",
+    )
+    setup_parser.add_argument(
+        "--model-all",
+        "--all-stages-model",
+        metavar="CONNECTION:MODEL",
+        help=("Override every model stage with one target; explicit --model stage overrides win"),
     )
     setup_parser.add_argument(
         "--model-policy",
