@@ -295,9 +295,9 @@ class TestPostPrRouting:
         state = make_task_state(ci_status=ci_status)
         assert _route_ci_evaluation(state) == expected
 
-    def test_human_review_merge_routes_to_task_takeover_complete(self) -> None:
+    def test_human_review_merge_routes_to_update_docs_repo(self) -> None:
         state = make_task_state(pr_merged=True, current_node="human_review_gate")
-        assert _route_human_review_task_takeover(state) == "complete_task_takeover"
+        assert _route_human_review_task_takeover(state) == "update_docs_repo"
 
     def test_human_review_changes_requested_routes_to_implement_review(self) -> None:
         state = make_task_state(
@@ -311,9 +311,9 @@ class TestPostPrRouting:
         state = make_task_state(current_node="human_review_gate", is_paused=True)
         assert _route_human_review_task_takeover(state) == END
 
-    def test_human_review_approved_routes_to_task_takeover_complete(self) -> None:
+    def test_human_review_approved_routes_to_update_docs_repo(self) -> None:
         state = make_task_state(current_node="human_review_gate", is_paused=False)
-        assert _route_human_review_task_takeover(state) == "complete_task_takeover"
+        assert _route_human_review_task_takeover(state) == "update_docs_repo"
 
     @pytest.mark.asyncio
     @patch("forge.workflow.task_takeover.graph.JiraClient")

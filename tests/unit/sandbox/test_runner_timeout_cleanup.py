@@ -79,7 +79,7 @@ async def test_run_writes_trace_context_to_task_file(tmp_path) -> None:
     runner._build_container_name = MagicMock(return_value="forge-ticket-abc123")
     captured_task_data = {}
 
-    def build_command(_workspace_path, task_file, *_args):  # noqa: ANN001
+    def build_command(_workspace_path, task_file, *_args, **_kwargs):  # noqa: ANN001
         captured_task_data.update(json.loads(task_file.read_text()))
         return ["podman", "run", "fake"]
 

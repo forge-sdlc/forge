@@ -22,7 +22,6 @@ async def update_documentation(state: WorkflowState) -> WorkflowState:
     changed identifiers, and applies minimal targeted updates to stale docs.
 
     Non-blocking: failures log a warning and proceed to PR creation.
-    Documentation update issues should not block code delivery.
 
     Args:
         state: Current workflow state.

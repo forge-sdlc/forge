@@ -34,6 +34,8 @@ graph TD;
 	escalate_blocked(escalate_blocked)
 	ai_review(ai_review)
 	human_review_gate(human_review_gate)
+	update_documentation(update_documentation)
+	update_docs_repo(update_docs_repo)
 	complete_tasks(complete_tasks)
 	aggregate_epic_status(aggregate_epic_status)
 	aggregate_feature_status(aggregate_feature_status)
@@ -65,13 +67,15 @@ graph TD;
 	generate_tasks -.-> __end__;
 	generate_tasks -.-> task_approval_gate;
 	human_review_gate -.-> __end__;
-	human_review_gate -.-> complete_tasks;
+	human_review_gate -.-> update_docs_repo;
 	human_review_gate -.-> implement_task;
+	update_docs_repo --> complete_tasks;
 	implement_bug_fix --> create_pr;
 	implement_task -.-> local_review;
 	implement_task -.-> escalate_blocked;
 	local_review -.-> local_review;
-	local_review -.-> create_pr;
+	local_review -.-> update_documentation;
+	update_documentation --> create_pr;
 	plan_approval_gate -.-> __end__;
 	plan_approval_gate -.-> generate_tasks;
 	plan_approval_gate -.-> regenerate_all_epics;

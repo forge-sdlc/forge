@@ -25,6 +25,9 @@ class BugState(
     bug_fix_implemented: bool
     tdd_approach: bool
 
+    # Documentation
+    docs_pr_url: str | None
+
     # Q&A mode
     qa_history: list[dict[str, str]]  # List of {question, answer, artifact_type, timestamp}
     generation_context: dict[str, Any]  # Stored context from generation
@@ -146,6 +149,7 @@ def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
         "qualitative_retry_count": 0,
         "qualitative_review_failed": False,
         "reflect_rca_retry_count": 0,
+        "docs_pr_url": None,
         "yolo_mode": False,
     }
 

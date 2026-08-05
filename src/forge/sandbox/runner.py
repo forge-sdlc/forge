@@ -290,6 +290,7 @@ class ContainerRunner:
         config: ContainerConfig,
         container_name: str,
         ticket_key: str | None = None,
+        extra_mounts: list[tuple[Path, str]] | None = None,
     ) -> list[str]:
         """Build the podman run command."""
 
@@ -320,6 +321,11 @@ class ContainerRunner:
             "-w",
             "/workspace",
         ]
+
+        # Mount extra volumes (e.g., code repo alongside docs workspace)
+        if extra_mounts:
+            for host_path, container_path in extra_mounts:
+                cmd.extend(["-v", f"{host_path}:{container_path}:ro,Z"])
 
         # Mount gcloud credentials for Vertex AI authentication
         if self.settings.llm_backend == "vertex-ai":
@@ -729,6 +735,7 @@ class ContainerRunner:
         task_key: str | None = None,
         repo_name: str | None = None,
         previous_task_keys: list[str] | None = None,
+        extra_mounts: list[tuple[Path, str]] | None = None,
         trace_context: dict[str, Any] | None = None,
         step_name: str | None = None,
         skill_name: str | None = None,
@@ -744,6 +751,7 @@ class ContainerRunner:
             task_key: Jira task key being implemented.
             repo_name: Repository name (e.g., "owner/repo") for container naming.
             previous_task_keys: List of previously implemented task keys for handoff context.
+            extra_mounts: Additional read-only volume mounts as (host_path, container_path) tuples.
             trace_context: Workflow fields forwarded to Langfuse only.
             step_name: Workflow step name (e.g., "implement_task", "local_review")
                 for organizing review cycle files under .forge/{step-name}/.
@@ -778,7 +786,12 @@ class ContainerRunner:
             # Build container name and command
             container_name = self._build_container_name(ticket_key, repo_name)
             cmd = self._build_podman_command(
-                workspace_path, task_file, config, container_name, ticket_key
+                workspace_path,
+                task_file,
+                config,
+                container_name,
+                ticket_key,
+                extra_mounts=extra_mounts,
             )
 
             logger.info(f"Starting container {container_name} for task: {task_summary}")

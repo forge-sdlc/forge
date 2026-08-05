@@ -1088,6 +1088,26 @@ class JiraClient:
         logger.info(f"Project {project_key}: default repo: {value}")
         return value
 
+    async def get_project_docs_repo(self, project_key: str) -> str | None:
+        """Fetch the optional forge.docs_repo project property.
+
+        Args:
+            project_key: The Jira project key.
+
+        Returns:
+            Repo string in "owner/repo" format, or None if not set.
+        """
+        value = await self.get_project_property(project_key, "forge.docs_repo")
+        if value is None:
+            return None
+        if not isinstance(value, str) or "/" not in value:
+            logger.warning(
+                f"forge.docs_repo for project {project_key} is malformed: {value!r}, ignoring"
+            )
+            return None
+        logger.info(f"Project {project_key}: docs repo: {value}")
+        return value
+
     async def get_prd_proposals_repo(self, project_key: str) -> str | None:
         """Fetch the forge.prd_proposals_repo project property.
 

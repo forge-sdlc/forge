@@ -46,6 +46,7 @@ from forge.workflow.nodes.rca_option_gate import (
 )
 from forge.workflow.nodes.rebase import rebase_pr
 from forge.workflow.nodes.triage import route_triage_gate, triage_check, triage_gate
+from forge.workflow.nodes.update_docs_repo import update_docs_repo
 from forge.workflow.nodes.workspace_setup import setup_workspace
 from forge.workflow.utils import resolve_shared_resume_node
 
@@ -120,6 +121,8 @@ def route_entry(state: BugState) -> str:
             return "decompose_plan"
         elif current_node == "post_merge_summary":
             return "post_merge_summary"
+        elif current_node == "update_docs_repo":
+            return "update_docs_repo"
         elif current_node in (
             "complete_tasks",
             "aggregate_epic_status",
@@ -440,6 +443,7 @@ def build_bug_graph() -> StateGraph:
 
     # ── Post-merge ──
     graph.add_node("post_merge_summary", post_merge_summary)
+    graph.add_node("update_docs_repo", update_docs_repo)
 
     # ── Q&A ──
     graph.add_node("answer_question", _answer_question_bug)
@@ -484,6 +488,7 @@ def build_bug_graph() -> StateGraph:
             "regenerate_plan": "regenerate_plan",
             "decompose_plan": "decompose_plan",
             "post_merge_summary": "post_merge_summary",
+            "update_docs_repo": "update_docs_repo",
             "setup_workspace": "setup_workspace",
             "implement_bug_fix": "implement_bug_fix",
             "local_review": "local_review",
@@ -750,6 +755,7 @@ def build_bug_graph() -> StateGraph:
     )
 
     # ── Post-merge terminal ──
-    graph.add_edge("post_merge_summary", END)
+    graph.add_edge("post_merge_summary", "update_docs_repo")
+    graph.add_edge("update_docs_repo", END)
 
     return graph

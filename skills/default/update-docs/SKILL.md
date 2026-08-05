@@ -2,9 +2,7 @@
 name: update-docs
 description: >-
   Detects documentation files that have become stale due to code changes
-  and applies minimal targeted updates. Builds an identifier checklist
-  from the diff, greps documentation for matches, evaluates candidates
-  in two passes, and edits confirmed stale docs in-place.
+  and applies targeted updates.
 ---
 
 # Update Docs
@@ -38,15 +36,18 @@ If the diff is empty, output `NO_DOCS_UPDATED` and stop.
 
 Explore the repository structure to identify where documentation lives.
 Different repos organize docs differently — look for dedicated doc
-directories (`docs/`, `doc/`, `documentation/`), standalone files like
-`README.md` at any level, and any other files whose primary purpose is
-documentation.
+directories, standalone files like README.md at any level, and any
+other files whose primary purpose is documentation.
 
-Search broadly:
+Search broadly — include diagram and config files that live alongside
+docs:
 
 ```bash
-find . -type f \( -name "*.md" -o -name "*.rst" -o -name "*.adoc" -o -name "*.txt" \) \
-  ! -path "./.git/*" ! -path "./.forge/*" ! -path "./vendor/*" ! -path "./node_modules/*" \
+find . -type f \( -name "*.md" -o -name "*.rst" -o -name "*.adoc" \
+  -o -name "*.txt" -o -name "*.mmd" -o -name "*.puml" \
+  -o -name "*.yaml" -o -name "*.yml" \) \
+  ! -path "./.git/*" ! -path "./.forge/*" ! -path "./vendor/*" \
+  ! -path "./node_modules/*" \
   | head -500
 ```
 
@@ -58,6 +59,9 @@ Then filter the results:
   swagger output)
 - **Exclude** changelog and release note entries that describe past
   releases
+- **Exclude** YAML/YML files that are not documentation. Only keep
+  YAML files that live in doc directories or are clearly documentation
+  examples.
 
 If no documentation files exist in the repo, output `NO_DOCS_FOUND`
 and stop.
@@ -88,7 +92,7 @@ Run the script in a single Bash call:
 
 ```bash
 for id in "identifier1" "identifier2" "identifier3"; do
-  matches=$(grep -rl "$id" <doc_files> 2>/dev/null)
+  matches=$(grep -rlFi "$id" <doc_files> 2>/dev/null)
   if [ -n "$matches" ]; then
     echo "MATCH: $id -> $matches"
   fi
@@ -102,25 +106,24 @@ are skipped.
 From the script output, collect all matched doc files into a
 candidate list.
 
-### 5. Evaluate every candidate (two passes)
+### 5. Evaluate candidates (two passes)
 
-**Pass 1 — Quick scan.** For each candidate doc file from step 4,
-view only the lines that matched the grep (use `grep -n` to see them
-in context). Based on the matching lines alone, decide whether the
-doc might be stale. Record a verdict for every candidate:
+**Pass 1 — Quick scan.** For each candidate, view only the lines
+that matched the grep (use `grep -n` to see them in context). Based
+on the matching lines alone, give a quick verdict:
 
 ```
 - path/to/doc.md -> possibly stale (describes behavior that changed)
 - path/to/other.md -> not stale (mentions identifier in passing)
-- path/to/another.md -> not stale (changelog entry)
-...
 ```
 
 Every candidate must have a verdict. Do not skip candidates.
 
-**Pass 2 — Deep read.** For each candidate marked "possibly stale"
-in pass 1, read the full file alongside the relevant section of the
-diff. Confirm whether the doc is actually stale.
+**Pass 2 — Deep read.** Only for candidates marked "possibly stale"
+in pass 1. Read the full file alongside the relevant section of the
+diff. Confirm whether the doc is actually stale. Check the file
+header for auto-generation markers — if the file is generated from
+source, skip it.
 
 When evaluating:
 
@@ -131,19 +134,32 @@ When evaluating:
 - **Do not flag changelog entries or release notes that describe past
   releases.** Historical entries are not stale because the code evolved.
 
-### 6. Update confirmed stale docs
+### 6. Review beyond grep results
 
-For each doc confirmed stale in pass 2:
+This step catches stale references that grep cannot find because
+documentation often uses prose names that differ from code identifiers,
+and new code introduces identifiers that don't exist in any doc yet.
+
+Always read the repository's README. Also read any main index or
+overview files at the root of doc directories. Read each file fully
+and compare it against the diff. Determine whether it describes any
+behavior, flow, or feature that the code changes affected. If it
+does, add it to the list of confirmed stale docs.
+
+Also scan the discovered documentation files for any that may cover
+the same area as the changed code, based on your understanding of
+what the diff does. You don't need to read every file — use file
+names and paths to decide which ones are worth checking.
+
+### 7. Update confirmed stale docs
+
+For each doc confirmed stale:
 
 1. Read the full file
-2. Make minimal targeted edits — fix only what the diff invalidated
-3. Do NOT restructure, rewrite, or add content beyond what the code
-   change requires
-4. Preserve the file's existing format, style, and structure
+2. Update the documentation so it accurately reflects the new code
+3. Preserve the file's existing format, style, and structure
 
-Update the documentation so it accurately reflects the new code.
-
-### 7. Commit changes
+### 8. Commit changes
 
 If any documentation files were updated:
 
@@ -154,7 +170,7 @@ git commit -m "[TICKET_KEY] docs: update documentation for code changes"
 
 Replace TICKET_KEY with the actual ticket key from the task context.
 
-### 8. Output
+### 9. Output
 
 If docs were updated:
 ```
@@ -177,11 +193,15 @@ NO_DOCS_FOUND
 
 ## Constraints
 
-- **Only change what the diff affects.** Do not improve, restructure,
-  or reformat documentation that is unrelated to the code change.
+- **Only change what the diff affects.** Fix stale content and add
+  new information that the diff introduced to existing docs. Do not
+  improve, restructure, or reformat documentation that is unrelated
+  to the code change.
 - **Do not update historical entries.** Changelog and release note
   entries for past releases are not stale — they describe what happened
   at that point in time.
+- **Skip auto-generated files.** Do not edit files that are generated
+  from source. They should be regenerated, not manually patched.
 - **Update existing files only.** Do not create new doc files from
   scratch.
 - **Preserve format.** Match the existing file's formatting conventions

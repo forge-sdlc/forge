@@ -42,6 +42,7 @@ from forge.workflow.nodes import (
     route_tasks_parallel,
     setup_workspace,
     teardown_and_route,
+    update_docs_repo,
     update_documentation,
     update_single_epic,
     wait_for_ci_gate,
@@ -144,6 +145,8 @@ def route_by_ticket_type(state: FeatureState) -> str:
             "escalate_blocked",
         ):
             return "task_router"
+        elif current_node == "update_docs_repo":
+            return "update_docs_repo"
         else:
             logger.warning(f"Unrecognized current_node '{current_node}', using ticket type routing")
 
@@ -484,6 +487,7 @@ def build_feature_graph() -> StateGraph:
     graph.add_node("human_review_gate", human_review_gate)
     graph.add_node("implement_review", implement_review)
     graph.add_node("review_response_gate", review_response_gate)
+    graph.add_node("update_docs_repo", update_docs_repo)
     graph.add_node("complete_tasks", complete_tasks)
     graph.add_node("aggregate_epic_status", aggregate_epic_status)
     graph.add_node("aggregate_feature_status", aggregate_feature_status)
@@ -530,6 +534,7 @@ def build_feature_graph() -> StateGraph:
             "human_review_gate": "human_review_gate",
             "implement_review": "implement_review",
             "review_response_gate": "review_response_gate",
+            "update_docs_repo": "update_docs_repo",
             # Rebase (merge conflict resolution)
             "rebase_pr": "rebase_pr",
             # Terminal chain — retried individually on failure
@@ -767,10 +772,11 @@ def build_feature_graph() -> StateGraph:
         route_human_review,
         {
             "implement_review": "implement_review",
-            "complete_tasks": "complete_tasks",
+            "complete_tasks": "update_docs_repo",
             END: END,  # Pause workflow until review webhook
         },
     )
+    graph.add_edge("update_docs_repo", "complete_tasks")
     graph.add_conditional_edges(
         "implement_review",
         lambda s: s.get("current_node", "wait_for_ci_gate"),

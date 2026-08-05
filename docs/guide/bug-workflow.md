@@ -24,6 +24,7 @@ flowchart TD
     K -->|needs work, retry < 2| J
     L --> M[CI/CD + Review → Merge]
     M --> N[Post-merge Summary\nJira comment]
+    N --> O[Update Docs Repo\nif configured]
 ```
 
 ## Triggering a Bug Workflow
@@ -109,6 +110,7 @@ After plan approval, Forge:
 7. **CI validation** with automatic fix loop.
 8. **Human review** gate.
 9. **Post-merge summary:** After merge, Forge posts a fix summary and release note to the Jira ticket.
+10. **Docs repo update:** If `forge.docs_repo` is configured, Forge updates the separate documentation repository and creates a PR (non-blocking).
 
 ---
 

@@ -98,7 +98,16 @@ curl -X PUT \
   -H "Content-Type: application/json" \
   -u "you@example.com:YOUR_API_TOKEN" \
   -d '"org/repo1"'
+
+# Optional: separate docs repo for post-merge documentation updates
+curl -X PUT \
+  "https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.docs_repo" \
+  -H "Content-Type: application/json" \
+  -u "you@example.com:YOUR_API_TOKEN" \
+  -d '"org/docs-repo"'
 ```
+
+When `forge.docs_repo` is set, Forge updates the separate documentation repository after a code PR is merged. The docs repo is cloned, the update-docs skill runs with the code repo mounted read-only, and a fork-based PR is created for any documentation changes. This is optional and non-blocking — if not configured or if the update fails, the workflow proceeds normally.
 
 ## Local Development Overrides
 

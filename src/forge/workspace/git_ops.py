@@ -218,6 +218,11 @@ class GitOperations:
 
         logger.info(f"Checked out branch {branch}")
 
+    def checkout_commit(self, sha: str) -> None:
+        """Checkout a specific commit by SHA (detached HEAD)."""
+        self._run_git("checkout", sha)
+        logger.info(f"Checked out commit {sha}")
+
     def stage_all(self) -> None:
         """Stage all user-facing changes, excluding Forge internal files."""
         self._run_git("rm", "-r", "--cached", "--ignore-unmatch", ".forge", check=False)

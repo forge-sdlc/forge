@@ -37,6 +37,18 @@ def write_workspace_identity(path: Path, *, ticket_key: str, repo_name: str) -> 
     )
 
 
+def _configure_forge_exclude(workspace_path: Path) -> None:
+    """Add .forge/ to .git/info/exclude so it is never staged or committed."""
+    exclude_path = workspace_path / ".git" / "info" / "exclude"
+    exclude_path.parent.mkdir(parents=True, exist_ok=True)
+    exclude_content = exclude_path.read_text() if exclude_path.exists() else ""
+    if ".forge/" not in exclude_content:
+        if exclude_content and not exclude_content.endswith("\n"):
+            exclude_content += "\n"
+        exclude_content += "\n# Forge workflow state (do not commit)\n.forge/\n"
+        exclude_path.write_text(exclude_content)
+
+
 def _recreate_workspace_from_fork(
     *,
     ticket_key: str,
@@ -343,14 +355,7 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
 
         # Keep Forge handoff files local to this clone without modifying the
         # target repository's tracked .gitignore.
-        exclude_path = workspace.path / ".git" / "info" / "exclude"
-        exclude_path.parent.mkdir(parents=True, exist_ok=True)
-        exclude_content = exclude_path.read_text() if exclude_path.exists() else ""
-        if ".forge/" not in exclude_content:
-            if exclude_content and not exclude_content.endswith("\n"):
-                exclude_content += "\n"
-            exclude_content += "\n# Forge workflow state (do not commit)\n.forge/\n"
-            exclude_path.write_text(exclude_content)
+        _configure_forge_exclude(workspace.path)
 
         logger.info("Created .forge directory for task handoff")
 
