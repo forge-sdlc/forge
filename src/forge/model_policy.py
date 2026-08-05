@@ -18,16 +18,13 @@ async def resolve_model_target_for_project(
 ) -> ResolvedModelTarget | None:
     """Fetch current Jira policy and resolve one canonical execution target.
 
-    ``None`` preserves the legacy host/container model split when the new
-    provider-neutral policy settings have not been configured.
+    ``None`` preserves the legacy host/container model split when neither a
+    project policy nor provider-neutral environment policy is configured.
     """
-    if not settings.has_explicit_model_policy:
-        return None
-
     canonical_key = canonical_policy_key(policy_key)
     project_policy = {}
     owned_jira = None
-    if project_key and settings.model_connections:
+    if project_key:
         if jira is None:
             from forge.integrations.jira.client import JiraClient
 
@@ -41,5 +38,8 @@ async def resolve_model_target_for_project(
         finally:
             if owned_jira is not None:
                 await owned_jira.close()
+
+    if not project_policy and not settings.has_explicit_model_policy:
+        return None
 
     return settings.model_policy_resolver().resolve(canonical_key, project_policy)

@@ -56,7 +56,7 @@ Forge validates the backend, credentials, and model compatibility at startup.
 The legacy `CONTAINER_LLM_MODEL` override remains supported. For exact
 per-stage selection, administrators can define JSON `MODEL_CONNECTIONS`,
 `MODEL_DEFAULT`, and `MODEL_POLICY` values. Connections contain a backend,
-provider location, and model allowlist—never a credential value. Each backend
+provider location, model allowlist, and declared capabilities—never a credential value. Each backend
 uses its existing provider-native environment credential. Jira projects then
 set `forge.model_policy`, restricted to those connections and models:
 
@@ -110,12 +110,20 @@ graph-node names are not accepted in Jira configuration:
 
 Unknown keys fail validation instead of silently using the default target.
 
+Forge owns stage capability requirements. The `implement_task`,
+`implement_bug_fix`, `implement_review_fix`, `task_takeover_execution`,
+`ci_fix`, `rebase`, and `update_docs` stages require a connection declaring
+`"capabilities": ["tools"]`. Jira policy cannot weaken that requirement.
+Per-target `max_output_tokens` is limited to 131072.
+
 Resolution is project override, then global stage mapping, then global default.
 This includes a project `*` override: it supersedes global per-stage mappings,
 but can only select administrator-allowlisted connections and models. Explicit
 project stage entries supersede the project wildcard. When `--model-policy` and
 `--model` are combined, individual `--model` entries overwrite matching JSON
-keys.
+keys. Used without `--model-policy`, `--model` and `--model-all` preserve the
+project's other existing overrides; `--model-policy` deliberately replaces the
+full property.
 Forge fetches the Jira project policy before each host or container agent
 execution, so changes apply automatically to the next stage or retry. The
 target remains fixed during that execution's internal model/tool loop. Projects

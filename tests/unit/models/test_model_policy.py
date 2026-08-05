@@ -78,6 +78,34 @@ def test_invalid_project_targets_fail_closed(
         resolver.resolve("implement_task", {"implement_task": target})
 
 
+def test_stage_capabilities_cannot_be_weakened_by_project_policy() -> None:
+    resolver = ModelPolicyResolver(
+        connections={"vertex": {"backend": "vertex-ai", "project": "prod"}},
+        policy={},
+        default={"connection": "vertex", "model": "gemini-pro"},
+    )
+
+    with pytest.raises(ValueError, match="lacks required capabilities: tools"):
+        resolver.resolve(
+            "implement_task",
+            {"implement_task": {"connection": "vertex", "model": "gemini-pro"}},
+        )
+
+
+def test_project_output_token_limit_is_bounded(resolver: ModelPolicyResolver) -> None:
+    with pytest.raises(ValueError, match="less than or equal to 131072"):
+        resolver.resolve(
+            "generate_prd",
+            {
+                "generate_prd": {
+                    "connection": "vertex",
+                    "model": "gemini-pro",
+                    "max_output_tokens": 131_073,
+                }
+            },
+        )
+
+
 def test_trace_metadata_is_non_secret(resolver: ModelPolicyResolver) -> None:
     resolved = resolver.resolve("generate_prd")
     assert resolved.trace_metadata() == {

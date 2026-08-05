@@ -9,6 +9,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Backend = Literal["google-genai", "vertex-ai", "anthropic"]
+MAX_MODEL_OUTPUT_TOKENS = 131_072
 
 
 class ModelConnection(BaseModel):
@@ -38,7 +39,7 @@ class ModelTarget(BaseModel):
     connection: str
     model: str
     temperature: float | None = Field(default=None, ge=0, le=2)
-    max_output_tokens: int | None = Field(default=None, gt=0)
+    max_output_tokens: int | None = Field(default=None, gt=0, le=MAX_MODEL_OUTPUT_TOKENS)
     required_capabilities: set[str] = Field(default_factory=set)
 
 
@@ -92,6 +93,17 @@ KNOWN_MODEL_POLICY_KEYS = (
     "sync_pr_description",
     "update_docs",
 )
+
+# Requirements belong to Forge's execution stages, not Jira project policy.
+REQUIRED_CAPABILITIES_BY_POLICY_KEY: dict[str, frozenset[str]] = {
+    "ci_fix": frozenset({"tools"}),
+    "implement_bug_fix": frozenset({"tools"}),
+    "implement_review_fix": frozenset({"tools"}),
+    "implement_task": frozenset({"tools"}),
+    "rebase": frozenset({"tools"}),
+    "task_takeover_execution": frozenset({"tools"}),
+    "update_docs": frozenset({"tools"}),
+}
 
 _POLICY_KEY_ALIASES = {
     "analyze-ci": "ci_analysis",
@@ -187,7 +199,8 @@ class ModelPolicyResolver:
             raise ValueError(
                 f"Model '{target.model}' is not allowed on connection '{target.connection}'"
             )
-        missing = target.required_capabilities - connection.capabilities
+        stage_requirements = REQUIRED_CAPABILITIES_BY_POLICY_KEY.get(key, frozenset())
+        missing = (target.required_capabilities | stage_requirements) - connection.capabilities
         if missing:
             raise ValueError(
                 f"Connection '{target.connection}' lacks required capabilities: "
@@ -212,7 +225,7 @@ class ModelPolicyResolver:
         elif project_policy and "*" in project_policy:
             target = ModelTarget.model_validate(project_policy["*"])
             source = "project"
-            connection = self._validate_target(target, project_override=True, key="*")
+            connection = self._validate_target(target, project_override=True, key=key)
         elif key in self.policy:
             target = self.policy[key]
             source = "global"

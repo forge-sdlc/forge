@@ -649,6 +649,15 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             if not isinstance(model_policy, dict):
                 print("Error: --model-policy must be a JSON object", file=sys.stderr)
                 return 1
+        elif args.model or args.model_all:
+            existing_policy = await jira.get_project_property(project_key, "forge.model_policy")
+            if existing_policy is not None and not isinstance(existing_policy, dict):
+                print(
+                    "Error: existing forge.model_policy must be a JSON object",
+                    file=sys.stderr,
+                )
+                return 1
+            model_policy = dict(existing_policy or {})
         for raw in args.model or []:
             policy_key, separator, target = raw.partition("=")
             connection, target_separator, model = target.partition(":")
@@ -679,8 +688,9 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
 
             resolver = get_settings().model_policy_resolver()
             try:
-                for key in model_policy:
-                    resolver.resolve(key, model_policy)
+                # Resolve every canonical stage so a wildcard cannot bypass
+                # administrator-owned stage capability requirements.
+                resolver.resolve_all(model_policy)
             except ValueError as exc:
                 print(f"Error: invalid model policy: {exc}", file=sys.stderr)
                 return 1
@@ -1328,18 +1338,24 @@ Examples:
         "--model",
         action="append",
         metavar="NODE_OR_SKILL=CONNECTION:MODEL",
-        help="Set an exact model override (repeatable; sets forge.model_policy)",
+        help="Add or replace one exact model override while preserving other project overrides",
     )
     setup_parser.add_argument(
         "--model-all",
         "--all-stages-model",
         metavar="CONNECTION:MODEL",
-        help=("Override every model stage with one target; explicit --model stage overrides win"),
+        help=(
+            "Add or replace the project wildcard target while preserving stage overrides; "
+            "explicit --model stage overrides win"
+        ),
     )
     setup_parser.add_argument(
         "--model-policy",
         metavar="JSON",
-        help=("Full forge.model_policy JSON object; later --model entries overwrite matching keys"),
+        help=(
+            "Replace the full forge.model_policy JSON object; later --model entries overwrite "
+            "matching keys"
+        ),
     )
 
     # get-config command

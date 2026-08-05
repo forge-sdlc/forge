@@ -1,12 +1,13 @@
 """Unit and integration tests for get-config CLI command."""
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from forge.cli import cmd_get_config, main
+from forge.cli import cmd_get_config, cmd_project_setup, main
 
 
 class TestCLIConfigParserAndRouting:
@@ -57,6 +58,40 @@ class TestCLIConfigParserAndRouting:
 
 class TestCLIConfigExecution:
     """Fallback Semantics, Output Serialization, and Discovery."""
+
+    @pytest.mark.asyncio
+    async def test_model_flag_preserves_existing_project_overrides(self):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(
+            return_value={"generate_prd": {"connection": "vertex", "model": "gemini-pro"}}
+        )
+        jira.set_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        resolver = MagicMock()
+        settings = MagicMock()
+        settings.model_policy_resolver.return_value = resolver
+        args = SimpleNamespace(
+            project_key="PROJ",
+            repo=None,
+            default_repo=None,
+            prd_proposals_repo=None,
+            prd_proposals_path=None,
+            skills_config=None,
+            add_skill=None,
+            model_policy=None,
+            model=["implement_task=vertex:gemini-pro"],
+            model_all=None,
+        )
+
+        with (
+            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
+            patch("forge.config.get_settings", return_value=settings),
+        ):
+            code = await cmd_project_setup(args)
+
+        assert code == 0
+        written = jira.set_project_property.await_args.args[2]
+        assert set(written) == {"generate_prd", "implement_task"}
 
     @pytest.fixture
     def mock_jira_client(self):
