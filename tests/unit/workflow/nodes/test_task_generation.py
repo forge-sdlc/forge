@@ -152,8 +152,8 @@ class TestFeedbackThreading:
         """When context contains feedback, it appears in the prompt sent to the agent."""
         captured_prompts = []
 
-        async def fake_run_task(task, prompt, context):
-            _ = (task, context)
+        async def fake_run_task(task, prompt, context, policy_key=None):
+            _ = (task, context, policy_key)
             captured_prompts.append(prompt)
             return ""  # empty → _parse_tasks_response returns []
 
@@ -186,8 +186,8 @@ class TestFeedbackThreading:
         """When context has no feedback, the prompt has no Revision Feedback section."""
         captured_prompts = []
 
-        async def fake_run_task(task, prompt, context):
-            _ = (task, context)
+        async def fake_run_task(task, prompt, context, policy_key=None):
+            _ = (task, context, policy_key)
             captured_prompts.append(prompt)
             return ""
 
