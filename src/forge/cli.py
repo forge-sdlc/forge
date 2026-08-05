@@ -640,7 +640,20 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         # workstations validate syntax only; the Forge runtime owns and
         # authorizes the deployment's connection/model allowlist.
         model_policy: dict[str, Any] = {}
-        if args.model_policy:
+        remove_models = getattr(args, "remove_model", None) or []
+        clear_model_policy = getattr(args, "clear_model_policy", False)
+        if clear_model_policy and (
+            args.model_policy or args.model or args.model_all or remove_models
+        ):
+            print(
+                "Error: --clear-model-policy cannot be combined with other model options",
+                file=sys.stderr,
+            )
+            return 1
+        if clear_model_policy:
+            await jira.delete_project_property(project_key, "forge.model_policy")
+            print("[OK] forge.model_policy deleted")
+        elif args.model_policy:
             try:
                 model_policy = json.loads(args.model_policy)
             except json.JSONDecodeError as exc:
@@ -649,7 +662,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             if not isinstance(model_policy, dict):
                 print("Error: --model-policy must be a JSON object", file=sys.stderr)
                 return 1
-        elif args.model or args.model_all:
+        elif args.model or args.model_all or remove_models:
             existing_policy = await jira.get_project_property(project_key, "forge.model_policy")
             if existing_policy is not None and not isinstance(existing_policy, dict):
                 print(
@@ -658,6 +671,11 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 )
                 return 1
             model_policy = dict(existing_policy or {})
+        for policy_key in remove_models:
+            if not policy_key:
+                print("Error: --remove-model requires a non-empty policy key", file=sys.stderr)
+                return 1
+            model_policy.pop(policy_key, None)
         for raw in args.model or []:
             policy_key, separator, target = raw.partition("=")
             connection, target_separator, model = target.partition(":")
@@ -683,7 +701,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 )
                 return 1
             model_policy["*"] = {"connection": connection, "model": model}
-        if args.model_policy or args.model or args.model_all:
+        if args.model_policy or args.model or args.model_all or remove_models:
             from forge.models.model_policy import KNOWN_MODEL_POLICY_KEYS, ModelTarget
 
             try:
@@ -697,8 +715,12 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             except ValueError as exc:
                 print(f"Error: invalid model policy: {exc}", file=sys.stderr)
                 return 1
-            await jira.set_project_property(project_key, "forge.model_policy", model_policy)
-            print(f"[OK] forge.model_policy = {len(model_policy)} overrides")
+            if model_policy:
+                await jira.set_project_property(project_key, "forge.model_policy", model_policy)
+                print(f"[OK] forge.model_policy = {len(model_policy)} overrides")
+            else:
+                await jira.delete_project_property(project_key, "forge.model_policy")
+                print("[OK] forge.model_policy deleted (no overrides remain)")
 
         if not any(
             [
@@ -711,6 +733,8 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 args.model_policy,
                 args.model,
                 args.model_all,
+                remove_models,
+                clear_model_policy,
             ]
         ):
             print(
@@ -718,6 +742,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 "--repo, --default-repo, --prd-proposals-repo, "
                 "--prd-proposals-path, --skills-config, --add-skill"
                 ", --model-policy, --model, --model-all"
+                ", --remove-model, --clear-model-policy"
             )
             return 1
 
@@ -1359,6 +1384,20 @@ Examples:
             "Replace the full forge.model_policy JSON object; later --model entries overwrite "
             "matching keys"
         ),
+    )
+    setup_parser.add_argument(
+        "--remove-model",
+        action="append",
+        metavar="POLICY_KEY",
+        help=(
+            "Remove one project model override while preserving the others; repeatable, "
+            "and later --model entries win"
+        ),
+    )
+    setup_parser.add_argument(
+        "--clear-model-policy",
+        action="store_true",
+        help="Delete the complete forge.model_policy Jira project property",
     )
 
     # get-config command

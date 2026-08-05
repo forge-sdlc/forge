@@ -55,6 +55,17 @@ class TestCLIConfigParserAndRouting:
         assert args.project_key == "aisos"
         assert args.model_all == "vertex-prod:gemini-pro"
 
+    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.setup_logging")
+    def test_project_setup_model_removal_parsing(self, _mock_setup_logging, mock_cmd):
+        mock_cmd.return_value = 0
+
+        code = main(["project-setup", "aisos", "--remove-model", "generate_prd"])
+
+        assert code == 0
+        args = mock_cmd.call_args.args[0]
+        assert args.remove_model == ["generate_prd"]
+
 
 class TestCLIConfigExecution:
     """Fallback Semantics, Output Serialization, and Discovery."""
@@ -112,6 +123,99 @@ class TestCLIConfigExecution:
         assert code == 0
         written = jira.set_project_property.await_args.args[2]
         assert written == {"generate_prd": {"connection": "default", "model": "gemini-pro"}}
+
+    @pytest.mark.asyncio
+    async def test_remove_model_preserves_other_overrides(self):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(
+            return_value={
+                "generate_prd": {"connection": "vertex", "model": "gemini-pro"},
+                "generate_spec": {"connection": "vertex", "model": "gemini-flash"},
+            }
+        )
+        jira.set_project_property = AsyncMock()
+        jira.delete_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        args = SimpleNamespace(
+            project_key="PROJ",
+            repo=None,
+            default_repo=None,
+            prd_proposals_repo=None,
+            prd_proposals_path=None,
+            skills_config=None,
+            add_skill=None,
+            model_policy=None,
+            model=None,
+            model_all=None,
+            remove_model=["generate_prd"],
+            clear_model_policy=False,
+        )
+
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(args)
+
+        assert code == 0
+        assert jira.set_project_property.await_args.args[2] == {
+            "generate_spec": {"connection": "vertex", "model": "gemini-flash"}
+        }
+        jira.delete_project_property.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_remove_last_model_deletes_property(self):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(
+            return_value={"generate_prd": {"connection": "vertex", "model": "gemini-pro"}}
+        )
+        jira.set_project_property = AsyncMock()
+        jira.delete_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        args = SimpleNamespace(
+            project_key="PROJ",
+            repo=None,
+            default_repo=None,
+            prd_proposals_repo=None,
+            prd_proposals_path=None,
+            skills_config=None,
+            add_skill=None,
+            model_policy=None,
+            model=None,
+            model_all=None,
+            remove_model=["generate_prd"],
+            clear_model_policy=False,
+        )
+
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(args)
+
+        assert code == 0
+        jira.delete_project_property.assert_awaited_once_with("PROJ", "forge.model_policy")
+        jira.set_project_property.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_clear_model_policy_deletes_property(self):
+        jira = MagicMock()
+        jira.delete_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        args = SimpleNamespace(
+            project_key="PROJ",
+            repo=None,
+            default_repo=None,
+            prd_proposals_repo=None,
+            prd_proposals_path=None,
+            skills_config=None,
+            add_skill=None,
+            model_policy=None,
+            model=None,
+            model_all=None,
+            remove_model=None,
+            clear_model_policy=True,
+        )
+
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(args)
+
+        assert code == 0
+        jira.delete_project_property.assert_awaited_once_with("PROJ", "forge.model_policy")
 
     @pytest.fixture
     def mock_jira_client(self):

@@ -78,6 +78,12 @@ forge project-setup MYPROJ \
 forge project-setup MYPROJ \
   --model-all vertex-production:gemini-3.5-pro
 
+# Remove one stage override and preserve the rest
+forge project-setup MYPROJ --remove-model generate_prd
+
+# Delete every project override and fall back to deployment policy
+forge project-setup MYPROJ --clear-model-policy
+
 # Validate against the local runtime configuration and print every target
 forge get-config MYPROJ --models
 ```
@@ -188,7 +194,9 @@ project stage entries supersede the project wildcard. When `--model-policy` and
 `--model` are combined, individual `--model` entries overwrite matching JSON
 keys. Used without `--model-policy`, `--model` and `--model-all` preserve the
 project's other existing overrides; `--model-policy` deliberately replaces the
-full property.
+full property. `--remove-model` removes only the named key and deletes the Jira
+property when no overrides remain. `--clear-model-policy` deletes the complete
+property and cannot be combined with another model option.
 When `MODEL_CONNECTIONS` is configured, Forge fetches the Jira project policy
 before each host or container agent execution, so changes apply automatically
 to the next stage or retry. The target remains fixed during that execution's
