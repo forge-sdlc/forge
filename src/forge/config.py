@@ -270,6 +270,11 @@ class Settings(BaseSettings):
     def effective_model_default(self) -> dict[str, Any]:
         return self.model_default or {"connection": "default", "model": self.llm_model}
 
+    @property
+    def has_explicit_model_policy(self) -> bool:
+        """Whether the provider-neutral policy settings were explicitly configured."""
+        return bool(self.model_connections or self.model_policy or self.model_default)
+
     def model_policy_resolver(self):
         from forge.models.model_policy import ModelPolicyResolver
 

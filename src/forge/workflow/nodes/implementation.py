@@ -203,6 +203,10 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             # Some embedders provide a settings-like test double; preserve the
             # legacy runner contract when no concrete policy can be validated.
             pass
+        elif not settings.has_explicit_model_policy:
+            # Preserve CONTAINER_LLM_MODEL for installations that have not
+            # opted into provider-neutral policy configuration.
+            pass
         else:
             project_key = ticket_key.split("-", 1)[0].upper()
             project_policy = None

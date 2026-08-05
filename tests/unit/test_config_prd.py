@@ -72,6 +72,18 @@ class TestLlmConfig:
             "connection": "default",
             "model": "gemini-3.5-flash",
         }
+        assert settings.has_explicit_model_policy is False
+
+    def test_new_model_configuration_is_detected_explicitly(self):
+        settings = make_settings(
+            jira_base_url="https://test.atlassian.net",
+            jira_api_token="test",
+            jira_user_email="test@example.com",
+            github_token="test",
+            model_policy={"generate_prd": {"connection": "default", "model": "gemini-3.5-flash"}},
+        )
+
+        assert settings.has_explicit_model_policy is True
 
     def test_backend_is_required(self):
         with pytest.raises(ValueError, match="llm_backend"):
