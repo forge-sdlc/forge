@@ -1745,6 +1745,13 @@
 <h3 id="prd-generation">PRD Generation<a class="headerlink" href="#prd-generation" title="Permanent link">&para;</a></h3>
 <p>Forge reads the ticket description and generates a structured Product Requirements Document. The PRD is posted as a comment on the Jira ticket.</p>
 <p><strong>Human action:</strong> Review the PRD. Optionally ask questions with <code>?</code> prefix (see <a href="#qa-mode">Q&amp;A Mode</a>). When satisfied, change the label to <code>forge:prd-approved</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Model continuity</p>
+<p>PRD revisions use the <code>generate_prd</code> model-policy key, but PRD questions
+use <code>answer_question</code>. Configure both keys to the same target when the
+generating model must also answer questions about its artifact. See
+<a href="../../reference/config/#keeping-artifact-generation-revision-and-qa-on-one-model">Per-stage model configuration</a>.</p>
+</div>
 <hr />
 <h3 id="spec-generation">Spec Generation<a class="headerlink" href="#spec-generation" title="Permanent link">&para;</a></h3>
 <p>Forge generates a behavioral specification from the approved PRD, typically using Given/When/Then acceptance criteria.</p>

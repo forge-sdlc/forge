@@ -1262,6 +1262,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#keeping-artifact-generation-revision-and-qa-on-one-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Keeping artifact generation, revision, and Q&amp;A on one model
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#related-actions-that-use-separate-policy-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Related actions that use separate policy keys
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#redis" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1511,6 +1533,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#keeping-artifact-generation-revision-and-qa-on-one-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Keeping artifact generation, revision, and Q&amp;A on one model
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#related-actions-that-use-separate-policy-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Related actions that use separate policy keys
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#redis" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -1728,13 +1772,282 @@
 </div>
 </div>
 </div>
-<p><code>LLM_BACKEND</code> and <code>LLM_MODEL</code> are required. Provider credentials must use the
-provider-native variables shown above; legacy aliases are not supported.
-Forge validates the backend, credentials, and model compatibility at startup.</p>
-<p><code>CONTAINER_LLM_MODEL</code> may override the model used for implementation tasks, but
-it does not select a separate backend. The override must be compatible with
-<code>LLM_BACKEND</code>; using different orchestrator and container backends is not
-currently supported.</p>
+<p><code>LLM_BACKEND</code> and <code>LLM_MODEL</code> are required for legacy configuration. A complete
+<code>MODEL_CONNECTIONS</code> plus <code>MODEL_DEFAULT</code> configuration replaces them and
+derives the runtime backend, model, Vertex project, and location. Provider
+credentials must use the provider-native variables shown above; legacy aliases
+are not supported. Forge validates the backend, credentials, and model
+compatibility at startup.</p>
+<p>The legacy <code>CONTAINER_LLM_MODEL</code> override remains supported. For exact
+per-stage selection, administrators can define JSON <code>MODEL_CONNECTIONS</code>,
+<code>MODEL_DEFAULT</code>, and <code>MODEL_POLICY</code> values. Connections contain a backend,
+provider location, model allowlist, and declared capabilities—never a credential value. Each backend
+uses its existing provider-native environment credential. Jira projects then
+set <code>forge.model_policy</code>, restricted to those connections and models:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">MODEL_CONNECTIONS</span><span class="o">={</span><span class="s2">&quot;vertex-global&quot;</span>:<span class="o">{</span><span class="s2">&quot;backend&quot;</span>:<span class="s2">&quot;vertex-ai&quot;</span>,<span class="s2">&quot;project&quot;</span>:<span class="s2">&quot;my-gcp-project&quot;</span>,<span class="s2">&quot;location&quot;</span>:<span class="s2">&quot;global&quot;</span>,<span class="s2">&quot;allowed_models&quot;</span>:<span class="o">[</span><span class="s2">&quot;gemini-3.5-flash&quot;</span>,<span class="s2">&quot;claude-sonnet-5&quot;</span><span class="o">]</span>,<span class="s2">&quot;capabilities&quot;</span>:<span class="o">[</span><span class="s2">&quot;tools&quot;</span><span class="o">]}}</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">MODEL_DEFAULT</span><span class="o">={</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">MODEL_POLICY</span><span class="o">={</span><span class="s2">&quot;generate_prd&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-sonnet-5&quot;</span><span class="o">}</span>,<span class="s2">&quot;generate_spec&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}}</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">generate_prd</span><span class="o">=</span>vertex-production:gemini-3.5-pro<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">implement_task</span><span class="o">=</span>anthropic-production:claude-sonnet-4-6
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Set a separate project-wide fallback (individual --model overrides still win)</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span>--model-all<span class="w"> </span>vertex-production:gemini-3.5-pro
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="c1"># Remove one stage override and preserve the rest</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--remove-model<span class="w"> </span>generate_prd
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="c1"># Delete all per-stage overrides</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--clear-model-policy
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="c1"># Delete the project-wide fallback</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--clear-model-default
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="c1"># Validate against the local runtime configuration and print every target</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>forge<span class="w"> </span>get-config<span class="w"> </span>MYPROJ<span class="w"> </span>--models
+</code></pre></div>
+<p>Project overrides require administrators to configure <code>MODEL_CONNECTIONS</code>.
+The user-facing <code>project-setup</code> command validates policy syntax and canonical
+stage names but does not require access to the Forge deployment's connection
+registry. Forge validates connection names, model allowlists, backends, and
+capabilities when it executes a stage. Invalid runtime policy fails closed and
+reports the available configured connections and models to Jira and, when an
+active PR exists, GitHub. The implicit legacy connection remains restricted to
+<code>LLM_MODEL</code> and <code>CONTAINER_LLM_MODEL</code> and is never exposed to Jira project
+policy.</p>
+<p>Canonical policy keys are deliberately specific; runtime prompt, skill, and
+graph-node names are not accepted in Jira configuration:</p>
+<table>
+<thead>
+<tr>
+<th>Policy key</th>
+<th>Execution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>generate_prd</code></td>
+<td>Initial PRD generation and every PRD revision</td>
+</tr>
+<tr>
+<td><code>generate_spec</code></td>
+<td>Initial specification generation and every specification revision</td>
+</tr>
+<tr>
+<td><code>decompose_epics</code></td>
+<td>Epic decomposition or revision</td>
+</tr>
+<tr>
+<td><code>generate_tasks</code></td>
+<td>Task generation or revision</td>
+</tr>
+<tr>
+<td><code>bug_triage</code></td>
+<td>Bug-report completeness triage</td>
+</tr>
+<tr>
+<td><code>automated_review_triage</code></td>
+<td>Classification of automated review feedback</td>
+</tr>
+<tr>
+<td><code>proposal_review_triage</code></td>
+<td>Classification of proposal review threads</td>
+</tr>
+<tr>
+<td><code>task_takeover_triage</code></td>
+<td>Existing-task takeover triage</td>
+</tr>
+<tr>
+<td><code>task_takeover_planning</code></td>
+<td>Existing-task implementation planning</td>
+</tr>
+<tr>
+<td><code>task_takeover_execution</code></td>
+<td>Existing-task container implementation</td>
+</tr>
+<tr>
+<td><code>task_takeover_review</code></td>
+<td>Existing-task qualitative review</td>
+</tr>
+<tr>
+<td><code>task_takeover_question</code></td>
+<td>Questions about task-takeover artifacts</td>
+</tr>
+<tr>
+<td><code>analyze_bug</code></td>
+<td>Root-cause analysis</td>
+</tr>
+<tr>
+<td><code>reflect_rca</code></td>
+<td>Root-cause analysis reflection</td>
+</tr>
+<tr>
+<td><code>plan_bug_fix</code></td>
+<td>Bug-fix planning</td>
+</tr>
+<tr>
+<td><code>implement_bug_fix</code></td>
+<td>Bug-fix container implementation</td>
+</tr>
+<tr>
+<td><code>implement_task</code></td>
+<td>Feature-task container implementation</td>
+</tr>
+<tr>
+<td><code>bug_local_review</code></td>
+<td>Local qualitative review of a bug fix</td>
+</tr>
+<tr>
+<td><code>local_code_review</code></td>
+<td>Local feature code review</td>
+</tr>
+<tr>
+<td><code>code_review</code></td>
+<td>Pull-request code review</td>
+</tr>
+<tr>
+<td><code>implement_review_analysis</code></td>
+<td>Analysis of implementation review feedback</td>
+</tr>
+<tr>
+<td><code>implement_review_fix</code></td>
+<td>Applying implementation review fixes</td>
+</tr>
+<tr>
+<td><code>generate_pr_description</code></td>
+<td>Initial pull-request description generation</td>
+</tr>
+<tr>
+<td><code>sync_pr_description</code></td>
+<td>Pull-request description synchronization</td>
+</tr>
+<tr>
+<td><code>ci_analysis</code></td>
+<td>CI failure analysis</td>
+</tr>
+<tr>
+<td><code>ci_fix</code></td>
+<td>CI failure remediation</td>
+</tr>
+<tr>
+<td><code>answer_question</code></td>
+<td>Q&amp;A about PRDs, specifications, plans, and other generated artifacts</td>
+</tr>
+<tr>
+<td><code>rebase</code></td>
+<td>Container-assisted rebase conflict resolution</td>
+</tr>
+<tr>
+<td><code>update_docs</code></td>
+<td>Documentation update generation</td>
+</tr>
+</tbody>
+</table>
+<p>Unknown keys fail validation instead of silently using the default target.</p>
+<h3 id="keeping-artifact-generation-revision-and-qa-on-one-model">Keeping artifact generation, revision, and Q&amp;A on one model<a class="headerlink" href="#keeping-artifact-generation-revision-and-qa-on-one-model" title="Permanent link">&para;</a></h3>
+<p>Revisions reuse the artifact's generation policy key. For example, both initial
+PRD generation and later <code>!</code> revision requests resolve <code>generate_prd</code>. Questions
+submitted with <code>?</code> do not regenerate the artifact and resolve the separate
+<code>answer_question</code> key. Configure both keys when the answer must use the same
+model that created the PRD:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">MODEL_POLICY</span><span class="o">={</span><span class="s2">&quot;generate_prd&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-opus-4-6&quot;</span><span class="o">}</span>,<span class="s2">&quot;answer_question&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-opus-4-6&quot;</span><span class="o">}}</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">generate_prd</span><span class="o">=</span>vertex-global:claude-opus-4-6<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">answer_question</span><span class="o">=</span>vertex-global:claude-opus-4-6
+</code></pre></div>
+<p>The same pattern applies to <code>generate_spec</code>, <code>decompose_epics</code>, and
+<code>generate_tasks</code>: revisions reuse their generation key, while Q&amp;A uses
+<code>answer_question</code>. Task-takeover artifact questions are the exception and use
+<code>task_takeover_question</code>.</p>
+<h3 id="related-actions-that-use-separate-policy-keys">Related actions that use separate policy keys<a class="headerlink" href="#related-actions-that-use-separate-policy-keys" title="Permanent link">&para;</a></h3>
+<p>Some user-visible flows contain multiple model invocations with intentionally
+different responsibilities. Forge resolves each invocation independently, so
+they may use different models unless every related key is mapped to the same
+target:</p>
+<table>
+<thead>
+<tr>
+<th>Flow</th>
+<th>Policy keys</th>
+<th>Boundary</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Generated artifact interaction</td>
+<td><code>generate_prd</code>, <code>generate_spec</code>, <code>decompose_epics</code>, or <code>generate_tasks</code> + <code>answer_question</code></td>
+<td>Creation and revision use the generation key; Q&amp;A uses <code>answer_question</code></td>
+</tr>
+<tr>
+<td>Task takeover</td>
+<td><code>task_takeover_planning</code> + <code>task_takeover_question</code></td>
+<td>Plan creation and revision are separate from artifact Q&amp;A</td>
+</tr>
+<tr>
+<td>Automated artifact review</td>
+<td><code>automated_review_triage</code> + the relevant generation key</td>
+<td>Feedback classification occurs before an accepted revision is generated</td>
+</tr>
+<tr>
+<td>Proposal review</td>
+<td><code>proposal_review_triage</code> + the relevant generation key</td>
+<td>Review-thread classification occurs before an accepted revision is generated</td>
+</tr>
+<tr>
+<td>Implementation review</td>
+<td><code>implement_review_analysis</code> + <code>implement_review_fix</code></td>
+<td>Feedback analysis and code modification are separate invocations</td>
+</tr>
+<tr>
+<td>CI remediation</td>
+<td><code>ci_analysis</code> + <code>ci_fix</code></td>
+<td>Failure diagnosis and code modification are separate invocations</td>
+</tr>
+<tr>
+<td>Bug investigation</td>
+<td><code>analyze_bug</code> + <code>reflect_rca</code> + <code>plan_bug_fix</code></td>
+<td>Initial analysis, reflection, and repair planning are separate stages</td>
+</tr>
+<tr>
+<td>Pull-request maintenance</td>
+<td><code>code_review</code> + <code>sync_pr_description</code></td>
+<td>Code review and description synchronization are separate tasks</td>
+</tr>
+</tbody>
+</table>
+<p>Using different models for these keys is supported and can optimize cost or
+quality. When context continuity or consistent judgment is more important,
+assign all keys in the flow to the same connection and model. Run
+<code>forge get-config MYPROJ --models</code> to display the effective target for every
+key before testing a workflow.</p>
+<p>Forge owns stage capability requirements. Every stage requires a connection
+declaring <code>"capabilities": ["tools"]</code> except the explicitly tool-free text or
+classification stages <code>automated_review_triage</code>, <code>proposal_review_triage</code>,
+<code>generate_pr_description</code>, and <code>sync_pr_description</code>. Jira policy cannot
+weaken that requirement.
+Per-target <code>max_output_tokens</code> is limited to 131072.</p>
+<p>Resolution is project stage override (<code>forge.model_policy</code>), then the separate
+project-wide fallback (<code>forge.model_default</code>), then the deployment stage mapping
+(<code>MODEL_POLICY</code>), then the deployment default (<code>MODEL_DEFAULT</code>). Project policy
+does not use a <code>*</code> key. <code>--model-all</code> writes <code>forge.model_default</code> and does not
+modify per-stage overrides. When <code>--model-policy</code> and <code>--model</code> are combined,
+individual <code>--model</code> entries overwrite matching JSON keys. Used without
+<code>--model-policy</code>, <code>--model</code> preserves the project's other existing stage
+overrides; <code>--model-policy</code> deliberately replaces the full stage property.
+<code>--remove-model</code> removes only the named stage and deletes <code>forge.model_policy</code>
+when no overrides remain. <code>--clear-model-policy</code> deletes all per-stage
+overrides, while <code>--clear-model-default</code> independently deletes the project-wide
+fallback.
+When <code>MODEL_CONNECTIONS</code> is configured, Forge fetches the Jira project policy
+before each host or container agent execution, so changes apply automatically
+to the next stage or retry. The target remains fixed during that execution's
+internal model/tool loop. Legacy and global-only configurations make no extra
+Jira policy request. Projects without <code>forge.model_policy</code> fall back to the
+global stage mapping, then the global default, and finally the legacy
+<code>LLM_BACKEND</code>/<code>LLM_MODEL</code> settings.</p>
 <h3 id="redis">Redis<a class="headerlink" href="#redis" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1758,32 +2071,32 @@ currently supported.</p>
 <p>In production, Forge reads repository configuration from Jira project properties, <strong>not</strong> from environment variables. If not configured, Forge blocks the workflow and posts setup instructions on the ticket.</p>
 </div>
 <p>Set these properties per Jira project via the REST API:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Available repos for this project</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.repos&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;[&quot;org/repo1&quot;, &quot;org/repo2&quot;]&#39;</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># Alternatively, configure a repository with additional metadata (like enabling draft PRs) using an object:</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.repos&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;[</span>
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="s1">    &quot;org/repo1&quot;,</span>
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="s1">    {</span>
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="s1">      &quot;name&quot;: &quot;org/repo2&quot;,</span>
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="s1">      &quot;draft&quot;: true</span>
-<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="s1">    }</span>
-<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="s1">  ]&#39;</span>
-<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
-<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="c1"># Default repo when no explicit assignment is made</span>
-<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.default_repo&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;&quot;org/repo1&quot;&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Available repos for this project</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.repos&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;[&quot;org/repo1&quot;, &quot;org/repo2&quot;]&#39;</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># Alternatively, configure a repository with additional metadata (like enabling draft PRs) using an object:</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.repos&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;[</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="s1">    &quot;org/repo1&quot;,</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="s1">    {</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="s1">      &quot;name&quot;: &quot;org/repo2&quot;,</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="s1">      &quot;draft&quot;: true</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="s1">    }</span>
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="s1">  ]&#39;</span>
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="c1"># Default repo when no explicit assignment is made</span>
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.default_repo&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;&quot;org/repo1&quot;&#39;</span>
 </code></pre></div>
 <h2 id="local-development-overrides">Local Development Overrides<a class="headerlink" href="#local-development-overrides" title="Permanent link">&para;</a></h2>
 <p>Use these to skip the Jira project property requirement during local development:</p>
