@@ -780,15 +780,15 @@ class ContainerRunner:
         forge_dir = workspace_path / ".forge"
         forge_dir.mkdir(exist_ok=True)
         task_file = forge_dir / "task.json"
-        pinned_trace_context = dict(trace_context or {})
+        resolved_trace_context = dict(trace_context or {})
         if model_target:
-            pinned_trace_context.update(model_target.trace_metadata())
+            resolved_trace_context.update(model_target.trace_metadata())
         task_data = {
             "task_key": task_key or "UNKNOWN",
             "summary": task_summary,
             "description": task_description,
             "previous_task_keys": previous_task_keys or [],
-            "trace_context": pinned_trace_context,
+            "trace_context": resolved_trace_context,
             "skill_name": skill_name or "",
             "model_target": model_target.model_dump(exclude={"credential_ref"})
             if model_target

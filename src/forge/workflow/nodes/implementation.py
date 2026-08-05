@@ -197,18 +197,12 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         # Run implementation in container sandbox
         runner = ContainerRunner(settings)
 
-        # Resolve once and persist the non-secret target in workflow state so
-        # retries and resumed checkpoints cannot drift after config changes.
-        snapshot = dict(state.get("model_policy_snapshot", {}))
+        # Resolve fresh policy for each container execution, including retries.
         model_target = None
         if not isinstance(settings, Settings):
             # Some embedders provide a settings-like test double; preserve the
             # legacy runner contract when no concrete policy can be validated.
             pass
-        elif implementation_node in snapshot:
-            from forge.models.model_policy import ResolvedModelTarget
-
-            model_target = ResolvedModelTarget.model_validate(snapshot[implementation_node])
         else:
             project_key = ticket_key.split("-", 1)[0].upper()
             project_policy = None
@@ -219,8 +213,6 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             model_target = settings.model_policy_resolver().resolve(
                 implementation_node, project_policy or {}
             )
-            snapshot[implementation_node] = model_target.model_dump(exclude={"credential_ref"})
-            state = {**state, "model_policy_snapshot": snapshot}
 
         current_repo = state.get("current_repo", "")
         # Copy list to avoid mutation after passing to runner

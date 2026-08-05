@@ -5,7 +5,7 @@ resolve_trace_fields(), and passes the resolved tags/metadata to
 _run_agent().
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -182,3 +182,41 @@ class TestRunTaskTraceResolution:
             await agent.run_task(task="test", prompt="test", context={"ticket_key": "PROJ-42"})
 
         assert mock_run.call_args.kwargs["session_id"] == "PROJ-42"
+
+    @pytest.mark.asyncio
+    async def test_project_policy_is_fetched_for_each_execution(self, agent: ForgeAgent) -> None:
+        agent.settings.model_connections = {
+            "vertex": {
+                "backend": "vertex-ai",
+                "credential_ref": "gcp-adc",
+                "project": "test-project",
+                "allowed_models": ["gemini-pro", "gemini-flash"],
+            }
+        }
+        agent.settings.model_default = {"connection": "vertex", "model": "gemini-flash"}
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(
+            side_effect=[
+                {"generate_prd": {"connection": "vertex", "model": "gemini-pro"}},
+                None,
+            ]
+        )
+        jira.close = AsyncMock()
+
+        with (
+            patch.object(agent, "_run_agent", new_callable=AsyncMock) as mock_run,
+            patch("forge.integrations.agents.agent.resolve_trace_fields", return_value=([], {})),
+            patch("forge.integrations.agents.agent.load_prompt", return_value="prompt"),
+            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
+        ):
+            mock_run.return_value = "result"
+            await agent.run_task(
+                task="generate-prd", prompt="test", context={"ticket_key": "PROJ-42"}
+            )
+            await agent.run_task(
+                task="generate-prd", prompt="test", context={"ticket_key": "PROJ-42"}
+            )
+
+        assert jira.get_project_property.await_count == 2
+        assert mock_run.await_args_list[0].kwargs["model_target"].model == "gemini-pro"
+        assert mock_run.await_args_list[1].kwargs["model_target"].model == "gemini-flash"

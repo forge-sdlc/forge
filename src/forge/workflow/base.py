@@ -41,8 +41,6 @@ class BaseState(TypedDict, total=False):
     # Message history
     messages: Annotated[list[Any], add_messages]
     context: dict[str, Any]
-    # Non-secret resolved targets pinned for the lifetime of this checkpoint.
-    model_policy_snapshot: dict[str, dict[str, Any]]
 
 
 class PRIntegrationState(TypedDict, total=False):

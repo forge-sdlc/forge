@@ -143,9 +143,6 @@ class ForgeAgent:
         self._ensure_api_key()
         self._checkpointer = MemorySaver()
         self._current_repo: str = ""  # Set per-task for dynamic MCP URLs
-        # A project policy is read once per agent lifetime.  Retries therefore
-        # cannot silently switch models when a Jira property changes.
-        self._project_model_policies: dict[str, dict[str, Any]] = {}
 
         # Set prompt version from config
         set_default_version(self.settings.prompt_version)
@@ -856,61 +853,37 @@ class ForgeAgent:
         if langgraph_node:
             trace_state["current_node"] = langgraph_node
 
-        # Stable node identifiers take precedence over skill identifiers when
-        # either policy explicitly maps the node.  The selected non-secret
-        # target is then pinned in this invocation and attached to every trace.
+        # Resolve fresh project policy for each agent execution. The target is
+        # fixed for this execution's internal model/tool loop, then re-read for
+        # the next stage or retry.
         project_key = (
             ticket_key.split("-", 1)[0].upper() if ticket_key and "-" in ticket_key else None
         )
         project_policy: dict[str, Any] = {}
         resolver = self.settings.model_policy_resolver()
-        pinned_snapshot = {}
-        try:
-            from langchain_core.runnables.config import ensure_config
-
-            pinned_snapshot = ensure_config().get("metadata", {}).get("model_policy_snapshot", {})
-        except Exception:
-            pass
-
         normalized_task = task.replace("-", "_")
-        snapshot_key = next(
-            (
-                candidate
-                for candidate in (langgraph_node, task, normalized_task)
-                if candidate and candidate in pinned_snapshot
-            ),
-            None,
-        )
-        if snapshot_key:
-            model_target = ResolvedModelTarget.model_validate(pinned_snapshot[snapshot_key])
-        elif project_key and self.settings.model_connections:
-            if project_key not in self._project_model_policies:
-                from forge.integrations.jira.client import JiraClient
+        if project_key and self.settings.model_connections:
+            from forge.integrations.jira.client import JiraClient
 
-                jira = JiraClient(settings=self.settings)
-                try:
-                    raw = await jira.get_project_property(project_key, "forge.model_policy")
-                    if raw is not None and not isinstance(raw, dict):
-                        raise ValueError(f"forge.model_policy for {project_key} must be an object")
-                    self._project_model_policies[project_key] = raw or {}
-                finally:
-                    await jira.close()
-            project_policy = self._project_model_policies[project_key]
-            explicit_keys = set(project_policy) | set(resolver.policy)
-            policy_key = (
-                str(langgraph_node)
-                if langgraph_node is not None and str(langgraph_node) in explicit_keys
-                else task
-            )
-            model_target = resolver.resolve(policy_key, project_policy)
-        else:
-            explicit_keys = set(resolver.policy)
-            policy_key = (
-                str(langgraph_node)
-                if langgraph_node is not None and str(langgraph_node) in explicit_keys
-                else task
-            )
-            model_target = resolver.resolve(policy_key)
+            jira = JiraClient(settings=self.settings)
+            try:
+                raw = await jira.get_project_property(project_key, "forge.model_policy")
+                if raw is not None and not isinstance(raw, dict):
+                    raise ValueError(f"forge.model_policy for {project_key} must be an object")
+                project_policy = raw or {}
+            finally:
+                await jira.close()
+
+        explicit_keys = set(project_policy) | set(resolver.policy)
+        policy_key = next(
+            (
+                str(candidate)
+                for candidate in (langgraph_node, task, normalized_task)
+                if candidate is not None and str(candidate) in explicit_keys
+            ),
+            task,
+        )
+        model_target = resolver.resolve(policy_key, project_policy)
         trace_tags, trace_metadata = resolve_trace_fields(trace_state)
 
         result = await self._run_agent(

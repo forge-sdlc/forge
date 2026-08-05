@@ -79,8 +79,11 @@ but can only select administrator-allowlisted connections and models. Explicit
 project stage entries supersede the project wildcard. When `--model-policy` and
 `--model` are combined, individual `--model` entries overwrite matching JSON
 keys.
-Targets are pinned for implementation retries and their backend, connection,
-exact model, stable policy key, and policy source are included in tracing.
+Forge fetches the Jira project policy before each host or container agent
+execution, so changes apply automatically to the next stage or retry. The
+target remains fixed during that execution's internal model/tool loop. Projects
+without `forge.model_policy` fall back to the global stage mapping, then the
+global default, and finally the legacy `LLM_BACKEND`/`LLM_MODEL` settings.
 
 ### Redis
 
