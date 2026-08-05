@@ -264,6 +264,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             task_key=f"{ticket_key}-review-analyze",
             repo_name=current_repo,
             step_name="implement_review_analyze",
+            policy_key="implement_review_analysis",
             skill_name="implement-review",
         )
         state = merge_review_exhaustion(state, result, ticket_key, "implement_review_analyze")
@@ -318,6 +319,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
                 task_key=f"{ticket_key}-review-fix",
                 repo_name=current_repo,
                 step_name="implement_review_fix",
+                policy_key="implement_review_fix",
                 skill_name="implement-review",
             )
             state = merge_review_exhaustion(state, result, ticket_key, "implement_review_fix")

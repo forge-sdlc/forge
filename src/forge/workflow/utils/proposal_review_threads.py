@@ -82,6 +82,7 @@ async def triage_proposal_review_threads(
     try:
         output = await ForgeAgent().run_task(
             task="triage-proposal-review-threads",
+            policy_key="proposal_review_triage",
             prompt=prompt,
             context={"ticket_key": ticket_key},
             include_tools=False,

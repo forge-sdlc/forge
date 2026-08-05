@@ -343,6 +343,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             task_key=f"{ticket_key}-ci-analyze",
             repo_name=state.get("current_repo", ""),
             step_name="analyze_ci",
+            policy_key="ci_analysis",
             skill_name="analyze-ci",
         )
         state = merge_review_exhaustion(state, result, ticket_key, "analyze_ci")
@@ -374,6 +375,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             task_key=f"{ticket_key}-ci-fix",
             repo_name=state.get("current_repo", ""),
             step_name="fix_ci",
+            policy_key="ci_fix",
             skill_name="fix-ci",
         )
         state = merge_review_exhaustion(state, result, ticket_key, "fix_ci")

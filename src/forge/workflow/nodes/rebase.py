@@ -166,6 +166,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
             task_key=f"{ticket_key}-rebase",
             repo_name=current_repo,
             step_name="rebase",
+            policy_key="rebase",
         )
 
         state = merge_review_exhaustion(state, result, ticket_key, "rebase")

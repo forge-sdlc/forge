@@ -304,6 +304,7 @@ async def _generate_tasks_for_epic(
 
     result = await agent.run_task(
         task="generate-tasks",
+        policy_key="generate_tasks",
         prompt=prompt,
         context=context,
     )

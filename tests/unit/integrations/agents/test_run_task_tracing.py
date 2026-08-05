@@ -190,7 +190,6 @@ class TestRunTaskTraceResolution:
         agent.settings.model_connections = {
             "vertex": {
                 "backend": "vertex-ai",
-                "credential_ref": "gcp-adc",
                 "project": "test-project",
                 "allowed_models": ["gemini-pro", "gemini-flash"],
             }

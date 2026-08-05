@@ -2,7 +2,11 @@
 
 import pytest
 
-from forge.models.model_policy import ModelPolicyResolver
+from forge.models.model_policy import (
+    KNOWN_MODEL_POLICY_KEYS,
+    ModelPolicyResolver,
+    canonical_policy_key,
+)
 
 
 @pytest.fixture
@@ -11,14 +15,12 @@ def resolver() -> ModelPolicyResolver:
         connections={
             "vertex": {
                 "backend": "vertex-ai",
-                "credential_ref": "gcp-workload-identity",
                 "project": "prod",
                 "allowed_models": ["gemini-pro", "gemini-flash"],
                 "capabilities": ["tools"],
             },
             "locked": {
                 "backend": "anthropic",
-                "credential_ref": "anthropic-session",
                 "allowed_models": ["claude-sonnet"],
                 "allow_project_override": False,
             },
@@ -118,3 +120,29 @@ def test_invalid_default_connection_fails_eagerly() -> None:
 def test_empty_policy_key_is_rejected(resolver: ModelPolicyResolver) -> None:
     with pytest.raises(ValueError, match="must not be empty"):
         resolver.resolve("generate_prd", {"": {"connection": "vertex", "model": "gemini-pro"}})
+
+
+@pytest.mark.parametrize(
+    ("runtime_key", "expected"),
+    [
+        ("triage-bug", "bug_triage"),
+        ("generate-pr-body", "generate_pr_description"),
+        ("sync-pr-description", "sync_pr_description"),
+        ("fix_ci", "ci_fix"),
+        ("implement_review_fix", "implement_review_fix"),
+    ],
+)
+def test_runtime_names_have_canonical_policy_keys(runtime_key: str, expected: str) -> None:
+    assert canonical_policy_key(runtime_key) == expected
+
+
+def test_every_advertised_policy_key_resolves(resolver: ModelPolicyResolver) -> None:
+    resolved = resolver.resolve_all()
+    assert set(resolved) == set(KNOWN_MODEL_POLICY_KEYS)
+
+
+def test_unknown_policy_key_is_rejected(resolver: ModelPolicyResolver) -> None:
+    with pytest.raises(ValueError, match="Unknown model policy key"):
+        resolver.resolve(
+            "generate_prd", {"typo_stage": {"connection": "vertex", "model": "gemini-pro"}}
+        )

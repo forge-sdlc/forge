@@ -85,6 +85,26 @@ class TestLlmConfig:
 
         assert settings.has_explicit_model_policy is True
 
+    def test_named_connection_backend_credentials_are_validated(self):
+        with pytest.raises(ValueError, match="ANTHROPIC_API_KEY.*anthropic model connection"):
+            make_settings(
+                jira_base_url="https://test.atlassian.net",
+                jira_api_token="test",
+                jira_user_email="test@example.com",
+                github_token="test",
+                model_connections={
+                    "vertex": {
+                        "backend": "vertex-ai",
+                        "project": "test-project",
+                    },
+                    "anthropic": {
+                        "backend": "anthropic",
+                        "allowed_models": ["claude-sonnet"],
+                    },
+                },
+                model_default={"connection": "vertex", "model": "gemini-pro"},
+            )
+
     def test_backend_is_required(self):
         with pytest.raises(ValueError, match="llm_backend"):
             Settings(

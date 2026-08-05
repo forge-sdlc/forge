@@ -94,6 +94,7 @@ async def triage_task(state: TaskTakeoverState) -> TaskTakeoverState:
         )
         raw_result = await agent.run_task(
             task="task-takeover-triage",
+            policy_key="task_takeover_triage",
             prompt=user_prompt,
             context={"ticket_key": ticket_key},
         )

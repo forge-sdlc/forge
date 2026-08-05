@@ -77,6 +77,7 @@ async def triage_check(state: BugState) -> BugState:
         )
         raw_result = await agent.run_task(
             task="triage-bug",
+            policy_key="bug_triage",
             prompt=user_prompt,
             context={"ticket_key": ticket_key},
         )

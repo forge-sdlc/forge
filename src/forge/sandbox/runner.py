@@ -28,6 +28,7 @@ from forge.api.routes.metrics import (
     record_review_verdict,
 )
 from forge.config import Settings, get_settings
+from forge.model_policy import resolve_model_target_for_project
 from forge.models.model_policy import ResolvedModelTarget
 from forge.observability import (
     ReviewCycleData,
@@ -754,6 +755,7 @@ class ContainerRunner:
         step_name: str | None = None,
         skill_name: str | None = None,
         model_target: ResolvedModelTarget | None = None,
+        policy_key: str | None = None,
     ) -> ContainerResult:
         """Run a task in a container sandbox.
 
@@ -775,6 +777,13 @@ class ContainerRunner:
             ContainerResult with execution status, logs, and review_cycles.
         """
         config = config or self._default_config()
+        project_key = (
+            ticket_key.split("-", 1)[0].upper() if ticket_key and "-" in ticket_key else None
+        )
+        if model_target is None and policy_key:
+            model_target = await resolve_model_target_for_project(
+                self.settings, project_key, policy_key
+            )
 
         # Create task file in .forge directory (excluded from commits)
         forge_dir = workspace_path / ".forge"
@@ -790,9 +799,7 @@ class ContainerRunner:
             "previous_task_keys": previous_task_keys or [],
             "trace_context": resolved_trace_context,
             "skill_name": skill_name or "",
-            "model_target": model_target.model_dump(exclude={"credential_ref"})
-            if model_target
-            else {},
+            "model_target": model_target.model_dump() if model_target else {},
         }
         task_file.write_text(json.dumps(task_data, indent=2))
 

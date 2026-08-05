@@ -585,6 +585,7 @@ async def _generate_pr_body_with_agent(
         agent = ForgeAgent(settings)
         result = await agent.run_task(
             task="generate-pr-body",
+            policy_key="generate_pr_description",
             prompt=prompt,
             context={
                 "ticket_key": ticket_key,

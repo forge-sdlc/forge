@@ -71,6 +71,7 @@ async def run_post_change_review(
             task_key=f"{ticket_key}-review-{label}",
             repo_name=current_repo,
             step_name="code_review",
+            policy_key="code_review",
             skill_name="review-code",
         )
 
@@ -150,6 +151,7 @@ async def sync_pr_description(
             try:
                 updated_body = await agent.run_task(
                     task="sync-pr-description",
+                    policy_key="sync_pr_description",
                     prompt=prompt,
                     context={"owner": owner, "repo": repo, "pr_number": pr_number},
                     trace_context={

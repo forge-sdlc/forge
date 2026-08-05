@@ -244,11 +244,16 @@ class Settings(BaseSettings):
 
     def _validate_model_policy(self, resolver_type: type) -> None:
         """Validate policy while preserving the legacy single-model configuration."""
-        resolver_type(
+        resolver = resolver_type(
             connections=self.effective_model_connections,
             policy=self.model_policy,
             default=self.effective_model_default,
         )
+        for connection in resolver.connections.values():
+            if connection.backend == "google-genai" and not self.google_api_key.get_secret_value():
+                raise ValueError("GOOGLE_API_KEY is required by a google-genai model connection")
+            if connection.backend == "anthropic" and not self.anthropic_api_key.get_secret_value():
+                raise ValueError("ANTHROPIC_API_KEY is required by an anthropic model connection")
 
     @property
     def effective_model_connections(self) -> dict[str, Any]:
@@ -256,7 +261,6 @@ class Settings(BaseSettings):
             return self.model_connections
         connection: dict[str, Any] = {
             "backend": self.llm_backend,
-            "credential_ref": "legacy-environment",
             "allowed_models": ["*"],
         }
         if self.llm_backend == "vertex-ai":

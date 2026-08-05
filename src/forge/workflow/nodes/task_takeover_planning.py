@@ -129,6 +129,7 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         # tools instead of requiring a cloned container workspace.
         raw_plan = await agent.run_task(
             task="task-takeover-planning",
+            policy_key="task_takeover_planning",
             prompt=task_description,
             context={
                 "ticket_key": ticket_key,

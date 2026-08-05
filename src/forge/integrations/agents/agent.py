@@ -33,6 +33,7 @@ except ImportError:
 from forge.config import Settings, get_settings
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
 from forge.integrations.langfuse.fields import resolve_trace_fields
+from forge.model_policy import resolve_model_target_for_project
 from forge.models.model_policy import ResolvedModelTarget
 from forge.prompts import load_prompt, set_default_version
 from forge.skills.resolver import resolve_skill_paths
@@ -787,6 +788,7 @@ class ForgeAgent:
         context: dict[str, Any] | None = None,
         trace_context: dict[str, Any] | None = None,
         include_tools: bool = True,
+        policy_key: str | None = None,
     ) -> str:
         """Run a task, letting the agent choose the best approach.
 
@@ -847,7 +849,6 @@ class ForgeAgent:
             **(context or {}),
             **(trace_context or {}),
             "system_prompt_length": len(system_prompt),
-            "llm_model": self.settings.llm_model,
         }
 
         if langgraph_node:
@@ -859,31 +860,15 @@ class ForgeAgent:
         project_key = (
             ticket_key.split("-", 1)[0].upper() if ticket_key and "-" in ticket_key else None
         )
-        project_policy: dict[str, Any] = {}
-        resolver = self.settings.model_policy_resolver()
-        normalized_task = task.replace("-", "_")
-        if project_key and self.settings.model_connections:
-            from forge.integrations.jira.client import JiraClient
-
-            jira = JiraClient(settings=self.settings)
-            try:
-                raw = await jira.get_project_property(project_key, "forge.model_policy")
-                if raw is not None and not isinstance(raw, dict):
-                    raise ValueError(f"forge.model_policy for {project_key} must be an object")
-                project_policy = raw or {}
-            finally:
-                await jira.close()
-
-        explicit_keys = set(project_policy) | set(resolver.policy)
-        policy_key = next(
-            (
-                str(candidate)
-                for candidate in (langgraph_node, task, normalized_task)
-                if candidate is not None and str(candidate) in explicit_keys
-            ),
-            task,
+        runtime_policy_key = policy_key or (str(langgraph_node) if langgraph_node else task)
+        model_target = await resolve_model_target_for_project(
+            self.settings,
+            project_key,
+            runtime_policy_key,
         )
-        model_target = resolver.resolve(policy_key, project_policy)
+        trace_state["llm_model"] = (
+            model_target.model if model_target is not None else self.settings.llm_model
+        )
         trace_tags, trace_metadata = resolve_trace_fields(trace_state)
 
         result = await self._run_agent(
@@ -1052,6 +1037,7 @@ class ForgeAgent:
         logger.info("Generating PRD using Deep Agents with skill")
         result = await self.run_task(
             task="generate-prd",
+            policy_key="generate_prd",
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
@@ -1089,6 +1075,7 @@ class ForgeAgent:
         logger.info("Generating Spec using Deep Agents with skill")
         result = await self.run_task(
             task="generate-spec",
+            policy_key="generate_spec",
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
@@ -1151,6 +1138,7 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         logger.info("Generating Epics using Deep Agents with skill")
         result = await self.run_task(
             task="decompose-epics",
+            policy_key="decompose_epics",
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
@@ -1203,6 +1191,12 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         logger.info(f"Regenerating {content_type} with feedback using Deep Agents")
         result = await self.run_task(
             task=skill_name,
+            policy_key={
+                "prd": "generate_prd",
+                "spec": "generate_spec",
+                "epic": "decompose_epics",
+                "task": "generate_tasks",
+            }.get(content_type, "generate_prd"),
             prompt=prompt,
             context={"is_revision": True, "ticket_key": ticket_key or ""},
             trace_context=_forward_trace_fields(context),
@@ -1321,6 +1315,9 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         logger.info(f"Answering question about {artifact_type} using task={task_name}")
         result = await self.run_task(
             task=task_name,
+            policy_key=(
+                "task_takeover_question" if artifact_type == "task_takeover" else "answer_question"
+            ),
             prompt=prompt,
             context={
                 "artifact_type": artifact_type,

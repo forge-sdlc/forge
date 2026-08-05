@@ -117,6 +117,7 @@ async def run_review_container(
     previous_task_keys: list[str] | None = None,
     step_name: str | None = None,
     skill_name: str | None = None,
+    policy_key: str | None = None,
 ) -> tuple[ContainerResult, str]:
     """Execute a review container and return its result and combined output."""
     # Never allow a failed retry to reuse an earlier attempt's verdict. The
@@ -144,6 +145,8 @@ async def run_review_container(
         kwargs["step_name"] = step_name
     if skill_name is not None:
         kwargs["skill_name"] = skill_name
+    if policy_key is not None:
+        kwargs["policy_key"] = policy_key
     result = await runner.run(**kwargs)
     output = collect_review_output(
         workspace_path,

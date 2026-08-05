@@ -107,6 +107,7 @@ async def analyze_bug(state: BugState) -> BugState:
                 ticket_key=ticket_key,
                 task_key=f"{ticket_key}-analysis",
                 step_name="analyze_bug",
+                policy_key="analyze_bug",
                 skill_name="analyze-bug",
             )
 
@@ -263,6 +264,7 @@ async def reflect_rca(state: BugState) -> BugState:
                 ticket_key=ticket_key,
                 task_key=task_key,
                 step_name="reflect_rca",
+                policy_key="reflect_rca",
                 skill_name="reflect-rca",
             )
 

@@ -55,10 +55,10 @@ Forge validates the backend, credentials, and model compatibility at startup.
 
 The legacy `CONTAINER_LLM_MODEL` override remains supported. For exact
 per-stage selection, administrators can define JSON `MODEL_CONNECTIONS`,
-`MODEL_DEFAULT`, and `MODEL_POLICY` values. Connections contain only a
-`credential_ref`, backend, provider location, and model allowlist—never a
-credential value. Jira projects then set `forge.model_policy`, restricted to
-those connections and models:
+`MODEL_DEFAULT`, and `MODEL_POLICY` values. Connections contain a backend,
+provider location, and model allowlist—never a credential value. Each backend
+uses its existing provider-native environment credential. Jira projects then
+set `forge.model_policy`, restricted to those connections and models:
 
 ```bash
 forge project-setup MYPROJ \
@@ -72,6 +72,43 @@ forge project-setup MYPROJ \
 # Validate and print every resolved non-secret target
 forge get-config MYPROJ --models
 ```
+
+Canonical policy keys are deliberately specific; runtime prompt, skill, and
+graph-node names are not accepted in Jira configuration:
+
+| Policy key | Execution |
+|---|---|
+| `generate_prd` | Initial or revised product requirements |
+| `generate_spec` | Initial or revised technical specification |
+| `decompose_epics` | Epic decomposition or revision |
+| `generate_tasks` | Task generation or revision |
+| `bug_triage` | Bug-report completeness triage |
+| `automated_review_triage` | Classification of automated review feedback |
+| `proposal_review_triage` | Classification of proposal review threads |
+| `task_takeover_triage` | Existing-task takeover triage |
+| `task_takeover_planning` | Existing-task implementation planning |
+| `task_takeover_execution` | Existing-task container implementation |
+| `task_takeover_review` | Existing-task qualitative review |
+| `task_takeover_question` | Questions about task-takeover artifacts |
+| `analyze_bug` | Root-cause analysis |
+| `reflect_rca` | Root-cause analysis reflection |
+| `plan_bug_fix` | Bug-fix planning |
+| `implement_bug_fix` | Bug-fix container implementation |
+| `implement_task` | Feature-task container implementation |
+| `bug_local_review` | Local qualitative review of a bug fix |
+| `local_code_review` | Local feature code review |
+| `code_review` | Pull-request code review |
+| `implement_review_analysis` | Analysis of implementation review feedback |
+| `implement_review_fix` | Applying implementation review fixes |
+| `generate_pr_description` | Initial pull-request description generation |
+| `sync_pr_description` | Pull-request description synchronization |
+| `ci_analysis` | CI failure analysis |
+| `ci_fix` | CI failure remediation |
+| `answer_question` | Questions about generated SDLC artifacts |
+| `rebase` | Container-assisted rebase conflict resolution |
+| `update_docs` | Documentation update generation |
+
+Unknown keys fail validation instead of silently using the default target.
 
 Resolution is project override, then global stage mapping, then global default.
 This includes a project `*` override: it supersedes global per-stage mappings,

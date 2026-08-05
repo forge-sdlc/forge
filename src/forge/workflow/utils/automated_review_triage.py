@@ -80,6 +80,7 @@ async def triage_automated_review(
     try:
         output = await ForgeAgent().run_task(
             task="triage-automated-review",
+            policy_key="automated_review_triage",
             prompt=prompt,
             context={"ticket_key": ticket_key},
             include_tools=False,

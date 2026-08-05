@@ -17,7 +17,6 @@ class ModelConnection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     backend: Backend
-    credential_ref: str = "default"
     project: str | None = None
     location: str | None = None
     allowed_models: list[str] = Field(default_factory=lambda: ["*"])
@@ -26,10 +25,6 @@ class ModelConnection(BaseModel):
 
     @model_validator(mode="after")
     def validate_connection(self) -> "ModelConnection":
-        if not self.credential_ref or any(
-            marker in self.credential_ref.lower() for marker in ("api_key=", "token=", "secret=")
-        ):
-            raise ValueError("credential_ref must be a non-secret credential identifier")
         if self.backend == "vertex-ai" and not self.project:
             raise ValueError("vertex-ai connections require project")
         return self
@@ -55,7 +50,6 @@ class ResolvedModelTarget(ModelTarget):
     policy_source: Literal["project", "global", "default"]
     project: str | None = None
     location: str | None = None
-    credential_ref: str = Field(default="", exclude=True, repr=False)
 
     def trace_metadata(self) -> dict[str, Any]:
         return {
@@ -68,20 +62,67 @@ class ResolvedModelTarget(ModelTarget):
 
 
 KNOWN_MODEL_POLICY_KEYS = (
+    "analyze_bug",
+    "answer_question",
+    "automated_review_triage",
+    "bug_local_review",
+    "bug_triage",
+    "ci_analysis",
+    "ci_fix",
+    "code_review",
+    "decompose_epics",
+    "generate_pr_description",
     "generate_prd",
     "generate_spec",
-    "decompose_epics",
     "generate_tasks",
-    "triage",
-    "plan_bug_fix",
+    "implement_review_analysis",
+    "implement_review_fix",
     "implement_task",
     "implement_bug_fix",
-    "local_review",
-    "code_review",
-    "generate_pr_description",
-    "ci_fix",
-    "answer_question",
+    "local_code_review",
+    "plan_bug_fix",
+    "proposal_review_triage",
+    "rebase",
+    "reflect_rca",
+    "task_takeover_execution",
+    "task_takeover_planning",
+    "task_takeover_question",
+    "task_takeover_review",
+    "task_takeover_triage",
+    "sync_pr_description",
+    "update_docs",
 )
+
+_POLICY_KEY_ALIASES = {
+    "analyze-ci": "ci_analysis",
+    "analyze_ci": "ci_analysis",
+    "decompose-epics": "decompose_epics",
+    "fix-ci": "ci_fix",
+    "fix_ci": "ci_fix",
+    "generate-pr-body": "generate_pr_description",
+    "generate-prd": "generate_prd",
+    "generate-spec": "generate_spec",
+    "generate-tasks": "generate_tasks",
+    "implement_review_analyze": "implement_review_analysis",
+    "plan-bug-fix": "plan_bug_fix",
+    "sync-pr-description": "sync_pr_description",
+    "task-takeover-execution": "task_takeover_execution",
+    "task-takeover-planning": "task_takeover_planning",
+    "task-takeover-review": "task_takeover_review",
+    "task-takeover-triage": "task_takeover_triage",
+    "triage-automated-review": "automated_review_triage",
+    "triage-bug": "bug_triage",
+    "triage-proposal-review-threads": "proposal_review_triage",
+}
+
+
+def canonical_policy_key(runtime_key: str) -> str:
+    """Return the advertised stable policy key for a runtime task/node name."""
+    normalized = runtime_key.strip()
+    canonical = _POLICY_KEY_ALIASES.get(normalized, normalized.replace("-", "_"))
+    if canonical not in KNOWN_MODEL_POLICY_KEYS:
+        raise ValueError(f"Unknown model policy key '{runtime_key}'")
+    return canonical
 
 
 class ModelPolicyResolver:
@@ -109,6 +150,9 @@ class ModelPolicyResolver:
         )
         if any(not key for key in self.policy):
             raise ValueError("Model policy keys must not be empty")
+        unknown_keys = set(self.policy) - set(KNOWN_MODEL_POLICY_KEYS) - {"*"}
+        if unknown_keys:
+            raise ValueError(f"Unknown model policy key '{sorted(unknown_keys)[0]}'")
         # Validate administrator policy eagerly at startup.
         for key, target in [*self.policy.items(), ("default", self.default)]:
             self._validate_target(target, project_override=False, key=key)
@@ -158,6 +202,9 @@ class ModelPolicyResolver:
             raise ValueError("Model policy keys must not be empty")
         if project_policy and any(not project_key for project_key in project_policy):
             raise ValueError("Model policy keys must not be empty")
+        unknown_keys = set(project_policy or {}) - set(KNOWN_MODEL_POLICY_KEYS) - {"*"}
+        if unknown_keys:
+            raise ValueError(f"Unknown model policy key '{sorted(unknown_keys)[0]}'")
         if project_policy and key in project_policy:
             target = ModelTarget.model_validate(project_policy[key])
             source = "project"
@@ -183,7 +230,6 @@ class ModelPolicyResolver:
             backend=connection.backend,
             project=connection.project,
             location=connection.location,
-            credential_ref=connection.credential_ref,
             policy_key=key,
             policy_source=source,
         )

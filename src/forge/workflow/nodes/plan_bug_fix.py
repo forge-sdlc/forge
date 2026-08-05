@@ -143,6 +143,7 @@ async def _run_plan_container(
                 ticket_key=ticket_key,
                 task_key=f"{ticket_key}-plan",
                 step_name="plan_bug_fix",
+                policy_key="plan_bug_fix",
                 skill_name="plan-bug-fix",
             )
 
