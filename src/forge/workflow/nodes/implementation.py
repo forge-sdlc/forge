@@ -14,7 +14,7 @@ Architecture:
 import logging
 from pathlib import Path
 
-from forge.config import get_settings
+from forge.config import Settings, get_settings
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import TicketType
 from forge.sandbox import ContainerRunner
@@ -197,6 +197,31 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         # Run implementation in container sandbox
         runner = ContainerRunner(settings)
 
+        # Resolve once and persist the non-secret target in workflow state so
+        # retries and resumed checkpoints cannot drift after config changes.
+        snapshot = dict(state.get("model_policy_snapshot", {}))
+        model_target = None
+        if not isinstance(settings, Settings):
+            # Some embedders provide a settings-like test double; preserve the
+            # legacy runner contract when no concrete policy can be validated.
+            pass
+        elif implementation_node in snapshot:
+            from forge.models.model_policy import ResolvedModelTarget
+
+            model_target = ResolvedModelTarget.model_validate(snapshot[implementation_node])
+        else:
+            project_key = ticket_key.split("-", 1)[0].upper()
+            project_policy = None
+            if settings.model_connections:
+                project_policy = await jira.get_project_property(project_key, "forge.model_policy")
+                if project_policy is not None and not isinstance(project_policy, dict):
+                    raise ValueError(f"forge.model_policy for {project_key} must be an object")
+            model_target = settings.model_policy_resolver().resolve(
+                implementation_node, project_policy or {}
+            )
+            snapshot[implementation_node] = model_target.model_dump(exclude={"credential_ref"})
+            state = {**state, "model_policy_snapshot": snapshot}
+
         current_repo = state.get("current_repo", "")
         # Copy list to avoid mutation after passing to runner
         implemented_tasks = list(state.get("implemented_tasks", []))
@@ -215,6 +240,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
                 implementation_node=implementation_node,
                 current_repo=current_repo,
             ),
+            model_target=model_target,
         )
 
         # Collect review exhaustion data (if auto-review ran and exhausted)

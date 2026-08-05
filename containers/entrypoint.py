@@ -396,6 +396,8 @@ def _create_llm_model(max_tokens_default: int = 16384):
     model_name = resolve_llm_model()
     is_gemini = model_name.lower().startswith(("gemini", "models/gemini"))
     max_tokens = int(os.environ.get("LLM_MAX_TOKENS", str(max_tokens_default)))
+    temperature_raw = os.environ.get("LLM_TEMPERATURE")
+    tuning = {"temperature": float(temperature_raw)} if temperature_raw is not None else {}
 
     if backend_name == "vertex-ai":
         vertex_project = os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -414,6 +416,7 @@ def _create_llm_model(max_tokens_default: int = 16384):
                 location=vertex_region,
                 vertexai=True,
                 max_output_tokens=max_tokens,
+                **tuning,
             )
         else:
             from langchain_google_vertexai.model_garden import ChatAnthropicVertex
@@ -426,6 +429,7 @@ def _create_llm_model(max_tokens_default: int = 16384):
                 project=vertex_project,
                 location=vertex_region,
                 max_tokens=max_tokens,
+                **tuning,
             )
     elif backend_name == "google-genai":
         if not is_gemini:
@@ -441,6 +445,7 @@ def _create_llm_model(max_tokens_default: int = 16384):
             model=model_name,
             api_key=google_api_key,
             max_output_tokens=max_tokens,
+            **tuning,
         )
     elif backend_name == "anthropic":
         if is_gemini:
@@ -455,6 +460,7 @@ def _create_llm_model(max_tokens_default: int = 16384):
             model=model_name,
             api_key=anthropic_api_key,
             max_tokens=max_tokens,
+            **tuning,
         )
     else:
         raise RuntimeError(f"Unsupported LLM_BACKEND: {backend_name}")

@@ -33,6 +33,7 @@ except ImportError:
 from forge.config import Settings, get_settings
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
 from forge.integrations.langfuse.fields import resolve_trace_fields
+from forge.models.model_policy import ResolvedModelTarget
 from forge.prompts import load_prompt, set_default_version
 from forge.skills.resolver import resolve_skill_paths
 
@@ -142,6 +143,9 @@ class ForgeAgent:
         self._ensure_api_key()
         self._checkpointer = MemorySaver()
         self._current_repo: str = ""  # Set per-task for dynamic MCP URLs
+        # A project policy is read once per agent lifetime.  Retries therefore
+        # cannot silently switch models when a Jira property changes.
+        self._project_model_policies: dict[str, dict[str, Any]] = {}
 
         # Set prompt version from config
         set_default_version(self.settings.prompt_version)
@@ -159,7 +163,11 @@ class ForgeAgent:
             if api_key:
                 os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    def _create_model(self, model_name: str | None = None) -> Any:
+    def _create_model(
+        self,
+        model_name: str | None = None,
+        model_target: ResolvedModelTarget | None = None,
+    ) -> Any:
         """Create the appropriate chat model based on configuration.
 
         Args:
@@ -168,9 +176,15 @@ class ForgeAgent:
         Returns:
             A LangChain chat model instance for Deep Agents.
         """
-        model = model_name or self.settings.llm_model
+        model = model_target.model if model_target else (model_name or self.settings.llm_model)
         is_gemini = Settings.detect_model_provider(model) == "google"
-        backend = self.settings.llm_backend
+        backend = model_target.backend if model_target else self.settings.llm_backend
+        max_tokens = (
+            model_target.max_output_tokens
+            if model_target and model_target.max_output_tokens
+            else self.settings.llm_max_tokens
+        )
+        temperature = model_target.temperature if model_target else None
 
         if backend == "google-genai":
             if not is_gemini:
@@ -183,11 +197,12 @@ class ForgeAgent:
             return ChatGoogleGenerativeAI(
                 model=model,
                 api_key=api_key,
-                max_output_tokens=self.settings.llm_max_tokens,
+                max_output_tokens=max_tokens,
+                **({"temperature": temperature} if temperature is not None else {}),
             )
 
         if backend == "vertex-ai":
-            project = self.settings.google_cloud_project
+            project = model_target.project if model_target else self.settings.google_cloud_project
             if not project:
                 raise ValueError("GOOGLE_CLOUD_PROJECT is required for vertex-ai")
             if is_gemini:
@@ -200,10 +215,15 @@ class ForgeAgent:
                 )
                 return ChatGoogleGenerativeAI(
                     model=model,
-                    project=self.settings.google_cloud_project,
-                    location=self.settings.google_cloud_location,
+                    project=project,
+                    location=(
+                        model_target.location
+                        if model_target
+                        else self.settings.google_cloud_location
+                    ),
                     vertexai=True,
-                    max_output_tokens=self.settings.llm_max_tokens,
+                    max_output_tokens=max_tokens,
+                    **({"temperature": temperature} if temperature is not None else {}),
                 )
             else:
                 if not HAS_ANTHROPIC_VERTEX:
@@ -217,9 +237,14 @@ class ForgeAgent:
                 )
                 return ChatAnthropicVertex(
                     model_name=model,
-                    project=self.settings.google_cloud_project,
-                    location=self.settings.google_cloud_location,
-                    max_tokens=self.settings.llm_max_tokens,
+                    project=project,
+                    location=(
+                        model_target.location
+                        if model_target
+                        else self.settings.google_cloud_location
+                    ),
+                    max_tokens=max_tokens,
+                    **({"temperature": temperature} if temperature is not None else {}),
                 )
         if backend == "anthropic":
             if is_gemini:
@@ -234,7 +259,8 @@ class ForgeAgent:
             return ChatAnthropic(
                 model=model,
                 api_key=api_key,
-                max_tokens=self.settings.llm_max_tokens,
+                max_tokens=max_tokens,
+                **({"temperature": temperature} if temperature is not None else {}),
             )
 
         raise ValueError(f"Unsupported LLM backend: {backend}")
@@ -458,6 +484,7 @@ class ForgeAgent:
         system_prompt: str,
         include_tools: bool = True,
         ticket_key: str | None = None,
+        model_target: ResolvedModelTarget | None = None,
     ) -> Any:
         """Create a Deep Agent instance with configured skills and MCP tools.
 
@@ -479,7 +506,7 @@ class ForgeAgent:
         backend = FilesystemBackend(root_dir=str(root_dir))
 
         # Create the model (supports both direct API and Vertex AI)
-        model = self._create_model()
+        model = self._create_model(model_target=model_target)
 
         # Load MCP tools if enabled
         mcp_tools = await self._load_mcp_tools() if include_tools else []
@@ -620,6 +647,7 @@ class ForgeAgent:
         ticket_key: str | None = None,
         tags: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        model_target: ResolvedModelTarget | None = None,
     ) -> str:
         """Run the agent with the given prompt.
 
@@ -643,6 +671,7 @@ class ForgeAgent:
             system_prompt=system_prompt,
             include_tools=include_tools,
             ticket_key=ticket_key,
+            model_target=model_target,
         )
 
         # Generate unique thread ID for this conversation
@@ -652,11 +681,14 @@ class ForgeAgent:
         config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
 
         # Add Langfuse callbacks for observability
+        tracing_metadata = dict(metadata or {})
+        if model_target:
+            tracing_metadata.update(model_target.trace_metadata())
         langfuse_config = get_langfuse_config(
             trace_name=trace_name or "deep_agent_invocation",
             session_id=session_id,
             tags=tags,
-            metadata=metadata,
+            metadata=tracing_metadata or None,
         )
         if langfuse_config:
             # Extract context params and remove from config
@@ -824,6 +856,32 @@ class ForgeAgent:
         if langgraph_node:
             trace_state["current_node"] = langgraph_node
 
+        # Stable node identifiers take precedence over skill identifiers when
+        # either policy explicitly maps the node.  The selected non-secret
+        # target is then pinned in this invocation and attached to every trace.
+        project_key = (
+            ticket_key.split("-", 1)[0].upper() if ticket_key and "-" in ticket_key else None
+        )
+        project_policy: dict[str, Any] = {}
+        if project_key and self.settings.model_connections:
+            if project_key not in self._project_model_policies:
+                from forge.integrations.jira.client import JiraClient
+
+                jira = JiraClient(settings=self.settings)
+                try:
+                    raw = await jira.get_project_property(project_key, "forge.model_policy")
+                    if raw is not None and not isinstance(raw, dict):
+                        raise ValueError(f"forge.model_policy for {project_key} must be an object")
+                    self._project_model_policies[project_key] = raw or {}
+                finally:
+                    await jira.close()
+            project_policy = self._project_model_policies[project_key]
+
+        resolver = self.settings.model_policy_resolver()
+        node_key = str(langgraph_node) if langgraph_node else ""
+        explicit_keys = set(project_policy) | set(resolver.policy)
+        policy_key = node_key if node_key in explicit_keys else task
+        model_target = resolver.resolve(policy_key, project_policy)
         trace_tags, trace_metadata = resolve_trace_fields(trace_state)
 
         result = await self._run_agent(
@@ -835,6 +893,7 @@ class ForgeAgent:
             ticket_key=ticket_key,
             tags=trace_tags or None,
             metadata=trace_metadata or None,
+            model_target=model_target,
         )
         observe_agent_duration(task_type=task, duration=time.monotonic() - _start)
 

@@ -28,6 +28,7 @@ from forge.api.routes.metrics import (
     record_review_verdict,
 )
 from forge.config import Settings, get_settings
+from forge.models.model_policy import ResolvedModelTarget
 from forge.observability import (
     ReviewCycleData,
     ReviewCyclePoller,
@@ -143,7 +144,10 @@ class ContainerRunner:
         )
 
     def _build_env_vars(
-        self, config: ContainerConfig, container_skill_paths: str = ""
+        self,
+        config: ContainerConfig,
+        container_skill_paths: str = "",
+        model_target: ResolvedModelTarget | None = None,
     ) -> dict[str, str]:
         """Build environment variables to pass to container.
 
@@ -156,23 +160,28 @@ class ContainerRunner:
         """
         env = {}
 
-        if not self.settings.llm_backend:
+        selected_backend = model_target.backend if model_target else self.settings.llm_backend
+        if not selected_backend:
             raise ValueError("llm_backend must be configured before building container env")
-        env["LLM_BACKEND"] = self.settings.llm_backend
+        env["LLM_BACKEND"] = selected_backend
 
-        if self.settings.llm_backend == "google-genai":
+        if selected_backend == "google-genai":
             google_api_key = self.settings.google_api_key.get_secret_value()
             if google_api_key:
                 env["GOOGLE_API_KEY"] = google_api_key
-        elif self.settings.llm_backend == "anthropic":
+        elif selected_backend == "anthropic":
             anthropic_api_key = self.settings.anthropic_api_key.get_secret_value()
             if anthropic_api_key:
                 env["ANTHROPIC_API_KEY"] = anthropic_api_key
 
         # Pass Vertex AI credentials
-        if self.settings.llm_backend == "vertex-ai":
-            env["GOOGLE_CLOUD_PROJECT"] = self.settings.google_cloud_project
-            env["GOOGLE_CLOUD_LOCATION"] = self.settings.google_cloud_location
+        if selected_backend == "vertex-ai":
+            env["GOOGLE_CLOUD_PROJECT"] = (
+                model_target.project if model_target else self.settings.google_cloud_project
+            ) or ""
+            env["GOOGLE_CLOUD_LOCATION"] = (
+                model_target.location if model_target else self.settings.google_cloud_location
+            ) or "global"
             # GOOGLE_APPLICATION_CREDENTIALS will be set if we mount gcloud creds
             env["GOOGLE_APPLICATION_CREDENTIALS"] = (
                 "/root/.config/gcloud/application_default_credentials.json"
@@ -180,8 +189,18 @@ class ContainerRunner:
 
         # Pass model configuration
         # Use container-specific model if configured, otherwise fall back to default
-        env["LLM_MODEL"] = self.settings.container_model
-        env["LLM_MAX_TOKENS"] = str(self.settings.llm_max_tokens)
+        env["LLM_MODEL"] = model_target.model if model_target else self.settings.container_model
+        env["LLM_MAX_TOKENS"] = str(
+            model_target.max_output_tokens
+            if model_target and model_target.max_output_tokens
+            else self.settings.llm_max_tokens
+        )
+        if model_target and model_target.temperature is not None:
+            env["LLM_TEMPERATURE"] = str(model_target.temperature)
+        if model_target:
+            env["FORGE_MODEL_CONNECTION"] = model_target.connection
+            env["FORGE_MODEL_POLICY_KEY"] = model_target.policy_key
+            env["FORGE_MODEL_POLICY_SOURCE"] = model_target.policy_source
 
         # Pass skill paths for agent (only if explicitly configured)
         if container_skill_paths:
@@ -290,6 +309,7 @@ class ContainerRunner:
         config: ContainerConfig,
         container_name: str,
         ticket_key: str | None = None,
+        model_target: ResolvedModelTarget | None = None,
     ) -> list[str]:
         """Build the podman run command."""
 
@@ -322,7 +342,8 @@ class ContainerRunner:
         ]
 
         # Mount gcloud credentials for Vertex AI authentication
-        if self.settings.llm_backend == "vertex-ai":
+        selected_backend = model_target.backend if model_target else self.settings.llm_backend
+        if selected_backend == "vertex-ai":
             gcloud_creds = self._get_gcloud_credentials_path()
             if gcloud_creds:
                 # Mount the credentials file to container
@@ -339,7 +360,9 @@ class ContainerRunner:
             cmd.extend(["-v", f"{host_path}:{container_path}:ro,Z"])
 
         # Add environment variables
-        for key, value in self._build_env_vars(config, container_skill_paths).items():
+        for key, value in self._build_env_vars(
+            config, container_skill_paths, model_target
+        ).items():
             cmd.extend(["-e", f"{key}={value}"])
 
         # Add timeout
@@ -732,6 +755,7 @@ class ContainerRunner:
         trace_context: dict[str, Any] | None = None,
         step_name: str | None = None,
         skill_name: str | None = None,
+        model_target: ResolvedModelTarget | None = None,
     ) -> ContainerResult:
         """Run a task in a container sandbox.
 
@@ -758,13 +782,19 @@ class ContainerRunner:
         forge_dir = workspace_path / ".forge"
         forge_dir.mkdir(exist_ok=True)
         task_file = forge_dir / "task.json"
+        pinned_trace_context = dict(trace_context or {})
+        if model_target:
+            pinned_trace_context.update(model_target.trace_metadata())
         task_data = {
             "task_key": task_key or "UNKNOWN",
             "summary": task_summary,
             "description": task_description,
             "previous_task_keys": previous_task_keys or [],
-            "trace_context": trace_context or {},
+            "trace_context": pinned_trace_context,
             "skill_name": skill_name or "",
+            "model_target": model_target.model_dump(exclude={"credential_ref"})
+            if model_target
+            else {},
         }
         task_file.write_text(json.dumps(task_data, indent=2))
 
@@ -778,7 +808,7 @@ class ContainerRunner:
             # Build container name and command
             container_name = self._build_container_name(ticket_key, repo_name)
             cmd = self._build_podman_command(
-                workspace_path, task_file, config, container_name, ticket_key
+                workspace_path, task_file, config, container_name, ticket_key, model_target
             )
 
             logger.info(f"Starting container {container_name} for task: {task_summary}")

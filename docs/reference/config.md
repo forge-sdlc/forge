@@ -53,10 +53,25 @@ Choose one backend explicitly. Gemini 3.5 Flash through Vertex AI is recommended
 provider-native variables shown above; legacy aliases are not supported.
 Forge validates the backend, credentials, and model compatibility at startup.
 
-`CONTAINER_LLM_MODEL` may override the model used for implementation tasks, but
-it does not select a separate backend. The override must be compatible with
-`LLM_BACKEND`; using different orchestrator and container backends is not
-currently supported.
+The legacy `CONTAINER_LLM_MODEL` override remains supported. For exact
+per-stage selection, administrators can define JSON `MODEL_CONNECTIONS`,
+`MODEL_DEFAULT`, and `MODEL_POLICY` values. Connections contain only a
+`credential_ref`, backend, provider location, and model allowlist—never a
+credential value. Jira projects then set `forge.model_policy`, restricted to
+those connections and models:
+
+```bash
+forge project-setup MYPROJ \
+  --model generate_prd=vertex-production:gemini-3.5-pro \
+  --model implement_task=anthropic-production:claude-sonnet-4-6
+
+# Validate and print every resolved non-secret target
+forge get-config MYPROJ --models
+```
+
+Resolution is project override, then global stage mapping, then global default.
+Targets are pinned for implementation retries and their backend, connection,
+exact model, stable policy key, and policy source are included in tracing.
 
 ### Redis
 

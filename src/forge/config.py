@@ -2,7 +2,7 @@
 
 import logging
 from functools import cached_property, lru_cache
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -179,6 +179,18 @@ class Settings(BaseSettings):
         default=16384,
         description="Maximum output tokens for LLM responses (default 16384)",
     )
+    model_connections: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Named non-secret model connections (JSON object)",
+    )
+    model_policy: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Global stable node/skill to exact model target mapping (JSON object)",
+    )
+    model_default: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Global default exact model target (JSON object)",
+    )
 
     @property
     def container_model(self) -> str:
@@ -201,6 +213,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_llm_configuration(self) -> "Settings":
         """Fail at startup when the selected backend cannot serve its models."""
+        from forge.models.model_policy import ModelPolicyResolver
+
         models = [self.llm_model]
         if self.container_llm_model:
             models.append(self.container_llm_model)
@@ -208,6 +222,7 @@ class Settings(BaseSettings):
         if self.llm_backend == "vertex-ai":
             if not self.google_cloud_project:
                 raise ValueError("GOOGLE_CLOUD_PROJECT is required for vertex-ai")
+            self._validate_model_policy(ModelPolicyResolver)
             return self
 
         if self.llm_backend == "google-genai":
@@ -216,6 +231,7 @@ class Settings(BaseSettings):
             incompatible = [m for m in models if self.detect_model_provider(m) != "google"]
             if incompatible:
                 raise ValueError(f"Model '{incompatible[0]}' is not supported by google-genai")
+            self._validate_model_policy(ModelPolicyResolver)
             return self
 
         if not self.anthropic_api_key.get_secret_value():
@@ -223,7 +239,45 @@ class Settings(BaseSettings):
         incompatible = [m for m in models if self.detect_model_provider(m) != "anthropic"]
         if incompatible:
             raise ValueError(f"Model '{incompatible[0]}' is not supported by anthropic")
+        self._validate_model_policy(ModelPolicyResolver)
         return self
+
+    def _validate_model_policy(self, resolver_type: type) -> None:
+        """Validate policy while preserving the legacy single-model configuration."""
+        resolver_type(
+            connections=self.effective_model_connections,
+            policy=self.model_policy,
+            default=self.effective_model_default,
+        )
+
+    @property
+    def effective_model_connections(self) -> dict[str, Any]:
+        if self.model_connections:
+            return self.model_connections
+        connection: dict[str, Any] = {
+            "backend": self.llm_backend,
+            "credential_ref": "legacy-environment",
+            "allowed_models": ["*"],
+        }
+        if self.llm_backend == "vertex-ai":
+            connection.update(
+                project=self.google_cloud_project,
+                location=self.google_cloud_location,
+            )
+        return {"default": connection}
+
+    @property
+    def effective_model_default(self) -> dict[str, Any]:
+        return self.model_default or {"connection": "default", "model": self.llm_model}
+
+    def model_policy_resolver(self):
+        from forge.models.model_policy import ModelPolicyResolver
+
+        return ModelPolicyResolver(
+            connections=self.effective_model_connections,
+            policy=self.model_policy,
+            default=self.effective_model_default,
+        )
 
     # Langfuse Configuration
     langfuse_enabled_setting: bool = Field(

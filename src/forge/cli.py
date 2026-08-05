@@ -636,6 +636,48 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             await jira.set_project_property(project_key, "forge.skills", skill_entries)
             print(f"[OK] forge.skills = {len(skill_entries)} entries")
 
+        # forge.model_policy — exact per-node/skill project overrides.  The CLI
+        # validates against the administrator-owned connection allowlist before
+        # anything is written to Jira.
+        model_policy: dict[str, Any] = {}
+        if args.model_policy:
+            try:
+                model_policy = json.loads(args.model_policy)
+            except json.JSONDecodeError as exc:
+                print(f"Error: --model-policy is not valid JSON: {exc}", file=sys.stderr)
+                return 1
+            if not isinstance(model_policy, dict):
+                print("Error: --model-policy must be a JSON object", file=sys.stderr)
+                return 1
+        for raw in args.model or []:
+            policy_key, separator, target = raw.partition("=")
+            connection, target_separator, model = target.partition(":")
+            if (
+                not separator
+                or not target_separator
+                or not policy_key
+                or not connection
+                or not model
+            ):
+                print(
+                    "Error: --model must use NODE_OR_SKILL=CONNECTION:MODEL",
+                    file=sys.stderr,
+                )
+                return 1
+            model_policy[policy_key] = {"connection": connection, "model": model}
+        if args.model_policy or args.model:
+            from forge.config import get_settings
+
+            resolver = get_settings().model_policy_resolver()
+            try:
+                for key in model_policy:
+                    resolver.resolve(key, model_policy)
+            except ValueError as exc:
+                print(f"Error: invalid model policy: {exc}", file=sys.stderr)
+                return 1
+            await jira.set_project_property(project_key, "forge.model_policy", model_policy)
+            print(f"[OK] forge.model_policy = {len(model_policy)} overrides")
+
         if not any(
             [
                 args.repo,
@@ -644,12 +686,15 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 args.prd_proposals_path is not None,
                 args.skills_config,
                 args.add_skill,
+                args.model_policy,
+                args.model,
             ]
         ):
             print(
                 "Nothing to set — specify at least one of: "
                 "--repo, --default-repo, --prd-proposals-repo, "
                 "--prd-proposals-path, --skills-config, --add-skill"
+                ", --model-policy, --model"
             )
             return 1
 
@@ -698,6 +743,7 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
             "forge.prd_proposals_path",
             "forge.skills",
             "forge.references",
+            "forge.model_policy",
         ]
 
         # Combine standard keys with extra discovered keys (avoid duplicates, preserve order/sort)
@@ -835,6 +881,21 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
             effective_config["forge.references"] = {"value": refs_val, "source": "project"}
         else:
             effective_config["forge.references"] = {"value": None, "source": "unset"}
+
+        model_policy_val = project_properties.get("forge.model_policy")
+        effective_config["forge.model_policy"] = {
+            "value": model_policy_val,
+            "source": "project" if model_policy_val is not None else "unset",
+        }
+
+        if getattr(args, "models", False):
+            try:
+                resolved = settings.model_policy_resolver().resolve_all(model_policy_val or {})
+            except ValueError as exc:
+                print(f"Error: invalid model policy: {exc}", file=sys.stderr)
+                return 1
+            print(json.dumps(resolved, indent=2))
+            return 0
 
         # 7. Discovered keys
         for key in extra_keys:
@@ -1253,6 +1314,17 @@ Examples:
         metavar="JSON",
         help="Full forge.skills value as a JSON array of SkillEntry objects",
     )
+    setup_parser.add_argument(
+        "--model",
+        action="append",
+        metavar="NODE_OR_SKILL=CONNECTION:MODEL",
+        help="Set an exact model override (repeatable; sets forge.model_policy)",
+    )
+    setup_parser.add_argument(
+        "--model-policy",
+        metavar="JSON",
+        help="Full forge.model_policy JSON object (combined with --model)",
+    )
 
     # get-config command
     get_config_parser = subparsers.add_parser(
@@ -1278,6 +1350,11 @@ Examples:
         "--property",
         metavar="name",
         help="Retrieve a single resolved property value (case-insensitive)",
+    )
+    group.add_argument(
+        "--models",
+        action="store_true",
+        help="Validate and print resolved non-secret model targets for all known stages",
     )
 
     args = parser.parse_args(argv)
