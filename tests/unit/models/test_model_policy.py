@@ -35,7 +35,7 @@ def test_precedence_and_policy_source(resolver: ModelPolicyResolver) -> None:
     override = {"generate_prd": {"connection": "vertex", "model": "gemini-flash"}}
     assert resolver.resolve("generate_prd", override).policy_source == "project"
     assert resolver.resolve("generate_prd").policy_source == "global"
-    assert resolver.resolve("unknown_node").policy_source == "default"
+    assert resolver.resolve("bug_triage").policy_source == "default"
 
 
 def test_project_wildcard_overrides_all_stages_but_not_explicit_stage(
@@ -180,8 +180,17 @@ def test_every_advertised_policy_key_resolves(resolver: ModelPolicyResolver) -> 
     assert set(resolved) == set(KNOWN_MODEL_POLICY_KEYS)
 
 
+def test_advertised_policy_keys_are_sorted() -> None:
+    assert tuple(sorted(KNOWN_MODEL_POLICY_KEYS)) == KNOWN_MODEL_POLICY_KEYS
+
+
 def test_unknown_policy_key_is_rejected(resolver: ModelPolicyResolver) -> None:
     with pytest.raises(ValueError, match="Unknown model policy key"):
         resolver.resolve(
             "generate_prd", {"typo_stage": {"connection": "vertex", "model": "gemini-pro"}}
         )
+
+
+def test_unknown_resolve_key_is_rejected(resolver: ModelPolicyResolver) -> None:
+    with pytest.raises(ValueError, match="Unknown model policy key 'unknown_node'"):
+        resolver.resolve("unknown_node")

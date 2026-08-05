@@ -76,21 +76,21 @@ KNOWN_MODEL_POLICY_KEYS = (
     "generate_prd",
     "generate_spec",
     "generate_tasks",
+    "implement_bug_fix",
     "implement_review_analysis",
     "implement_review_fix",
     "implement_task",
-    "implement_bug_fix",
     "local_code_review",
     "plan_bug_fix",
     "proposal_review_triage",
     "rebase",
     "reflect_rca",
+    "sync_pr_description",
     "task_takeover_execution",
     "task_takeover_planning",
     "task_takeover_question",
     "task_takeover_review",
     "task_takeover_triage",
-    "sync_pr_description",
     "update_docs",
 )
 
@@ -216,6 +216,8 @@ class ModelPolicyResolver:
     ) -> ResolvedModelTarget:
         if not key:
             raise ValueError("Model policy keys must not be empty")
+        if key not in KNOWN_MODEL_POLICY_KEYS:
+            raise ValueError(f"Unknown model policy key '{key}'")
         if project_policy and any(not project_key for project_key in project_policy):
             raise ValueError("Model policy keys must not be empty")
         unknown_keys = set(project_policy or {}) - set(KNOWN_MODEL_POLICY_KEYS) - {"*"}
@@ -236,7 +238,7 @@ class ModelPolicyResolver:
         elif "*" in self.policy:
             target = self.policy["*"]
             source = "global"
-            connection = self._validate_target(target, project_override=False, key="*")
+            connection = self._validate_target(target, project_override=False, key=key)
         else:
             target = self.default
             source = "default"
