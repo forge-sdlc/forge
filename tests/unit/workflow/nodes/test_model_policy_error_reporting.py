@@ -12,7 +12,7 @@ async def test_model_policy_error_is_reported_to_jira_and_active_github_pr() -> 
     jira = MagicMock()
     issue = MagicMock(reporter=None, assignee=None)
     jira.get_issue = AsyncMock(return_value=issue)
-    jira.add_error_comment = AsyncMock()
+    jira.add_model_policy_error_comment = AsyncMock()
     jira.close = AsyncMock()
     github = MagicMock()
     github.create_issue_comment = AsyncMock()
@@ -34,7 +34,14 @@ async def test_model_policy_error_is_reported_to_jira_and_active_github_pr() -> 
     ):
         await notify_error(state, error, "implement_task")
 
-    assert jira.add_error_comment.await_args.kwargs["error_message"] == error
+    guidance = jira.add_model_policy_error_comment.await_args.kwargs
+    assert guidance["problem"] == ("model 'missing' is not allowed on connection 'vertex'")
+    assert guidance["available_connections"] == (
+        "vertex-ai: vertex=[gemini-3.5-flash, claude-sonnet-5]"
+    )
+    assert guidance["fix_command"] == (
+        "forge project-setup PROJ --model implement_task=CONNECTION:MODEL"
+    )
     github.create_issue_comment.assert_awaited_once()
     assert "vertex-ai: vertex=" in github.create_issue_comment.await_args.args[3]
     github.close.assert_awaited_once()

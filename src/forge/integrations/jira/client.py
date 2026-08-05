@@ -687,6 +687,97 @@ class JiraClient:
         logger.info(f"Added error comment to {issue_key} mentioning {mention_account_ids}")
         return JiraComment.from_api_response(data)
 
+    async def add_model_policy_error_comment(
+        self,
+        issue_key: str,
+        node_name: str,
+        problem: str,
+        available_connections: str,
+        fix_command: str,
+        mention_account_ids: list[str] | None = None,
+    ) -> JiraComment:
+        """Post an actionable model-policy configuration error in Jira."""
+        client = await self._get_client()
+        mention_nodes: list[dict[str, Any]] = []
+        for account_id in mention_account_ids or []:
+            if account_id:
+                mention_nodes.extend(
+                    [
+                        {
+                            "type": "mention",
+                            "attrs": {
+                                "id": account_id,
+                                "text": f"@{account_id}",
+                                "accessLevel": "",
+                            },
+                        },
+                        {"type": "text", "text": " "},
+                    ]
+                )
+
+        def paragraph(text: str, *, strong: bool = False) -> dict[str, Any]:
+            node: dict[str, Any] = {"type": "text", "text": text}
+            if strong:
+                node["marks"] = [{"type": "strong"}]
+            return {"type": "paragraph", "content": [node]}
+
+        content: list[dict[str, Any]] = [
+            {
+                "type": "paragraph",
+                "content": mention_nodes
+                + [
+                    {
+                        "type": "text",
+                        "text": "🚨 Action required: Forge model configuration",
+                        "marks": [{"type": "strong"}],
+                    }
+                ],
+            },
+            paragraph(
+                "This stage stopped because its project model selection is invalid. "
+                "The solution is included below.",
+                strong=True,
+            ),
+            {
+                "type": "heading",
+                "attrs": {"level": 3},
+                "content": [{"type": "text", "text": "What needs fixing"}],
+            },
+            paragraph(f"Stage: {node_name}"),
+            paragraph(problem),
+            {
+                "type": "heading",
+                "attrs": {"level": 3},
+                "content": [
+                    {"type": "text", "text": "Available configured connections and models"}
+                ],
+            },
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "text"},
+                "content": [{"type": "text", "text": available_connections}],
+            },
+            {
+                "type": "heading",
+                "attrs": {"level": 3},
+                "content": [{"type": "text", "text": "How to fix it"}],
+            },
+            paragraph("Choose a connection and model from the list above, then run:"),
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "bash"},
+                "content": [{"type": "text", "text": fix_command}],
+            },
+            paragraph(f"Then add the forge:retry label to {issue_key}.", strong=True),
+        ]
+        response = await client.post(
+            f"/issue/{issue_key}/comment",
+            json={"body": {"version": 1, "type": "doc", "content": content}},
+        )
+        response.raise_for_status()
+        logger.info(f"Added model policy error guidance to {issue_key}")
+        return JiraComment.from_api_response(response.json())
+
     async def get_comments(self, issue_key: str) -> list[JiraComment]:
         """Get all comments for a Jira issue.
 
