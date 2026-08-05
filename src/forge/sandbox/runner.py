@@ -381,6 +381,7 @@ class ContainerRunner:
             env_vars=env_vars,
             memory_limit=config.memory_limit,
             cpu_limit=config.cpu_limit,
+            network_mode=config.network_mode,
             timeout_seconds=config.timeout_seconds,
             skip_tests=config.skip_tests,
             max_retries=config.max_retries,

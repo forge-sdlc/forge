@@ -25,6 +25,7 @@ def _make_spec(**overrides: object) -> ExecutionSpec:
         "env_vars": {"LLM_BACKEND": "anthropic", "LLM_MODEL": "test-model"},
         "memory_limit": "4g",
         "cpu_limit": "2",
+        "network_mode": "slirp4netns",
         "timeout_seconds": 1800,
         "skip_tests": False,
         "max_retries": 3,
@@ -96,8 +97,7 @@ def fake_k8s():
     """Patch sys.modules so `from kubernetes import client` resolves to stubs."""
     k8s_top, k8s_client, k8s_config = _build_fake_k8s_modules()
     saved = {
-        k: sys.modules.get(k)
-        for k in ("kubernetes", "kubernetes.client", "kubernetes.config")
+        k: sys.modules.get(k) for k in ("kubernetes", "kubernetes.client", "kubernetes.config")
     }
     sys.modules["kubernetes"] = k8s_top
     sys.modules["kubernetes.client"] = k8s_client
@@ -136,7 +136,7 @@ class TestBuildJobManifest:
         driver = _make_driver()
         job = driver._build_job_manifest(_make_spec())
 
-        assert job.metadata.name == "forge-TEST-abc123"
+        assert job.metadata.name == "forge-test-abc123"
         assert job.metadata.namespace == "forge"
         assert job.spec.backoff_limit == 0
         assert job.spec.active_deadline_seconds == 1800
@@ -148,9 +148,7 @@ class TestBuildJobManifest:
 
     def test_env_vars_passed(self, fake_k8s) -> None:  # noqa: ARG002
         driver = _make_driver()
-        job = driver._build_job_manifest(
-            _make_spec(env_vars={"KEY1": "val1", "KEY2": "val2"})
-        )
+        job = driver._build_job_manifest(_make_spec(env_vars={"KEY1": "val1", "KEY2": "val2"}))
         container = job.spec.template.spec.containers[0]
         env_names = {e.name for e in container.env}
         assert {"KEY1", "KEY2"} <= env_names
@@ -179,6 +177,65 @@ class TestBuildJobManifest:
         mount = job.spec.template.spec.containers[0].volume_mounts[0]
         assert mount.mount_path == "/workspace"
         assert mount.sub_path == "org/repo"
+
+    def test_workspace_file_mount_uses_pvc_subpath(self, fake_k8s) -> None:  # noqa: ARG002
+        driver = _make_driver()
+        spec = _make_spec(
+            volume_mounts=[
+                (
+                    Path("/mnt/workspaces/org/repo/.forge/task.json"),
+                    "/task.json",
+                    "ro,Z",
+                )
+            ]
+        )
+
+        job = driver._build_job_manifest(spec)
+
+        mount = job.spec.template.spec.containers[0].volume_mounts[1]
+        assert mount.mount_path == "/task.json"
+        assert mount.sub_path == "org/repo/.forge/task.json"
+        assert mount.read_only is True
+
+    def test_job_name_is_dns_safe_and_preserves_unique_suffix(self) -> None:
+        driver = _make_driver()
+
+        name = driver._job_name("forge-FEATURE_WITH.INVALID*CHARS-abc123")
+        long_name = driver._job_name(f"forge-{'A' * 100}-abc123")
+
+        assert name == "forge-feature-with-invalid-chars-abc123"
+        assert len(long_name) <= 63
+        assert long_name.endswith("-abc123")
+
+
+class TestExternalMountStaging:
+    def test_copies_external_file_and_directory_into_workspace(self, tmp_path) -> None:
+        driver = _make_driver()
+        workspace = tmp_path / "workspaces" / "org" / "repo"
+        workspace.mkdir(parents=True)
+        external_file = tmp_path / "credentials.json"
+        external_file.write_text("secret")
+        external_dir = tmp_path / "skills"
+        external_dir.mkdir()
+        (external_dir / "SKILL.md").write_text("instructions")
+        spec = _make_spec(
+            workspace_path=workspace,
+            task_file=workspace / ".forge" / "task.json",
+            volume_mounts=[
+                (external_file, "/credentials.json", "ro"),
+                (external_dir, "/skills/example", "ro"),
+            ],
+        )
+
+        prepared, staging_dir = driver._stage_external_mounts(spec)
+
+        assert staging_dir is not None
+        assert prepared.volume_mounts[0][0].read_text() == "secret"
+        assert (prepared.volume_mounts[1][0] / "SKILL.md").read_text() == "instructions"
+        assert all(source.is_relative_to(workspace) for source, _, _ in prepared.volume_mounts)
+
+        driver._remove_staging_dir(staging_dir)
+        assert not staging_dir.exists()
 
     def test_image_pull_secrets(self, fake_k8s) -> None:  # noqa: ARG002
         settings = _make_settings()
@@ -218,15 +275,11 @@ class TestExecute:
 
         job_status = _Stub(succeeded=1, failed=None, conditions=[])
         mock_batch.create_namespaced_job = MagicMock()
-        mock_batch.read_namespaced_job_status = MagicMock(
-            return_value=_Stub(status=job_status)
-        )
+        mock_batch.read_namespaced_job_status = MagicMock(return_value=_Stub(status=job_status))
         mock_batch.delete_namespaced_job = MagicMock()
 
         mock_pod = _Stub(metadata=_Stub(name="forge-TEST-abc123-pod"))
-        mock_core.list_namespaced_pod = MagicMock(
-            return_value=_Stub(items=[mock_pod])
-        )
+        mock_core.list_namespaced_pod = MagicMock(return_value=_Stub(items=[mock_pod]))
         mock_core.read_namespaced_pod_log = MagicMock(return_value="task output")
 
         k8s_client_mod.BatchV1Api = MagicMock(return_value=mock_batch)
@@ -249,9 +302,7 @@ class TestExecute:
         failed_cond = _Stub(type="Failed", status="True", reason="BackoffLimitExceeded")
         job_status = _Stub(succeeded=None, failed=1, conditions=[failed_cond])
         mock_batch.create_namespaced_job = MagicMock()
-        mock_batch.read_namespaced_job_status = MagicMock(
-            return_value=_Stub(status=job_status)
-        )
+        mock_batch.read_namespaced_job_status = MagicMock(return_value=_Stub(status=job_status))
         mock_batch.delete_namespaced_job = MagicMock()
 
         mock_core.list_namespaced_pod = MagicMock(return_value=_Stub(items=[]))
@@ -274,9 +325,7 @@ class TestExecute:
 
         job_status = _Stub(succeeded=1, failed=None, conditions=[])
         mock_batch.create_namespaced_job = MagicMock()
-        mock_batch.read_namespaced_job_status = MagicMock(
-            return_value=_Stub(status=job_status)
-        )
+        mock_batch.read_namespaced_job_status = MagicMock(return_value=_Stub(status=job_status))
 
         mock_core.list_namespaced_pod = MagicMock(return_value=_Stub(items=[]))
 

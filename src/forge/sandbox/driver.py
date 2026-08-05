@@ -20,6 +20,7 @@ class ExecutionSpec:
     env_vars: dict[str, str]
     memory_limit: str
     cpu_limit: str
+    network_mode: str
     timeout_seconds: int
     skip_tests: bool
     max_retries: int

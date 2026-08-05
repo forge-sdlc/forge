@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import shutil
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -58,48 +61,55 @@ class KubernetesDriver(SandboxDriver):
         batch_api = k8s_client.BatchV1Api()
         core_api = k8s_client.CoreV1Api()
 
-        job_manifest = self._build_job_manifest(spec)
+        job_name = self._job_name(spec.container_name)
+        prepared_spec, staging_dir = self._stage_external_mounts(spec)
+        job_manifest = self._build_job_manifest(prepared_spec, job_name=job_name)
 
         logger.info(
             "Creating K8s Job %s in namespace %s",
-            spec.container_name,
+            job_name,
             self._namespace,
         )
 
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            None,
-            lambda: batch_api.create_namespaced_job(
-                namespace=self._namespace,
-                body=job_manifest,
-            ),
-        )
-
+        job_created = False
+        job_deleted = False
         try:
-            exit_code = await self._wait_for_completion(
-                batch_api, spec.container_name, spec.timeout_seconds
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: batch_api.create_namespaced_job(
+                    namespace=self._namespace,
+                    body=job_manifest,
+                ),
+            )
+            job_created = True
+            exit_code = await self._wait_for_completion(batch_api, job_name, spec.timeout_seconds)
+            stdout, stderr = await self._collect_logs(core_api, job_name)
+
+            return ExecutionResult(
+                exit_code=exit_code,
+                stdout=stdout,
+                stderr=stderr,
             )
         except asyncio.CancelledError:
-            logger.warning("Execution cancelled, deleting Job %s", spec.container_name)
-            await self._delete_job(batch_api, spec.container_name)
+            logger.warning("Execution cancelled, deleting Job %s", job_name)
+            if job_created:
+                await self._delete_job(batch_api, job_name)
+                job_deleted = True
             raise
-
-        stdout, stderr = await self._collect_logs(core_api, spec.container_name)
-
-        if spec.remove_after:
-            await self._delete_job(batch_api, spec.container_name)
-
-        return ExecutionResult(
-            exit_code=exit_code,
-            stdout=stdout,
-            stderr=stderr,
-        )
+        finally:
+            if spec.remove_after and job_created and not job_deleted:
+                await self._delete_job(batch_api, job_name)
+            if spec.remove_after or not job_created:
+                self._remove_staging_dir(staging_dir)
 
     # ------------------------------------------------------------------
     # Job manifest construction
     # ------------------------------------------------------------------
 
-    def _build_job_manifest(self, spec: ExecutionSpec) -> dict[str, Any]:
+    def _build_job_manifest(
+        self, spec: ExecutionSpec, *, job_name: str | None = None
+    ) -> dict[str, Any]:
         from kubernetes import client as k8s_client
 
         env_vars = [k8s_client.V1EnvVar(name=k, value=v) for k, v in spec.env_vars.items()]
@@ -111,6 +121,25 @@ class KubernetesDriver(SandboxDriver):
                 sub_path=self._workspace_subpath(spec.workspace_path),
             ),
         ]
+
+        workspace_subpath = Path(self._workspace_subpath(spec.workspace_path))
+        for host_path, container_path, mode in spec.volume_mounts:
+            if container_path == "/workspace":
+                continue
+            try:
+                relative_path = host_path.relative_to(spec.workspace_path)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Kubernetes mount source must be in the shared workspace: {host_path}"
+                ) from exc
+            volume_mounts.append(
+                k8s_client.V1VolumeMount(
+                    name="workspace",
+                    mount_path=container_path,
+                    sub_path=str(workspace_subpath / relative_path),
+                    read_only="ro" in mode.split(","),
+                )
+            )
 
         volumes = [
             k8s_client.V1Volume(
@@ -174,7 +203,7 @@ class KubernetesDriver(SandboxDriver):
             api_version="batch/v1",
             kind="Job",
             metadata=k8s_client.V1ObjectMeta(
-                name=spec.container_name,
+                name=job_name or self._job_name(spec.container_name),
                 namespace=self._namespace,
                 labels={"app.kubernetes.io/managed-by": "forge"},
             ),
@@ -182,6 +211,56 @@ class KubernetesDriver(SandboxDriver):
         )
 
         return job
+
+    @staticmethod
+    def _job_name(container_name: str) -> str:
+        """Convert a runner identifier to a valid Kubernetes DNS label."""
+        name = re.sub(r"[^a-z0-9-]+", "-", container_name.lower()).strip("-")
+        name = re.sub(r"-+", "-", name)
+        if not name:
+            raise ValueError("Container name does not contain any DNS-label characters")
+        if len(name) <= 63:
+            return name
+        prefix, separator, suffix = name.rpartition("-")
+        if separator and suffix:
+            return f"{prefix[: 62 - len(suffix)].rstrip('-')}-{suffix}"
+        return name[:63].rstrip("-")
+
+    def _stage_external_mounts(self, spec: ExecutionSpec) -> tuple[ExecutionSpec, Path | None]:
+        """Copy worker-local mounts into the workspace shared through the PVC."""
+        staged_mounts: list[tuple[Path, str, str]] = []
+        staging_dir: Path | None = None
+
+        for index, (host_path, container_path, mode) in enumerate(spec.volume_mounts):
+            try:
+                host_path.relative_to(spec.workspace_path)
+                staged_mounts.append((host_path, container_path, mode))
+                continue
+            except ValueError:
+                pass
+
+            if staging_dir is None:
+                staging_dir = (
+                    spec.workspace_path
+                    / ".forge"
+                    / "k8s-mounts"
+                    / self._job_name(spec.container_name)
+                )
+                staging_dir.mkdir(parents=True, exist_ok=False)
+
+            staged_path = staging_dir / f"mount-{index}"
+            if host_path.is_dir():
+                shutil.copytree(host_path, staged_path)
+            else:
+                shutil.copy2(host_path, staged_path)
+            staged_mounts.append((staged_path, container_path, mode))
+
+        return replace(spec, volume_mounts=staged_mounts), staging_dir
+
+    @staticmethod
+    def _remove_staging_dir(staging_dir: Path | None) -> None:
+        if staging_dir is not None:
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
     # ------------------------------------------------------------------
     # Lifecycle helpers

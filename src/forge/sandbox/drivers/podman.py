@@ -74,6 +74,7 @@ class PodmanDriver(SandboxDriver):
 
         cmd.extend(["--memory", spec.memory_limit])
         cmd.extend(["--cpus", spec.cpu_limit])
+        cmd.extend(["--network", spec.network_mode])
         cmd.extend(["-w", "/workspace"])
 
         for key, value in spec.env_vars.items():
