@@ -48,7 +48,7 @@ class ResolvedModelTarget(ModelTarget):
 
     backend: Backend
     policy_key: str
-    policy_source: Literal["project", "global", "default"]
+    policy_source: Literal["project", "project_default", "global", "default"]
     project: str | None = None
     location: str | None = None
 
@@ -226,7 +226,10 @@ class ModelPolicyResolver:
         return connection
 
     def resolve(
-        self, key: str, project_policy: dict[str, Any] | None = None
+        self,
+        key: str,
+        project_policy: dict[str, Any] | None = None,
+        project_default: ModelTarget | dict[str, Any] | None = None,
     ) -> ResolvedModelTarget:
         if not key:
             raise ValueError("Model policy keys must not be empty")
@@ -234,16 +237,20 @@ class ModelPolicyResolver:
             raise ValueError(f"Unknown model policy key '{key}'")
         if project_policy and any(not project_key for project_key in project_policy):
             raise ValueError("Model policy keys must not be empty")
-        unknown_keys = set(project_policy or {}) - set(KNOWN_MODEL_POLICY_KEYS) - {"*"}
+        unknown_keys = set(project_policy or {}) - set(KNOWN_MODEL_POLICY_KEYS)
         if unknown_keys:
             raise ValueError(f"Unknown model policy key '{sorted(unknown_keys)[0]}'")
         if project_policy and key in project_policy:
             target = ModelTarget.model_validate(project_policy[key])
             source = "project"
             connection = self._validate_target(target, project_override=True, key=key)
-        elif project_policy and "*" in project_policy:
-            target = ModelTarget.model_validate(project_policy["*"])
-            source = "project"
+        elif project_default is not None:
+            target = (
+                project_default
+                if isinstance(project_default, ModelTarget)
+                else ModelTarget.model_validate(project_default)
+            )
+            source = "project_default"
             connection = self._validate_target(target, project_override=True, key=key)
         elif key in self.policy:
             target = self.policy[key]
@@ -266,7 +273,14 @@ class ModelPolicyResolver:
             policy_source=source,
         )
 
-    def resolve_all(self, project_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+    def resolve_all(
+        self,
+        project_policy: dict[str, Any] | None = None,
+        project_default: ModelTarget | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         keys = set(KNOWN_MODEL_POLICY_KEYS) | set(self.policy) | set(project_policy or {})
         keys.discard("*")
-        return {key: self.resolve(key, project_policy).model_dump() for key in sorted(keys)}
+        return {
+            key: self.resolve(key, project_policy, project_default).model_dump()
+            for key in sorted(keys)
+        }

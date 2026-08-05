@@ -26,6 +26,7 @@ async def resolve_model_target_for_project(
 
     canonical_key = canonical_policy_key(policy_key)
     project_policy = {}
+    project_default = None
     owned_jira = None
     # Jira projects may only select from explicitly administrator-owned
     # connections. Global-only policy never adds a Jira dependency.
@@ -36,12 +37,16 @@ async def resolve_model_target_for_project(
             owned_jira = JiraClient(settings=settings)
             jira = owned_jira
         try:
-            raw = await jira.get_project_property(project_key, "forge.model_policy")
-            if raw is not None and not isinstance(raw, dict):
+            raw_policy = await jira.get_project_property(project_key, "forge.model_policy")
+            raw_default = await jira.get_project_property(project_key, "forge.model_default")
+            if raw_policy is not None and not isinstance(raw_policy, dict):
                 raise ValueError(f"forge.model_policy for {project_key} must be an object")
-            project_policy = raw or {}
+            if raw_default is not None and not isinstance(raw_default, dict):
+                raise ValueError(f"forge.model_default for {project_key} must be an object")
+            project_policy = raw_policy or {}
+            project_default = raw_default
         finally:
             if owned_jira is not None:
                 await owned_jira.close()
 
-    return settings.model_policy_resolver().resolve(canonical_key, project_policy)
+    return settings.model_policy_resolver().resolve(canonical_key, project_policy, project_default)

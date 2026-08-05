@@ -14,7 +14,13 @@ from forge.integrations.agents.agent import ForgeAgent
 
 @pytest.fixture
 def agent() -> ForgeAgent:
-    return ForgeAgent()
+    agent = ForgeAgent()
+    # Isolate tracing tests from model-policy values in the developer's .env.
+    agent.settings = agent.settings.model_copy(deep=True)
+    agent.settings.model_connections = {}
+    agent.settings.model_policy = {}
+    agent.settings.model_default = {}
+    return agent
 
 
 def _metrics_patches():
@@ -197,11 +203,16 @@ class TestRunTaskTraceResolution:
         }
         agent.settings.model_default = {"connection": "vertex", "model": "gemini-flash"}
         jira = MagicMock()
-        jira.get_project_property = AsyncMock(
-            side_effect=[
+        project_policies = iter(
+            [
                 {"generate_prd": {"connection": "vertex", "model": "gemini-pro"}},
                 None,
             ]
+        )
+        jira.get_project_property = AsyncMock(
+            side_effect=lambda _project, prop: (
+                next(project_policies) if prop == "forge.model_policy" else None
+            )
         )
         jira.close = AsyncMock()
 
@@ -219,6 +230,6 @@ class TestRunTaskTraceResolution:
                 task="generate-prd", prompt="test", context={"ticket_key": "PROJ-42"}
             )
 
-        assert jira.get_project_property.await_count == 2
+        assert jira.get_project_property.await_count == 4
         assert mock_run.await_args_list[0].kwargs["model_target"].model == "gemini-pro"
         assert mock_run.await_args_list[1].kwargs["model_target"].model == "gemini-flash"

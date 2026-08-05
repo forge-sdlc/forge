@@ -642,11 +642,16 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         model_policy: dict[str, Any] = {}
         remove_models = getattr(args, "remove_model", None) or []
         clear_model_policy = getattr(args, "clear_model_policy", False)
-        if clear_model_policy and (
-            args.model_policy or args.model or args.model_all or remove_models
-        ):
+        clear_model_default = getattr(args, "clear_model_default", False)
+        if clear_model_policy and (args.model_policy or args.model or remove_models):
             print(
-                "Error: --clear-model-policy cannot be combined with other model options",
+                "Error: --clear-model-policy cannot be combined with stage model options",
+                file=sys.stderr,
+            )
+            return 1
+        if clear_model_default and args.model_all:
+            print(
+                "Error: --clear-model-default cannot be combined with --model-all",
                 file=sys.stderr,
             )
             return 1
@@ -662,7 +667,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             if not isinstance(model_policy, dict):
                 print("Error: --model-policy must be a JSON object", file=sys.stderr)
                 return 1
-        elif args.model or args.model_all or remove_models:
+        elif args.model or remove_models:
             existing_policy = await jira.get_project_property(project_key, "forge.model_policy")
             if existing_policy is not None and not isinstance(existing_policy, dict):
                 print(
@@ -692,20 +697,11 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 )
                 return 1
             model_policy[policy_key] = {"connection": connection, "model": model}
-        if args.model_all:
-            connection, separator, model = args.model_all.partition(":")
-            if not separator or not connection or not model:
-                print(
-                    "Error: --model-all must use CONNECTION:MODEL",
-                    file=sys.stderr,
-                )
-                return 1
-            model_policy["*"] = {"connection": connection, "model": model}
-        if args.model_policy or args.model or args.model_all or remove_models:
+        if args.model_policy or args.model or remove_models:
             from forge.models.model_policy import KNOWN_MODEL_POLICY_KEYS, ModelTarget
 
             try:
-                unknown_keys = set(model_policy) - set(KNOWN_MODEL_POLICY_KEYS) - {"*"}
+                unknown_keys = set(model_policy) - set(KNOWN_MODEL_POLICY_KEYS)
                 if unknown_keys:
                     raise ValueError(f"Unknown model policy key '{sorted(unknown_keys)[0]}'")
                 for key, target in model_policy.items():
@@ -722,6 +718,25 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 await jira.delete_project_property(project_key, "forge.model_policy")
                 print("[OK] forge.model_policy deleted (no overrides remain)")
 
+        if args.model_all:
+            from forge.models.model_policy import ModelTarget
+
+            connection, separator, model = args.model_all.partition(":")
+            if not separator or not connection or not model:
+                print("Error: --model-all must use CONNECTION:MODEL", file=sys.stderr)
+                return 1
+            model_default = {"connection": connection, "model": model}
+            try:
+                ModelTarget.model_validate(model_default)
+            except ValueError as exc:
+                print(f"Error: invalid model default: {exc}", file=sys.stderr)
+                return 1
+            await jira.set_project_property(project_key, "forge.model_default", model_default)
+            print("[OK] forge.model_default set")
+        elif clear_model_default:
+            await jira.delete_project_property(project_key, "forge.model_default")
+            print("[OK] forge.model_default deleted")
+
         if not any(
             [
                 args.repo,
@@ -735,6 +750,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 args.model_all,
                 remove_models,
                 clear_model_policy,
+                clear_model_default,
             ]
         ):
             print(
@@ -743,6 +759,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 "--prd-proposals-path, --skills-config, --add-skill"
                 ", --model-policy, --model, --model-all"
                 ", --remove-model, --clear-model-policy"
+                ", --clear-model-default"
             )
             return 1
 
@@ -935,10 +952,17 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
             "value": model_policy_val,
             "source": "project" if model_policy_val is not None else "unset",
         }
+        model_default_val = project_properties.get("forge.model_default")
+        effective_config["forge.model_default"] = {
+            "value": model_default_val,
+            "source": "project" if model_default_val is not None else "unset",
+        }
 
         if getattr(args, "models", False):
             try:
-                resolved = settings.model_policy_resolver().resolve_all(model_policy_val or {})
+                resolved = settings.model_policy_resolver().resolve_all(
+                    model_policy_val or {}, model_default_val
+                )
             except ValueError as exc:
                 print(f"Error: invalid model policy: {exc}", file=sys.stderr)
                 return 1
@@ -1373,7 +1397,7 @@ Examples:
         "--all-stages-model",
         metavar="CONNECTION:MODEL",
         help=(
-            "Add or replace the project wildcard target while preserving stage overrides; "
+            "Set the separate project-wide model fallback in forge.model_default; "
             "explicit --model stage overrides win"
         ),
     )
@@ -1398,6 +1422,11 @@ Examples:
         "--clear-model-policy",
         action="store_true",
         help="Delete the complete forge.model_policy Jira project property",
+    )
+    setup_parser.add_argument(
+        "--clear-model-default",
+        action="store_true",
+        help="Delete the project-wide forge.model_default fallback",
     )
 
     # get-config command

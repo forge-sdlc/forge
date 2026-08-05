@@ -74,15 +74,18 @@ forge project-setup MYPROJ \
   --model generate_prd=vertex-production:gemini-3.5-pro \
   --model implement_task=anthropic-production:claude-sonnet-4-6
 
-# Or override every stage at once (individual --model overrides still win)
+# Set a separate project-wide fallback (individual --model overrides still win)
 forge project-setup MYPROJ \
   --model-all vertex-production:gemini-3.5-pro
 
 # Remove one stage override and preserve the rest
 forge project-setup MYPROJ --remove-model generate_prd
 
-# Delete every project override and fall back to deployment policy
+# Delete all per-stage overrides
 forge project-setup MYPROJ --clear-model-policy
+
+# Delete the project-wide fallback
+forge project-setup MYPROJ --clear-model-default
 
 # Validate against the local runtime configuration and print every target
 forge get-config MYPROJ --models
@@ -187,16 +190,18 @@ classification stages `automated_review_triage`, `proposal_review_triage`,
 weaken that requirement.
 Per-target `max_output_tokens` is limited to 131072.
 
-Resolution is project override, then global stage mapping, then global default.
-This includes a project `*` override: it supersedes global per-stage mappings,
-but can only select administrator-allowlisted connections and models. Explicit
-project stage entries supersede the project wildcard. When `--model-policy` and
-`--model` are combined, individual `--model` entries overwrite matching JSON
-keys. Used without `--model-policy`, `--model` and `--model-all` preserve the
-project's other existing overrides; `--model-policy` deliberately replaces the
-full property. `--remove-model` removes only the named key and deletes the Jira
-property when no overrides remain. `--clear-model-policy` deletes the complete
-property and cannot be combined with another model option.
+Resolution is project stage override (`forge.model_policy`), then the separate
+project-wide fallback (`forge.model_default`), then the deployment stage mapping
+(`MODEL_POLICY`), then the deployment default (`MODEL_DEFAULT`). Project policy
+does not use a `*` key. `--model-all` writes `forge.model_default` and does not
+modify per-stage overrides. When `--model-policy` and `--model` are combined,
+individual `--model` entries overwrite matching JSON keys. Used without
+`--model-policy`, `--model` preserves the project's other existing stage
+overrides; `--model-policy` deliberately replaces the full stage property.
+`--remove-model` removes only the named stage and deletes `forge.model_policy`
+when no overrides remain. `--clear-model-policy` deletes all per-stage
+overrides, while `--clear-model-default` independently deletes the project-wide
+fallback.
 When `MODEL_CONNECTIONS` is configured, Forge fetches the Jira project policy
 before each host or container agent execution, so changes apply automatically
 to the next stage or retry. The target remains fixed during that execution's

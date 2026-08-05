@@ -38,17 +38,28 @@ def test_precedence_and_policy_source(resolver: ModelPolicyResolver) -> None:
     assert resolver.resolve("bug_triage").policy_source == "default"
 
 
-def test_project_wildcard_overrides_all_stages_but_not_explicit_stage(
+def test_project_default_overrides_global_policy_but_not_explicit_project_stage(
     resolver: ModelPolicyResolver,
 ) -> None:
     overrides = {
-        "*": {"connection": "vertex", "model": "gemini-flash"},
         "generate_prd": {"connection": "vertex", "model": "gemini-pro"},
     }
+    project_default = {"connection": "vertex", "model": "gemini-flash"}
 
-    assert resolver.resolve("implement_task", overrides).model == "gemini-flash"
-    assert resolver.resolve("generate_prd", overrides).model == "gemini-pro"
-    assert "*" not in resolver.resolve_all(overrides)
+    resolved_default = resolver.resolve("implement_task", overrides, project_default)
+    resolved_explicit = resolver.resolve("generate_prd", overrides, project_default)
+    assert resolved_default.model == "gemini-flash"
+    assert resolved_default.policy_source == "project_default"
+    assert resolved_explicit.model == "gemini-pro"
+    assert resolved_explicit.policy_source == "project"
+
+
+def test_project_policy_rejects_legacy_wildcard(resolver: ModelPolicyResolver) -> None:
+    with pytest.raises(ValueError, match="Unknown model policy key '\\*'"):
+        resolver.resolve(
+            "generate_prd",
+            {"*": {"connection": "vertex", "model": "gemini-flash"}},
+        )
 
 
 def test_rejects_unauthorized_connection(resolver: ModelPolicyResolver) -> None:

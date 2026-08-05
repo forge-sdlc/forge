@@ -217,6 +217,65 @@ class TestCLIConfigExecution:
         assert code == 0
         jira.delete_project_property.assert_awaited_once_with("PROJ", "forge.model_policy")
 
+    @pytest.mark.asyncio
+    async def test_model_all_sets_separate_project_default(self):
+        jira = MagicMock()
+        jira.set_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        args = SimpleNamespace(
+            project_key="PROJ",
+            repo=None,
+            default_repo=None,
+            prd_proposals_repo=None,
+            prd_proposals_path=None,
+            skills_config=None,
+            add_skill=None,
+            model_policy=None,
+            model=None,
+            model_all="vertex:gemini-flash",
+            remove_model=None,
+            clear_model_policy=False,
+            clear_model_default=False,
+        )
+
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(args)
+
+        assert code == 0
+        jira.set_project_property.assert_awaited_once_with(
+            "PROJ",
+            "forge.model_default",
+            {"connection": "vertex", "model": "gemini-flash"},
+        )
+        jira.get_project_property.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_clear_model_default_deletes_separate_property(self):
+        jira = MagicMock()
+        jira.delete_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        args = SimpleNamespace(
+            project_key="PROJ",
+            repo=None,
+            default_repo=None,
+            prd_proposals_repo=None,
+            prd_proposals_path=None,
+            skills_config=None,
+            add_skill=None,
+            model_policy=None,
+            model=None,
+            model_all=None,
+            remove_model=None,
+            clear_model_policy=False,
+            clear_model_default=True,
+        )
+
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(args)
+
+        assert code == 0
+        jira.delete_project_property.assert_awaited_once_with("PROJ", "forge.model_default")
+
     @pytest.fixture
     def mock_jira_client(self):
         with patch("forge.integrations.jira.client.JiraClient") as mock:
