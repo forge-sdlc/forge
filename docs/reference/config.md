@@ -145,6 +145,30 @@ The same pattern applies to `generate_spec`, `decompose_epics`, and
 `answer_question`. Task-takeover artifact questions are the exception and use
 `task_takeover_question`.
 
+### Related actions that use separate policy keys
+
+Some user-visible flows contain multiple model invocations with intentionally
+different responsibilities. Forge resolves each invocation independently, so
+they may use different models unless every related key is mapped to the same
+target:
+
+| Flow | Policy keys | Boundary |
+|---|---|---|
+| Generated artifact interaction | `generate_prd`, `generate_spec`, `decompose_epics`, or `generate_tasks` + `answer_question` | Creation and revision use the generation key; Q&A uses `answer_question` |
+| Task takeover | `task_takeover_planning` + `task_takeover_question` | Plan creation and revision are separate from artifact Q&A |
+| Automated artifact review | `automated_review_triage` + the relevant generation key | Feedback classification occurs before an accepted revision is generated |
+| Proposal review | `proposal_review_triage` + the relevant generation key | Review-thread classification occurs before an accepted revision is generated |
+| Implementation review | `implement_review_analysis` + `implement_review_fix` | Feedback analysis and code modification are separate invocations |
+| CI remediation | `ci_analysis` + `ci_fix` | Failure diagnosis and code modification are separate invocations |
+| Bug investigation | `analyze_bug` + `reflect_rca` + `plan_bug_fix` | Initial analysis, reflection, and repair planning are separate stages |
+| Pull-request maintenance | `code_review` + `sync_pr_description` | Code review and description synchronization are separate tasks |
+
+Using different models for these keys is supported and can optimize cost or
+quality. When context continuity or consistent judgment is more important,
+assign all keys in the flow to the same connection and model. Run
+`forge get-config MYPROJ --models` to display the effective target for every
+key before testing a workflow.
+
 Forge owns stage capability requirements. Every stage requires a connection
 declaring `"capabilities": ["tools"]` except the explicitly tool-free text or
 classification stages `automated_review_triage`, `proposal_review_triage`,
