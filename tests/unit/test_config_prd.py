@@ -68,6 +68,10 @@ class TestLlmConfig:
         )
 
         assert settings.effective_model_connections["default"]["backend"] == "vertex-ai"
+        assert settings.effective_model_connections["default"]["allowed_models"] == [
+            "gemini-3.5-flash"
+        ]
+        assert settings.effective_model_connections["default"]["capabilities"] == ["tools"]
         assert settings.effective_model_default == {
             "connection": "default",
             "model": "gemini-3.5-flash",

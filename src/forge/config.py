@@ -261,7 +261,10 @@ class Settings(BaseSettings):
             return self.model_connections
         connection: dict[str, Any] = {
             "backend": self.llm_backend,
-            "allowed_models": ["*"],
+            "allowed_models": list(dict.fromkeys([self.llm_model, self.container_model])),
+            # Legacy Forge agents already rely on provider tool calling. This
+            # implicit connection is not exposed to Jira project overrides.
+            "capabilities": ["tools"],
         }
         if self.llm_backend == "vertex-ai":
             connection.update(

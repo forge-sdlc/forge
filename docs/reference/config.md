@@ -73,6 +73,11 @@ forge project-setup MYPROJ \
 forge get-config MYPROJ --models
 ```
 
+Project overrides require administrators to configure `MODEL_CONNECTIONS`.
+Forge rejects the setup command otherwise; the implicit legacy connection is
+restricted to `LLM_MODEL` and `CONTAINER_LLM_MODEL` and is never exposed to
+Jira project policy.
+
 Canonical policy keys are deliberately specific; runtime prompt, skill, and
 graph-node names are not accepted in Jira configuration:
 
@@ -110,10 +115,11 @@ graph-node names are not accepted in Jira configuration:
 
 Unknown keys fail validation instead of silently using the default target.
 
-Forge owns stage capability requirements. The `implement_task`,
-`implement_bug_fix`, `implement_review_fix`, `task_takeover_execution`,
-`ci_fix`, `rebase`, and `update_docs` stages require a connection declaring
-`"capabilities": ["tools"]`. Jira policy cannot weaken that requirement.
+Forge owns stage capability requirements. Every stage requires a connection
+declaring `"capabilities": ["tools"]` except the explicitly tool-free text or
+classification stages `automated_review_triage`, `proposal_review_triage`,
+`generate_pr_description`, and `sync_pr_description`. Jira policy cannot
+weaken that requirement.
 Per-target `max_output_tokens` is limited to 131072.
 
 Resolution is project override, then global stage mapping, then global default.
@@ -124,11 +130,13 @@ project stage entries supersede the project wildcard. When `--model-policy` and
 keys. Used without `--model-policy`, `--model` and `--model-all` preserve the
 project's other existing overrides; `--model-policy` deliberately replaces the
 full property.
-Forge fetches the Jira project policy before each host or container agent
-execution, so changes apply automatically to the next stage or retry. The
-target remains fixed during that execution's internal model/tool loop. Projects
-without `forge.model_policy` fall back to the global stage mapping, then the
-global default, and finally the legacy `LLM_BACKEND`/`LLM_MODEL` settings.
+When `MODEL_CONNECTIONS` is configured, Forge fetches the Jira project policy
+before each host or container agent execution, so changes apply automatically
+to the next stage or retry. The target remains fixed during that execution's
+internal model/tool loop. Legacy and global-only configurations make no extra
+Jira policy request. Projects without `forge.model_policy` fall back to the
+global stage mapping, then the global default, and finally the legacy
+`LLM_BACKEND`/`LLM_MODEL` settings.
 
 ### Redis
 

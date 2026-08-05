@@ -69,6 +69,7 @@ class TestCLIConfigExecution:
         jira.close = AsyncMock()
         resolver = MagicMock()
         settings = MagicMock()
+        settings.model_connections = {"vertex": {}}
         settings.model_policy_resolver.return_value = resolver
         args = SimpleNamespace(
             project_key="PROJ",
@@ -92,6 +93,34 @@ class TestCLIConfigExecution:
         assert code == 0
         written = jira.set_project_property.await_args.args[2]
         assert set(written) == {"generate_prd", "implement_task"}
+
+    @pytest.mark.asyncio
+    async def test_project_model_override_requires_explicit_connections(self, capsys):
+        jira = MagicMock()
+        jira.close = AsyncMock()
+        settings = MagicMock(model_connections={})
+        args = SimpleNamespace(
+            project_key="PROJ",
+            repo=None,
+            default_repo=None,
+            prd_proposals_repo=None,
+            prd_proposals_path=None,
+            skills_config=None,
+            add_skill=None,
+            model_policy=None,
+            model=["generate_prd=default:gemini-pro"],
+            model_all=None,
+        )
+
+        with (
+            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
+            patch("forge.config.get_settings", return_value=settings),
+        ):
+            code = await cmd_project_setup(args)
+
+        assert code == 1
+        assert "require administrator-configured MODEL_CONNECTIONS" in capsys.readouterr().err
+        jira.set_project_property.assert_not_called()
 
     @pytest.fixture
     def mock_jira_client(self):

@@ -95,14 +95,17 @@ KNOWN_MODEL_POLICY_KEYS = (
 )
 
 # Requirements belong to Forge's execution stages, not Jira project policy.
+# Only these text/classification stages explicitly disable agent tools.
+_TOOL_FREE_POLICY_KEYS = {
+    "automated_review_triage",
+    "generate_pr_description",
+    "proposal_review_triage",
+    "sync_pr_description",
+}
 REQUIRED_CAPABILITIES_BY_POLICY_KEY: dict[str, frozenset[str]] = {
-    "ci_fix": frozenset({"tools"}),
-    "implement_bug_fix": frozenset({"tools"}),
-    "implement_review_fix": frozenset({"tools"}),
-    "implement_task": frozenset({"tools"}),
-    "rebase": frozenset({"tools"}),
-    "task_takeover_execution": frozenset({"tools"}),
-    "update_docs": frozenset({"tools"}),
+    key: frozenset({"tools"})
+    for key in KNOWN_MODEL_POLICY_KEYS
+    if key not in _TOOL_FREE_POLICY_KEYS
 }
 
 _POLICY_KEY_ALIASES = {

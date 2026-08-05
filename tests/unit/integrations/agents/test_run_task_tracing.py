@@ -192,6 +192,7 @@ class TestRunTaskTraceResolution:
                 "backend": "vertex-ai",
                 "project": "test-project",
                 "allowed_models": ["gemini-pro", "gemini-flash"],
+                "capabilities": ["tools"],
             }
         }
         agent.settings.model_default = {"connection": "vertex", "model": "gemini-flash"}

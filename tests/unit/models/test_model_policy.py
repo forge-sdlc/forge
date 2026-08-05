@@ -4,6 +4,7 @@ import pytest
 
 from forge.models.model_policy import (
     KNOWN_MODEL_POLICY_KEYS,
+    REQUIRED_CAPABILITIES_BY_POLICY_KEY,
     ModelPolicyResolver,
     canonical_policy_key,
 )
@@ -90,6 +91,16 @@ def test_stage_capabilities_cannot_be_weakened_by_project_policy() -> None:
             "implement_task",
             {"implement_task": {"connection": "vertex", "model": "gemini-pro"}},
         )
+
+
+def test_tool_requirements_cover_every_agentic_stage() -> None:
+    tool_free = {
+        "automated_review_triage",
+        "generate_pr_description",
+        "proposal_review_triage",
+        "sync_pr_description",
+    }
+    assert set(REQUIRED_CAPABILITIES_BY_POLICY_KEY) == set(KNOWN_MODEL_POLICY_KEYS) - tool_free
 
 
 def test_project_output_token_limit_is_bounded(resolver: ModelPolicyResolver) -> None:
