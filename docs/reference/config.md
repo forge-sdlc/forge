@@ -78,14 +78,19 @@ forge project-setup MYPROJ \
 forge project-setup MYPROJ \
   --model-all vertex-production:gemini-3.5-pro
 
-# Validate and print every resolved non-secret target
+# Validate against the local runtime configuration and print every target
 forge get-config MYPROJ --models
 ```
 
 Project overrides require administrators to configure `MODEL_CONNECTIONS`.
-Forge rejects the setup command otherwise; the implicit legacy connection is
-restricted to `LLM_MODEL` and `CONTAINER_LLM_MODEL` and is never exposed to
-Jira project policy.
+The user-facing `project-setup` command validates policy syntax and canonical
+stage names but does not require access to the Forge deployment's connection
+registry. Forge validates connection names, model allowlists, backends, and
+capabilities when it executes a stage. Invalid runtime policy fails closed and
+reports the available configured connections and models to Jira and, when an
+active PR exists, GitHub. The implicit legacy connection remains restricted to
+`LLM_MODEL` and `CONTAINER_LLM_MODEL` and is never exposed to Jira project
+policy.
 
 Canonical policy keys are deliberately specific; runtime prompt, skill, and
 graph-node names are not accepted in Jira configuration:

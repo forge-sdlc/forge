@@ -636,22 +636,10 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             await jira.set_project_property(project_key, "forge.skills", skill_entries)
             print(f"[OK] forge.skills = {len(skill_entries)} entries")
 
-        # forge.model_policy — exact per-node/skill project overrides.  The CLI
-        # validates against the administrator-owned connection allowlist before
-        # anything is written to Jira.
+        # forge.model_policy — exact per-stage project overrides. User
+        # workstations validate syntax only; the Forge runtime owns and
+        # authorizes the deployment's connection/model allowlist.
         model_policy: dict[str, Any] = {}
-        settings = None
-        if args.model_policy or args.model or args.model_all:
-            from forge.config import get_settings
-
-            settings = get_settings()
-            if not settings.model_connections:
-                print(
-                    "Error: project model overrides require administrator-configured "
-                    "MODEL_CONNECTIONS",
-                    file=sys.stderr,
-                )
-                return 1
         if args.model_policy:
             try:
                 model_policy = json.loads(args.model_policy)
@@ -696,12 +684,16 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 return 1
             model_policy["*"] = {"connection": connection, "model": model}
         if args.model_policy or args.model or args.model_all:
-            assert settings is not None
-            resolver = settings.model_policy_resolver()
+            from forge.models.model_policy import KNOWN_MODEL_POLICY_KEYS, ModelTarget
+
             try:
-                # Resolve every canonical stage so a wildcard cannot bypass
-                # administrator-owned stage capability requirements.
-                resolver.resolve_all(model_policy)
+                unknown_keys = set(model_policy) - set(KNOWN_MODEL_POLICY_KEYS) - {"*"}
+                if unknown_keys:
+                    raise ValueError(f"Unknown model policy key '{sorted(unknown_keys)[0]}'")
+                for key, target in model_policy.items():
+                    if not key:
+                        raise ValueError("Model policy keys must not be empty")
+                    ModelTarget.model_validate(target)
             except ValueError as exc:
                 print(f"Error: invalid model policy: {exc}", file=sys.stderr)
                 return 1

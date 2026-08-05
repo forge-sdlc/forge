@@ -67,10 +67,6 @@ class TestCLIConfigExecution:
         )
         jira.set_project_property = AsyncMock()
         jira.close = AsyncMock()
-        resolver = MagicMock()
-        settings = MagicMock()
-        settings.model_connections = {"vertex": {}}
-        settings.model_policy_resolver.return_value = resolver
         args = SimpleNamespace(
             project_key="PROJ",
             repo=None,
@@ -84,10 +80,7 @@ class TestCLIConfigExecution:
             model_all=None,
         )
 
-        with (
-            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
-            patch("forge.config.get_settings", return_value=settings),
-        ):
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
             code = await cmd_project_setup(args)
 
         assert code == 0
@@ -95,10 +88,11 @@ class TestCLIConfigExecution:
         assert set(written) == {"generate_prd", "implement_task"}
 
     @pytest.mark.asyncio
-    async def test_project_model_override_requires_explicit_connections(self, capsys):
+    async def test_project_model_override_does_not_require_local_connections(self):
         jira = MagicMock()
+        jira.get_project_property = AsyncMock(return_value=None)
+        jira.set_project_property = AsyncMock()
         jira.close = AsyncMock()
-        settings = MagicMock(model_connections={})
         args = SimpleNamespace(
             project_key="PROJ",
             repo=None,
@@ -112,15 +106,12 @@ class TestCLIConfigExecution:
             model_all=None,
         )
 
-        with (
-            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
-            patch("forge.config.get_settings", return_value=settings),
-        ):
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
             code = await cmd_project_setup(args)
 
-        assert code == 1
-        assert "require administrator-configured MODEL_CONNECTIONS" in capsys.readouterr().err
-        jira.set_project_property.assert_not_called()
+        assert code == 0
+        written = jira.set_project_property.await_args.args[2]
+        assert written == {"generate_prd": {"connection": "default", "model": "gemini-pro"}}
 
     @pytest.fixture
     def mock_jira_client(self):
