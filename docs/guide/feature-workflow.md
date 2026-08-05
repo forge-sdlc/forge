@@ -46,6 +46,12 @@ Forge reads the ticket description and generates a structured Product Requiremen
 
 **Human action:** Review the PRD. Optionally ask questions with `?` prefix (see [Q&A Mode](#qa-mode)). When satisfied, change the label to `forge:prd-approved`.
 
+!!! note "Model continuity"
+    PRD revisions use the `generate_prd` model-policy key, but PRD questions
+    use `answer_question`. Configure both keys to the same target when the
+    generating model must also answer questions about its artifact. See
+    [Per-stage model configuration](../reference/config.md#keeping-artifact-generation-revision-and-qa-on-one-model).
+
 ---
 
 ### Spec Generation

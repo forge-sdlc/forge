@@ -92,8 +92,8 @@ graph-node names are not accepted in Jira configuration:
 
 | Policy key | Execution |
 |---|---|
-| `generate_prd` | Initial or revised product requirements |
-| `generate_spec` | Initial or revised technical specification |
+| `generate_prd` | Initial PRD generation and every PRD revision |
+| `generate_spec` | Initial specification generation and every specification revision |
 | `decompose_epics` | Epic decomposition or revision |
 | `generate_tasks` | Task generation or revision |
 | `bug_triage` | Bug-report completeness triage |
@@ -118,11 +118,32 @@ graph-node names are not accepted in Jira configuration:
 | `sync_pr_description` | Pull-request description synchronization |
 | `ci_analysis` | CI failure analysis |
 | `ci_fix` | CI failure remediation |
-| `answer_question` | Questions about generated SDLC artifacts |
+| `answer_question` | Q&A about PRDs, specifications, plans, and other generated artifacts |
 | `rebase` | Container-assisted rebase conflict resolution |
 | `update_docs` | Documentation update generation |
 
 Unknown keys fail validation instead of silently using the default target.
+
+### Keeping artifact generation, revision, and Q&A on one model
+
+Revisions reuse the artifact's generation policy key. For example, both initial
+PRD generation and later `!` revision requests resolve `generate_prd`. Questions
+submitted with `?` do not regenerate the artifact and resolve the separate
+`answer_question` key. Configure both keys when the answer must use the same
+model that created the PRD:
+
+```bash
+MODEL_POLICY={"generate_prd":{"connection":"vertex-global","model":"claude-opus-4-6"},"answer_question":{"connection":"vertex-global","model":"claude-opus-4-6"}}
+
+forge project-setup MYPROJ \
+  --model generate_prd=vertex-global:claude-opus-4-6 \
+  --model answer_question=vertex-global:claude-opus-4-6
+```
+
+The same pattern applies to `generate_spec`, `decompose_epics`, and
+`generate_tasks`: revisions reuse their generation key, while Q&A uses
+`answer_question`. Task-takeover artifact questions are the exception and use
+`task_takeover_question`.
 
 Forge owns stage capability requirements. Every stage requires a connection
 declaring `"capabilities": ["tools"]` except the explicitly tool-free text or
