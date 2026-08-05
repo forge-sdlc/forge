@@ -360,9 +360,7 @@ class ContainerRunner:
             cmd.extend(["-v", f"{host_path}:{container_path}:ro,Z"])
 
         # Add environment variables
-        for key, value in self._build_env_vars(
-            config, container_skill_paths, model_target
-        ).items():
+        for key, value in self._build_env_vars(config, container_skill_paths, model_target).items():
             cmd.extend(["-e", f"{key}={value}"])
 
         # Add timeout
