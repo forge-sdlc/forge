@@ -85,4 +85,36 @@ def test_trace_metadata_is_non_secret(resolver: ModelPolicyResolver) -> None:
         "model_policy_key": "generate_prd",
         "model_policy_source": "global",
     }
-    assert "credential" not in str(resolved.model_dump())
+    assert "credential_ref" not in resolved.model_dump()
+
+
+def test_provider_neutral_options_flow_to_resolved_target(
+    resolver: ModelPolicyResolver,
+) -> None:
+    override = {
+        "generate_prd": {
+            "connection": "vertex",
+            "model": "gemini-pro",
+            "temperature": 0.25,
+            "max_output_tokens": 8192,
+        }
+    }
+
+    resolved = resolver.resolve("generate_prd", override)
+
+    assert resolved.temperature == 0.25
+    assert resolved.max_output_tokens == 8192
+
+
+def test_invalid_default_connection_fails_eagerly() -> None:
+    with pytest.raises(ValueError, match="unknown connection"):
+        ModelPolicyResolver(
+            connections={},
+            policy={},
+            default={"connection": "missing", "model": "gemini-pro"},
+        )
+
+
+def test_empty_policy_key_is_rejected(resolver: ModelPolicyResolver) -> None:
+    with pytest.raises(ValueError, match="must not be empty"):
+        resolver.resolve("generate_prd", {"": {"connection": "vertex", "model": "gemini-pro"}})

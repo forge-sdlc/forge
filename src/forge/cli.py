@@ -1339,7 +1339,7 @@ Examples:
     setup_parser.add_argument(
         "--model-policy",
         metavar="JSON",
-        help="Full forge.model_policy JSON object (combined with --model)",
+        help=("Full forge.model_policy JSON object; later --model entries overwrite matching keys"),
     )
 
     # get-config command

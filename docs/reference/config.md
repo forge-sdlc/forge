@@ -74,6 +74,11 @@ forge get-config MYPROJ --models
 ```
 
 Resolution is project override, then global stage mapping, then global default.
+This includes a project `*` override: it supersedes global per-stage mappings,
+but can only select administrator-allowlisted connections and models. Explicit
+project stage entries supersede the project wildcard. When `--model-policy` and
+`--model` are combined, individual `--model` entries overwrite matching JSON
+keys.
 Targets are pinned for implementation retries and their backend, connection,
 exact model, stable policy key, and policy source are included in tracing.
 

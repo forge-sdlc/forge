@@ -59,6 +59,20 @@ class TestPrdApprovalConfig:
 
 
 class TestLlmConfig:
+    def test_legacy_model_configuration_builds_effective_default(self):
+        settings = make_settings(
+            jira_base_url="https://test.atlassian.net",
+            jira_api_token="test",
+            jira_user_email="test@example.com",
+            github_token="test",
+        )
+
+        assert settings.effective_model_connections["default"]["backend"] == "vertex-ai"
+        assert settings.effective_model_default == {
+            "connection": "default",
+            "model": "gemini-3.5-flash",
+        }
+
     def test_backend_is_required(self):
         with pytest.raises(ValueError, match="llm_backend"):
             Settings(

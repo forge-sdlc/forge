@@ -371,6 +371,17 @@ class OrchestratorWorker:
             if existing_state is None:
                 existing_state = await compiled_workflow.aget_state(config)
 
+            if existing_state and existing_state.values:
+                pinned_values = await self._ensure_model_policy_snapshot(
+                    existing_state.values, ticket_key, jira_client
+                )
+                if pinned_values is not existing_state.values:
+                    await compiled_workflow.aupdate_state(config, pinned_values)
+                    existing_state = await compiled_workflow.aget_state(config)
+                config["metadata"] = {
+                    "model_policy_snapshot": pinned_values.get("model_policy_snapshot", {})
+                }
+
             # Debug logging for checkpoint state
             logger.debug(f"Existing state for {ticket_key}: {existing_state}")
             if existing_state:
@@ -471,6 +482,10 @@ class OrchestratorWorker:
 
                 # New workflow - build initial state
                 state = self._build_initial_state(message)
+                state = await self._ensure_model_policy_snapshot(state, ticket_key, jira_client)
+                config["metadata"] = {
+                    "model_policy_snapshot": state.get("model_policy_snapshot", {})
+                }
                 logger.info(f"Starting new workflow for {ticket_key}")
 
                 # Record workflow started metric
@@ -2084,6 +2099,32 @@ class OrchestratorWorker:
             "retry_count": message.retry_count,
             "yolo_mode": yolo_mode,
         }
+
+    async def _ensure_model_policy_snapshot(
+        self,
+        state: dict[str, Any],
+        ticket_key: str,
+        jira: JiraClient,
+    ) -> dict[str, Any]:
+        """Pin all non-secret model targets before a configured workflow runs."""
+        if state.get("model_policy_snapshot"):
+            return state
+        if not (
+            self.settings.model_connections
+            or self.settings.model_policy
+            or self.settings.model_default
+        ):
+            return state
+
+        project_policy = None
+        if self.settings.model_connections:
+            project_key = extract_project_key(ticket_key)
+            project_policy = await jira.get_project_property(project_key, "forge.model_policy")
+            if project_policy is not None and not isinstance(project_policy, dict):
+                raise ValueError(f"forge.model_policy for {project_key} must be an object")
+
+        snapshot = self.settings.model_policy_resolver().resolve_all(project_policy or {})
+        return {**state, "model_policy_snapshot": snapshot}
 
     async def start(self) -> None:
         """Start the worker and begin processing events."""

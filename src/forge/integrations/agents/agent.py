@@ -863,7 +863,27 @@ class ForgeAgent:
             ticket_key.split("-", 1)[0].upper() if ticket_key and "-" in ticket_key else None
         )
         project_policy: dict[str, Any] = {}
-        if project_key and self.settings.model_connections:
+        resolver = self.settings.model_policy_resolver()
+        pinned_snapshot = {}
+        try:
+            from langchain_core.runnables.config import ensure_config
+
+            pinned_snapshot = ensure_config().get("metadata", {}).get("model_policy_snapshot", {})
+        except Exception:
+            pass
+
+        normalized_task = task.replace("-", "_")
+        snapshot_key = next(
+            (
+                candidate
+                for candidate in (langgraph_node, task, normalized_task)
+                if candidate and candidate in pinned_snapshot
+            ),
+            None,
+        )
+        if snapshot_key:
+            model_target = ResolvedModelTarget.model_validate(pinned_snapshot[snapshot_key])
+        elif project_key and self.settings.model_connections:
             if project_key not in self._project_model_policies:
                 from forge.integrations.jira.client import JiraClient
 
@@ -876,12 +896,21 @@ class ForgeAgent:
                 finally:
                     await jira.close()
             project_policy = self._project_model_policies[project_key]
-
-        resolver = self.settings.model_policy_resolver()
-        node_key = str(langgraph_node) if langgraph_node else ""
-        explicit_keys = set(project_policy) | set(resolver.policy)
-        policy_key = node_key if node_key in explicit_keys else task
-        model_target = resolver.resolve(policy_key, project_policy)
+            explicit_keys = set(project_policy) | set(resolver.policy)
+            policy_key = (
+                str(langgraph_node)
+                if langgraph_node is not None and str(langgraph_node) in explicit_keys
+                else task
+            )
+            model_target = resolver.resolve(policy_key, project_policy)
+        else:
+            explicit_keys = set(resolver.policy)
+            policy_key = (
+                str(langgraph_node)
+                if langgraph_node is not None and str(langgraph_node) in explicit_keys
+                else task
+            )
+            model_target = resolver.resolve(policy_key)
         trace_tags, trace_metadata = resolve_trace_fields(trace_state)
 
         result = await self._run_agent(

@@ -107,6 +107,8 @@ class ModelPolicyResolver:
         self.default = (
             default if isinstance(default, ModelTarget) else ModelTarget.model_validate(default)
         )
+        if any(not key for key in self.policy):
+            raise ValueError("Model policy keys must not be empty")
         # Validate administrator policy eagerly at startup.
         for key, target in [*self.policy.items(), ("default", self.default)]:
             self._validate_target(target, project_override=False, key=key)
@@ -114,7 +116,11 @@ class ModelPolicyResolver:
     @staticmethod
     def _model_matches_backend(model: str, backend: Backend) -> bool:
         is_gemini = model.lower().startswith(("gemini", "models/gemini"))
-        return backend == "vertex-ai" or (is_gemini == (backend == "google-genai"))
+        # Vertex AI's model garden intentionally serves both Gemini and
+        # Anthropic models. Direct-provider backends accept only their family.
+        if backend == "vertex-ai":
+            return True
+        return is_gemini == (backend == "google-genai")
 
     def _validate_target(
         self, target: ModelTarget, *, project_override: bool, key: str
@@ -148,6 +154,10 @@ class ModelPolicyResolver:
     def resolve(
         self, key: str, project_policy: dict[str, Any] | None = None
     ) -> ResolvedModelTarget:
+        if not key:
+            raise ValueError("Model policy keys must not be empty")
+        if project_policy and any(not project_key for project_key in project_policy):
+            raise ValueError("Model policy keys must not be empty")
         if project_policy and key in project_policy:
             target = ModelTarget.model_validate(project_policy[key])
             source = "project"
