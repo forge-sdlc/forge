@@ -192,6 +192,45 @@ class Settings(BaseSettings):
         description="Global default exact model target (JSON object)",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def derive_legacy_model_fields(cls, values: Any) -> Any:
+        """Derive runtime fields from a complete provider-neutral configuration.
+
+        The rest of Forge can continue consuming the established settings
+        attributes without forcing operators to configure two sources of truth.
+        """
+        if not isinstance(values, dict):
+            return values
+        connections = values.get("model_connections") or {}
+        default = values.get("model_default") or {}
+        if not connections:
+            return values
+        if not default:
+            if not values.get("llm_backend") or not values.get("llm_model"):
+                raise ValueError(
+                    "MODEL_DEFAULT is required when MODEL_CONNECTIONS replaces legacy "
+                    "LLM_BACKEND/LLM_MODEL configuration"
+                )
+            return values
+
+        connection_name = default.get("connection")
+        connection = connections.get(connection_name)
+        if not isinstance(connection, dict):
+            raise ValueError(f"MODEL_DEFAULT references unknown connection '{connection_name}'")
+        backend = connection.get("backend")
+        model = default.get("model")
+        if not backend or not model:
+            raise ValueError("MODEL_DEFAULT and its connection must define a backend and model")
+
+        derived = dict(values)
+        derived["llm_backend"] = backend
+        derived["llm_model"] = model
+        if backend == "vertex-ai":
+            derived["google_cloud_project"] = connection.get("project") or ""
+            derived["google_cloud_location"] = connection.get("location") or "global"
+        return derived
+
     @property
     def container_model(self) -> str:
         """Get the container model, falling back to the primary configured model."""

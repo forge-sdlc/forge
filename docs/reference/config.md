@@ -49,9 +49,12 @@ Choose one backend explicitly. Gemini 3.5 Flash through Vertex AI is recommended
     LLM_MODEL=claude-sonnet-4-6
     ```
 
-`LLM_BACKEND` and `LLM_MODEL` are required. Provider credentials must use the
-provider-native variables shown above; legacy aliases are not supported.
-Forge validates the backend, credentials, and model compatibility at startup.
+`LLM_BACKEND` and `LLM_MODEL` are required for legacy configuration. A complete
+`MODEL_CONNECTIONS` plus `MODEL_DEFAULT` configuration replaces them and
+derives the runtime backend, model, Vertex project, and location. Provider
+credentials must use the provider-native variables shown above; legacy aliases
+are not supported. Forge validates the backend, credentials, and model
+compatibility at startup.
 
 The legacy `CONTAINER_LLM_MODEL` override remains supported. For exact
 per-stage selection, administrators can define JSON `MODEL_CONNECTIONS`,
@@ -59,6 +62,12 @@ per-stage selection, administrators can define JSON `MODEL_CONNECTIONS`,
 provider location, model allowlist, and declared capabilities—never a credential value. Each backend
 uses its existing provider-native environment credential. Jira projects then
 set `forge.model_policy`, restricted to those connections and models:
+
+```bash
+MODEL_CONNECTIONS={"vertex-global":{"backend":"vertex-ai","project":"my-gcp-project","location":"global","allowed_models":["gemini-3.5-flash","claude-sonnet-5"],"capabilities":["tools"]}}
+MODEL_DEFAULT={"connection":"vertex-global","model":"gemini-3.5-flash"}
+MODEL_POLICY={"generate_prd":{"connection":"vertex-global","model":"claude-sonnet-5"},"generate_spec":{"connection":"vertex-global","model":"gemini-3.5-flash"}}
+```
 
 ```bash
 forge project-setup MYPROJ \

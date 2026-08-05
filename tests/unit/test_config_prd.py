@@ -16,6 +16,9 @@ def clear_prd_proposal_env(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("CONTAINER_LLM_MODEL", raising=False)
+    monkeypatch.delenv("MODEL_CONNECTIONS", raising=False)
+    monkeypatch.delenv("MODEL_DEFAULT", raising=False)
+    monkeypatch.delenv("MODEL_POLICY", raising=False)
 
 
 def make_settings(**kwargs) -> Settings:
@@ -59,6 +62,73 @@ class TestPrdApprovalConfig:
 
 
 class TestLlmConfig:
+    def test_provider_neutral_environment_does_not_require_legacy_vars(self, monkeypatch):
+        monkeypatch.setenv(
+            "MODEL_CONNECTIONS",
+            '{"vertex":{"backend":"vertex-ai","project":"policy-project",'
+            '"location":"global","allowed_models":["gemini-3.5-flash"],'
+            '"capabilities":["tools"]}}',
+        )
+        monkeypatch.setenv(
+            "MODEL_DEFAULT",
+            '{"connection":"vertex","model":"gemini-3.5-flash"}',
+        )
+
+        settings = Settings(
+            _env_file=None,
+            jira_base_url="https://test.atlassian.net",
+            jira_api_token="test",
+            jira_user_email="test@example.com",
+            github_token="test",
+        )
+
+        assert settings.llm_backend == "vertex-ai"
+        assert settings.llm_model == "gemini-3.5-flash"
+        assert settings.google_cloud_project == "policy-project"
+
+    def test_complete_model_policy_configuration_derives_legacy_runtime_fields(self):
+        settings = Settings(
+            _env_file=None,
+            jira_base_url="https://test.atlassian.net",
+            jira_api_token="test",
+            jira_user_email="test@example.com",
+            github_token="test",
+            model_connections={
+                "vertex-global": {
+                    "backend": "vertex-ai",
+                    "project": "policy-project",
+                    "location": "global",
+                    "allowed_models": ["gemini-3.5-flash", "claude-sonnet-5"],
+                    "capabilities": ["tools"],
+                }
+            },
+            model_default={
+                "connection": "vertex-global",
+                "model": "gemini-3.5-flash",
+            },
+        )
+
+        assert settings.llm_backend == "vertex-ai"
+        assert settings.llm_model == "gemini-3.5-flash"
+        assert settings.google_cloud_project == "policy-project"
+        assert settings.google_cloud_location == "global"
+
+    def test_model_connections_without_default_or_legacy_config_is_rejected(self):
+        with pytest.raises(ValueError, match="MODEL_DEFAULT is required"):
+            Settings(
+                _env_file=None,
+                jira_base_url="https://test.atlassian.net",
+                jira_api_token="test",
+                jira_user_email="test@example.com",
+                github_token="test",
+                model_connections={
+                    "vertex": {
+                        "backend": "vertex-ai",
+                        "project": "policy-project",
+                    }
+                },
+            )
+
     def test_legacy_model_configuration_builds_effective_default(self):
         settings = make_settings(
             jira_base_url="https://test.atlassian.net",
