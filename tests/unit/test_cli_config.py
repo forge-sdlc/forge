@@ -288,6 +288,8 @@ class TestCLIConfigExecution:
                     "forge.prd_proposals_path",
                     "forge.skills",
                     "forge.references",
+                    "forge.model_policy",
+                    "forge.model_default",
                 ]
             )
             client_inst.get_project_property = AsyncMock(
@@ -298,6 +300,11 @@ class TestCLIConfigExecution:
                     "forge.prd_proposals_path": "/enhancements/",
                     "forge.skills": [{"source": "http://skill"}],
                     "forge.references": None,
+                    "forge.model_policy": None,
+                    "forge.model_default": {
+                        "connection": "vertex",
+                        "model": "gemini-flash",
+                    },
                 }.get(key)
             )
             client_inst.close = AsyncMock()
@@ -413,6 +420,27 @@ class TestCLIConfigExecution:
             data["effective"]["forge.prd_proposals_path"]["value"] == "enhancements"
         )  # stripped slashes
         assert data["effective"]["forge.prd_proposals_path"]["source"] == "project"
+
+    @pytest.mark.asyncio
+    async def test_human_output_includes_project_model_default(
+        self,
+        mock_jira_client,  # noqa: ARG002
+        mock_settings,  # noqa: ARG002
+        capsys,
+    ):
+        class Args:
+            project_key = "MYPROJ"
+            json = False
+            property = None
+
+        code = await cmd_get_config(Args())
+
+        assert code == 0
+        out, _err = capsys.readouterr()
+        assert "forge.model_default:" in out
+        assert '"connection": "vertex"' in out
+        assert '"model": "gemini-flash"' in out
+        assert "[project]" in out
 
     @pytest.mark.asyncio
     async def test_output_property_queries(self, mock_jira_client, mock_settings, capsys):  # noqa: ARG002

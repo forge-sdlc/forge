@@ -809,6 +809,7 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
             "forge.skills",
             "forge.references",
             "forge.model_policy",
+            "forge.model_default",
         ]
 
         # Combine standard keys with extra discovered keys (avoid duplicates, preserve order/sort)
