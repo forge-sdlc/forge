@@ -185,6 +185,8 @@ class TestRunTaskTraceResolution:
 
     @pytest.mark.asyncio
     async def test_project_policy_is_fetched_for_each_execution(self, agent: ForgeAgent) -> None:
+        # Do not mutate the cached application Settings shared by later tests.
+        agent.settings = agent.settings.model_copy(deep=True)
         agent.settings.model_connections = {
             "vertex": {
                 "backend": "vertex-ai",
