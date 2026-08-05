@@ -156,6 +156,35 @@ def test_invalid_default_connection_fails_eagerly() -> None:
         )
 
 
+def test_unknown_connection_error_lists_available_backends_and_models(
+    resolver: ModelPolicyResolver,
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        resolver.resolve(
+            "generate_prd",
+            {"generate_prd": {"connection": "missing", "model": "gemini-pro"}},
+        )
+
+    message = str(exc_info.value)
+    assert "unknown connection 'missing'" in message
+    assert "vertex-ai: vertex=[gemini-pro, gemini-flash]" in message
+    assert "anthropic: locked=[claude-sonnet]" in message
+
+
+def test_disallowed_model_error_lists_available_backends_and_models(
+    resolver: ModelPolicyResolver,
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        resolver.resolve(
+            "generate_prd",
+            {"generate_prd": {"connection": "vertex", "model": "gemini-ultra"}},
+        )
+
+    message = str(exc_info.value)
+    assert "model 'gemini-ultra' is not allowed on connection 'vertex'" in message
+    assert "vertex-ai: vertex=[gemini-pro, gemini-flash]" in message
+
+
 def test_empty_policy_key_is_rejected(resolver: ModelPolicyResolver) -> None:
     with pytest.raises(ValueError, match="must not be empty"):
         resolver.resolve("generate_prd", {"": {"connection": "vertex", "model": "gemini-pro"}})

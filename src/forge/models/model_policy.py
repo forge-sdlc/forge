@@ -172,6 +172,20 @@ class ModelPolicyResolver:
         for key, target in [*self.policy.items(), ("default", self.default)]:
             self._validate_target(target, project_override=False, key=key)
 
+    def available_models_summary(self) -> str:
+        """Return a non-secret summary suitable for operator-facing errors."""
+        entries = []
+        for name, connection in sorted(self.connections.items()):
+            models = ", ".join(connection.allowed_models) or "(none)"
+            entries.append(f"{connection.backend}: {name}=[{models}]")
+        return "; ".join(entries) or "(no model connections configured)"
+
+    def _configuration_error(self, message: str) -> ValueError:
+        return ValueError(
+            f"Model policy configuration error: {message}. "
+            f"Available connections and models: {self.available_models_summary()}"
+        )
+
     @staticmethod
     def _model_matches_backend(model: str, backend: Backend) -> bool:
         is_gemini = model.lower().startswith(("gemini", "models/gemini"))
@@ -186,21 +200,21 @@ class ModelPolicyResolver:
     ) -> ModelConnection:
         connection = self.connections.get(target.connection)
         if connection is None:
-            raise ValueError(
-                f"Model policy '{key}' references unknown connection '{target.connection}'"
+            raise self._configuration_error(
+                f"policy '{key}' references unknown connection '{target.connection}'"
             )
         if project_override and not connection.allow_project_override:
             raise ValueError(
                 f"Connection '{target.connection}' is not allowed for project overrides"
             )
         if not self._model_matches_backend(target.model, connection.backend):
-            raise ValueError(
-                f"Model '{target.model}' is incompatible with backend '{connection.backend}'"
+            raise self._configuration_error(
+                f"model '{target.model}' is incompatible with backend '{connection.backend}'"
             )
         allowed = connection.allowed_models
         if "*" not in allowed and target.model not in allowed:
-            raise ValueError(
-                f"Model '{target.model}' is not allowed on connection '{target.connection}'"
+            raise self._configuration_error(
+                f"model '{target.model}' is not allowed on connection '{target.connection}'"
             )
         stage_requirements = REQUIRED_CAPABILITIES_BY_POLICY_KEY.get(key, frozenset())
         missing = (target.required_capabilities | stage_requirements) - connection.capabilities
