@@ -37,6 +37,7 @@ from forge.workflow.pr_state import (
     save_active_pull_request,
 )
 from forge.workflow.registry import create_default_router
+from forge.workflow.retrospective import run_retrospective
 from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.automated_review_triage import (
     is_bot_sender,
@@ -108,6 +109,17 @@ _YOLO_GATES = {
     "task_approval_gate",
     "rca_option_gate",
 }
+
+
+async def _run_terminal_retrospective(state: dict[str, Any]) -> bool:
+    """Run optional analysis without allowing it to affect workflow completion."""
+    try:
+        return await run_retrospective(state) is not None
+    except Exception:
+        logger.exception(
+            "Retrospective failed for %s; terminal outcome is unchanged", state.get("ticket_key")
+        )
+        return False
 
 
 class OrchestratorWorker:
@@ -422,6 +434,9 @@ class OrchestratorWorker:
                         f"'{updated_values.get('current_node')}', skipping invocation"
                     )
                     await compiled_workflow.aupdate_state(config, updated_values)
+                    if await _run_terminal_retrospective(updated_values):
+                        updated_values["retrospective_completed"] = True
+                        await compiled_workflow.aupdate_state(config, updated_values)
                     return
 
                 # If _handle_resume_event returned the state object unchanged (identity
@@ -505,6 +520,11 @@ class OrchestratorWorker:
             if not is_paused:
                 ticket_type = result.get("ticket_type", "unknown")
                 record_workflow_completed(ticket_type=ticket_type, final_node=final_node)
+
+            is_terminal = final_node == "complete" or result.get("is_blocked", False)
+            if is_terminal and await _run_terminal_retrospective(result):
+                result["retrospective_completed"] = True
+                await compiled_workflow.aupdate_state(config, result)
 
         except Exception as e:
             import traceback

@@ -28,6 +28,7 @@ class BaseState(TypedDict, total=False):
     is_blocked: bool
     retry_count: int
     last_error: str | None
+    retrospective_completed: bool
 
     # Timestamps
     created_at: str
