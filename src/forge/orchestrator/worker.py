@@ -1578,6 +1578,11 @@ class OrchestratorWorker:
                     "force_fresh_invoke": True,
                 }
                 # Keep current_node — workflow resumes from the node that failed
+
+            await self._post_retry_acknowledgement(
+                message.ticket_key,
+                updated_state.get("current_node", current_node),
+            )
         elif is_ci_webhook:
             # GitHub CI event — unpause the gate and let ci_evaluator check the results
             updated_state["is_paused"] = False
@@ -1923,6 +1928,22 @@ class OrchestratorWorker:
             logger.info(f"Posted terminal error comment to {ticket_key}")
         except Exception as e:
             logger.warning(f"Failed to post terminal error comment to {ticket_key}: {e}")
+
+    async def _post_retry_acknowledgement(self, ticket_key: str, node: str) -> None:
+        """Acknowledge an accepted retry without blocking workflow resumption."""
+        jira = JiraClient()
+        try:
+            comment = (
+                f"Forge accepted the `forge:retry` request and is resuming "
+                f"the workflow from `{node}`."
+            )
+            await post_status_comment(jira, ticket_key, comment)
+            logger.info(f"Posted retry acknowledgement to {ticket_key}")
+        except Exception as e:
+            logger.warning(f"Failed to post retry acknowledgement to {ticket_key}: {e}")
+        finally:
+            with contextlib.suppress(Exception):
+                await jira.close()
 
     async def _find_workflow_by_state(self, ticket_key: str) -> tuple[Any, Any]:
         """Find a workflow that has existing checkpoint state for the given ticket.

@@ -1,6 +1,6 @@
 """Unit tests for blocked-state and forge:retry worker behaviour."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -11,7 +11,9 @@ from forge.queue.models import QueueMessage
 
 @pytest.fixture
 def worker():
-    return OrchestratorWorker(consumer_name="test-worker")
+    instance = OrchestratorWorker(consumer_name="test-worker")
+    instance._post_retry_acknowledgement = AsyncMock()
+    return instance
 
 
 @pytest.fixture
@@ -210,6 +212,65 @@ class TestRetryHandlerClearsBlockedState:
         result = await worker._handle_resume_event(_make_retry_message(base_message), blocked_state)
 
         assert result.get("context", {}).get("force_fresh_invoke") is True
+
+    @pytest.mark.asyncio
+    async def test_retry_posts_acknowledgement(self, worker, base_message):
+        """An accepted retry is made visible on the Jira ticket."""
+        blocked_state = {
+            "ticket_key": "TEST-123",
+            "current_node": "execute_task_changes",
+            "is_paused": True,
+            "is_blocked": True,
+            "last_error": "Implementation failed",
+            "context": {},
+        }
+        await worker._handle_resume_event(_make_retry_message(base_message), blocked_state)
+
+        worker._post_retry_acknowledgement.assert_awaited_once_with(
+            "TEST-123", "execute_task_changes"
+        )
+
+    @pytest.mark.asyncio
+    async def test_retry_acknowledgement_failure_does_not_raise(self, worker):
+        """Jira acknowledgement failures must not block workflow resumption."""
+        jira = MagicMock()
+        jira.close = AsyncMock()
+        with (
+            patch("forge.orchestrator.worker.JiraClient", return_value=jira),
+            patch(
+                "forge.orchestrator.worker.post_status_comment",
+                new=AsyncMock(side_effect=RuntimeError("Jira unavailable")),
+            ),
+        ):
+            await OrchestratorWorker._post_retry_acknowledgement(
+                worker, "TEST-123", "execute_task_changes"
+            )
+
+        jira.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_retry_acknowledgement_names_resumed_node(self, worker):
+        """The Jira acknowledgement tells the user where Forge resumed."""
+        jira = MagicMock()
+        jira.close = AsyncMock()
+        with (
+            patch("forge.orchestrator.worker.JiraClient", return_value=jira),
+            patch(
+                "forge.orchestrator.worker.post_status_comment",
+                new_callable=AsyncMock,
+            ) as post_comment,
+        ):
+            await OrchestratorWorker._post_retry_acknowledgement(
+                worker, "TEST-123", "execute_task_changes"
+            )
+
+        post_comment.assert_awaited_once_with(
+            jira,
+            "TEST-123",
+            "Forge accepted the `forge:retry` request and is resuming "
+            "the workflow from `execute_task_changes`.",
+        )
+        jira.close.assert_awaited_once()
 
 
 class TestRetryOnStuckNonTerminalNode:
