@@ -120,6 +120,27 @@ class Settings(BaseSettings):
             "Unset (default) uses a per-run system temp directory."
         ),
     )
+    output_protected_paths: str = Field(
+        default=".github/workflows/**,.github/CODEOWNERS,.gitlab-ci.yml,CODEOWNERS",
+        description="Comma-separated path patterns agents may not publish",
+    )
+    output_max_file_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1,
+        description="Maximum size of one added or modified file published by an agent",
+    )
+    output_max_total_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=1,
+        description="Maximum total size of added or modified agent output",
+    )
+
+    @property
+    def protected_output_paths(self) -> tuple[str, ...]:
+        """Return normalized configured protected path patterns."""
+        return tuple(
+            value.strip() for value in self.output_protected_paths.split(",") if value.strip()
+        )
 
     # PRD Approval Configuration (global fallbacks — per-project config via
     # Jira project property forge.prd_proposals_repo takes precedence)

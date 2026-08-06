@@ -7,6 +7,7 @@ from pathlib import Path
 from forge.config import get_settings
 from forge.utils.redaction import redact_secrets
 from forge.workspace.manager import Workspace
+from forge.workspace.output_validation import OutputValidationPolicy, validate_repository_output
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +177,7 @@ class GitOperations:
         Args:
             force: Force push (use with caution).
         """
+        self.validate_output_for_push()
         args = ["push", "-u", "fork", self.workspace.branch_name]
         if force:
             args.insert(1, "--force")
@@ -357,6 +359,7 @@ class GitOperations:
         Raises:
             GitError: If conflicts detected and check_conflicts is True.
         """
+        self.validate_output_for_push()
         if check_conflicts and not force:
             has_conflicts, conflicting_files = self.check_for_conflicts()
             if has_conflicts:
@@ -372,6 +375,17 @@ class GitOperations:
 
         self._run_git(*args)
         logger.info(f"Pushed branch {self.workspace.branch_name}")
+
+    def validate_output_for_push(self) -> None:
+        """Validate branch output at the trusted boundary before any push."""
+        validate_repository_output(
+            self.repo_path,
+            OutputValidationPolicy(
+                protected_paths=self.settings.protected_output_paths,
+                max_file_bytes=self.settings.output_max_file_bytes,
+                max_total_bytes=self.settings.output_max_total_bytes,
+            ),
+        )
 
     def get_current_sha(self) -> str:
         """Get the current commit SHA.

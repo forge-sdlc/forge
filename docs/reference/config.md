@@ -2,6 +2,26 @@
 
 All configuration is via environment variables in `.env`. See `.env.example` in the repository for the complete list with comments.
 
+## Safe Output Gate
+
+Forge validates repository changes in the trusted worker immediately before
+every Git push. Validation fails closed when Git metadata cannot be inspected,
+and rejects protected paths, symbolic links, oversized files, and oversized
+combined output. Deletions count as protected-path changes but do not count
+toward size limits.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OUTPUT_PROTECTED_PATHS` | `.github/workflows/**,.github/CODEOWNERS,.gitlab-ci.yml,CODEOWNERS` | Comma-separated exact paths or glob patterns agents cannot publish |
+| `OUTPUT_MAX_FILE_BYTES` | `10485760` | Maximum size of an added or modified file |
+| `OUTPUT_MAX_TOTAL_BYTES` | `52428800` | Maximum combined size of added and modified files |
+
+The gate evaluates changes from the merge base with `origin/HEAD` through the
+current branch tip. A missing remote default-branch reference blocks the push
+instead of silently skipping validation. Additional validators, such as secret
+scanners, can consume the same `OutputValidationContext` and run in the same
+trusted gate.
+
 ## Required Variables
 
 ### Jira
