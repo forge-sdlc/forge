@@ -73,6 +73,17 @@ async def test_disabled_stage_has_no_side_effects():
 
 
 @pytest.mark.asyncio
+async def test_nonterminal_stage_has_no_side_effects():
+    settings = AsyncMock(retrospective_enabled=True)
+    with patch("forge.workflow.retrospective.JiraClient") as jira:
+        result = await run_retrospective(
+            {"ticket_key": "F-1", "current_node": "ci_evaluator"}, settings
+        )
+    assert result is None
+    jira.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_completed_stage_is_idempotent():
     settings = AsyncMock(retrospective_enabled=True)
     with patch("forge.workflow.retrospective.JiraClient") as jira:

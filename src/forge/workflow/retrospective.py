@@ -157,7 +157,12 @@ async def run_retrospective(
 ) -> RetrospectiveReport | None:
     """Publish a terminal report without changing state or terminal outcome."""
     settings = settings or get_settings()
-    if not settings.retrospective_enabled or state.get("retrospective_completed", False):
+    is_terminal = state.get("current_node") == "complete" or bool(state.get("is_blocked"))
+    if (
+        not settings.retrospective_enabled
+        or not is_terminal
+        or state.get("retrospective_completed", False)
+    ):
         return None
     data = build_input(state, settings.retrospective_max_items)
     report = analyze(data)
