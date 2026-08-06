@@ -500,6 +500,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
     jira = JiraClient()
 
     try:
+
         def parse_repo(raw: str) -> str | dict:
             if raw.startswith("{"):
                 try:
@@ -512,9 +513,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                     )
                 name = repo["name"]
                 if not isinstance(name, str) or "/" not in name:
-                    raise ValueError(
-                        f"repo name in JSON config must contain '/', got: {name!r}"
-                    )
+                    raise ValueError(f"repo name in JSON config must contain '/', got: {name!r}")
                 return repo
             if "/" not in raw:
                 raise ValueError(f"invalid repo format (expected owner/repo): {raw!r}")
@@ -583,8 +582,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         remove_prd_repo = getattr(args, "remove_prd_proposals_repo", False)
         if remove_prd_repo and args.prd_proposals_repo is not None:
             print(
-                "Error: --remove-prd-proposals-repo cannot be combined with "
-                "--prd-proposals-repo",
+                "Error: --remove-prd-proposals-repo cannot be combined with --prd-proposals-repo",
                 file=sys.stderr,
             )
             return 1
@@ -611,8 +609,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         remove_prd_path = getattr(args, "remove_prd_proposals_path", False)
         if remove_prd_path and args.prd_proposals_path is not None:
             print(
-                "Error: --remove-prd-proposals-path cannot be combined with "
-                "--prd-proposals-path",
+                "Error: --remove-prd-proposals-path cannot be combined with --prd-proposals-path",
                 file=sys.stderr,
             )
             return 1
