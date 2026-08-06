@@ -2,11 +2,19 @@
 
 import logging
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
 
 from forge.config import get_settings
 from forge.utils.redaction import redact_secrets
 from forge.workspace.manager import Workspace
+from forge.workspace.output_validation import (
+    OutputValidationError,
+    OutputValidationPolicy,
+    OutputValidationResult,
+    OutputValidator,
+    validate_repository_output,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +22,13 @@ logger = logging.getLogger(__name__)
 class GitOperations:
     """Git operations for cloning, branching, committing, and pushing."""
 
-    def __init__(self, workspace: Workspace):
+    def __init__(
+        self,
+        workspace: Workspace,
+        *,
+        output_validators: Iterable[OutputValidator] = (),
+        output_base_ref: str | None = None,
+    ):
         """Initialize git operations for a workspace.
 
         Args:
@@ -22,6 +36,8 @@ class GitOperations:
         """
         self.workspace = workspace
         self.settings = get_settings()
+        self.output_validators = tuple(output_validators)
+        self.output_base_ref = output_base_ref
         # Set by workspace recovery when this instance represents a replacement
         # clone rather than the workspace recorded in workflow state.  The path
         # alone cannot identify that case because managed workspaces reuse a
@@ -176,6 +192,7 @@ class GitOperations:
         Args:
             force: Force push (use with caution).
         """
+        self.validate_output_for_push()
         args = ["push", "-u", "fork", self.workspace.branch_name]
         if force:
             args.insert(1, "--force")
@@ -357,6 +374,7 @@ class GitOperations:
         Raises:
             GitError: If conflicts detected and check_conflicts is True.
         """
+        self.validate_output_for_push()
         if check_conflicts and not force:
             has_conflicts, conflicting_files = self.check_for_conflicts()
             if has_conflicts:
@@ -372,6 +390,23 @@ class GitOperations:
 
         self._run_git(*args)
         logger.info(f"Pushed branch {self.workspace.branch_name}")
+
+    def validate_output_for_push(self) -> OutputValidationResult:
+        """Validate branch output at the trusted boundary before any push."""
+        try:
+            return validate_repository_output(
+                self.repo_path,
+                OutputValidationPolicy(
+                    protected_paths=self.settings.protected_output_paths,
+                    max_file_bytes=self.settings.output_max_file_bytes,
+                    max_total_bytes=self.settings.output_max_total_bytes,
+                ),
+                self.output_validators,
+                base_ref=self.output_base_ref or self.settings.output_base_ref or None,
+                head_ref=f"refs/heads/{self.workspace.branch_name}",
+            )
+        except OutputValidationError as exc:
+            raise GitError(exc) from exc
 
     def get_current_sha(self) -> str:
         """Get the current commit SHA.
