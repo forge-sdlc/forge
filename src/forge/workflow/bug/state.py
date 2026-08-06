@@ -95,6 +95,7 @@ def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
         "persistence_retry_count": 0,
         "review_push_pending": False,
         "review_push_pending_updates": {},
+        "handoffs": {},
         "tdd_approach": False,
         "ci_status": None,
         "current_pr_url": None,

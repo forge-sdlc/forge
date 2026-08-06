@@ -483,6 +483,13 @@ class TestPrepareWorkspaceRecovery:
             fork_owner="forge-bot",
             fork_repo="repo",
             context={"branch_name": "forge/test-123"},
+            handoffs={
+                "org/repo": {
+                    "content": "prior task context",
+                    "task_key": "TEST-122",
+                    "captured_at": "2026-08-06T00:00:00+00:00",
+                }
+            },
         )
 
         old_git = MagicMock()
@@ -507,6 +514,7 @@ class TestPrepareWorkspaceRecovery:
         new_git.add_fork_remote.assert_called_once_with("forge-bot", "repo")
         new_git.checkout_branch.assert_called_once_with("forge/test-123", remote="fork")
         assert new_git.workspace_recreated is True
+        assert (workspace_path / ".forge" / "handoff.md").read_text() == "prior task context"
 
     def test_recovery_uses_container_aware_cleanup_for_old_workspace(self, tmp_path):
         workspace_path = tmp_path / "forge-TEST-125-org-repo"

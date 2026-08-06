@@ -105,6 +105,7 @@ def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState
         "persistence_retry_count": 0,
         "review_push_pending": False,
         "review_push_pending_updates": {},
+        "handoffs": {},
         "ci_status": None,
         "current_pr_url": None,
         "current_pr_number": None,

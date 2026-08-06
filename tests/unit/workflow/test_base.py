@@ -63,6 +63,7 @@ class TestPRIntegrationState:
         assert "repos_completed" in hints
         assert "implemented_tasks" in hints
         assert "current_task_key" in hints
+        assert "handoffs" in hints
 
 
 class TestCIIntegrationState:

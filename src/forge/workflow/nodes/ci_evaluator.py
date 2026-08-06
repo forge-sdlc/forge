@@ -24,6 +24,7 @@ from forge.workflow.utils.jira_status import (
     set_review_pending_label,
 )
 from forge.workspace.git_ops import GitOperations
+from forge.workspace.handoff import capture_handoff
 from forge.workspace.manager import Workspace
 
 logger = logging.getLogger(__name__)
@@ -508,6 +509,13 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 pr_number=state.get("current_pr_number"),
                 attempt=ci_fix_attempt,
             )
+
+        state = capture_handoff(
+            workspace_path,
+            state.get("current_repo", ""),
+            f"{ticket_key}-ci-fix-{attempt}",
+            state,
+        )
 
         return update_state_timestamp(
             {

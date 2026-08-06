@@ -29,6 +29,7 @@ from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.references import fetch_and_inject_references
 from forge.workspace.git_ops import GitOperations
+from forge.workspace.handoff import capture_handoff
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +227,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
         if result.success:
             logger.info(f"Container completed successfully for {current_task}")
+
+            state = capture_handoff(workspace_path, current_repo, current_task, state)
 
             # Persist each task commit before checkpointing. A subsequent task
             # or local review may resume on a worker with a different filesystem.

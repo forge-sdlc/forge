@@ -43,6 +43,14 @@ class BaseState(TypedDict, total=False):
     context: dict[str, Any]
 
 
+class HandoffState(TypedDict):
+    """Durable task-continuity summary for one repository."""
+
+    content: str
+    task_key: str
+    captured_at: str
+
+
 class PRIntegrationState(TypedDict, total=False):
     """Mixin for workflows that create PRs."""
 
@@ -69,6 +77,7 @@ class PRIntegrationState(TypedDict, total=False):
     review_push_pending: bool
     review_push_pending_updates: dict[str, Any]
     review_exhaustion_report: Annotated[dict[str, Any], operator.or_]
+    handoffs: dict[str, HandoffState]
 
 
 class CIIntegrationState(TypedDict, total=False):
