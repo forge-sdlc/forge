@@ -13,6 +13,7 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.checkpointer import set_pr_ticket_index
 from forge.prompts import load_prompt
+from forge.security.secrets import AgentOutputContext, scan_agent_output
 from forge.workflow.nodes.code_review import sync_pr_description
 from forge.workflow.nodes.post_merge_summary import _extract_impact
 from forge.workflow.pr_state import save_active_pull_request
@@ -76,6 +77,14 @@ async def open_pull_request_from_fork(
     draft: bool = False,
 ) -> dict:
     """Open a pull request from the prepared fork branch to upstream."""
+    scan_agent_output(
+        f"{title}\n{body}",
+        context=AgentOutputContext(
+            source="pull request title and body",
+            repository=f"{target.owner}/{target.repo}",
+            workflow_stage="pr_creation",
+        ),
+    )
     return await github.create_pull_request(
         owner=target.owner,
         repo=target.repo,

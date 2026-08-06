@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from forge.config import get_settings
+from forge.security.secrets import RepositorySecretValidator
 from forge.utils.redaction import redact_secrets
 from forge.workspace.manager import Workspace
 from forge.workspace.output_validation import (
@@ -36,7 +37,7 @@ class GitOperations:
         """
         self.workspace = workspace
         self.settings = get_settings()
-        self.output_validators = tuple(output_validators)
+        self.output_validators = (RepositorySecretValidator(), *tuple(output_validators))
         self.output_base_ref = output_base_ref
         # Set by workspace recovery when this instance represents a replacement
         # clone rather than the workspace recorded in workflow state.  The path

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
+from forge.security.secrets import AgentOutputContext, scan_agent_output
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
 
@@ -29,6 +30,14 @@ async def _post_qa_response(
     artifact_type: str,
     body: str,
 ) -> None:
+    scan_agent_output(
+        body,
+        context=AgentOutputContext(
+            source=f"{artifact_type} Q&A response",
+            ticket_key=ticket_key,
+            workflow_stage="qa_handler",
+        ),
+    )
     pr_target = _artifact_pr_target(state, artifact_type)
     if pr_target:
         repo_full, pr_number = pr_target

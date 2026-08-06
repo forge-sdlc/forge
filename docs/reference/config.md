@@ -346,3 +346,17 @@ These variables are used by `docker-compose.yml`, `devtools/docker-compose.dev.y
 ### MCP Servers
 
 MCP server configuration lives in `mcp-servers.json`, not `.env`. See the [MCP servers section](https://github.com/forge-sdlc/forge/blob/main/mcp-servers.json) of the repository.
+# Secret scanning boundary
+
+Forge composes secret detection into the common repository-change gate before a
+workflow branch is pushed. Workflow nodes also explicitly scan text they know came
+from an agent, such as pull-request descriptions, Q&A responses, review objections,
+and post-merge summaries. Trusted Jira and GitHub clients remain transport components;
+they do not globally classify every system message as agent output. Detection,
+timeout, or scanner failure blocks the affected publication, and diagnostics contain
+only the detector name, filename, and line number.
+
+Repositories may commit a `detect-secrets` `.secrets.baseline`. Forge reads the
+baseline exclusively from the trusted origin base revision, so an agent cannot alter
+the allowlist during a run. Keep baselines narrowly scoped and review baseline changes
+as security-sensitive policy changes.
