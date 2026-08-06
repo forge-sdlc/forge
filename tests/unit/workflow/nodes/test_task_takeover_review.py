@@ -103,6 +103,7 @@ class TestRunQualitativeReview:
 
     @pytest.mark.asyncio
     async def test_run_qualitative_review_success(self, base_task_state: TaskTakeoverState) -> None:
+        base_task_state["implemented_tasks"] = {"TASK-2", "TASK-1"}  # type: ignore[typeddict-item]
         mock_jira = _make_mock_jira()
         mock_runner = _make_mock_runner("verdict: adequate\nfeedback: Brilliant changes.")
 
@@ -139,6 +140,7 @@ class TestRunQualitativeReview:
         assert kwargs["task_summary"] == "Review task takeover changes for TASK-101"
         assert kwargs["task_key"] == "TASK-101-review"
         assert kwargs["repo_name"] == "owner/repo"
+        assert "previous_task_keys" not in kwargs
         assert "task-takeover-review skill" in kwargs["task_description"]
 
     @pytest.mark.asyncio

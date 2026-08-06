@@ -108,7 +108,6 @@ async def run_qualitative_review(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
             task_key=f"{current_task}-review",
             repo_name=current_repo,
-            previous_task_keys=state.get("implemented_tasks", []),
             step_name="task_takeover_review",
             policy_key="task_takeover_review",
             skill_name="local-code-review",

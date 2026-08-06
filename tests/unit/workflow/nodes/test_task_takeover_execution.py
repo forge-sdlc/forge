@@ -124,6 +124,34 @@ class TestTaskTakeoverExecutionNode:
         mock_git.push_to_fork.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_ignores_linked_tasks_for_container_json(self) -> None:
+        """Task takeover must not pass unrelated linked-task state to its container."""
+        state = _make_state(implemented_tasks={"TASK-2", "TASK-1"})
+        mock_jira = _make_mock_jira()
+        mock_runner = _make_mock_runner()
+        mock_git = _make_mock_git()
+
+        with (
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.ContainerRunner",
+                return_value=mock_runner,
+            ),
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
+                return_value=("/tmp/ws", mock_git),
+            ),
+            patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
+        ):
+            result = await execute_task_changes(state)
+
+        assert result["last_error"] is None
+        assert "previous_task_keys" not in mock_runner.run.call_args.kwargs
+
+    @pytest.mark.asyncio
     async def test_execution_failure(self) -> None:
         """Test that execution failures are recorded as non-blocking metrics/results in state."""
         state = _make_state()

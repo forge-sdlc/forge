@@ -130,7 +130,6 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
             step_name="task_takeover_execution",
             policy_key="task_takeover_execution",
             skill_name="implement-task",
-            previous_task_keys=state.get("implemented_tasks", []),
         )
 
         # Collect review exhaustion data (if auto-review ran and exhausted)
