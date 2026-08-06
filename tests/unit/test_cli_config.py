@@ -66,9 +66,119 @@ class TestCLIConfigParserAndRouting:
         args = mock_cmd.call_args.args[0]
         assert args.remove_model == ["generate_prd"]
 
+    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.setup_logging")
+    def test_project_setup_incremental_flags(self, _mock_setup_logging, mock_cmd):
+        mock_cmd.return_value = 0
+
+        code = main(
+            [
+                "project-setup",
+                "aisos",
+                "--add-repo",
+                "org/new",
+                "--remove-repo",
+                "org/old",
+                "--remove-prd-proposals-repo",
+                "--remove-prd-proposals-path",
+                "--remove-skills",
+            ]
+        )
+
+        assert code == 0
+        args = mock_cmd.call_args.args[0]
+        assert args.add_repo == ["org/new"]
+        assert args.remove_repo == ["org/old"]
+        assert args.remove_prd_proposals_repo is True
+        assert args.remove_prd_proposals_path is True
+        assert args.remove_skills is True
+
 
 class TestCLIConfigExecution:
     """Fallback Semantics, Output Serialization, and Discovery."""
+
+    @staticmethod
+    def setup_args(**overrides):
+        values = {
+            "project_key": "PROJ",
+            "repo": None,
+            "add_repo": None,
+            "remove_repo": None,
+            "default_repo": None,
+            "prd_proposals_repo": None,
+            "remove_prd_proposals_repo": False,
+            "prd_proposals_path": None,
+            "remove_prd_proposals_path": False,
+            "skills_config": None,
+            "add_skill": None,
+            "remove_skills": False,
+            "model_policy": None,
+            "model": None,
+            "model_all": None,
+            "remove_model": None,
+            "clear_model_policy": False,
+            "clear_model_default": False,
+        }
+        values.update(overrides)
+        return SimpleNamespace(**values)
+
+    @pytest.mark.asyncio
+    async def test_add_and_remove_repos_preserves_other_entries(self):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(
+            return_value=["org/keep", "org/remove", {"name": "org/update", "branch": "old"}]
+        )
+        jira.set_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        args = self.setup_args(
+            add_repo=['{"name":"org/update","branch":"main"}', "org/new"],
+            remove_repo=["org/remove"],
+        )
+
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(args)
+
+        assert code == 0
+        jira.set_project_property.assert_awaited_once_with(
+            "PROJ",
+            "forge.repos",
+            ["org/keep", {"name": "org/update", "branch": "main"}, "org/new"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_remove_repo_rejects_empty_result(self, capsys):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(return_value=["org/only"])
+        jira.set_project_property = AsyncMock()
+        jira.close = AsyncMock()
+
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(self.setup_args(remove_repo=["org/only"]))
+
+        assert code == 1
+        assert "forge.repos cannot be empty" in capsys.readouterr().err
+        jira.set_project_property.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_remove_optional_metadata(self):
+        jira = MagicMock()
+        jira.delete_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        args = self.setup_args(
+            remove_prd_proposals_repo=True,
+            remove_prd_proposals_path=True,
+            remove_skills=True,
+        )
+
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(args)
+
+        assert code == 0
+        assert [item.args for item in jira.delete_project_property.await_args_list] == [
+            ("PROJ", "forge.prd_proposals_repo"),
+            ("PROJ", "forge.prd_proposals_path"),
+            ("PROJ", "forge.skills"),
+        ]
 
     @pytest.mark.asyncio
     async def test_model_flag_preserves_existing_project_overrides(self):
