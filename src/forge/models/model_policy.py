@@ -281,6 +281,6 @@ class ModelPolicyResolver:
         keys = set(KNOWN_MODEL_POLICY_KEYS) | set(self.policy) | set(project_policy or {})
         keys.discard("*")
         return {
-            key: self.resolve(key, project_policy, project_default).model_dump()
+            key: self.resolve(key, project_policy, project_default).model_dump(mode="json")
             for key in sorted(keys)
         }

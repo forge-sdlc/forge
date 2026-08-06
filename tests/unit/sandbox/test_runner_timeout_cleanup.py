@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from forge.models.model_policy import ResolvedModelTarget
 from forge.sandbox.runner import ContainerConfig, ContainerRunner
 
 
@@ -115,3 +116,47 @@ async def test_run_writes_trace_context_to_task_file(tmp_path) -> None:
     assert result.success is True
     assert captured_task_data["trace_context"]["current_node"] == "implement_task"
     assert captured_task_data["trace_context"]["current_repo"] == "org/repo"
+
+
+@pytest.mark.asyncio
+async def test_run_serializes_model_target_capabilities_to_task_file(tmp_path) -> None:
+    runner = _runner_without_init()
+    runner.settings = MagicMock()
+    runner.settings.container_keep = False
+    runner._build_container_name = MagicMock(return_value="forge-ticket-abc123")
+    captured_task_data = {}
+
+    def build_command(_workspace_path, task_file, *_args):  # noqa: ANN001
+        captured_task_data.update(json.loads(task_file.read_text()))
+        return ["podman", "run", "fake"]
+
+    runner._build_podman_command = MagicMock(side_effect=build_command)
+    process = MagicMock()
+    process.communicate = AsyncMock(return_value=(b"ok", b""))
+    process.returncode = 0
+    model_target = ResolvedModelTarget(
+        connection="default",
+        model="gemini-2.5-pro",
+        required_capabilities={"tools"},
+        backend="google-genai",
+        policy_key="task_takeover_execution",
+        policy_source="default",
+    )
+
+    with patch(
+        "forge.sandbox.runner.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=process),
+    ):
+        result = await runner.run(
+            workspace_path=tmp_path,
+            task_summary="Do it",
+            task_description="Details",
+            config=ContainerConfig(),
+            ticket_key="AISOS-2385",
+            task_key="AISOS-2385",
+            repo_name="winiciusallan/api",
+            model_target=model_target,
+        )
+
+    assert result.success is True
+    assert captured_task_data["model_target"]["required_capabilities"] == ["tools"]

@@ -799,7 +799,7 @@ class ContainerRunner:
             "previous_task_keys": previous_task_keys or [],
             "trace_context": resolved_trace_context,
             "skill_name": skill_name or "",
-            "model_target": model_target.model_dump() if model_target else {},
+            "model_target": model_target.model_dump(mode="json") if model_target else {},
         }
         task_file.write_text(json.dumps(task_data, indent=2))
 

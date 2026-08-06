@@ -218,6 +218,7 @@ def test_runtime_names_have_canonical_policy_keys(runtime_key: str, expected: st
 def test_every_advertised_policy_key_resolves(resolver: ModelPolicyResolver) -> None:
     resolved = resolver.resolve_all()
     assert set(resolved) == set(KNOWN_MODEL_POLICY_KEYS)
+    assert isinstance(resolved["implement_task"]["required_capabilities"], list)
 
 
 def test_advertised_policy_keys_are_sorted() -> None:
