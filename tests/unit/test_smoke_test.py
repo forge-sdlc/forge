@@ -28,7 +28,11 @@ async def test_smoke_test_success(mock_settings: Settings) -> None:
     # 1. Mock Stage 1: Diagnostic Graph Execution
     mock_compiled_graph = MagicMock()
     mock_compiled_graph.ainvoke = AsyncMock(
-        return_value={"passed_nodes": ["start", "end"], "status": "success"}
+        side_effect=lambda state, **_kwargs: (
+            {"passed_nodes": ["start"], "status": "running"}
+            if state is not None
+            else {"passed_nodes": ["start", "end"], "status": "success"}
+        )
     )
 
     # 2. Mock Stage 2: Workspace Setup & Container Verification
@@ -55,6 +59,8 @@ async def test_smoke_test_success(mock_settings: Settings) -> None:
 
         assert exit_code == 0
         mock_clear.assert_called_once()
+        assert mock_compiled_graph.ainvoke.await_count == 2
+        assert mock_compiled_graph.ainvoke.await_args_list[1].args == (None,)
 
 
 @pytest.mark.asyncio
@@ -82,7 +88,11 @@ async def test_smoke_test_missing_podman_or_image(mock_settings: Settings) -> No
     # Mock Stage 1 success
     mock_compiled_graph = MagicMock()
     mock_compiled_graph.ainvoke = AsyncMock(
-        return_value={"passed_nodes": ["start", "end"], "status": "success"}
+        side_effect=lambda state, **_kwargs: (
+            {"passed_nodes": ["start"], "status": "running"}
+            if state is not None
+            else {"passed_nodes": ["start", "end"], "status": "success"}
+        )
     )
 
     # Case A: podman is missing
@@ -118,7 +128,11 @@ async def test_smoke_test_agent_failure(mock_settings: Settings) -> None:
     # Mock Stage 1 success
     mock_compiled_graph = MagicMock()
     mock_compiled_graph.ainvoke = AsyncMock(
-        return_value={"passed_nodes": ["start", "end"], "status": "success"}
+        side_effect=lambda state, **_kwargs: (
+            {"passed_nodes": ["start"], "status": "running"}
+            if state is not None
+            else {"passed_nodes": ["start", "end"], "status": "success"}
+        )
     )
 
     # Mock Stage 2 success
@@ -162,7 +176,11 @@ async def test_smoke_test_timeout_and_cleanup(mock_settings: Settings) -> None:
     # Mock Stage 1 success
     mock_compiled_graph = MagicMock()
     mock_compiled_graph.ainvoke = AsyncMock(
-        return_value={"passed_nodes": ["start", "end"], "status": "success"}
+        side_effect=lambda state, **_kwargs: (
+            {"passed_nodes": ["start"], "status": "running"}
+            if state is not None
+            else {"passed_nodes": ["start", "end"], "status": "success"}
+        )
     )
 
     # Mock Stage 2 success

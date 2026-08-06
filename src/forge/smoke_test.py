@@ -73,12 +73,26 @@ async def run_smoke_test(settings: Settings) -> int:
             workflow.add_edge("start_node", "end_node")
             workflow.add_edge("end_node", END)
 
-            compiled_graph = workflow.compile(checkpointer=checkpointer)
+            compiled_graph = workflow.compile(
+                checkpointer=checkpointer,
+                interrupt_after=["start_node"],
+            )
 
             config = {"configurable": {"thread_id": thread_id}}
-            result = await compiled_graph.ainvoke(
+            interrupted_result = await compiled_graph.ainvoke(
                 {"passed_nodes": [], "status": "initialized"}, config=config
             )
+            if interrupted_result.get("status") != "running" or interrupted_result.get(
+                "passed_nodes", []
+            ) != ["start"]:
+                raise RuntimeError(
+                    "Diagnostic graph did not interrupt after the start node: "
+                    f"status={interrupted_result.get('status')}, "
+                    f"passed_nodes={interrupted_result.get('passed_nodes', [])}"
+                )
+
+            # Resume without supplying state so the graph must restore it from Redis.
+            result = await compiled_graph.ainvoke(None, config=config)
 
             # Retrieve result and perform assertions
             final_status = result.get("status")

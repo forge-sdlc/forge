@@ -110,4 +110,3 @@ This command runs completely offline from Jira/production branches, performing a
 1. **Diagnostic Graph Execution**: Compiles a 2-node LangGraph and executes it with the configured Redis state checkpointer, verifying workflow resumption.
 2. **Workspace Setup & Container Verification**: Launches a rootless Podman environment inside a temporary folder with a mocked Git tree.
 3. **Container Agent Execution & Verification**: Spawns the real agent inside the container, instructs it to create a specific verification file, and asserts that the file is successfully populated.
-```
