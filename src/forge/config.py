@@ -423,6 +423,23 @@ class Settings(BaseSettings):
     ci_fix_max_retries: int = Field(
         default=5, description="Maximum retry attempts for autonomous CI fixes"
     )
+    retrospective_enabled: bool = Field(
+        default=False,
+        description="Publish a bounded evidence-based retrospective after terminal workflows",
+    )
+    retrospective_create_issues: bool = Field(
+        default=False,
+        description=(
+            "Allow retrospective recommendations to create Jira improvement tasks. "
+            "Disabled independently of retrospective reporting by default."
+        ),
+    )
+    retrospective_max_items: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum evidence items retained in a retrospective input",
+    )
     ci_ignored_checks: str = Field(
         default="tide",
         description=(

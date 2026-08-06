@@ -37,6 +37,7 @@ from forge.workflow.pr_state import (
     save_active_pull_request,
 )
 from forge.workflow.registry import create_default_router
+from forge.workflow.retrospective import run_retrospective, terminal_outcome
 from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.automated_review_triage import (
     is_bot_sender,
@@ -108,6 +109,18 @@ _YOLO_GATES = {
     "task_approval_gate",
     "rca_option_gate",
 }
+
+
+async def _run_terminal_retrospective(state: dict[str, Any]) -> str | None:
+    """Run optional analysis without allowing it to affect workflow completion."""
+    try:
+        report = await run_retrospective(state)
+        return report.input.idempotency_key if report else None
+    except Exception:
+        logger.exception(
+            "Retrospective failed for %s; terminal outcome is unchanged", state.get("ticket_key")
+        )
+        return None
 
 
 class OrchestratorWorker:
@@ -422,6 +435,12 @@ class OrchestratorWorker:
                         f"'{updated_values.get('current_node')}', skipping invocation"
                     )
                     await compiled_workflow.aupdate_state(config, updated_values)
+                    retrospective_key = await _run_terminal_retrospective(updated_values)
+                    if retrospective_key:
+                        updated_values["retrospective_keys"] = [
+                            *(updated_values.get("retrospective_keys") or []), retrospective_key
+                        ]
+                        await compiled_workflow.aupdate_state(config, updated_values)
                     return
 
                 # If _handle_resume_event returned the state object unchanged (identity
@@ -505,6 +524,15 @@ class OrchestratorWorker:
             if not is_paused:
                 ticket_type = result.get("ticket_type", "unknown")
                 record_workflow_completed(ticket_type=ticket_type, final_node=final_node)
+
+            retrospective_key = None
+            if terminal_outcome(result) is not None:
+                retrospective_key = await _run_terminal_retrospective(result)
+            if retrospective_key:
+                result["retrospective_keys"] = [
+                    *(result.get("retrospective_keys") or []), retrospective_key
+                ]
+                await compiled_workflow.aupdate_state(config, result)
 
         except Exception as e:
             import traceback
