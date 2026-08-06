@@ -103,6 +103,35 @@ def test_trusted_base_baseline_allows_known_finding(repository: Path) -> None:
     scan_repository(repository)
 
 
+def test_trusted_baseline_does_not_allow_secret_copied_to_another_file(
+    repository: Path,
+) -> None:
+    tracked = repository / "example.txt"
+    tracked.write_text(f"aws_access_key_id={AWS_KEY}\n")
+    baseline = {
+        "version": "1.5.0",
+        "results": {
+            "example.txt": [
+                {
+                    "type": "AWS Access Key",
+                    "filename": "example.txt",
+                    "hashed_secret": PotentialSecret.hash_secret(AWS_KEY),
+                }
+            ]
+        },
+    }
+    (repository / ".secrets.baseline").write_text(json.dumps(baseline))
+    _git(repository, "add", ".")
+    _git(repository, "commit", "-m", "trusted baseline")
+    _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
+    (repository / "copied.txt").write_text(f"aws_access_key_id={AWS_KEY}\n")
+
+    with pytest.raises(SecretDetectedError) as caught:
+        scan_repository(repository)
+
+    assert caught.value.findings[0].location == "copied.txt"
+
+
 def test_binary_file_does_not_crash_scanner(repository: Path) -> None:
     (repository / "image.bin").write_bytes(b"\x00\xff\x10\x80")
     scan_repository(repository)

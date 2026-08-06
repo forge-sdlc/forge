@@ -115,7 +115,7 @@ def _trusted_base(repo: Path) -> str:
     raise SecretScanError("Unable to resolve a trusted origin base for secret scanning")
 
 
-def _baseline_hashes(repo: Path, base: str) -> set[str]:
+def _baseline_findings(repo: Path, base: str) -> set[tuple[str, str]]:
     result = subprocess.run(
         ["git", "show", f"{base}:.secrets.baseline"],
         cwd=repo,
@@ -129,9 +129,10 @@ def _baseline_hashes(repo: Path, base: str) -> set[str]:
     try:
         baseline = json.loads(result.stdout)
         return {
-            item["hashed_secret"]
-            for entries in baseline.get("results", {}).values()
+            (filename, item["hashed_secret"])
+            for filename, entries in baseline.get("results", {}).items()
             for item in entries
+            if isinstance(filename, str)
             if isinstance(item.get("hashed_secret"), str)
         }
     except (TypeError, json.JSONDecodeError, KeyError) as exc:
@@ -158,11 +159,11 @@ def scan_repository(repo: Path, *, timeout_seconds: float = 30) -> None:
         if resolved.is_file():
             files.append((resolved, name))
 
-    allowed = _baseline_hashes(repo, base)
+    allowed = _baseline_findings(repo, base)
     findings = [
         finding
         for finding in _run_bounded(files, timeout_seconds)
-        if finding.secret_hash not in allowed
+        if (finding.public.location, finding.secret_hash) not in allowed
     ]
     if findings:
         raise SecretDetectedError([finding.public for finding in findings])
