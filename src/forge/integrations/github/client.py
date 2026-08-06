@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from forge.config import Settings, get_settings
+from forge.security.secrets import scan_text
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ class GitHubClient:
         Returns:
             API response with PR details.
         """
+        scan_text(f"{title}\n{body}", location="GitHub pull request")
         client = await self._get_client()
         payload = {
             "title": title,
@@ -184,6 +186,7 @@ class GitHubClient:
         Returns:
             API response with comment details.
         """
+        scan_text(body, location="GitHub review comment")
         client = await self._get_client()
         response = await client.post(
             f"/repos/{owner}/{repo}/pulls/{pr_number}/comments",
@@ -207,6 +210,7 @@ class GitHubClient:
         body: str,
     ) -> dict[str, Any]:
         """Reply in the review thread containing ``comment_id``."""
+        scan_text(body, location="GitHub review reply")
         client = await self._get_client()
         response = await client.post(
             f"/repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies",
@@ -427,6 +431,7 @@ class GitHubClient:
         Returns:
             API response with comment details.
         """
+        scan_text(body, location="GitHub issue comment")
         client = await self._get_client()
         response = await client.post(
             f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
@@ -622,6 +627,9 @@ class GitHubClient:
         Returns:
             API response with updated PR details.
         """
+        scan_text(
+            "\n".join(value for value in (title, body) if value), location="GitHub pull request"
+        )
         client = await self._get_client()
         data: dict[str, Any] = {}
         if title is not None:

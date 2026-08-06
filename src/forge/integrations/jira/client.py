@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from forge.config import Settings, get_settings
 from forge.integrations.jira.models import JiraComment, JiraIssue
 from forge.models.workflow import ForgeLabel
+from forge.security.secrets import scan_text
 from forge.skills.models import SkillEntry
 from forge.utils.redaction import redact_secrets
 
@@ -587,6 +588,7 @@ class JiraClient:
         Returns:
             The created JiraComment.
         """
+        scan_text(body, location=f"Jira comment on {issue_key}")
         client = await self._get_client()
         adf_content = self._text_to_adf(body)
 
@@ -617,8 +619,6 @@ class JiraClient:
         Returns:
             The created JiraComment.
         """
-        client = await self._get_client()
-
         # Build ADF content with mentions
         mention_nodes: list[dict[str, Any]] = []
         if mention_account_ids:
@@ -637,6 +637,10 @@ class JiraClient:
                     mention_nodes.append({"type": "text", "text": " "})
 
         safe_error_message = redact_secrets(error_message)
+        scan_text(
+            f"{node_name}\n{safe_error_message}", location=f"Jira error comment on {issue_key}"
+        )
+        client = await self._get_client()
 
         # Build the error message content
         error_paragraph: list[dict[str, Any]] = [
@@ -697,6 +701,10 @@ class JiraClient:
         mention_account_ids: list[str] | None = None,
     ) -> JiraComment:
         """Post an actionable model-policy configuration error in Jira."""
+        scan_text(
+            "\n".join((node_name, problem, available_connections, fix_command)),
+            location=f"Jira model policy comment on {issue_key}",
+        )
         client = await self._get_client()
         mention_nodes: list[dict[str, Any]] = []
         for account_id in mention_account_ids or []:

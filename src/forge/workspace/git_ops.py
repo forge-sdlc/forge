@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from forge.config import get_settings
+from forge.security.secrets import scan_repository
 from forge.utils.redaction import redact_secrets
 from forge.workspace.manager import Workspace
 
@@ -176,6 +177,7 @@ class GitOperations:
         Args:
             force: Force push (use with caution).
         """
+        scan_repository(self.repo_path)
         args = ["push", "-u", "fork", self.workspace.branch_name]
         if force:
             args.insert(1, "--force")
@@ -366,6 +368,7 @@ class GitOperations:
                     "Use force=True to override or resolve conflicts first."
                 )
 
+        scan_repository(self.repo_path)
         args = ["push", "-u", "origin", self.workspace.branch_name]
         if force:
             args.insert(1, "--force")
