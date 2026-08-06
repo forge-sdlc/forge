@@ -141,17 +141,26 @@ def _default_base_ref(repo_path: Path) -> str:
 
 def _changed_entries(repo_path: Path, base_ref: str, head_ref: str) -> list[tuple[str, str, str]]:
     output = _git(
-        repo_path, "diff", "--raw", "--no-renames", "--diff-filter=ACDMRTUXB", base_ref, head_ref
+        repo_path,
+        "diff",
+        "--raw",
+        "-z",
+        "--no-renames",
+        "--diff-filter=ACDMRTUXB",
+        base_ref,
+        head_ref,
     )
     entries: list[tuple[str, str, str]] = []
-    for line in output.splitlines():
-        header, separator, path = line.partition("\t")
-        if not separator:
+    fields = output.split("\0")
+    if fields[-1:] == [""]:
+        fields.pop()
+    if len(fields) % 2:
+        raise OutputValidationError("Malformed Git diff metadata; push blocked")
+    for header, path in zip(fields[::2], fields[1::2], strict=True):
+        metadata = header.split()
+        if len(metadata) != 5:
             raise OutputValidationError("Malformed Git diff metadata; push blocked")
-        fields = header.split()
-        if len(fields) != 5:
-            raise OutputValidationError("Malformed Git diff metadata; push blocked")
-        old_mode, new_mode, _old_sha, _new_sha, status = fields
+        old_mode, new_mode, _old_sha, _new_sha, status = metadata
         entries.append((status[0], old_mode if status[0] == "D" else new_mode, path))
     return entries
 

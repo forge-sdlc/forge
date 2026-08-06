@@ -23,12 +23,14 @@ def test_push_methods_validate_before_running_git(tmp_path: Path, method: str) -
     git = _operations(tmp_path)
     git._run_git = MagicMock()
 
-    with patch(
-        "forge.workspace.git_ops.validate_repository_output",
-        side_effect=OutputValidationError("blocked"),
-    ) as validate:
-        with pytest.raises(OutputValidationError, match="blocked"):
-            getattr(git, method)()
+    with (
+        pytest.raises(OutputValidationError, match="blocked"),
+        patch(
+            "forge.workspace.git_ops.validate_repository_output",
+            side_effect=OutputValidationError("blocked"),
+        ) as validate,
+    ):
+        getattr(git, method)()
 
     validate.assert_called_once()
     git._run_git.assert_not_called()

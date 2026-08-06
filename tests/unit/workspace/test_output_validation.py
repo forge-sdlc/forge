@@ -53,6 +53,14 @@ def test_accepts_bounded_regular_output(repository: Path) -> None:
     assert context.changed_paths == ("src/example.py",)
 
 
+def test_handles_tab_in_changed_filename_without_git_quoting(repository: Path) -> None:
+    _commit(repository, "src/tab\tname.py", "safe\n")
+
+    context = validate_repository_output(repository, OutputValidationPolicy())
+
+    assert context.changed_paths == ("src/tab\tname.py",)
+
+
 @pytest.mark.parametrize("path", [".github/workflows/release.yml", "CODEOWNERS"])
 def test_rejects_protected_path(repository: Path, path: str) -> None:
     _commit(repository, path, "unsafe\n")
@@ -120,7 +128,7 @@ def test_wraps_unexpected_validator_failure_as_fail_closed(repository: Path) -> 
     class BrokenValidator:
         name = "broken"
 
-        def validate(self, context) -> None:
+        def validate(self, _context) -> None:
             raise RuntimeError("scanner unavailable")
 
     with pytest.raises(OutputValidationError, match="scanner unavailable"):
