@@ -23,14 +23,26 @@ def capture_handoff(
     the workspace exactly and prevents deleted content from being resurrected
     after a later workspace recreation.
     """
-    handoffs = dict(state.get("handoffs", {}))
+    saved_handoffs = state.get("handoffs", {})
+    if not isinstance(saved_handoffs, dict):
+        logger.warning("Ignoring malformed handoff state while capturing %s", repo)
+        saved_handoffs = {}
+    handoffs = dict(saved_handoffs)
     handoff_path = Path(workspace_path) / _HANDOFF_PATH
 
-    if not handoff_path.is_file():
+    try:
+        size = handoff_path.stat().st_size
+    except FileNotFoundError:
         handoffs.pop(repo, None)
         return {**state, "handoffs": handoffs}
+    except OSError as exc:
+        logger.warning("Failed to inspect handoff for %s: %s", repo, exc)
+        return state
 
-    size = handoff_path.stat().st_size
+    if handoff_path.is_symlink() or not handoff_path.is_file():
+        logger.warning("Ignoring non-regular handoff for %s", repo)
+        handoffs.pop(repo, None)
+        return {**state, "handoffs": handoffs}
     if size > MAX_HANDOFF_BYTES:
         logger.warning(
             "Ignoring oversized handoff for %s (%d bytes; limit %d)",
@@ -61,19 +73,32 @@ def materialize_handoff(
     state: dict[str, Any],
 ) -> None:
     """Materialize the saved repository handoff at its fixed workspace path."""
-    handoff = state.get("handoffs", {}).get(repo)
-    if not handoff:
+    handoffs = state.get("handoffs", {})
+    if not isinstance(handoffs, dict):
+        logger.warning("Ignoring malformed handoff state for %s", repo)
+        return
+    handoff = handoffs.get(repo)
+    if not isinstance(handoff, dict):
         return
 
     content = handoff.get("content")
-    if not isinstance(content, str) or len(content.encode()) > MAX_HANDOFF_BYTES:
+    try:
+        content_size = len(content.encode()) if isinstance(content, str) else -1
+    except UnicodeError:
+        content_size = -1
+    if content_size < 0 or content_size > MAX_HANDOFF_BYTES:
         logger.warning("Ignoring invalid saved handoff for %s", repo)
         return
 
     handoff_path = Path(workspace_path) / _HANDOFF_PATH
-    handoff_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = handoff_path.with_suffix(".md.tmp")
     try:
+        forge_dir = handoff_path.parent
+        if forge_dir.is_symlink():
+            logger.warning("Refusing to materialize handoff through symlink for %s", repo)
+            return
+        forge_dir.mkdir(parents=True, exist_ok=True)
+        temporary_path.unlink(missing_ok=True)
         temporary_path.write_text(content)
         temporary_path.replace(handoff_path)
     except (OSError, UnicodeError) as exc:

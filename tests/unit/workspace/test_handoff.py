@@ -80,3 +80,58 @@ def test_materialize_ignores_other_repository(tmp_path):
     materialize_handoff(tmp_path, "org/repo", state)
 
     assert not (tmp_path / ".forge").exists()
+
+
+def test_first_iteration_without_saved_handoffs_is_a_noop(tmp_path):
+    materialize_handoff(tmp_path, "org/repo", {})
+
+    assert not (tmp_path / ".forge").exists()
+
+
+def test_malformed_checkpoint_state_is_ignored(tmp_path):
+    materialize_handoff(tmp_path, "org/repo", {"handoffs": ["not", "a", "mapping"]})
+
+    assert not (tmp_path / ".forge").exists()
+
+
+def test_malformed_checkpoint_entry_is_ignored(tmp_path):
+    materialize_handoff(tmp_path, "org/repo", {"handoffs": {"org/repo": "bad"}})
+
+    assert not (tmp_path / ".forge").exists()
+
+
+def test_capture_recovers_from_malformed_checkpoint_state(tmp_path):
+    (tmp_path / ".forge").mkdir()
+    (tmp_path / ".forge" / "handoff.md").write_text("usable")
+
+    result = capture_handoff(
+        tmp_path, "org/repo", "TEST-2", {"handoffs": ["not", "a", "mapping"]}
+    )
+
+    assert result["handoffs"]["org/repo"]["content"] == "usable"
+
+
+def test_capture_rejects_symlinked_handoff(tmp_path):
+    outside = tmp_path / "outside.md"
+    outside.write_text("do not capture")
+    (tmp_path / ".forge").mkdir()
+    (tmp_path / ".forge" / "handoff.md").symlink_to(outside)
+
+    result = capture_handoff(tmp_path, "org/repo", "TEST-2", {"handoffs": {}})
+
+    assert result["handoffs"] == {}
+
+
+def test_materialize_refuses_symlinked_forge_directory(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (tmp_path / ".forge").symlink_to(outside, target_is_directory=True)
+    state = {
+        "handoffs": {
+            "org/repo": {"content": "unsafe", "task_key": "TEST-2", "captured_at": "now"}
+        }
+    }
+
+    materialize_handoff(tmp_path, "org/repo", state)
+
+    assert not (outside / "handoff.md").exists()
