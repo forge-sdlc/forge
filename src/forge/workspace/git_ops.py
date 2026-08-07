@@ -249,11 +249,15 @@ class GitOperations:
             return False
 
         self._run_git(
+            "-c",
+            f"user.name={self.settings.git_user_name}",
+            "-c",
+            f"user.email={self.settings.git_user_email}",
             "commit",
             "-m",
             message,
             "--author",
-            f"{author_name} <forge@example.com>",
+            f"{author_name} <{self.settings.git_user_email}>",
         )
         logger.info(f"Committed: {message[:50]}...")
         return True
