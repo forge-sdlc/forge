@@ -694,6 +694,7 @@ async def run_reviewer_agent(
     workspace: Path,
     review_instructions: str,
     task_key: str,
+    task_description: str = "",
 ) -> str:
     """Run reviewer agent with review.md instructions.
 
@@ -701,6 +702,7 @@ async def run_reviewer_agent(
         workspace: Path to the workspace directory.
         review_instructions: Instructions from review.md body.
         task_key: Jira task key for tracing.
+        task_description: Implementation context, including repository scope.
 
     Returns:
         The reviewer agent's output text.
@@ -724,6 +726,12 @@ async def run_reviewer_agent(
 
 ## Review Instructions
 {review_instructions}
+
+## Task Context and Repository Scope
+{task_description}
+
+Evaluate completeness only within the repository scope stated above. Requirements assigned
+to other repositories are not missing from this implementation; they are handled separately.
 
 ## Verdict Format
 After reviewing the code, you MUST output your verdict as either:
@@ -861,6 +869,7 @@ async def run_review_loop(
                 workspace=workspace,
                 review_instructions=instructions,
                 task_key=task_key,
+                task_description=task_description,
             )
         except Exception as e:
             logger.error(f"Reviewer agent failed: {e}")

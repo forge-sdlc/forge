@@ -102,6 +102,13 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
 
         task_prompt = (
             f"You are implementing changes for task takeover [{current_task}].\n\n"
+            f"## Repository Execution Scope\n"
+            f"Current repository: `{current_repo}`\n"
+            f"Implement and validate only the approved-plan steps that belong to "
+            f"`{current_repo}`. Do not search for, create, or modify files assigned to "
+            f"other repositories in the plan. Those repositories are handled in separate "
+            f"workspaces. Completion for this run is evaluated only against the current "
+            f"repository's scope.\n\n"
             f"{feedback_section}"
             f"## Approved Implementation Plan\n{plan_content}\n\n"
             f"## Task Description\n{task_description}\n\n"

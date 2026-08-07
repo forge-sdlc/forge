@@ -97,6 +97,14 @@ async def run_qualitative_review(state: WorkflowState) -> WorkflowState:
             git_diff=git_diff,
             workspace_path=workspace_path,
         )
+        prompt_content = (
+            "## Repository Review Scope\n"
+            f"Current repository: `{current_repo}`\n"
+            "Review only requirements and changes belonging to this repository. Do not "
+            "reject this repository's work because plan steps assigned to other repositories "
+            "are absent; those are implemented and reviewed separately.\n\n"
+            f"{prompt_content}"
+        )
 
         runner = ContainerRunner(settings)
         result, response = await run_review_container(

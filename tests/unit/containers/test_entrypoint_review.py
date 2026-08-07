@@ -101,9 +101,13 @@ class TestRunReviewerAgent:
                 workspace=tmp_path,
                 review_instructions="Check for bugs",
                 task_key="TEST-123",
+                task_description="Current repository: owner/repo",
             )
 
         assert result == "APPROVED"
+        system_prompt = mock_create.call_args.kwargs["system_prompt"]
+        assert "Current repository: owner/repo" in system_prompt
+        assert "handled separately" in system_prompt
 
     @pytest.mark.asyncio
     async def test_system_prompt_contains_instructions(self, tmp_path: Path):
@@ -305,6 +309,10 @@ class TestRunReviewLoop:
             assert result is True
             assert mock_reviewer.call_count == 2
             mock_worker.assert_called_once()
+            assert all(
+                call.kwargs["task_description"] == "Description"
+                for call in mock_reviewer.call_args_list
+            )
 
             # Check feedback was passed to worker
             worker_call = mock_worker.call_args
