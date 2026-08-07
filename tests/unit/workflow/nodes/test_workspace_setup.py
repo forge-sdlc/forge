@@ -1,5 +1,7 @@
 """Integration tests for workspace setup node - Jira status updates."""
 
+import errno
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -511,3 +513,94 @@ class TestPrepareWorkspaceRecovery:
             prepare_workspace(state)
 
         assert local_commit.read_text() == "not pushed yet"
+
+    def test_backup_cleanup_retries_directory_not_empty(self, tmp_path):
+        """A transient ENOTEMPTY race during backup deletion is retried."""
+        workspace_path = tmp_path / "forge-TEST-125-org-repo"
+        workspace_path.mkdir()
+        (workspace_path / "stale.txt").write_text("dirty")
+        state = create_initial_feature_state(
+            ticket_key="TEST-125",
+            current_repo="org/repo",
+            workspace_path=str(workspace_path),
+            fork_owner="forge-bot",
+            fork_repo="repo",
+            context={"branch_name": "forge/test-125"},
+        )
+        old_git = MagicMock()
+        old_git.pull_rebase.side_effect = RuntimeError("sync failed")
+        new_git = MagicMock()
+        settings = MagicMock(workspace_base_dir=str(tmp_path))
+        real_rmtree = shutil.rmtree
+        cleanup_calls = 0
+
+        def transient_rmtree(path, *args, **kwargs):
+            nonlocal cleanup_calls
+            if Path(path).name.startswith(f".{workspace_path.name}-old-"):
+                cleanup_calls += 1
+                if cleanup_calls == 1:
+                    raise OSError(errno.ENOTEMPTY, "Directory not empty", path)
+            return real_rmtree(path, *args, **kwargs)
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.get_settings", return_value=settings),
+            patch(
+                "forge.workflow.nodes.workspace_setup.GitOperations",
+                side_effect=[old_git, new_git],
+            ),
+            patch(
+                "forge.workflow.nodes.workspace_setup.shutil.rmtree",
+                side_effect=transient_rmtree,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.time.sleep") as sleep,
+        ):
+            result_path, result_git = prepare_workspace(state)
+
+        assert result_path == str(workspace_path)
+        assert result_git is new_git
+        assert cleanup_calls == 2
+        sleep.assert_called_once()
+
+    def test_backup_cleanup_failure_does_not_fail_recovery(self, tmp_path, caplog):
+        """Post-swap cleanup errors do not mask successful workspace recovery."""
+        workspace_path = tmp_path / "forge-TEST-126-org-repo"
+        workspace_path.mkdir()
+        (workspace_path / "stale.txt").write_text("dirty")
+        state = create_initial_feature_state(
+            ticket_key="TEST-126",
+            current_repo="org/repo",
+            workspace_path=str(workspace_path),
+            fork_owner="forge-bot",
+            fork_repo="repo",
+            context={"branch_name": "forge/test-126"},
+        )
+        old_git = MagicMock()
+        old_git.pull_rebase.side_effect = RuntimeError("original sync failure")
+        new_git = MagicMock()
+        settings = MagicMock(workspace_base_dir=str(tmp_path))
+        real_rmtree = shutil.rmtree
+
+        def persistent_rmtree(path, *args, **kwargs):
+            if Path(path).name.startswith(f".{workspace_path.name}-old-"):
+                raise OSError(errno.ENOTEMPTY, "Directory not empty", path)
+            return real_rmtree(path, *args, **kwargs)
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.get_settings", return_value=settings),
+            patch(
+                "forge.workflow.nodes.workspace_setup.GitOperations",
+                side_effect=[old_git, new_git],
+            ),
+            patch(
+                "forge.workflow.nodes.workspace_setup.shutil.rmtree",
+                side_effect=persistent_rmtree,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.time.sleep"),
+            caplog.at_level("WARNING"),
+        ):
+            result_path, result_git = prepare_workspace(state)
+
+        assert result_path == str(workspace_path)
+        assert result_git is new_git
+        assert new_git.workspace_recreated is True
+        assert "backup cleanup failed" in caplog.text

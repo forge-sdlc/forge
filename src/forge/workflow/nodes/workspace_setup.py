@@ -1,9 +1,11 @@
 """Workspace setup node for LangGraph workflow."""
 
+import errno
 import json
 import logging
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +28,8 @@ WorkflowState = dict[str, Any]
 logger = logging.getLogger(__name__)
 
 _WORKSPACE_IDENTITY_FILE = ".forge/workspace.json"
+_BACKUP_CLEANUP_ATTEMPTS = 3
+_BACKUP_CLEANUP_RETRY_DELAY_SECONDS = 0.05
 
 
 def write_workspace_identity(path: Path, *, ticket_key: str, repo_name: str) -> None:
@@ -35,6 +39,20 @@ def write_workspace_identity(path: Path, *, ticket_key: str, repo_name: str) -> 
     identity_path.write_text(
         json.dumps({"ticket_key": ticket_key, "repo_name": repo_name}, sort_keys=True) + "\n"
     )
+
+
+def _remove_workspace_backup(path: Path) -> None:
+    """Remove a replaced workspace, tolerating short-lived filesystem races."""
+    for attempt in range(1, _BACKUP_CLEANUP_ATTEMPTS + 1):
+        try:
+            shutil.rmtree(path)
+            return
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            if exc.errno != errno.ENOTEMPTY or attempt == _BACKUP_CLEANUP_ATTEMPTS:
+                raise
+            time.sleep(_BACKUP_CLEANUP_RETRY_DELAY_SECONDS)
 
 
 def _recreate_workspace_from_fork(
@@ -101,7 +119,18 @@ def _recreate_workspace_from_fork(
         raise
 
     if backup_path and backup_path.exists():
-        shutil.rmtree(backup_path)
+        try:
+            _remove_workspace_backup(backup_path)
+        except OSError:
+            # The replacement is already installed at target_path. Cleanup is
+            # best-effort here: surfacing this error would incorrectly report
+            # workspace recovery as failed and hide the error that triggered it.
+            logger.warning(
+                "Workspace recreated for %s, but backup cleanup failed: %s",
+                ticket_key,
+                backup_path,
+                exc_info=True,
+            )
 
     git.workspace.path = target_path
     git.workspace_recreated = True
