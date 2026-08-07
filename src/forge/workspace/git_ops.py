@@ -242,9 +242,11 @@ class GitOperations:
         Returns:
             True if commit was created, False if nothing to commit.
         """
-        # Check if there are changes to commit
-        result = self._run_git("status", "--porcelain", check=False)
-        if not result.stdout.strip():
+        # Only staged changes can be committed. The workspace may contain
+        # untracked Forge metadata (for example .forge/handoff.md), which is
+        # deliberately excluded by stage_all().
+        result = self._run_git("diff", "--cached", "--quiet", check=False)
+        if result.returncode == 0:
             logger.info("Nothing to commit")
             return False
 
@@ -411,12 +413,21 @@ class GitOperations:
         return stats
 
     def has_uncommitted_changes(self) -> bool:
-        """Check if there are uncommitted changes.
+        """Check for user-facing uncommitted changes.
 
         Returns:
-            True if there are uncommitted changes.
+            True if there are uncommitted changes outside Forge's internal
+            ``.forge`` directory.
         """
-        result = self._run_git("status", "--porcelain", check=False)
+        result = self._run_git(
+            "status",
+            "--porcelain",
+            "--",
+            ".",
+            ":!.forge",
+            ":!.forge/**",
+            check=False,
+        )
         return bool(result.stdout.strip())
 
     def reset_hard(self) -> None:
