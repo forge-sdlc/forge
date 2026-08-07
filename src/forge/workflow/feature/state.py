@@ -121,6 +121,8 @@ def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState
         "ci_skipped_checks": [],
         "ci_fix_attempt": 0,
         "ci_fix_max_attempts": settings.ci_fix_max_retries,
+        "ci_fix_hints": [],
+        "ci_hint_bonus_attempts": 0,
         "ai_review_status": None,
         "ai_review_results": [],
         "human_review_status": None,
