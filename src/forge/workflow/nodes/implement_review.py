@@ -324,24 +324,24 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             )
             state = merge_review_exhaustion(state, result, ticket_key, "implement_review_fix")
 
-            # Commit any uncommitted changes the container left
+            # Fold leftover work into HEAD so review fixes do not create a
+            # second commit that can fail per-commit message CI gates.
             if git.has_uncommitted_changes():
-                git.stage_all()
-                git.commit(f"[{ticket_key}] review: address PR feedback")
+                git.amend_commit()
 
-        # ── Push only if there are new commits ───────────────────────────────
+        # ── Push only if HEAD moved relative to the remote ────────────────────
         if fork_owner and fork_repo:
             git.add_fork_remote(fork_owner, fork_repo)
             remote_ref = f"fork/{branch_name}"
         else:
             remote_ref = f"origin/{branch_name}"
 
-        unpushed = git._run_git(
-            "log", f"{remote_ref}..HEAD", "--oneline", check=False
-        ).stdout.strip()
+        local_sha = git._run_git("rev-parse", "HEAD", check=False).stdout.strip()
+        remote_sha = git._run_git("rev-parse", remote_ref, check=False).stdout.strip()
+        head_diverged = bool(local_sha) and local_sha != remote_sha
 
-        if unpushed:
-            # Run post-change review before pushing (only when there are commits)
+        if head_diverged:
+            # Run post-change review before pushing (only when HEAD changed)
             _, review_result = await run_post_change_review(
                 workspace_path=workspace_path,
                 ticket_key=ticket_key,
@@ -354,11 +354,12 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             if review_result is not None:
                 state = merge_review_exhaustion(state, review_result, ticket_key, "code_review")
 
+            # Amend rewrites history; force-push is required to update the PR.
             if fork_owner and fork_repo:
-                git.push_to_fork(force=False)
+                git.push_to_fork(force=True)
             else:
-                git.push(force=False)
-            logger.info(f"Review implementation pushed for {ticket_key}")
+                git.push(force=True)
+            logger.info("Review implementation force-pushed for %s", ticket_key)
 
             await sync_pr_description(
                 state,
@@ -391,7 +392,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
         if contested_comments:
             next_node = "review_response_gate"
         else:
-            next_node = "wait_for_ci_gate" if unpushed else "human_review_gate"
+            next_node = "wait_for_ci_gate" if head_diverged else "human_review_gate"
 
         return update_state_timestamp(
             {

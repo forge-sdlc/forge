@@ -262,6 +262,55 @@ class GitOperations:
         logger.info(f"Committed: {message[:50]}...")
         return True
 
+    def amend_commit(
+        self,
+        message: str | None = None,
+        author_name: str = "Forge",
+    ) -> bool:
+        """Amend HEAD with staged/unstaged user-facing changes.
+
+        Preserves the existing commit message when ``message`` is None.
+        Returns False when there is nothing to amend into HEAD.
+
+        Args:
+            message: Optional replacement commit message. When None, keep HEAD's
+                message via ``--no-edit``.
+            author_name: Author name recorded on the amended commit.
+
+        Returns:
+            True if HEAD was amended, False if there was nothing to commit.
+        """
+        result = self._run_git("status", "--porcelain", check=False)
+        if not result.stdout.strip() and message is None:
+            logger.info("Nothing to amend")
+            return False
+
+        self.stage_all()
+        # Re-check after staging exclusions (.forge) — may be empty.
+        staged = self._run_git("diff", "--cached", "--name-only", check=False)
+        if not staged.stdout.strip() and message is None:
+            logger.info("Nothing to amend after staging")
+            return False
+
+        args = [
+            "-c",
+            f"user.name={self.settings.git_user_name}",
+            "-c",
+            f"user.email={self.settings.git_user_email}",
+            "commit",
+            "--amend",
+            "--author",
+            f"{author_name} <{self.settings.git_user_email}>",
+        ]
+        if message is None:
+            args.append("--no-edit")
+        else:
+            args.extend(["-m", message])
+
+        self._run_git(*args)
+        logger.info("Amended HEAD commit%s", "" if message is None else f": {message[:50]}...")
+        return True
+
     def remote_branch_exists(self, branch_name: str, remote: str = "origin") -> bool:
         """Check whether a branch exists on the given remote.
 
