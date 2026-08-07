@@ -423,6 +423,15 @@ class Settings(BaseSettings):
     ci_fix_max_retries: int = Field(
         default=5, description="Maximum retry attempts for autonomous CI fixes"
     )
+    instruction_audit_mode: Literal["off", "audit"] = Field(
+        default="off",
+        description=(
+            "Optional instruction-context audit scanner mode. "
+            "'off' disables scanning; 'audit' emits telemetry for obvious "
+            "prompt-injection patterns without altering workflow routing. "
+            "A clean scan is not a security guarantee."
+        ),
+    )
     ci_ignored_checks: str = Field(
         default="tide",
         description=(

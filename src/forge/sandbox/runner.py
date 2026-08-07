@@ -36,6 +36,7 @@ from forge.observability import (
     ReviewCycleRecorder,
 )
 from forge.prompts import load_prompt
+from forge.security.instruction_audit import scan_instruction_context
 from forge.skills.resolver import resolve_skill_paths
 
 logger = logging.getLogger(__name__)
@@ -283,6 +284,63 @@ class ContainerRunner:
             logger.info(f"Mounting skill dir: {host_path} → {container_path}")
 
         return mounts, ",".join(container_paths)
+
+    def _audit_instruction_context(
+        self,
+        *,
+        workspace_path: Path,
+        ticket_key: str | None,
+        repo_name: str | None,
+        step_name: str | None,
+        skill_name: str | None,
+        task_description: str,
+    ) -> None:
+        """Scan instruction-bearing context selected for this container run."""
+        mode = getattr(self.settings, "instruction_audit_mode", "off")
+        if mode == "off":
+            return
+
+        skills_dir = Path.cwd() / self.settings.skills_dir.rstrip("/")
+        skill_paths = [
+            Path(p.rstrip("/")) for p in resolve_skill_paths(ticket_key or "", skills_dir)
+        ]
+        files: list[Path] = []
+        for skill_path in skill_paths:
+            if not skill_path.is_absolute():
+                skill_path = Path.cwd() / skill_path
+            if skill_name:
+                candidate = skill_path / skill_name / "SKILL.md"
+                if candidate.is_file():
+                    files.append(candidate)
+            skill_md = skill_path / "SKILL.md"
+            if skill_md.is_file():
+                files.append(skill_md)
+
+        for name in ("AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"):
+            candidate = workspace_path / name
+            if candidate.is_file():
+                files.append(candidate)
+
+        # Deduplicate while preserving order.
+        seen: set[Path] = set()
+        unique_files: list[Path] = []
+        for path in files:
+            resolved = path.resolve()
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            unique_files.append(resolved)
+
+        report = scan_instruction_context(
+            paths=unique_files,
+            inline_texts=[("task_description", task_description or "")],
+            mode=mode,
+            ticket_key=ticket_key,
+            repository=repo_name,
+            workflow_stage=step_name,
+        )
+        if report.findings or report.error:
+            logger.info("Instruction audit report: %s", report.to_dict())
 
     def _build_container_name(
         self,
@@ -802,6 +860,17 @@ class ContainerRunner:
             "model_target": model_target.model_dump(mode="json") if model_target else {},
         }
         task_file.write_text(json.dumps(task_data, indent=2))
+
+        # Optional driver-independent instruction-context audit (see #76).
+        # Audit mode emits telemetry only and never changes routing.
+        self._audit_instruction_context(
+            workspace_path=workspace_path,
+            ticket_key=ticket_key,
+            repo_name=repo_name,
+            step_name=step_name,
+            skill_name=skill_name,
+            task_description=task_description,
+        )
 
         # List to collect review cycles detected during execution
         collected_cycles: list[ReviewCycleData] = []
