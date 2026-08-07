@@ -695,6 +695,8 @@ async def run_reviewer_agent(
     review_instructions: str,
     task_key: str,
     task_description: str = "",
+    trace_context: dict[str, Any] | None = None,
+    review_cycle: int | None = None,
 ) -> str:
     """Run reviewer agent with review.md instructions.
 
@@ -703,6 +705,8 @@ async def run_reviewer_agent(
         review_instructions: Instructions from review.md body.
         task_key: Jira task key for tracing.
         task_description: Implementation context, including repository scope.
+        trace_context: Workflow fields forwarded to Langfuse only.
+        review_cycle: Current review cycle, used as trace metadata.
 
     Returns:
         The reviewer agent's output text.
@@ -751,6 +755,15 @@ Be specific in your feedback if rejecting."""
         system_prompt=system_prompt,
     )
 
+    trace_state = {
+        **(trace_context or {}),
+        "system_prompt_length": len(system_prompt),
+        "llm_model": model_name,
+    }
+    config, langfuse_enabled = _setup_langfuse_tracing(task_key, trace_state)
+    if langfuse_enabled:
+        config["run_name"] = f"review:{task_key}"
+
     # Run the reviewer
     initial_message = {
         "messages": [
@@ -761,7 +774,32 @@ Be specific in your feedback if rejecting."""
         ]
     }
 
-    result = await agent.ainvoke(initial_message)
+    if langfuse_enabled:
+        from langfuse import propagate_attributes
+
+        trace_tags, trace_metadata = resolve_container_trace_fields(trace_state)
+        tags = ["forge-container", "task-review", *trace_tags]
+        metadata = {
+            "review_cycle": review_cycle,
+            "review_instructions_length": len(review_instructions),
+            **trace_metadata,
+        }
+        with propagate_attributes(
+            session_id=task_key,
+            tags=tags,
+            metadata=metadata,
+        ):
+            result = await agent.ainvoke(initial_message, config=config)
+    else:
+        result = await agent.ainvoke(initial_message, config=config)
+
+    if langfuse_enabled:
+        try:
+            from langfuse import get_client
+
+            get_client().flush()
+        except Exception:
+            pass
 
     # Extract output text from result
     messages = result.get("messages", [])
@@ -870,6 +908,8 @@ async def run_review_loop(
                 review_instructions=instructions,
                 task_key=task_key,
                 task_description=task_description,
+                trace_context=trace_context,
+                review_cycle=cycle,
             )
         except Exception as e:
             logger.error(f"Reviewer agent failed: {e}")

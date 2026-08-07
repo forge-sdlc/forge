@@ -157,6 +157,61 @@ class TestRunReviewerAgent:
 
         mock_create_model.assert_called_once_with(max_tokens_default=8192)
 
+    @pytest.mark.asyncio
+    async def test_creates_distinct_langfuse_review_trace(self, tmp_path: Path):
+        """Reviewer runs are traced separately with review-specific context."""
+        from contextlib import nullcontext
+
+        from entrypoint import run_reviewer_agent
+
+        mock_agent = MagicMock()
+        mock_agent.ainvoke = AsyncMock(return_value={"messages": [MagicMock(content="APPROVED")]})
+        mock_propagate = MagicMock(return_value=nullcontext())
+        mock_client = MagicMock()
+        mock_langfuse = MagicMock(
+            propagate_attributes=mock_propagate,
+            get_client=MagicMock(return_value=mock_client),
+        )
+        callback = MagicMock()
+
+        with (
+            patch("entrypoint._create_llm_model", return_value=("test-model", MagicMock())),
+            patch("deepagents.create_deep_agent", return_value=mock_agent),
+            patch("deepagents.backends.LocalShellBackend"),
+            patch(
+                "entrypoint._setup_langfuse_tracing", return_value=({"callbacks": [callback]}, True)
+            ),
+            patch(
+                "entrypoint.resolve_container_trace_fields",
+                return_value=(["ticket_key"], {"ticket_key": "TEST-123"}),
+            ),
+            patch.dict("sys.modules", {"langfuse": mock_langfuse}),
+        ):
+            result = await run_reviewer_agent(
+                workspace=tmp_path,
+                review_instructions="Check for bugs",
+                task_key="TEST-123",
+                trace_context={"ticket_key": "TEST-123"},
+                review_cycle=2,
+            )
+
+        assert result == "APPROVED"
+        mock_agent.ainvoke.assert_awaited_once()
+        assert mock_agent.ainvoke.await_args.kwargs["config"] == {
+            "callbacks": [callback],
+            "run_name": "review:TEST-123",
+        }
+        mock_propagate.assert_called_once_with(
+            session_id="TEST-123",
+            tags=["forge-container", "task-review", "ticket_key"],
+            metadata={
+                "review_cycle": 2,
+                "review_instructions_length": len("Check for bugs"),
+                "ticket_key": "TEST-123",
+            },
+        )
+        mock_client.flush.assert_called_once_with()
+
 
 # ---------------------------------------------------------------------------
 # Test run_worker_with_feedback
