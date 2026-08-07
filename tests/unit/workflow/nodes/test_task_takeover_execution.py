@@ -115,6 +115,7 @@ class TestTaskTakeoverExecutionNode:
         assert kwargs["workspace_path"] == Path("/tmp/ws")
         assert "Approved Implementation Plan" in kwargs["task_description"]
         assert "inject at least one new or modified test file" in kwargs["task_description"]
+        assert "config" not in kwargs
 
         # Verify GitOperations were performed
         mock_git.has_uncommitted_changes.assert_called_once()

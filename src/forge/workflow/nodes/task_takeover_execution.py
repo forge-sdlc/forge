@@ -6,7 +6,7 @@ from typing import cast
 
 from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
-from forge.sandbox.runner import ContainerConfig, ContainerRunner
+from forge.sandbox.runner import ContainerRunner
 from forge.workflow.nodes.git_persistence import (
     PushPersistenceError,
     build_persistence_error_state,
@@ -114,16 +114,14 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
             f"6. Make sure all compilation and local tests pass successfully before finishing.\n"
         )
 
-        # Initialize ContainerRunner matching sandbox configuration
+        # Let ContainerRunner derive container limits from application settings.
         runner = ContainerRunner(settings)
-        config = ContainerConfig()
 
         # Run task execution inside the container
         result = await runner.run(
             workspace_path=Path(workspace_path),
             task_summary=f"Execute task takeover changes for {current_task}",
             task_description=task_prompt,
-            config=config,
             ticket_key=ticket_key,
             task_key=current_task,
             repo_name=current_repo,

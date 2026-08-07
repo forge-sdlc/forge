@@ -6,7 +6,7 @@ from typing import cast
 
 from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
-from forge.sandbox.runner import ContainerConfig, ContainerRunner
+from forge.sandbox.runner import ContainerRunner
 from forge.workflow.nodes.review_utils import (
     collect_git_diff,
     next_review_attempt,
@@ -104,7 +104,6 @@ async def run_qualitative_review(state: WorkflowState) -> WorkflowState:
             workspace_path=Path(workspace_path),
             task_summary=f"Review task takeover changes for {current_task}",
             task_description=prompt_content,
-            config=ContainerConfig(),
             ticket_key=ticket_key,
             task_key=f"{current_task}-review",
             repo_name=current_repo,

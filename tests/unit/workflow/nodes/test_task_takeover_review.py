@@ -141,6 +141,7 @@ class TestRunQualitativeReview:
         assert kwargs["task_key"] == "TASK-101-review"
         assert kwargs["repo_name"] == "owner/repo"
         assert "previous_task_keys" not in kwargs
+        assert "config" not in kwargs
         assert "task-takeover-review skill" in kwargs["task_description"]
 
     @pytest.mark.asyncio
