@@ -26,6 +26,17 @@ Skip anything listed under **Skipped Failures** — do not attempt to fix them.
 1. Commit with a clear message referencing what was fixed
 2. Do NOT push — the orchestrator handles that
 
+### Special case: commit-message failures
+
+If the fix plan category is `commit-message` (or the only failures are commit
+title/trailer validation such as `check-commits` / commitlint):
+
+1. Do **not** create a new commit for message-only fixes
+2. Amend HEAD with the corrected message from the plan:
+   `git commit --amend -m "<corrected message>"`
+3. Include required trailers (for example `Signed-off-by`) in that amended message
+4. Do NOT push — the orchestrator force-pushes after amend
+
 ## Guidelines
 
 - Follow the plan — do not invent additional fixes to the logic

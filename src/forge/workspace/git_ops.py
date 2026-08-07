@@ -262,6 +262,68 @@ class GitOperations:
         logger.info(f"Committed: {message[:50]}...")
         return True
 
+    def amend_commit(
+        self,
+        message: str | None = None,
+        author_name: str = "Forge",
+    ) -> bool:
+        """Amend HEAD, optionally rewriting the commit message.
+
+        When ``message`` is provided, HEAD is rewritten even if the tree is
+        unchanged (commit-message-only CI fixes). When ``message`` is None,
+        returns False if there are no user-facing changes to fold in.
+
+        Returns:
+            True if HEAD was amended, False otherwise.
+        """
+        result = self._run_git("status", "--porcelain", check=False)
+        if not result.stdout.strip() and message is None:
+            logger.info("Nothing to amend")
+            return False
+
+        self.stage_all()
+        staged = self._run_git("diff", "--cached", "--name-only", check=False)
+        if not staged.stdout.strip() and message is None:
+            logger.info("Nothing to amend after staging")
+            return False
+
+        # Allow message-only rewrites with an empty index.
+        if not staged.stdout.strip() and message is not None:
+            self._run_git(
+                "-c",
+                f"user.name={self.settings.git_user_name}",
+                "-c",
+                f"user.email={self.settings.git_user_email}",
+                "commit",
+                "--amend",
+                "--allow-empty",
+                "-m",
+                message,
+                "--author",
+                f"{author_name} <{self.settings.git_user_email}>",
+            )
+            logger.info("Amended HEAD commit message: %s...", message[:50])
+            return True
+
+        args = [
+            "-c",
+            f"user.name={self.settings.git_user_name}",
+            "-c",
+            f"user.email={self.settings.git_user_email}",
+            "commit",
+            "--amend",
+            "--author",
+            f"{author_name} <{self.settings.git_user_email}>",
+        ]
+        if message is None:
+            args.append("--no-edit")
+        else:
+            args.extend(["-m", message])
+
+        self._run_git(*args)
+        logger.info("Amended HEAD commit%s", "" if message is None else f": {message[:50]}...")
+        return True
+
     def remote_branch_exists(self, branch_name: str, remote: str = "origin") -> bool:
         """Check whether a branch exists on the given remote.
 

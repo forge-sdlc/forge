@@ -2,6 +2,7 @@
 
 import io
 import logging
+import re
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,10 @@ from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_des
 from forge.workflow.nodes.error_handler import notify_error
 from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
+from forge.workflow.utils.commit_message_ci import (
+    commit_message_failure_summary,
+    is_commit_message_formatting_failure,
+)
 from forge.workflow.utils.jira_status import (
     post_status_comment,
     remove_implementing_label,
@@ -390,8 +395,18 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
         branch_name = state.get("context", {}).get("branch_name", "")
 
-        # Commit any files the container left uncommitted (safety net)
-        if git.has_uncommitted_changes():
+        commit_msg_failure = is_commit_message_formatting_failure(failed_checks)
+        amended_message = _extract_amended_commit_message(fix_plan)
+
+        # Commit any files the container left uncommitted (safety net).
+        # Commit-message-only failures need --amend, not a new commit.
+        if commit_msg_failure:
+            if amended_message:
+                git.amend_commit(message=amended_message)
+            elif git.has_uncommitted_changes():
+                # Keep original message if the agent staged code + message fix.
+                git.amend_commit()
+        elif git.has_uncommitted_changes():
             git.stage_all()
             git.commit(f"[{ticket_key}] fix: address CI failures (attempt {attempt})")
 
@@ -402,12 +417,27 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         else:
             remote_ref = f"origin/{branch_name}"
 
-        unpushed = git._run_git(
-            "log", f"{remote_ref}..HEAD", "--oneline", check=False
-        ).stdout.strip()
+        local_sha = git._run_git("rev-parse", "HEAD", check=False).stdout.strip()
+        remote_sha = git._run_git("rev-parse", remote_ref, check=False).stdout.strip()
+        head_diverged = bool(local_sha) and local_sha != remote_sha
+        unpushed = head_diverged
 
         if not unpushed:
             logger.warning(f"Container made no changes for {ticket_key} (attempt {attempt})")
+            if commit_msg_failure:
+                # Do not burn the full retry budget on empty commits for
+                # message-only gates — escalate with an actionable error.
+                summary = commit_message_failure_summary(failed_checks)
+                logger.error("Commit-message CI failure unresolved for %s: %s", ticket_key, summary)
+                return update_state_timestamp(
+                    {
+                        **state,
+                        "ci_status": "failed",
+                        "ci_fix_attempt": state.get("ci_fix_max_attempts", ci_fix_max),
+                        "current_node": "ci_evaluator",
+                        "last_error": summary,
+                    }
+                )
         else:
             # Only run the expensive review pass when the fix actually changed code
             _, review_result = await run_post_change_review(
@@ -422,12 +452,14 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             if review_result is not None:
                 state = merge_review_exhaustion(state, review_result, ticket_key, "code_review")
 
-            # Push all commits (CI fix + any review corrections)
+            # Push all commits (CI fix + any review corrections).
+            # Message rewrites require force-push.
+            force_push = commit_msg_failure
             if fork_owner and fork_repo:
-                git.push_to_fork(force=False)
+                git.push_to_fork(force=force_push)
             else:
                 logger.warning("Fork info not in state — pushing to origin instead")
-                git.push(force=False)
+                git.push(force=force_push)
             logger.info(f"CI fix pushed for {ticket_key} (attempt {attempt})")
             record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="pushed")
 
@@ -702,3 +734,28 @@ def _collect_error_info(failed_checks: list[dict[str, Any]]) -> str:
         parts.append("")
 
     return "\n".join(parts)
+
+
+def _extract_amended_commit_message(fix_plan: str) -> str | None:
+    """Extract a corrected commit message from an analyze-ci fix plan, if present.
+
+    Looks for a fenced or labeled ``Amended Commit Message`` / ``New Commit Message``
+    section produced when the failure category is ``commit-message``.
+    """
+    if not fix_plan:
+        return None
+
+    patterns = (
+        r"(?im)^(?:#+\s*)?(?:amended|new|corrected)\s+commit\s+message\s*:?\s*\n+"
+        r"(?:```(?:text|commit)?\s*\n)?(.+?)(?:\n```|\n\n|\Z)",
+        r"(?im)^\*\*Amended Commit Message\*\*\s*:?\s*\n+"
+        r"(?:```(?:text|commit)?\s*\n)?(.+?)(?:\n```|\n\n|\Z)",
+    )
+
+    for pattern in patterns:
+        match = re.search(pattern, fix_plan, re.DOTALL)
+        if match:
+            message = match.group(1).strip()
+            if message:
+                return message
+    return None

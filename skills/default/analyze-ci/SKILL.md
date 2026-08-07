@@ -46,6 +46,7 @@ Analyze downloaded files locally — do not print large log content to the conve
 - `codegen-outdated` — generated files out of sync with source
 - `unit-test` — test assertion failures caused by a code bug
 - `e2e-code-bug` — end-to-end test fails consistently with the same assertion error pointing to a logic defect in the code under test
+- `commit-message` — commit title/trailer validation (`check-commits`, commitlint, missing `Signed-off-by`, topic prefix, title length). These require amending existing commit messages, not new file commits.
 
 **Not fixable by code change — skip:**
 - `infra` — CI infrastructure failures (runner unavailable, network timeout, quota exceeded)
@@ -64,12 +65,19 @@ Write `.forge/fix-plan.md`:
 ## Fixable Failures
 
 ### {check-name}
-**Category**: {compile | lint | format | codegen-outdated | unit-test | e2e-code-bug}
+**Category**: {compile | lint | format | codegen-outdated | unit-test | e2e-code-bug | commit-message}
 **Root Cause**: {exact error or description}
 **Affected Files**: {list}
 **Fix**:
 1. {exact command or edit}
 2. {verification command}
+
+When category is `commit-message`, also include:
+
+### Amended Commit Message
+```
+{full corrected commit message including required trailers}
+```
 
 ## Skipped Failures
 
