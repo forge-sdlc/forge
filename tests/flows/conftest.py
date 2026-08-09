@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from forge.config import Settings
+from forge.integrations.github.client import PullRequestCreationResult
 from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from tests.fixtures.workflow_states import (
@@ -101,10 +102,13 @@ def mock_github_client() -> MagicMock:
 
     def create_pull_request(*args, **kwargs):
         mock._pr_count += 1
-        return {
-            "number": 40 + mock._pr_count,
-            "html_url": f"https://github.com/org/repo/pull/{40 + mock._pr_count}",
-        }
+        return PullRequestCreationResult(
+            pr={
+                "number": 40 + mock._pr_count,
+                "html_url": f"https://github.com/org/repo/pull/{40 + mock._pr_count}",
+            },
+            created=True,
+        )
 
     mock.create_pull_request = AsyncMock(side_effect=create_pull_request)
     mock.get_pull_request = AsyncMock(

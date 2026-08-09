@@ -139,7 +139,6 @@ class TestTaskExecutionSandbox:
                     "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
                     return_value=(str(workspace_path), mock_git),
                 ),
-                patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
             ):
                 # Act
                 updated_state = await execute_task_changes(state)
@@ -202,7 +201,6 @@ class TestTaskExecutionSandbox:
                     "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
                     return_value=(str(workspace_path), mock_git_fail),
                 ),
-                patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
             ):
                 # Act
                 state_after_fail = await execute_task_changes(state_initial)
@@ -237,7 +235,6 @@ class TestTaskExecutionSandbox:
                     "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
                     return_value=(str(workspace_path), mock_git_success),
                 ),
-                patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
             ):
                 # Act
                 state_after_success = await execute_task_changes(state_after_fail)
@@ -249,7 +246,6 @@ class TestTaskExecutionSandbox:
             assert state_after_success["retry_count"] == 0  # Reset after success
             assert state_after_success["commit_info"]["committed"] is True
             assert state_after_success["commit_info"]["sha"] == "abcdef1234567890"
-
 
     @pytest.mark.asyncio
     @patch("forge.workflow.nodes.workspace_setup.get_workspace_manager")

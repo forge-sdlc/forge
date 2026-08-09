@@ -9,6 +9,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from forge.config import Settings
+from forge.integrations.github.client import PullRequestCreationResult
 from forge.main import app
 
 _TEST_DIRECTORY_MARKERS = {
@@ -95,10 +96,13 @@ def mock_github_client() -> Generator[MagicMock, None, None]:
     """Create a mock GitHub client."""
     mock = MagicMock()
     mock.create_pull_request = AsyncMock(
-        return_value={
-            "number": 42,
-            "html_url": "https://github.com/org/repo/pull/42",
-        }
+        return_value=PullRequestCreationResult(
+            pr={
+                "number": 42,
+                "html_url": "https://github.com/org/repo/pull/42",
+            },
+            created=True,
+        )
     )
     mock.get_pull_request = AsyncMock(
         return_value={

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.config import Settings
+from forge.integrations.github.client import PullRequestCreationResult
 from forge.models.workflow import TicketType
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
@@ -78,10 +79,13 @@ def mock_github_client() -> MagicMock:
     """Create a mock GitHub client with all methods mocked."""
     mock = MagicMock()
     mock.create_pull_request = AsyncMock(
-        return_value={
-            "number": 42,
-            "html_url": "https://github.com/org/repo/pull/42",
-        }
+        return_value=PullRequestCreationResult(
+            pr={
+                "number": 42,
+                "html_url": "https://github.com/org/repo/pull/42",
+            },
+            created=True,
+        )
     )
     mock.get_pull_request = AsyncMock(
         return_value={
