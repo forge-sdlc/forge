@@ -464,6 +464,19 @@ class TestJiraClientADF:
         code_text = adf["content"][0]["content"][0]
         assert "marks" not in code_text
 
+    def test_text_to_adf_does_not_link_urls_in_inline_code(self):
+        adf = JiraClient._text_to_adf("Run `curl https://example.com/api` locally.")
+
+        paragraph = adf["content"][0]["content"]
+        code_node = next(
+            node
+            for node in paragraph
+            if any(mark.get("type") == "code" for mark in node.get("marks", []))
+        )
+        # The URL stays inside the inline-code node without a link mark.
+        assert "https://example.com/api" in code_node["text"]
+        assert all(mark.get("type") != "link" for mark in code_node.get("marks", []))
+
     def test_issue_description_extracts_epic_plan_blocks(self):
         """Epic plan descriptions survive the markdown to ADF to JiraIssue round trip."""
         plan = """# Task Takeover Routing

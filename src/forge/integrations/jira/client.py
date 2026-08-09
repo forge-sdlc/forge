@@ -1348,13 +1348,13 @@ class JiraClient:
                 continue
 
             marks = child.get("marks", [])
-            already_linked = any(mark.get("type") == "link" for mark in marks)
+            skip_marks = any(mark.get("type") in ("link", "code") for mark in marks)
             child_text = child.get("text")
             if (
                 child.get("type") != "text"
                 or not isinstance(child_text, str)
                 or in_code_block
-                or already_linked
+                or skip_marks
             ):
                 JiraClient._link_bare_urls(child, in_code_block=in_code_block)
                 linked_content.append(child)
