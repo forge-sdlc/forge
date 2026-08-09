@@ -1033,6 +1033,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#end-to-end-smoke-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        End-to-End Smoke Testing
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1490,6 +1501,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#end-to-end-smoke-testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        End-to-End Smoke Testing
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1582,6 +1604,14 @@ missing infrastructure dependency fails the gate instead of silently skipping it
 <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;PROJ-123&quot;</span>
 </code></pre></div>
 <p>See the <a href="../../developer-guide/#10-debugging-tools">Developer Guide</a> for patching checkpoints directly and other advanced debugging tools.</p>
+<h2 id="end-to-end-smoke-testing">End-to-End Smoke Testing<a class="headerlink" href="#end-to-end-smoke-testing" title="Permanent link">&para;</a></h2>
+<p>Forge provides an automated end-to-end smoke test CLI command to verify that state checkpointing, the container runtime sandbox, model provider API connectivity, and the Deep Agent system are fully functional.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>smoke-test
+</code></pre></div>
+<p>This command runs completely offline from Jira/production branches, performing all actions in a disposable workspace:
+1. <strong>Diagnostic Graph Execution</strong>: Compiles a 2-node LangGraph and executes it with the configured Redis state checkpointer, verifying workflow resumption.
+2. <strong>Workspace Setup &amp; Container Verification</strong>: Launches a rootless Podman environment inside a temporary folder with a mocked Git tree.
+3. <strong>Container Agent Execution &amp; Verification</strong>: Spawns the real agent inside the container, instructs it to create a specific verification file, and asserts that the file is successfully populated.</p>
 
 
 
