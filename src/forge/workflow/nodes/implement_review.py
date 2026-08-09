@@ -28,9 +28,7 @@ _REVIEW_COMMENTS_FILE = ".forge/review-comments.md"
 _REVIEW_PLAN_FILE = ".forge/review-plan.md"
 _REVIEW_OBJECTIONS_FILE = ".forge/review-objections.md"
 _REVIEW_DECISIONS_FILE = ".forge/review-decisions.json"
-_REVIEW_ADDRESSING_COMMENT = (
-    "Forge is addressing PR review feedback now. This status update is informational."
-)
+_REVIEW_ADDRESSING_COMMENT = "Forge is addressing PR review feedback now."
 
 
 def review_response_gate(state: WorkflowState) -> WorkflowState:
