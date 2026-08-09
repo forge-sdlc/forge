@@ -117,12 +117,14 @@ class GitHubClient:
                 logger.info(
                     f"PR already exists for {head} -> {base}: #{existing['number']} in {owner}/{repo}"
                 )
+                existing["is_new_pr"] = False
                 return existing
             response.raise_for_status()
 
         response.raise_for_status()
         data = response.json()
         logger.info(f"Created PR #{data['number']} in {owner}/{repo}")
+        data["is_new_pr"] = True
         return data
 
     async def _find_existing_pr(

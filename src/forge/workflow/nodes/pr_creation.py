@@ -276,6 +276,30 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
 
         if pr_number is not None:
             logger.info(f"Created PR #{pr_number}: {pr_url}")
+            is_new_pr = pr_data.get("is_new_pr", True)
+            if is_new_pr:
+                try:
+                    comment_body = (
+                        "### 🛠️ Forge PR Commands\n\n"
+                        "This pull request was created by Forge! You can use the following commands by commenting on this PR:\n\n"
+                        "*   `/forge rebase` - Merge the base branch (e.g. `main`) into this PR branch, with conflicts resolved by AI.\n"
+                        "*   `/forge skip-gate <name>` - Skip a named CI check (substring match) for this PR. This setting persists across subsequent pushes.\n"
+                        "*   `/forge unskip-gate <name>` - Remove a previously set CI check skip.\n\n"
+                        "Feel free to use these commands to manage your workflow!"
+                    )
+                    await github.create_issue_comment(
+                        owner=pr_target.owner,
+                        repo=pr_target.repo,
+                        issue_number=pr_number,
+                        body=comment_body,
+                    )
+                    logger.info(
+                        f"Posted informational command comment on newly created PR #{pr_number}"
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to post informational command comment on PR #{pr_number}: {e}"
+                    )
         else:
             logger.info(f"Created PR (number unavailable): {pr_url}")
 
