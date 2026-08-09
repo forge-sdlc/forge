@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 5
 INITIAL_BACKOFF_SECONDS = 1.0
 MAX_BACKOFF_SECONDS = 60.0
+
+_BARE_URL_RE = re.compile(r"https?://[^\s<>]+")
+_URL_TRAILING_PUNCTUATION = ".,;:!?)]}"
 
 
 _ARTIFACT_APPROVAL_LABELS = {
@@ -1306,7 +1310,7 @@ class JiraClient:
             }
 
         try:
-            return convert(text)
+            adf = convert(text)
         except Exception as e:
             logger.warning(f"ADF conversion failed, using simple fallback: {e}")
             # Simple fallback - just paragraphs
@@ -1320,8 +1324,55 @@ class JiraClient:
                             "content": [{"type": "text", "text": para}],
                         }
                     )
-            return {
+            adf = {
                 "type": "doc",
                 "version": 1,
                 "content": content or [{"type": "paragraph", "content": []}],
             }
+
+        JiraClient._link_bare_urls(adf)
+        return adf
+
+    @staticmethod
+    def _link_bare_urls(node: dict[str, Any], *, in_code_block: bool = False) -> None:
+        """Add ADF link marks to bare HTTP(S) URLs in converted text."""
+        in_code_block = in_code_block or node.get("type") == "codeBlock"
+        content = node.get("content")
+        if not isinstance(content, list):
+            return
+
+        linked_content: list[dict[str, Any]] = []
+        for child in content:
+            if not isinstance(child, dict):
+                linked_content.append(child)
+                continue
+
+            marks = child.get("marks", [])
+            already_linked = any(mark.get("type") == "link" for mark in marks)
+            child_text = child.get("text")
+            if (
+                child.get("type") != "text"
+                or not isinstance(child_text, str)
+                or in_code_block
+                or already_linked
+            ):
+                JiraClient._link_bare_urls(child, in_code_block=in_code_block)
+                linked_content.append(child)
+                continue
+
+            position = 0
+            for match in _BARE_URL_RE.finditer(child_text):
+                url_with_punctuation = match.group(0)
+                url = url_with_punctuation.rstrip(_URL_TRAILING_PUNCTUATION)
+                if not url:
+                    continue
+                if match.start() > position:
+                    linked_content.append({**child, "text": child_text[position : match.start()]})
+                link_marks = [*marks, {"type": "link", "attrs": {"href": url}}]
+                linked_content.append({**child, "text": url, "marks": link_marks})
+                position = match.start() + len(url)
+
+            if position < len(child_text):
+                linked_content.append({**child, "text": child_text[position:]})
+
+        node["content"] = linked_content

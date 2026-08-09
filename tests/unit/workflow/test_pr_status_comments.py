@@ -110,6 +110,7 @@ class TestPRStatusCommentPosting:
             task_keys=["TASK-001"],
         )
         state["current_pr_number"] = 999
+        state["current_pr_url"] = "https://github.com/owner/repo/pull/999"
         state["ci_fix_attempt"] = 0
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
@@ -118,7 +119,7 @@ class TestPRStatusCommentPosting:
         # Verify comment posted to correct ticket with correct message
         mock_jira.add_comment.assert_called_once_with(
             "TEST-200",
-            "🚀 Pull request #999 created and submitted. Waiting for CI checks to complete."
+            "🚀 [Pull request #999](https://github.com/owner/repo/pull/999) created and submitted. Waiting for CI checks to complete."
         )
 
     @pytest.mark.asyncio

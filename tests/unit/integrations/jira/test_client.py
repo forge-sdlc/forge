@@ -442,6 +442,28 @@ class TestJiraClientADF:
         # Should have paragraph with inline marks
         assert adf["content"][0]["type"] == "paragraph"
 
+    def test_text_to_adf_links_bare_urls(self):
+        text = "Created: https://github.com/forge-sdlc/forge/pull/293."
+
+        adf = JiraClient._text_to_adf(text)
+
+        paragraph = adf["content"][0]["content"]
+        link = next(node for node in paragraph if node.get("marks"))
+        assert link["text"] == "https://github.com/forge-sdlc/forge/pull/293"
+        assert link["marks"] == [
+            {
+                "type": "link",
+                "attrs": {"href": "https://github.com/forge-sdlc/forge/pull/293"},
+            }
+        ]
+        assert paragraph[-1]["text"] == "."
+
+    def test_text_to_adf_does_not_link_urls_in_code_blocks(self):
+        adf = JiraClient._text_to_adf("```\nhttps://example.com/script\n```")
+
+        code_text = adf["content"][0]["content"][0]
+        assert "marks" not in code_text
+
     def test_issue_description_extracts_epic_plan_blocks(self):
         """Epic plan descriptions survive the markdown to ADF to JiraIssue round trip."""
         plan = """# Task Takeover Routing

@@ -489,8 +489,15 @@ async def wait_for_ci_gate(state: WorkflowState) -> WorkflowState:
         try:
             # Build status message with PR number if available
             pr_number = state.get("current_pr_number")
+            pr_url = state.get("current_pr_url")
+            if not pr_url:
+                pr_urls = state.get("pr_urls", [])
+                pr_url = pr_urls[-1] if pr_urls else None
             if pr_number is not None:
-                message = f"🚀 Pull request #{pr_number} created and submitted. Waiting for CI checks to complete."
+                pr_label = f"Pull request #{pr_number}"
+                if pr_url:
+                    pr_label = f"[{pr_label}]({pr_url})"
+                message = f"🚀 {pr_label} created and submitted. Waiting for CI checks to complete."
             else:
                 message = (
                     "🚀 Pull request created and submitted. Waiting for CI checks to complete."
