@@ -4,6 +4,7 @@ import logging
 
 from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
+from forge.security.secrets import AgentOutputContext, scan_agent_output
 from forge.workflow.bug.state import BugState
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,15 @@ async def post_merge_summary(state: BugState) -> BugState:
             fix_approach=fix_approach,
             current_repo=current_repo,
             pr_urls=pr_urls,
+        )
+        scan_agent_output(
+            comment,
+            context=AgentOutputContext(
+                source="post-merge summary",
+                ticket_key=ticket_key,
+                repository=current_repo,
+                workflow_stage="post_merge_summary",
+            ),
         )
         await jira.add_comment(ticket_key, comment)
         logger.info(f"Posted post-merge summary to {ticket_key}")

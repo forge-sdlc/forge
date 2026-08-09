@@ -12,6 +12,7 @@ from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
+from forge.security.secrets import AgentOutputContext, scan_agent_output
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_description
 from forge.workflow.nodes.workspace_setup import prepare_workspace
@@ -457,6 +458,15 @@ async def _post_review_objection(
                 f"**Forge review response for {ticket_key}:**\n\n"
                 f"{objections}\n\n"
                 f"*Please confirm whether to proceed as requested or withdraw.*"
+            )
+            scan_agent_output(
+                comment,
+                context=AgentOutputContext(
+                    source="review objection",
+                    ticket_key=ticket_key,
+                    repository=f"{owner}/{repo}",
+                    workflow_stage="implement_review",
+                ),
             )
             if pr_number:
                 await github.create_issue_comment(owner, repo, pr_number, comment)
