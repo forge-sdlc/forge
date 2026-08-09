@@ -13,6 +13,7 @@ from forge.workflow.task_takeover.graph import (
     _route_after_execution,
     _route_after_generate_plan,
     _route_after_triage_check,
+    _route_after_workspace_setup,
     _route_ci_evaluation,
     _route_human_review_task_takeover,
     build_task_takeover_graph,
@@ -159,6 +160,41 @@ class TestPathTransitions:
 
 
 class TestExecutionRouting:
+    def test_successful_workspace_setup_routes_to_execution(self) -> None:
+        state = make_task_state(workspace_path="/tmp/forge-workspace", last_error=None)
+
+        assert _route_after_workspace_setup(state) == "execute_task_changes"
+
+    @pytest.mark.parametrize(
+        "workspace_path,last_error",
+        [
+            (None, "GitHub API returned 403: rate limit exceeded"),
+            ("", None),
+            ("/tmp/partial-workspace", "clone failed"),
+        ],
+    )
+    def test_failed_workspace_setup_routes_to_blocked(
+        self, workspace_path: str | None, last_error: str | None
+    ) -> None:
+        state = make_task_state(
+            current_node="setup_workspace",
+            workspace_path=workspace_path,
+            last_error=last_error,
+        )
+
+        assert _route_after_workspace_setup(state) == "escalate_blocked"
+        assert state["current_node"] == "setup_workspace"
+        assert state["last_error"] == last_error
+
+    def test_failed_workspace_retry_returns_to_workspace_setup(self) -> None:
+        state = make_task_state(
+            current_node="setup_workspace",
+            workspace_path=None,
+            last_error="GitHub API returned 403: rate limit exceeded",
+        )
+
+        assert route_entry(state) == "setup_workspace"
+
     def test_success_routes_to_review(self) -> None:
         assert _route_after_execution(make_task_state(last_error=None)) == "run_qualitative_review"
 

@@ -131,6 +131,18 @@ def _route_after_answer(state: TaskTakeoverState) -> str:
     return "task_plan_approval_gate"
 
 
+def _route_after_workspace_setup(state: TaskTakeoverState) -> str:
+    """Route to execution only after workspace setup completed successfully."""
+    workspace_path = state.get("workspace_path")
+    last_error = state.get("last_error")
+
+    if workspace_path and not last_error:
+        return "execute_task_changes"
+
+    logger.error(f"Workspace setup failed: {last_error}")
+    return "escalate_blocked"
+
+
 def _route_after_execution(state: TaskTakeoverState) -> str:
     """Never review an implementation whose branch was not persisted."""
     last_error = state.get("last_error")
@@ -365,7 +377,14 @@ def build_task_takeover_graph() -> StateGraph[TaskTakeoverState, Any, Any]:
     )
 
     # Execution flow
-    graph.add_edge("setup_workspace", "execute_task_changes")
+    graph.add_conditional_edges(
+        "setup_workspace",
+        _route_after_workspace_setup,
+        {
+            "execute_task_changes": "execute_task_changes",
+            "escalate_blocked": "escalate_blocked",
+        },
+    )
     graph.add_conditional_edges(
         "execute_task_changes",
         _route_after_execution,
