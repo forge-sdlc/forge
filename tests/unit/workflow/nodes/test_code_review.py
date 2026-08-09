@@ -6,6 +6,7 @@ import pytest
 
 from forge.observability.review_poller import ReviewCycleData
 from forge.sandbox.runner import ContainerResult
+from forge.integrations.github.client import PullRequestCreationResult
 from tests.fixtures.workflow_states import make_workflow_state
 
 FIX_COMMITS = (
@@ -328,7 +329,10 @@ class TestSyncCalledFromCreatePR:
         mock_github.sync_fork_with_upstream = AsyncMock()
         mock_github.add_fork_remote = MagicMock()
         mock_github.create_pull_request = AsyncMock(
-            return_value={"number": 42, "html_url": "https://github.com/org/repo/pull/42"}
+            return_value=PullRequestCreationResult(
+                pr={"number": 42, "html_url": "https://github.com/org/repo/pull/42"},
+                created=True,
+            )
         )
         mock_github.close = AsyncMock()
 

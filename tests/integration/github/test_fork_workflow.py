@@ -265,7 +265,7 @@ class TestPRFromFork:
             assert json_body["head"] == "forge-user:feature-branch"
             assert json_body["base"] == "main"
 
-            assert result["number"] == 123
+            assert result.pr["number"] == 123
 
     async def test_get_fork_owner_uses_config(self, github_client):
         """Should use configured fork owner if set."""

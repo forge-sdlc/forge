@@ -7,6 +7,7 @@ import pytest
 
 from forge.workflow.feature.state import create_initial_feature_state
 from forge.workflow.nodes.pr_creation import create_pull_request
+from forge.integrations.github.client import PullRequestCreationResult
 
 
 def create_mock_github_client(
@@ -27,12 +28,13 @@ def create_mock_github_client(
     # PR creation response - can be configured for different scenarios
     pr_data = {
         "html_url": pr_url,
-        "is_new_pr": is_new_pr,
     }
     if pr_number is not None:
         pr_data["number"] = pr_number
 
-    mock.create_pull_request = AsyncMock(return_value=pr_data)
+    mock.create_pull_request = AsyncMock(
+        return_value=PullRequestCreationResult(pr=pr_data, created=is_new_pr)
+    )
     return mock
 
 

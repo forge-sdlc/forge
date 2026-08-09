@@ -5,7 +5,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from forge.integrations.github.client import GitHubClient
+from forge.integrations.github.client import GitHubClient, PullRequestCreationResult
 from forge.integrations.jira.client import JiraClient, MissingProjectConfig
 from forge.workflow.feature.state import create_initial_feature_state
 from forge.workflow.nodes.pr_creation import create_pull_request
@@ -29,7 +29,9 @@ def create_mock_github_client(pr_number=123, pr_url="https://github.com/owner/re
     if pr_number is not None:
         pr_data["number"] = pr_number
 
-    mock.create_pull_request = AsyncMock(return_value=pr_data)
+    mock.create_pull_request = AsyncMock(
+        return_value=PullRequestCreationResult(pr=pr_data, created=True)
+    )
     return mock
 
 

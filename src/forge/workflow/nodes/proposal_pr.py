@@ -97,7 +97,7 @@ async def create_proposal_pr(
             "Leave comments on this PR to provide feedback — "
             f"Forge will regenerate the {artifact.title_name} and push updated commits."
         )
-        pr_data = await gh.create_pull_request(
+        pr_result = await gh.create_pull_request(
             owner=upstream_owner,
             repo=upstream_repo,
             title=f"[{ticket_key}] {artifact.title_name}: {summary}",
@@ -106,8 +106,8 @@ async def create_proposal_pr(
             base=default_branch,
         )
 
-        pr_url = pr_data["html_url"]
-        pr_number = pr_data["number"]
+        pr_url = pr_result.pr["html_url"]
+        pr_number = pr_result.pr["number"]
         await set_pr_ticket_index(pr_url, ticket_key)
         await jira.set_workflow_label(ticket_key, artifact.pending_label)
         await post_status_comment(

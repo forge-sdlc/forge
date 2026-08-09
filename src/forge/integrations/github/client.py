@@ -1,6 +1,7 @@
 """GitHub REST API client for PR and repository operations."""
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -8,6 +9,15 @@ import httpx
 from forge.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PullRequestCreationResult:
+    """Result of a pull request creation or lookup when it already exists."""
+
+    pr: dict[str, Any]
+    created: bool
+
 
 _STATUS_TO_CONCLUSION: dict[str, str] = {
     "success": "success",
@@ -81,7 +91,7 @@ class GitHubClient:
         head: str,
         base: str = "main",
         draft: bool = False,
-    ) -> dict[str, Any]:
+    ) -> PullRequestCreationResult:
         """Create a new pull request.
 
         Args:
@@ -94,10 +104,10 @@ class GitHubClient:
             draft: Whether the PR should be created as a draft.
 
         Returns:
-            API response with PR details.
+            PullRequestCreationResult wrapping the PR details and status.
         """
         client = await self._get_client()
-        payload = {
+        payload: dict[str, Any] = {
             "title": title,
             "body": body,
             "head": head,
@@ -117,15 +127,13 @@ class GitHubClient:
                 logger.info(
                     f"PR already exists for {head} -> {base}: #{existing['number']} in {owner}/{repo}"
                 )
-                existing["is_new_pr"] = False
-                return existing
+                return PullRequestCreationResult(pr=existing, created=False)
             response.raise_for_status()
 
         response.raise_for_status()
         data = response.json()
         logger.info(f"Created PR #{data['number']} in {owner}/{repo}")
-        data["is_new_pr"] = True
-        return data
+        return PullRequestCreationResult(pr=data, created=True)
 
     async def _find_existing_pr(
         self,

@@ -6,6 +6,7 @@ import pytest
 
 from forge.models.workflow import TicketType
 from forge.workflow.feature.state import create_initial_feature_state
+from forge.integrations.github.client import PullRequestCreationResult
 
 
 class TestCreateSpecProposalPr:
@@ -27,10 +28,13 @@ class TestCreateSpecProposalPr:
         mock_gh.create_branch = AsyncMock(return_value={"ref": "refs/heads/forge/spec/test-123"})
         mock_gh.create_or_update_file = AsyncMock(return_value={"content": {"sha": "filesha"}})
         mock_gh.create_pull_request = AsyncMock(
-            return_value={
-                "number": 12,
-                "html_url": "https://github.com/org/proposals/pull/12",
-            }
+            return_value=PullRequestCreationResult(
+                pr={
+                    "number": 12,
+                    "html_url": "https://github.com/org/proposals/pull/12",
+                },
+                created=True,
+            )
         )
         mock_gh.close = AsyncMock()
 
@@ -96,10 +100,13 @@ class TestCreateSpecProposalPr:
         mock_gh.create_branch = AsyncMock(return_value={"ref": "refs/heads/forge/spec/test-456"})
         mock_gh.create_or_update_file = AsyncMock(return_value={"content": {"sha": "filesha"}})
         mock_gh.create_pull_request = AsyncMock(
-            return_value={
-                "number": 15,
-                "html_url": "https://github.com/org/proposals/pull/15",
-            }
+            return_value=PullRequestCreationResult(
+                pr={
+                    "number": 15,
+                    "html_url": "https://github.com/org/proposals/pull/15",
+                },
+                created=True,
+            )
         )
         mock_gh.close = AsyncMock()
 

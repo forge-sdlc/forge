@@ -8,7 +8,7 @@ from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
-from forge.integrations.github.client import GitHubClient
+from forge.integrations.github.client import GitHubClient, PullRequestCreationResult
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.checkpointer import set_pr_ticket_index
@@ -74,7 +74,7 @@ async def open_pull_request_from_fork(
     body: str,
     base: str = "main",
     draft: bool = False,
-) -> dict:
+) -> PullRequestCreationResult:
     """Open a pull request from the prepared fork branch to upstream."""
     return await github.create_pull_request(
         owner=target.owner,
@@ -236,7 +236,7 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         project_key = ticket_key.split("-")[0] if "-" in ticket_key else ticket_key
         is_draft = await jira.is_repo_draft(project_key, current_repo)
 
-        pr_data = await open_pull_request_from_fork(
+        pr_result = await open_pull_request_from_fork(
             github,
             pr_target,
             branch_name=branch_name,
@@ -246,8 +246,8 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
             draft=is_draft,
         )
 
-        pr_url = pr_data.get("html_url", "")
-        pr_number = pr_data.get("number")
+        pr_url = pr_result.pr.get("html_url", "")
+        pr_number = pr_result.pr.get("number")
 
         # Log PR number extraction status
         if pr_number is not None:
@@ -276,30 +276,8 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
 
         if pr_number is not None:
             logger.info(f"Created PR #{pr_number}: {pr_url}")
-            is_new_pr = pr_data.get("is_new_pr", True)
-            if is_new_pr:
-                try:
-                    comment_body = (
-                        "### 🛠️ Forge PR Commands\n\n"
-                        "This pull request was created by Forge! You can use the following commands by commenting on this PR:\n\n"
-                        "*   `/forge rebase` - Merge the base branch (e.g. `main`) into this PR branch, with conflicts resolved by AI.\n"
-                        "*   `/forge skip-gate <name>` - Skip a named CI check (substring match) for this PR. This setting persists across subsequent pushes.\n"
-                        "*   `/forge unskip-gate <name>` - Remove a previously set CI check skip.\n\n"
-                        "Feel free to use these commands to manage your workflow!"
-                    )
-                    await github.create_issue_comment(
-                        owner=pr_target.owner,
-                        repo=pr_target.repo,
-                        issue_number=pr_number,
-                        body=comment_body,
-                    )
-                    logger.info(
-                        f"Posted informational command comment on newly created PR #{pr_number}"
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to post informational command comment on PR #{pr_number}: {e}"
-                    )
+            if pr_result.created:
+                await _post_pr_commands_comment(github, pr_target, pr_number)
         else:
             logger.info(f"Created PR (number unavailable): {pr_url}")
 
@@ -379,6 +357,32 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
     finally:
         await github.close()
         await jira.close()
+
+
+async def _post_pr_commands_comment(
+    github: GitHubClient,
+    pr_target: PullRequestTarget,
+    pr_number: int,
+) -> None:
+    """Post informational PR commands comment on a newly created pull request."""
+    try:
+        comment_body = (
+            "### 🛠️ Forge PR Commands\n\n"
+            "This pull request was created by Forge! You can use the following commands by commenting on this PR:\n\n"
+            "*   `/forge rebase` - Merge the base branch (e.g. `main`) into this PR branch, with conflicts resolved by AI.\n"
+            "*   `/forge skip-gate <name>` - Skip a named CI check (substring match) for this PR. This setting persists across subsequent pushes.\n"
+            "*   `/forge unskip-gate <name>` - Remove a previously set CI check skip.\n\n"
+            "Feel free to use these commands to manage your workflow!"
+        )
+        await github.create_issue_comment(
+            owner=pr_target.owner,
+            repo=pr_target.repo,
+            issue_number=pr_number,
+            body=comment_body,
+        )
+        logger.info(f"Posted informational command comment on newly created PR #{pr_number}")
+    except Exception as e:
+        logger.warning(f"Failed to post informational command comment on PR #{pr_number}: {e}")
 
 
 def _get_pr_title(state: WorkflowState, ticket_summary: str = "") -> str:
