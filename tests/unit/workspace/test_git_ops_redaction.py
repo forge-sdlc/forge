@@ -64,21 +64,49 @@ def test_stage_all_excludes_forge_internal_directory(tmp_path):
     git = _git_ops(tmp_path)
 
     with patch.object(git, "_run_git") as run_git:
+        run_git.return_value.stdout = "new-file.txt\0.forge/state.json\0"
         git.stage_all()
 
-    assert run_git.call_args_list[0].args == (
+    assert run_git.call_args_list[0].args == ("add", "-u")
+    assert run_git.call_args_list[1].args == (
+        "ls-files",
+        "-z",
+        "--others",
+        "--exclude-standard",
+    )
+    assert run_git.call_args_list[2].args == ("add", "--", "new-file.txt")
+    assert run_git.call_args_list[3].args == (
         "rm",
         "-r",
         "--cached",
         "--ignore-unmatch",
         ".forge",
     )
-    assert run_git.call_args_list[0].kwargs == {"check": False}
-    assert run_git.call_args_list[1].args == (
-        "add",
-        "-A",
-        "--",
-        ".",
-        ":!.forge",
-        ":!.forge/**",
-    )
+    assert run_git.call_args_list[3].kwargs == {"check": False}
+
+
+def test_stage_all_handles_ignored_forge_directory(tmp_path):
+    git = _git_ops(tmp_path)
+    git.repo_path.mkdir()
+
+    subprocess.run(["git", "init", "-q"], cwd=git.repo_path, check=True)
+    (git.repo_path / "tracked.txt").write_text("before\n")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=git.repo_path, check=True)
+
+    exclude_path = git.repo_path / ".git" / "info" / "exclude"
+    exclude_path.write_text(".forge/\n")
+    (git.repo_path / ".forge").mkdir()
+    (git.repo_path / ".forge" / "state.json").write_text("{}\n")
+    (git.repo_path / "tracked.txt").write_text("after\n")
+    (git.repo_path / "new-file.txt").write_text("new\n")
+
+    git.stage_all()
+
+    staged = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=git.repo_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    assert staged == ["new-file.txt", "tracked.txt"]

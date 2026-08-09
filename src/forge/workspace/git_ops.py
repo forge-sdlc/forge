@@ -220,8 +220,24 @@ class GitOperations:
 
     def stage_all(self) -> None:
         """Stage all user-facing changes, excluding Forge internal files."""
+        # Stage modifications and deletions to tracked files separately. Passing
+        # an ignored path as a negative pathspec to ``git add`` still makes Git
+        # reject the command, even though the path is explicitly excluded.
+        self._run_git("add", "-u")
+
+        # Stage untracked files explicitly so .forge remains excluded even when
+        # the workspace's .git/info/exclude entry is missing or incomplete.
+        result = self._run_git("ls-files", "-z", "--others", "--exclude-standard")
+        new_files = [
+            path
+            for path in result.stdout.split("\0")
+            if path and path != ".forge" and not path.startswith(".forge/")
+        ]
+        if new_files:
+            self._run_git("add", "--", *new_files)
+
+        # Remove any Forge files that may have been tracked by an earlier run.
         self._run_git("rm", "-r", "--cached", "--ignore-unmatch", ".forge", check=False)
-        self._run_git("add", "-A", "--", ".", ":!.forge", ":!.forge/**")
 
     def stage_files(self, *files: str) -> None:
         """Stage specific files.
