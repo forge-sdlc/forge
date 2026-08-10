@@ -25,9 +25,9 @@ workflows—while making Jira, GitHub, and Podman defaults rather than permanent
 
 ## Product principles
 
-1. **Contracts before integrations.** Stable domain contracts and conformance suites
-   isolate workflows from provider-specific behavior and declare backend capabilities
-   explicitly.
+1. **Provider-neutral core.** Workflow state and logic depend on versioned domain
+   interfaces, never a specific external system; every backend declares its capabilities
+   and proves the same contract through conformance tests.
 2. **Fail closed at trust boundaries.** Invalid artifacts, failed execution, ambiguous
    events, or unavailable policy checks stop progression with evidence and a deliberate
    recovery path.
