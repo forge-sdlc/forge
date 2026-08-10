@@ -102,134 +102,47 @@ state or unrecoverable failures.
 
 “Multiple git sources” has two dimensions: a project may span repositories, and each
 repository may live on a different provider or provider instance. Forge already supports
-the first for GitHub; this theme adds the second.
+the first for GitHub; this theme adds provider choice without weakening coordinated
+multi-repository delivery.
 
-**Repository and workflow-state model**
+**Outcomes**
 
-Use canonical repository identities rather than `owner/repo` strings. The provider is a
-property of each repository reference, never of the workflow as a whole:
+- GitHub, GitLab.com, and self-managed GitLab operate behind one provider-neutral source
+  control capability, with provider differences exposed deliberately.
+- A single workflow can mix GitHub repositories and repositories from multiple GitLab
+  instances from the first supported GitLab milestone.
+- Repository changes progress independently while Forge presents unified approval, CI,
+  and completion status across the workflow.
+- Connections, credentials, webhook identity, and provider-specific configuration remain
+  centrally governed and outside agent context.
 
-```yaml
-id: payments-api
-provider: github                 # github | gitlab
-connection: public-github        # configured Forge connection
-namespace: acme/payments
-default_branch: main
-change_request_mode: fork        # fork | branch
-```
+**Sequence**
 
-A connection holds base/API URLs, webhook verification settings, credential reference,
-TLS/CA configuration, and allowed namespaces. This is essential for multiple internal
-GitLab deployments and prevents credentials from being embedded in Jira metadata.
+1. Move current GitHub behavior behind the provider boundary without regression.
+2. Introduce GitLab.com together with mixed GitHub/GitLab workflow support.
+3. Add self-managed and multiple GitLab instances, then harden compatibility across the
+   supported provider matrix.
 
-Do not extend the current `current_repo`, `current_pr_number`, and `pr_urls` fields with a
-single workflow-level provider. That shape cannot safely represent PR #42 in GitHub and
-MR !42 in GitLab, provider-specific CI state, or concurrent events from several
-repositories. Replace it with a map of independently progressing repository work items:
-
-```yaml
-repository_changes:
-  payments-api:                 # stable Forge repository ID
-    repository:
-      provider: github
-      connection: public-github
-      namespace: acme/payments
-    source_revision: main@abc123
-    branch: forge/PROJ-123
-    change_request:
-      native_id: "42"           # opaque string; never globally unique
-      url: https://github.com/acme/payments/pull/42
-      state: open
-    checks:
-      state: passed
-      runs: []
-    review:
-      state: approved
-    execution:
-      state: completed
-  deployment-config:
-    repository:
-      provider: gitlab
-      connection: corp-gitlab
-      namespace: platform/deployment-config
-    source_revision: main@def456
-    branch: forge/PROJ-123
-    change_request:
-      native_id: "42"
-      url: https://gitlab.corp/platform/deployment-config/-/merge_requests/42
-      state: open
-    checks:
-      state: running
-      runs: []
-    review:
-      state: pending
-    execution:
-      state: completed
-```
-
-The durable external identity of a change request is the composite
-`(connection, repository_id, native_id)`. URLs are presentation data, and native numbers
-are opaque provider-local identifiers. A `current_work_item` may exist as a scheduling
-cursor, but it must not be the source of truth for event routing or completion.
-
-Workflow-level status is a derived aggregate over `repository_changes`, using explicit
-policy such as `all_required_changes_pass_ci`, `all_required_changes_approved`, and
-`allow_partial_completion`. Each work item keeps its own execution, push, change-request,
-CI, review, retry, and error state. This permits repositories to progress concurrently
-and prevents a GitLab event from overwriting the active GitHub state.
-
-Cross-repository ordering must also be explicit. Work items may declare dependencies—for
-example, deploy configuration waits for an application image digest—rather than relying
-on list position. Outputs passed between repositories use typed artifacts and immutable
-revisions, not mutable branch names.
-
-**Provider contract**
-
-- Repository discovery, clone/fetch URL, and default branch.
-- Branch/fork creation and push authorization.
-- Pull request / merge request create, update, comment, review, merge status, and close.
-- CI status normalization, logs/artifacts lookup, and retry/cancel capabilities.
-- Webhook verification, normalized events, actor identity, and delivery deduplication.
-- Event routing by the composite change-request identity into exactly one repository work
-  item, followed by recomputation of aggregate workflow gates.
-- Capability discovery so workflows can degrade deliberately when a provider lacks a
-  feature.
-
-**Delivery slices**
-
-1. Extract the existing GitHub implementation behind `SourceControlProvider` and prove
-   no behavioral regression.
-2. Replace GitHub-specific workflow state and language with provider-neutral repository,
-   per-repository change request, review, and check-run models; migrate existing
-   checkpoints from the single-current-PR shape.
-3. Add GitLab.com support for branch-based merge requests, pipelines/jobs, discussions,
-   approvals, and system hooks/project webhooks. The first supported GitLab release must
-   also support a workflow mixing GitHub and GitLab repositories; single-provider-only
-   project support is not an acceptable milestone.
-4. Add self-managed GitLab connections: arbitrary base URL, private CA bundle, proxy,
-   version/capability probing, group/project tokens, OAuth/service accounts, and multiple
-   simultaneous instances.
-5. Harden mixed-provider workflows across multiple simultaneous GitLab instances, with
-   independent change requests but one aggregate approval and completion view.
+Issue [#162](https://github.com/forge-sdlc/forge/issues/162) is the canonical technical
+plan for repository identity, workflow state, provider contracts, migrations, and event
+routing.
 
 **Related tracking (reviewed 2026-08-10)**
 
 - Open issue: [configurable source providers and mixed-provider workflows #162](https://github.com/forge-sdlc/forge/issues/162).
 - Merged foundation: [multi-repository PR lifecycle tracking PR #238](https://github.com/forge-sdlc/forge/pull/238)
   resolved [issue #135](https://github.com/forge-sdlc/forge/issues/135).
-- Tracking gaps: GitLab.com, self-managed GitLab, multiple simultaneous GitLab instances,
-  provider conformance tests, and checkpoint migration need dedicated issues beneath
-  #162.
+- Tracking gaps: the delivery slices in #162 should be split into implementation issues
+  as work is scheduled.
 
 **Exit criteria**
 
-- The same provider contract suite passes for GitHub, GitLab.com, and a supported
-  self-managed GitLab version range.
-- One test feature produces coordinated GitHub PR and GitLab MR changes.
-- Interleaved and replayed GitHub/GitLab events update only their addressed repository
-  work item and produce the correct aggregate gate state.
-- No workflow node imports a concrete source-control client.
-- Connection credentials and private CA material never enter agent prompts or logs.
+- One workflow produces coordinated changes across GitHub and GitLab.com, and across the
+  supported self-managed GitLab matrix.
+- Mixed-provider events and failures remain isolated to the correct repository change
+  while aggregate workflow gates stay correct.
+- Provider conformance tests show equivalent core behavior, and credentials or private
+  connection material never enter agent prompts or logs.
 
 ### 3. Pluggable execution and Kubernetes support
 
