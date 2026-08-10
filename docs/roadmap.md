@@ -49,28 +49,29 @@ workflows—while making Jira, GitHub, and Podman defaults rather than permanent
 
 ## Roadmap themes
 
-### 1. Reliable orchestration foundation
+### 1. Deterministic and recoverable orchestration
 
-This is the prerequisite for every expansion. Provider and runtime abstractions will
-multiply failure modes, so Forge must first make node outcomes and side effects explicit.
+Before adding providers, runtimes, or workflows, Forge must make every transition
+validated, replay-safe, traceable, and recoverable. This foundation prevents ambiguous
+agent or execution results from advancing a workflow and gives operators enough evidence
+to understand and resume failures.
 
 **Deliverables**
 
-- Versioned, typed artifact envelope for agent handoffs with outcomes such as
-  `actionable`, `no_action`, `needs_input`, and `failed`; retain Markdown as a view.
-- Fail-closed routing for missing, malformed, or incompatible artifacts.
-- Explicit execution result contract; container or pod failure cannot lead to PR/MR
-  creation.
-- Idempotent side-effect journal for comments, branches, change requests, deployments,
-  and teardown operations.
-- Stable correlation index across ticket, repository, branch, PR/MR, CI run, and
-  environment; remove title parsing as an identity mechanism.
-- Terminal-failure notifications, heartbeat/status updates, retry ownership, and
-  actionable transcript error summaries.
-- Secret redaction and prompt-injection scanning at repository and output boundaries.
-- Short-lived credential support, beginning with Vertex AI OIDC and extending the same
-  credential-broker pattern to source and deployment providers.
-- Contract, replay, failure-injection, and workflow migration tests.
+- **Explicit outcomes:** versioned, typed node and execution results distinguish
+  `actionable`, `no_action`, `needs_input`, and `failed`; missing, malformed, or
+  incompatible results fail closed. Markdown remains a view, not the workflow contract.
+- **Replay-safe effects:** an idempotent journal governs comments, branches, PRs/MRs,
+  deployments, and teardown so retries and duplicate events cannot repeat mutations.
+- **Durable identity:** stable correlation IDs link tickets, repositories, revisions,
+  PRs/MRs, CI runs, and environments without relying on titles or URLs for routing.
+- **Visible recovery:** heartbeats, status updates, transcript summaries, retry ownership,
+  and terminal notifications show what failed, who acts next, and how work can resume.
+- **Baseline trust controls:** redact secrets, scan untrusted instructions and outputs,
+  and broker short-lived credentials outside agent context, beginning with Vertex AI
+  OIDC.
+- **Proof under failure:** contract, replay, failure-injection, and migration tests verify
+  these guarantees across restarts and workflow upgrades.
 
 **Current backlog incorporated:**
 [artifact contracts #150](https://github.com/forge-sdlc/forge/issues/150),
@@ -84,10 +85,12 @@ multiply failure modes, so Forge must first make node outcomes and side effects 
 
 **Exit criteria**
 
-- All workflow transitions consume validated typed outcomes.
-- Replaying any supported webhook or worker message does not duplicate a side effect.
-- Every terminal failure is visible to the user and carries a correlation ID.
-- Failure-injection tests prove that unsuccessful execution cannot create a PR/MR.
+- Every transition consumes a validated outcome; unsuccessful or unknown execution cannot
+  create a PR/MR or cross another consequential gate.
+- Replaying supported events or recovering after restart produces no duplicate effect and
+  preserves correlation history.
+- Every stalled or terminal workflow exposes its failure, owner, evidence, and supported
+  recovery action.
 
 ### 2. Source control provider platform
 
