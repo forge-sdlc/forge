@@ -25,43 +25,27 @@ workflows—while making Jira, GitHub, and Podman defaults rather than permanent
 
 ## Product principles
 
-1. **Contracts before integrations.** Forge models source control, issue tracking,
-   execution, artifacts, and deployment through stable domain contracts before adding
-   provider-specific behavior. GitHub, GitLab, Podman, Kubernetes, and external plugins
-   must prove those contracts through shared conformance suites, with capabilities and
-   limitations declared explicitly rather than leaking provider assumptions into the
-   workflow.
-2. **Fail closed at trust boundaries.** Missing or malformed agent artifacts, failed
-   execution, ambiguous events, unavailable scanners, and unmet policy checks must stop
-   progression instead of being interpreted as success. Every stopped transition should
-   preserve diagnostic evidence and expose a deliberate retry, recovery, exception, or
-   human-escalation path.
-3. **Humans govern consequential changes.** Forge may analyze, propose, prototype, and
-   automate within policy, but approvals for publication, accepted risk, deployment, and
-   other material effects are explicit, auditable workflow gates—not prompt conventions
-   or assumptions inferred by an agent. Projects may automate a gate only through a
-   visible policy decision with a defined scope.
-4. **Traceability survives every backend.** Tickets, artifacts, prototype decisions,
-   repositories, commits, PRs/MRs, CI runs, environments, and deployments share stable
-   Forge correlation identities independent of provider-local names or URLs. A user or
-   operator must be able to reconstruct why a transition occurred and which inputs,
-   policies, actors, and outputs contributed to it.
-5. **Credentials never enter agent context.** Adapters, execution drivers, and credential
-   brokers obtain short-lived, least-privilege access outside the model boundary and
-   expose only the narrowly scoped operation an agent needs. Secrets must not appear in
-   prompts, generated artifacts, workspace history, logs, or external comments, and
-   credential use remains attributable to a Forge workflow and policy decision.
-6. **A central platform with an open ecosystem.** Forge is designed to run as a centrally
-   operated service that gives platform teams consistent governance, identity,
-   isolation, and orchestration across projects and providers. Its open-source model
-   should enable organizations to self-host, inspect, extend, and contribute to that
-   platform without redefining Forge as a local developer tool.
+1. **Contracts before integrations.** Stable domain contracts and conformance suites
+   isolate workflows from provider-specific behavior and declare backend capabilities
+   explicitly.
+2. **Fail closed at trust boundaries.** Invalid artifacts, failed execution, ambiguous
+   events, or unavailable policy checks stop progression with evidence and a deliberate
+   recovery path.
+3. **Humans govern consequential changes.** Publication, accepted risk, and deployment
+   require explicit, auditable policy gates; automation is enabled by scoped policy, not
+   inferred by an agent.
+4. **Traceability survives every backend.** Stable Forge identities correlate artifacts,
+   actors, policies, repositories, changes, CI runs, environments, and deployments across
+   provider boundaries.
+5. **Credentials never enter agent context.** Brokers provide short-lived,
+   least-privilege operations outside the model boundary, keeping secrets out of prompts,
+   artifacts, workspaces, logs, and comments.
+6. **A central platform with an open ecosystem.** Forge is centrally operated for
+   consistent cross-project governance while remaining open source, self-hostable,
+   extensible, and open to contribution—not repositioned as a local developer tool.
 7. **Orchestrate infrastructure; do not become its control plane.** Forge owns deployment
-   intent, policy gates, lifecycle records, correlation, and reconciliation. External
-   deployment plugins own provider-specific provisioning and teardown, and the target
-   platform remains authoritative for infrastructure state. This boundary lets Forge
-   govern environments without embedding cloud credentials, resource schemas, or a
-   general-purpose cloud provisioner in the core.
+   intent, policy, and lifecycle reconciliation; plugins and target platforms own
+   provisioning and infrastructure state.
 
 ## Roadmap themes
 
