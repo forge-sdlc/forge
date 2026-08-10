@@ -51,10 +51,10 @@ workflows—while making Jira, GitHub, and Podman defaults rather than permanent
 
 ### 1. Deterministic and recoverable orchestration
 
-Before adding providers, runtimes, or workflows, Forge must make every transition
-validated, replay-safe, traceable, and recoverable. This foundation prevents ambiguous
-agent or execution results from advancing a workflow and gives operators enough evidence
-to understand and resume failures.
+Forge is moving toward transitions that are validated, replay-safe, traceable, and
+recoverable. These capabilities should be delivered incrementally and adopted by each
+new provider, runtime, and workflow, enabling expansion without multiplying ambiguous
+state or unrecoverable failures.
 
 **Deliverables**
 
