@@ -58,9 +58,8 @@ state or unrecoverable failures.
 
 **Deliverables**
 
-- **Explicit outcomes:** versioned, typed node and execution results distinguish
-  `actionable`, `no_action`, `needs_input`, and `failed`; missing, malformed, or
-  incompatible results fail closed. Markdown remains a view, not the workflow contract.
+- **Explicit outcomes:** nodes and execution drivers return validated, versioned results
+  with unambiguous completion and failure semantics; invalid results fail closed.
 - **Replay-safe effects:** an idempotent journal governs comments, branches, PRs/MRs,
   deployments, and teardown so retries and duplicate events cannot repeat mutations.
 - **Durable identity:** stable correlation IDs link tickets, repositories, revisions,
