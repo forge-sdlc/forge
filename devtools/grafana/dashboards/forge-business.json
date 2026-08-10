@@ -843,6 +843,117 @@
             }
           }
         }
+      },
+      "panel-26": {
+        "kind": "Panel",
+        "spec": {
+          "id": 26,
+          "title": "Avg Cost / Task",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "langfuse-clickhouse"
+                      },
+                      "spec": {
+                        "format": "table",
+                        "rawSql": "SELECT round(avg(issue_cost), 2) as value FROM (SELECT t.session_id, sum(o.total_cost) as issue_cost FROM default.traces t FINAL JOIN default.observations o FINAL ON t.id = o.trace_id WHERE $__timeFilter(t.timestamp) AND t.metadata['ticket_type'] = 'Task' AND t.session_id IN ($jira_issue) GROUP BY t.session_id)"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "stat",
+            "version": "",
+            "spec": {
+              "options": {
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "currencyUSD"
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "panel-27": {
+        "kind": "Panel",
+        "spec": {
+          "id": 27,
+          "title": "Avg Completion Time (Tasks)",
+          "description": "",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "grafana-clickhouse-datasource",
+                      "version": "v0",
+                      "datasource": {
+                        "name": "langfuse-clickhouse"
+                      },
+                      "spec": {
+                        "format": "timeseries",
+                        "rawSql": "SELECT toStartOfWeek(start_time) as time, round(avg(hours_elapsed), 1) as avg_hours FROM (SELECT t.session_id, min(t.timestamp) as start_time, dateDiff('hour', min(t.timestamp), max(t.timestamp)) as hours_elapsed FROM default.traces t FINAL WHERE $__timeFilter(t.timestamp) AND t.session_id IN ($jira_issue) AND t.metadata['ticket_type'] = 'Task' GROUP BY t.session_id HAVING count(*) > 1) GROUP BY time ORDER BY time"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {},
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "h",
+                  "custom": {
+                    "spanNulls": true
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
       }
     },
     "layout": {
@@ -863,7 +974,7 @@
                       "spec": {
                         "x": 0,
                         "y": 0,
-                        "width": 5,
+                        "width": 4,
                         "height": 4,
                         "element": {
                           "kind": "ElementReference",
@@ -874,9 +985,9 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 5,
+                        "x": 4,
                         "y": 0,
-                        "width": 5,
+                        "width": 4,
                         "height": 4,
                         "element": {
                           "kind": "ElementReference",
@@ -887,9 +998,9 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 10,
+                        "x": 8,
                         "y": 0,
-                        "width": 5,
+                        "width": 4,
                         "height": 4,
                         "element": {
                           "kind": "ElementReference",
@@ -900,9 +1011,22 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 15,
+                        "x": 12,
                         "y": 0,
-                        "width": 5,
+                        "width": 4,
+                        "height": 4,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-26"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 4,
                         "height": 4,
                         "element": {
                           "kind": "ElementReference",
@@ -1048,7 +1172,7 @@
                       "spec": {
                         "x": 0,
                         "y": 0,
-                        "width": 12,
+                        "width": 8,
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
@@ -1059,13 +1183,26 @@
                     {
                       "kind": "GridLayoutItem",
                       "spec": {
-                        "x": 12,
+                        "x": 8,
                         "y": 0,
-                        "width": 12,
+                        "width": 8,
                         "height": 8,
                         "element": {
                           "kind": "ElementReference",
                           "name": "panel-25"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 16,
+                        "y": 0,
+                        "width": 8,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-27"
                         }
                       }
                     }
@@ -1183,36 +1320,34 @@
         }
       },
       {
-        "kind": "CustomVariable",
+        "kind": "QueryVariable",
         "spec": {
           "name": "ticket_type",
-          "query": "Feature,Bug",
           "current": {
             "text": "All",
             "value": "$__all"
           },
-          "options": [
-            {
-              "selected": true,
-              "text": "All",
-              "value": "$__all"
-            },
-            {
-              "selected": false,
-              "text": "Feature",
-              "value": "Feature"
-            },
-            {
-              "selected": false,
-              "text": "Bug",
-              "value": "Bug"
-            }
-          ],
-          "multi": true,
-          "includeAll": true,
           "label": "Ticket Type",
           "hide": "dontHide",
+          "refresh": "onTimeRangeChanged",
           "skipUrlSync": false,
+          "query": {
+            "kind": "DataQuery",
+            "group": "grafana-clickhouse-datasource",
+            "version": "v0",
+            "datasource": {
+              "name": "langfuse-clickhouse"
+            },
+            "spec": {
+              "__legacyStringValue": "SELECT DISTINCT metadata['ticket_type'] as tt FROM default.traces FINAL WHERE tt != '' ORDER BY tt"
+            }
+          },
+          "regex": "",
+          "sort": "alphabeticalAsc",
+          "definition": "SELECT DISTINCT metadata['ticket_type'] as tt FROM default.traces FINAL WHERE tt != '' ORDER BY tt",
+          "options": [],
+          "multi": true,
+          "includeAll": true,
           "allowCustomValue": true
         }
       },
