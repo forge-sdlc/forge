@@ -19,6 +19,12 @@ cd forge
 uv sync
 ```
 
+To verify that Forge is correctly installed, you can print the installed version:
+
+```bash
+uv run forge version
+```
+
 ## 2. Configure
 
 ```bash
