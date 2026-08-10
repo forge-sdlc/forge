@@ -47,7 +47,31 @@ workflows—while making Jira, GitHub, and Podman defaults rather than permanent
    intent, policy, and lifecycle reconciliation; plugins and target platforms own
    provisioning and infrastructure state.
 
+## Product decisions
+
+1. **Primary audience:** enterprise platform teams operating Forge as a central service;
+   open source supports self-hosting, extension, and contribution rather than making
+   local execution the primary product mode.
+2. **Kubernetes scope:** both the Forge control plane and isolated agent execution,
+   delivered as separate tracks.
+3. **Mixed source providers:** GitHub and multiple GitLab instances must coexist within
+   one project from the first supported GitLab milestone.
+4. **Product prototyping:** users compare working options from an initial PRD and feed
+   approved learning into the PRD and plan before production implementation.
+5. **Preview environments:** explicit approval by default, with project-policy opt-in to
+   automatic creation.
+6. **First deployment integration:** invoke an allowlisted automation job before adding
+   declarative environment reconciliation.
+7. **Extension model:** Forge-maintained built-ins and separately deployed external
+   plugins share interfaces and conformance suites with trust-appropriate isolation.
+8. **Issue tracking:** Jira is the built-in default behind an interface, not a permanent
+   architectural requirement.
+
 ## Roadmap themes
+
+Each theme uses the same structure: intended outcomes, related tracking, and observable
+exit criteria. Technical schemas and implementation contracts belong in the linked issues
+and proposals. Tracking status was reviewed on 2026-08-10.
 
 ### 1. Deterministic and recoverable orchestration
 
@@ -56,7 +80,7 @@ recoverable. These capabilities should be delivered incrementally and adopted by
 new provider, runtime, and workflow, enabling expansion without multiplying ambiguous
 state or unrecoverable failures.
 
-**Deliverables**
+**Outcomes**
 
 - **Explicit outcomes:** nodes and execution drivers return validated, versioned results
   with unambiguous completion and failure semantics; invalid results fail closed.
@@ -72,7 +96,7 @@ state or unrecoverable failures.
 - **Proof under failure:** contract, replay, failure-injection, and migration tests verify
   these guarantees across restarts and workflow upgrades.
 
-**Related tracking (reviewed 2026-08-10)**
+**Tracking**
 
 - Open issues: [typed artifact contracts #150](https://github.com/forge-sdlc/forge/issues/150),
   [structured model outputs #252](https://github.com/forge-sdlc/forge/issues/252),
@@ -127,7 +151,7 @@ Issue [#162](https://github.com/forge-sdlc/forge/issues/162) is the canonical te
 plan for repository identity, workflow state, provider contracts, migrations, and event
 routing.
 
-**Related tracking (reviewed 2026-08-10)**
+**Tracking**
 
 - Open issue: [configurable source providers and mixed-provider workflows #162](https://github.com/forge-sdlc/forge/issues/162).
 - Merged foundation: [multi-repository PR lifecycle tracking PR #238](https://github.com/forge-sdlc/forge/pull/238)
@@ -146,43 +170,28 @@ routing.
 
 ### 3. Pluggable execution and Kubernetes support
 
-Kubernetes support must cover two separate user needs: deploying the Forge control plane
-to Kubernetes and running isolated agent jobs on Kubernetes. They should be deliverable
-independently.
+Kubernetes support has two independent tracks: running isolated agent work and operating
+the Forge control plane. Both build on provider-neutral execution semantics so workflow
+logic does not depend on Podman, Kubernetes, or a future runtime.
 
-**Execution driver contract**
+**Outcomes**
 
-- Submit an immutable execution specification: image digest, command, workspace, resource
-  limits, deadline, network policy profile, secrets references, and correlation labels.
-- Observe status and heartbeats, stream bounded logs, cancel, collect typed results and
-  artifacts, and clean up idempotently.
-- Drivers: existing local Podman, then Kubernetes Job; future drivers can include remote
-  container services without changing workflow nodes.
+- Podman and Kubernetes execute the same bounded work specification and expose consistent
+  lifecycle, logs, artifacts, cancellation, and cleanup behavior.
+- Kubernetes agent jobs use workload identity, least privilege, resource limits,
+  controlled egress, and durable workspace/artifact transport.
+- Forge ships as an operable Kubernetes/OpenShift service with supported installation,
+  upgrades, rollback, scaling, recovery, and production security guidance.
+- Runtime failures, restarts, and orphaned resources converge without losing or
+  duplicating workflow work.
 
-**Kubernetes agent execution**
+**Sequence**
 
-- Kubernetes Jobs with per-run ServiceAccounts, security contexts, quotas, deadlines,
-  and TTL cleanup.
-- Workspace transport via object storage or purpose-built PVCs; do not assume a shared
-  host filesystem.
-- Default-deny network policies with explicit egress profiles.
-- External Secrets / workload identity integration instead of environment-secret copies.
-- Log and artifact size limits, cancellation, orphan reconciliation, and namespace-level
-  concurrency quotas.
-- Compatibility with vanilla Kubernetes and OpenShift restricted security profiles.
+1. Establish the execution-driver boundary and retain Podman behavior.
+2. Add conformant Kubernetes agent execution and sandbox hardening.
+3. Deliver and harden the Kubernetes/OpenShift control-plane distribution.
 
-**Forge control-plane deployment**
-
-- Versioned OCI images and Helm chart for API, worker, Redis dependency/external Redis,
-  Service, Ingress/Route, probes, PodDisruptionBudget, autoscaling, and metrics.
-- Database/checkpoint migrations and documented upgrade/rollback policy.
-- HA worker semantics, graceful shutdown, queue draining, backups, and disaster recovery.
-- Production security guide and reference values for OpenShift.
-
-This theme implements the intent of
-[pluggable sandbox drivers #30](https://github.com/forge-sdlc/forge/issues/30).
-
-**Related tracking (reviewed 2026-08-10)**
+**Tracking**
 
 - Open issue and implementation PR: [pluggable sandbox drivers #30](https://github.com/forge-sdlc/forge/issues/30)
   and [Kubernetes driver PR #243](https://github.com/forge-sdlc/forge/pull/243).
@@ -202,47 +211,24 @@ This theme implements the intent of
 
 ### 4. Product prototyping and workflow evolution
 
-Product prototyping is a discovery workflow for Forge users. Starting from an initial
-PRD or feature idea, a user can ask Forge to build one or more competing prototypes,
-interact with and revise them, compare their behavior, and feed what was learned back
-into the PRD and product plan before committing to a production implementation. This is
-distinct from prototyping Forge's own workflow graph, which remains a platform-engineering
-capability.
+This theme contains two related capabilities: product discovery for Forge users and safe
+evolution of Forge workflows by platform engineers. Both rely on isolated experiments,
+measured comparison, and an explicit decision before promotion.
 
-**Deliverables**
+**Outcomes**
 
-- A PRD-to-prototype discovery workflow that turns explicit uncertainties and hypotheses
-  into one or more time-boxed prototype options with comparable goals and evaluation
-  criteria.
-- Isolated, disposable prototype workspaces and optional preview environments where users
-  can exercise behavior, provide feedback, and request revisions without creating a
-  production PR/MR or representing the prototype as production-ready code.
-- Side-by-side comparison of alternative prototypes using user feedback, behavior,
-  feasibility, architecture implications, risks, cost, and measured results—not only an
-  agent preference.
-- A governed learning step that proposes concrete PRD and plan updates, records which
-  prototype evidence supports each change, and requires user approval before modifying
-  the canonical artifacts.
-- An explicit transition from discovery to delivery: discard all options, continue
-  prototyping, or select an option and generate a coherent implementation plan. Reuse
-  validated decisions and evidence, but regenerate production-quality implementation
-  rather than silently promoting disposable prototype code.
-- Versioned workflow definition and registry with typed inputs, outputs, gates, retry
-  policies, permissions, and capability requirements.
-- Workflow scaffold CLI and validation/lint command.
-- Visual graph rendering plus a step-by-step simulator using fixture events and recorded
-  adapter responses.
-- `dry-run` mode: agents may generate artifacts, but external writes are captured as an
-  inspectable side-effect plan.
-- `shadow` mode: run a candidate workflow against copied/sanitized events without writes
-  and compare decisions, cost, latency, and artifacts to the active version.
-- Project-level pinning, canary rollout, immutable workflow version per in-flight run,
-  checkpoint migration rules, and one-click rollback for new runs.
-- Evaluation datasets and scorecards for artifact quality, approval revisions, CI
-  first-pass rate, completion rate, cost, and time.
-- A stable extension API only after two internal workflow prototypes prove the contract.
+- Users can turn an uncertain PRD or feature idea into multiple time-boxed prototypes,
+  revise and compare them, and approve evidence-backed updates to the PRD and plan.
+- Prototype code and environments remain disposable and clearly separate from production
+  delivery; validated decisions may carry forward, but production code is regenerated.
+- Platform engineers can define, validate, simulate, and evaluate versioned workflows
+  without editing orchestrator routing code or mutating live projects.
+- Dry-run, shadow, pinning, canary, migration, and rollback controls support measured
+  workflow evolution without changing in-flight runs unexpectedly.
+- Stable extension APIs follow proven internal implementations rather than speculative
+  abstraction.
 
-**Related tracking (reviewed 2026-08-10)**
+**Tracking**
 
 - Merged foundation: [PRD approval workflow issue #33](https://github.com/forge-sdlc/forge/issues/33)
   and [implementation PR #83](https://github.com/forge-sdlc/forge/pull/83).
@@ -256,78 +242,43 @@ capability.
 
 **Exit criteria**
 
-- Given one PRD with an unresolved product or implementation choice, a user can create,
-  revise, and compare at least two working prototype options before selecting either.
-- Approved learnings update the PRD and implementation plan with traceable prototype and
-  user-feedback evidence; rejected learnings leave the canonical artifacts unchanged.
-- Prototype code and environments are clearly marked disposable, isolated from production
-  delivery, and cleaned up according to policy.
-- A new experimental workflow can be scaffolded and simulated without editing worker
-  routing code.
-- Dry-run mode performs zero external mutations, verified by adapter contract tests.
-- In-flight workflows remain on their original version during a rollout.
-- A candidate version can be promoted or rolled back using measured evaluation results.
+- A user can compare at least two working options for one unresolved PRD decision and
+  apply only approved learnings to the canonical artifacts.
+- Prototype resources are isolated, visibly disposable, and cleaned up by policy.
+- A candidate workflow can be simulated, evaluated, promoted, and rolled back without
+  external dry-run mutations or unintended changes to in-flight runs.
 
 ### 5. External deployment and ephemeral environments
 
-[Issue #28](https://github.com/forge-sdlc/forge/issues/28) should be refined into a
-generic lifecycle-hook and deployment-plugin capability. Deployment controllers,
-GitOps systems, and infrastructure-automation services integrate through the same
-contract; none are dependencies of Forge core.
+Forge should govern deployment intent and environment lifecycle while external systems
+remain responsible for infrastructure operations and state. The first use case is a
+preview environment for unmerged changes, created only after explicit approval by
+default.
 
-**Refined scope**
+**Outcomes**
 
-Forge owns the decision and lifecycle record; the plugin owns infrastructure operations.
-The first use case is a preview/demo environment built from unmerged change requests.
-Conversational ticket intake is a separate upstream integration and is not required for
-the deployment MVP. Creation requires explicit approval or command by default; projects
-may opt into automatic creation after CI through policy.
+- A provider-neutral lifecycle and plugin boundary supports deployment controllers,
+  GitOps systems, and automation services without making them Forge dependencies.
+- Environment records connect immutable inputs, policy, ownership, status, outputs, TTL,
+  teardown, and audit history without exposing credentials.
+- Allowlisted templates, quotas, budgets, approvals, and target connections constrain
+  what can be provisioned and where.
+- Idempotent reconciliation converges provisioning and teardown across duplicate events,
+  missed callbacks, expiry, and Forge restarts.
 
-**Related tracking (reviewed 2026-08-10)**
+**Sequence**
+
+1. Define the lifecycle, threat model, and reference plugin.
+2. Prove the contract by invoking an allowlisted automation job.
+3. Add declarative/GitOps integrations, automatic teardown, quotas, cost reporting, and
+   an external plugin SDK.
+
+**Tracking**
 
 - Open proposal: [staging/demo environments #28](https://github.com/forge-sdlc/forge/issues/28).
-- Tracking gaps: lifecycle hooks, the environment state machine, plugin conformance,
-  allowlisted automation jobs, approval policy, and TTL reconciliation need dedicated
-  issues after #28 is refined.
-
-**Environment record**
-
-- Stable environment ID, owner, ticket and PR/MR references.
-- Requested template, immutable source revisions/image digests, parameters, and policy.
-- Provider operation ID, lifecycle state, timestamps, TTL, cost/size classification.
-- Non-secret outputs such as URLs; credentials are delivered through a secret broker or
-  one-time access mechanism, never Jira/PR comments.
-- Teardown reason, status, retries, and audit history.
-
-**Plugin contract**
-
-- `validate(request)`, `provision(request, idempotency_key)`, `status(operation_id)`,
-  `outputs(operation_id)`, and `destroy(operation_id, idempotency_key)`.
-- Signed/authenticated callbacks plus polling fallback.
-- Capability declaration, health check, timeouts, retry classification, and redacted
-  errors.
-- Hooks initially available after change-request creation, after required CI passes, and
-  on close/merge/ticket completion/TTL expiration. Policy selects which hooks are active.
-
-**Safety policy**
-
-- Allowlisted project templates, parameter schemas, quotas, maximum TTL, concurrency and
-  budget limits, approved target connections, and optional human deployment approval.
-- Unique Forge environment IDs are passed to plugins; plugins remain responsible for
-  provider-specific naming and collision handling.
-- A durable reconciler performs teardown. Webhook-only teardown is insufficient because
-  events can be missed and Forge can be offline at expiry.
-- Provisioning failure must not mutate source history or weaken CI gates.
-- Deployment success does not imply production release approval.
-
-**Delivery slices**
-
-1. Proposal and threat model; environment state machine and lifecycle hook contract.
-2. No-op/reference plugin and conformance suite; dry-run and manual trigger.
-3. Generic job-orchestration plugin for invoking allowlisted automation templates.
-4. Kubernetes/GitOps plugin for applying approved, parameterized environment templates.
-5. Automatic TTL and PR/MR/ticket teardown reconciliation; access-output delivery.
-6. Multiple change requests, refresh/redeploy, quotas, cost reporting, and plugin SDK.
+- Tracking gaps: lifecycle hooks, environment state, plugin conformance, allowlisted
+  automation jobs, approval policy, and TTL reconciliation need dedicated issues after
+  #28 is refined.
 
 **Exit criteria**
 
@@ -343,37 +294,20 @@ Security and testing are workflow outcomes, not only implementation-stage tools.
 should support both urgent vulnerability remediation and systematic improvement of
 existing code whose behavior is insufficiently verified.
 
-**Security deliverables**
+**Outcomes**
 
-- CVE remediation workflow: ingest a vulnerability advisory or scanner finding, resolve
-  affected repositories and dependency paths, assess exploitability and priority,
-  propose the smallest safe upgrade or mitigation, generate regression tests, and retain
-  advisory-to-commit evidence.
-- Policy-controlled security stages in implementation workflows: dependency, secret,
-  static-analysis, and generated-code weakness scans before publication and again through
-  repository-owned CI. Normalize findings into typed artifacts with severity,
-  confidence, location, remediation, and suppress/accept-risk decisions.
-- Fail closed for findings above project policy thresholds; require an auditable human
-  exception for accepted risk. Scanner outage or malformed output must not be treated as
-  a pass.
-- Harden Forge itself: sandbox capability contracts, default-deny execution profiles,
-  pre-push validation, structured execution security evidence, credential isolation,
-  secret scanning, and prompt-injection defenses.
+- A CVE workflow traces advisories or findings to affected code, assesses risk, proposes
+  minimal remediation, adds regression tests, and preserves advisory-to-change evidence.
+- Policy-controlled security stages scan dependencies, secrets, source, and generated
+  changes; required checks fail closed and accepted risk requires an auditable exception.
+- Forge hardening covers sandbox boundaries, pre-push validation, credential isolation,
+  security evidence, secret scanning, and prompt-injection defenses.
+- A verification-debt workflow discovers risky unverified behavior in existing code,
+  prioritizes it, and opens focused test-only changes with behavior-level traceability.
+- Planning uses risk-based behavior matrices and measures verification gains beyond line
+  coverage, including mutation effectiveness and flaky-test impact.
 
-**Verification-debt deliverables**
-
-- A dedicated test workflow for existing features and code: discover unverified behavior
-  from requirements, incidents, change history, coverage/mutation reports, and code risk;
-  prioritize verification debt; generate focused tests without requiring a feature
-  implementation; and open reviewable PRs/MRs with traceability to the behavior covered.
-- Improve test planning in the normal planning and implementation workflows with explicit
-  behavior inventories, risk-based test matrices, negative/boundary/concurrency cases,
-  and a clear split between deterministic repository validation and model-reviewed
-  evidence.
-- Measure meaningful verification gains with behavior/risk coverage, mutation score,
-  escaped-defect history, and flaky-test impact rather than line coverage alone.
-
-**Related tracking (reviewed 2026-08-10)**
+**Tracking**
 
 - Open security issues: [sandbox capability requirements #265](https://github.com/forge-sdlc/forge/issues/265),
   [sandbox hardening #266](https://github.com/forge-sdlc/forge/issues/266),
@@ -412,28 +346,22 @@ existing code whose behavior is insufficiently verified.
 
 Platform breadth is only valuable if users can understand and govern it.
 
-**Deliverables**
+**Outcomes**
 
-- Concise Jira progress updates and a provider-neutral aggregate view across all
-  repositories and environments.
-- Review split artifacts on their parent before creating child tickets; revisions update
-  stable items rather than deleting and recreating them.
-- Concurrent CI observation and human review where policy allows, while merge readiness
-  still requires both.
-- Better Langfuse span names and end-to-end workflow statistics: duration, revisions,
-  model/token cost, first-pass CI, failure class, and environment lifetime.
-- Layered prompt efficiency, context budgets, caching, and per-stage model policy.
-- An `auto` model option per stage that dynamically routes by task complexity, context,
-  required capabilities, latency/cost budget, and observed quality. Policies must support
-  allowlists, deterministic fallback, retry/escalation to a stronger model, and a pinned
-  model override for reproducibility.
-- MLflow integration as an optional experiment/evaluation backend: record workflow and
-  stage parameters, model/provider identity, prompt/artifact versions, datasets, metrics,
-  costs, latency, and correlation IDs; compare routing and workflow variants without
-  making MLflow a runtime dependency or storing secrets/raw sensitive context by default.
-- Pre-change-request validation defined by project policy/skills.
+- Users see concise progress, ownership, next actions, and aggregate status across every
+  repository and environment associated with a workflow.
+- Artifact review preserves stable identity and happens before irreversible decomposition
+  or publication; CI and human review may proceed concurrently without weakening gates.
+- End-to-end telemetry reports outcome, latency, revisions, failures, quality, and cost by
+  workflow stage and configuration.
+- Per-stage model policy supports a pinned model or auditable `auto` routing with budgets,
+  capability constraints, deterministic fallback, and escalation.
+- Optional MLflow export compares workflow and routing variants using shared correlation
+  IDs without becoming a runtime dependency or exporting sensitive context by default.
+- Prompt efficiency, context budgets, caching, and repository-owned pre-PR validation
+  reduce cost and avoidable feedback cycles without lowering quality.
 
-**Related tracking (reviewed 2026-08-10)**
+**Tracking**
 
 - Open issues and PRs: [revision identity #91](https://github.com/forge-sdlc/forge/issues/91),
   [concurrent CI/review #137](https://github.com/forge-sdlc/forge/issues/137) with
@@ -510,28 +438,6 @@ Track these by project, provider, workflow version, and execution driver:
 - Execution queue time, success rate, orphan rate, and cleanup latency.
 - Preview-environment provision time, success rate, TTL compliance, and leaked resources.
 - Provider/driver conformance pass rate and upgrade compatibility.
-
-## Product decisions
-
-1. **Primary audience:** prioritize enterprise platform teams operating Forge as a
-   central service. Preserve open-source self-hosting, extensibility, and contribution;
-   local execution of Forge is not a primary product mode.
-2. **Kubernetes scope:** support both running the Forge control plane and running isolated
-   agent sandboxes, as separately shippable tracks.
-3. **Mixed source providers:** a Jira project must be able to mix GitHub repositories and
-   repositories from multiple GitLab instances from the first supported GitLab milestone.
-4. **Product prototyping:** Forge users start from an initial PRD, explore and revise one
-   or more working options, compare the results, and feed approved learning into a
-   coherent PRD and plan before production implementation.
-5. **Preview environments:** require explicit approval or command by default, with
-   project-policy opt-in for automatic creation.
-6. **First deployment integration:** prove the external deployment contract by invoking
-   an allowlisted automation job before adding declarative environment reconciliation.
-7. **Extension model:** provide Forge-maintained built-ins and interfaces/conformance
-   suites for separately deployed external plugins, with trust-appropriate isolation.
-8. **Issue tracking:** abstract Jira behind an issue-tracker interface. Ship Jira as the
-   built-in default while allowing external issue-tracker plugins; Jira is not a permanent
-   architectural requirement.
 
 ## Near-term proposal backlog
 
