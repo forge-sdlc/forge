@@ -6,11 +6,11 @@
 
 ## Product direction
 
-Forge is an extensible, governed SDLC orchestrator: a durable control plane for turning
-product intent into traceable artifacts, validated changes, and, when policy permits,
-temporary environments. It coordinates long-running agent workflows across issue
-tracking, source control, execution, CI, review, and deployment while preserving those
-systems as the authoritative owners of their respective operations.
+Forge is a governed SDLC orchestrator for turning product intent into traceable artifacts
+and validated changes through long-running agent workflows. This roadmap evolves Forge
+into an extensible control plane spanning issue tracking, source control, execution, CI,
+review, and deployment, including policy-governed temporary environments. These systems
+remain the authoritative owners of their respective operations.
 
 The durable product boundary is:
 
