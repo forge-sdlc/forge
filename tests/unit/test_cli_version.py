@@ -19,9 +19,9 @@ def test_routing_version(_mock_setup_logging: MagicMock, mock_cmd: AsyncMock) ->
 
 @pytest.mark.asyncio
 async def test_cmd_version_output(capsys: Any) -> None:
-    from types import SimpleNamespace
+    import argparse
 
-    args = SimpleNamespace(command="version")
+    args = argparse.Namespace(command="version")
     code = await cmd_version(args)
     assert code == 0
     captured = capsys.readouterr()
