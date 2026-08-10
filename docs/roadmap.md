@@ -2,7 +2,7 @@
 
 **Status:** Draft for discussion  
 **Planning horizon:** Outcome-based; dates and release assignments are intentionally TBD  
-**Last reviewed:** 2026-07-15
+**Last reviewed:** 2026-08-10
 
 ## Product direction
 
@@ -187,11 +187,13 @@ revisions, not mutable branch names.
    per-repository change request, review, and check-run models; migrate existing
    checkpoints from the single-current-PR shape.
 3. Add GitLab.com support for branch-based merge requests, pipelines/jobs, discussions,
-   approvals, and system hooks/project webhooks.
+   approvals, and system hooks/project webhooks. The first supported GitLab release must
+   also support a workflow mixing GitHub and GitLab repositories; single-provider-only
+   project support is not an acceptable milestone.
 4. Add self-managed GitLab connections: arbitrary base URL, private CA bundle, proxy,
    version/capability probing, group/project tokens, OAuth/service accounts, and multiple
    simultaneous instances.
-5. Support a single Forge workflow spanning GitHub and GitLab repositories, with
+5. Harden mixed-provider workflows across multiple simultaneous GitLab instances, with
    independent change requests but one aggregate approval and completion view.
 
 **Exit criteria**
@@ -249,14 +251,33 @@ This theme implements the intent of
 - An OpenShift restricted-profile installation completes an end-to-end workflow.
 - Orphaned jobs and workspaces are reconciled after control-plane restart.
 
-### 4. Workflow prototyping and evolution
+### 4. Product prototyping and workflow evolution
 
-Prototyping should let maintainers design and evaluate workflows safely without forking
-the orchestrator or exposing real projects to experimental routing. Skills customize node
-behavior; prototypes must also be able to change graph structure.
+Product prototyping is a discovery workflow for Forge users. Starting from an initial
+PRD or feature idea, a user can ask Forge to build one or more competing prototypes,
+interact with and revise them, compare their behavior, and feed what was learned back
+into the PRD and product plan before committing to a production implementation. This is
+distinct from prototyping Forge's own workflow graph, which remains a platform-engineering
+capability.
 
 **Deliverables**
 
+- A PRD-to-prototype discovery workflow that turns explicit uncertainties and hypotheses
+  into one or more time-boxed prototype options with comparable goals and evaluation
+  criteria.
+- Isolated, disposable prototype workspaces and optional preview environments where users
+  can exercise behavior, provide feedback, and request revisions without creating a
+  production PR/MR or representing the prototype as production-ready code.
+- Side-by-side comparison of alternative prototypes using user feedback, behavior,
+  feasibility, architecture implications, risks, cost, and measured results—not only an
+  agent preference.
+- A governed learning step that proposes concrete PRD and plan updates, records which
+  prototype evidence supports each change, and requires user approval before modifying
+  the canonical artifacts.
+- An explicit transition from discovery to delivery: discard all options, continue
+  prototyping, or select an option and generate a coherent implementation plan. Reuse
+  validated decisions and evidence, but regenerate production-quality implementation
+  rather than silently promoting disposable prototype code.
 - Versioned workflow definition and registry with typed inputs, outputs, gates, retry
   policies, permissions, and capability requirements.
 - Workflow scaffold CLI and validation/lint command.
@@ -274,6 +295,12 @@ behavior; prototypes must also be able to change graph structure.
 
 **Exit criteria**
 
+- Given one PRD with an unresolved product or implementation choice, a user can create,
+  revise, and compare at least two working prototype options before selecting either.
+- Approved learnings update the PRD and implementation plan with traceable prototype and
+  user-feedback evidence; rejected learnings leave the canonical artifacts unchanged.
+- Prototype code and environments are clearly marked disposable, isolated from production
+  delivery, and cleaned up according to policy.
 - A new experimental workflow can be scaffolded and simulated without editing worker
   routing code.
 - Dry-run mode performs zero external mutations, verified by adapter contract tests.
@@ -292,7 +319,8 @@ contract; none are dependencies of Forge core.
 Forge owns the decision and lifecycle record; the plugin owns infrastructure operations.
 The first use case is a preview/demo environment built from unmerged change requests.
 Conversational ticket intake is a separate upstream integration and is not required for
-the deployment MVP.
+the deployment MVP. Creation requires explicit approval or command by default; projects
+may opt into automatic creation after CI through policy.
 
 **Environment record**
 
@@ -341,7 +369,64 @@ the deployment MVP.
 - No infrastructure or access credentials are exposed to agents or ticket/change-request
   comments.
 
-### 6. Human experience, quality, and economics
+### 6. Security remediation and verification debt
+
+Security and testing are workflow outcomes, not only implementation-stage tools. Forge
+should support both urgent vulnerability remediation and systematic improvement of
+existing code whose behavior is insufficiently verified.
+
+**Security deliverables**
+
+- CVE remediation workflow: ingest a vulnerability advisory or scanner finding, resolve
+  affected repositories and dependency paths, assess exploitability and priority,
+  propose the smallest safe upgrade or mitigation, generate regression tests, and retain
+  advisory-to-commit evidence.
+- Policy-controlled security stages in implementation workflows: dependency, secret,
+  static-analysis, and generated-code weakness scans before publication and again through
+  repository-owned CI. Normalize findings into typed artifacts with severity,
+  confidence, location, remediation, and suppress/accept-risk decisions.
+- Fail closed for findings above project policy thresholds; require an auditable human
+  exception for accepted risk. Scanner outage or malformed output must not be treated as
+  a pass.
+- Harden Forge itself: sandbox capability contracts, default-deny execution profiles,
+  pre-push validation, structured execution security evidence, credential isolation,
+  secret scanning, and prompt-injection defenses.
+
+**Verification-debt deliverables**
+
+- A dedicated test workflow for existing features and code: discover unverified behavior
+  from requirements, incidents, change history, coverage/mutation reports, and code risk;
+  prioritize verification debt; generate focused tests without requiring a feature
+  implementation; and open reviewable PRs/MRs with traceability to the behavior covered.
+- Improve test planning in the normal planning and implementation workflows with explicit
+  behavior inventories, risk-based test matrices, negative/boundary/concurrency cases,
+  and a clear split between deterministic repository validation and model-reviewed
+  evidence.
+- Measure meaningful verification gains with behavior/risk coverage, mutation score,
+  escaped-defect history, and flaky-test impact rather than line coverage alone.
+
+**Current security backlog incorporated:**
+[sandbox capability requirements #265](https://github.com/forge-sdlc/forge/issues/265),
+[sandbox hardening #266](https://github.com/forge-sdlc/forge/issues/266),
+[structured security evidence #264](https://github.com/forge-sdlc/forge/issues/264),
+[fail-closed pre-push validation #263](https://github.com/forge-sdlc/forge/issues/263),
+[OpenShell boundary spike #262](https://github.com/forge-sdlc/forge/issues/262),
+[credential isolation #82](https://github.com/forge-sdlc/forge/issues/82),
+[secret scanning #77](https://github.com/forge-sdlc/forge/issues/77), and
+[prompt-injection auditing #76](https://github.com/forge-sdlc/forge/issues/76).
+
+**Exit criteria**
+
+- A CVE advisory can produce a policy-compliant remediation PR/MR with linked scan and
+  regression-test evidence.
+- Generated changes cannot be published when a required security stage fails, is
+  unavailable, or returns invalid output.
+- A verification-debt run can add tests to existing code and report the behaviors and
+  risks newly covered without changing production behavior.
+- Forge execution security controls and accepted exceptions are queryable by correlation
+  ID.
+
+### 7. Human experience, quality, and economics
 
 Platform breadth is only valuable if users can understand and govern it.
 
@@ -355,7 +440,15 @@ Platform breadth is only valuable if users can understand and govern it.
   still requires both.
 - Better Langfuse span names and end-to-end workflow statistics: duration, revisions,
   model/token cost, first-pass CI, failure class, and environment lifetime.
-- Layered prompt efficiency, context budgets, caching, and per-node model policy.
+- Layered prompt efficiency, context budgets, caching, and per-stage model policy.
+- An `auto` model option per stage that dynamically routes by task complexity, context,
+  required capabilities, latency/cost budget, and observed quality. Policies must support
+  allowlists, deterministic fallback, retry/escalation to a stronger model, and a pinned
+  model override for reproducibility.
+- MLflow integration as an optional experiment/evaluation backend: record workflow and
+  stage parameters, model/provider identity, prompt/artifact versions, datasets, metrics,
+  costs, latency, and correlation IDs; compare routing and workflow variants without
+  making MLflow a runtime dependency or storing secrets/raw sensitive context by default.
 - Pre-change-request validation defined by project policy/skills.
 
 **Current backlog incorporated:**
@@ -373,6 +466,10 @@ workflow-status and statistics proposals.
 - Every major stage reports latency, cost, revision count, and outcome.
 - Baseline and post-change evaluation show cost improvements without lower completion or
   quality scores.
+- Automatic routing meets configured quality and latency floors while reducing cost
+  against pinned-model baselines, with every routing decision auditable.
+- The same evaluation run can be inspected in Forge telemetry and, when configured,
+  MLflow using a shared correlation ID.
 
 ## Recommended sequence
 
@@ -380,10 +477,10 @@ The themes overlap, but their enabling order should be explicit.
 
 | Horizon | Primary outcome | Included work |
 | --- | --- | --- |
-| **Now: Trust the core** | Forge never advances ambiguously and users can diagnose failures | Typed artifacts, execution failure semantics, correlation/indexing, idempotency, terminal notifications, redaction/injection defenses, status/telemetry |
-| **Next: Create extension seams** | Current behavior runs through stable abstractions | Source-control provider contract with GitHub adapter; execution driver contract with Podman adapter; versioned workflow definitions; lifecycle hook proposal |
-| **Then: Add enterprise backends** | Forge works in heterogeneous enterprise environments | GitLab.com and self-managed GitLab; Kubernetes Job driver; Helm/OpenShift deployment; short-lived credentials/private CA support |
-| **Then: Safely experiment and deploy** | Teams can evaluate new workflows and create governed preview environments | Simulator/dry-run/shadow/canary; deployment plugin runtime; generic automation-template plugin; TTL reconciler |
+| **Now: Trust the core** | Forge never advances ambiguously and users can diagnose failures | Typed artifacts, execution failure semantics, correlation/indexing, idempotency, terminal notifications, redaction/injection defenses, sandbox hardening, security evidence, status/telemetry |
+| **Next: Create extension seams** | Current behavior runs through stable abstractions | Source-control and issue-tracker provider contracts with built-in adapters; execution driver contract with Podman adapter; versioned workflow definitions; lifecycle hook proposal |
+| **Then: Add enterprise backends** | Enterprise platform teams can operate Forge in heterogeneous environments while open-source users retain a simple path | Mixed GitHub/GitLab workflows from the first GitLab milestone; GitLab.com and self-managed GitLab; Kubernetes agent Jobs; Helm/OpenShift deployment; short-lived credentials/private CA support |
+| **Then: Discover, experiment, and deploy** | Teams can learn through working product options, evaluate workflows, and create governed preview environments | PRD-driven competing prototypes and feedback into planning; simulator/dry-run/shadow/canary; security and verification-debt workflows; dynamic model routing and MLflow evaluation; deployment plugin runtime; allowlisted automation-job plugin; TTL reconciler |
 | **Later: Broaden the ecosystem** | External contributors can extend Forge without core changes | GitOps and deployment-controller plugins, supported SDKs, additional ticket/source/execution/deployment adapters, workflow template catalog, organization policy and portfolio analytics |
 
 Do not start all integrations simultaneously. A useful vertical-slice order is GitHub
@@ -397,9 +494,11 @@ These decisions should be captured as proposals/ADRs before implementation:
 
 1. **Configuration ownership:** move from GitHub-shaped Jira properties to project
    configuration referencing centrally managed provider connections.
-2. **Plugin boundary:** begin with in-process Python interfaces where trusted; use a
-   versioned HTTP/event contract for deployment plugins that handle higher privilege or
-   independent scaling. Do not load arbitrary plugin code into the worker.
+2. **Plugin boundary:** support both Forge-maintained built-in adapters and separately
+   deployed external plugins behind the same versioned interfaces and conformance suites.
+   Begin with in-process Python interfaces for trusted built-ins; use a versioned
+   HTTP/event contract for external or higher-privilege plugins. Do not load arbitrary
+   plugin code into the worker.
 3. **State durability:** define which state belongs in LangGraph checkpoints versus a
    queryable operational store for correlation, idempotency, and environment lifecycle.
 4. **Workflow compatibility:** define immutable workflow versions and checkpoint
@@ -424,29 +523,26 @@ Track these by project, provider, workflow version, and execution driver:
 - Preview-environment provision time, success rate, TTL compliance, and leaked resources.
 - Provider/driver conformance pass rate and upgrade compatibility.
 
-## Questions for product discussion
+## Product decisions
 
-The roadmap can proceed with the direction above, but these answers change prioritization:
-
-1. Is Forge's primary next user a local/open-source team or an enterprise platform team?
-   This decides whether workflow prototyping or Kubernetes/GitLab lands first after the
-   contracts.
-2. Does “Kubernetes support” primarily mean running Forge, running agent sandboxes, or
-   both? This roadmap recommends both as separately shippable tracks.
-3. Must one Jira project mix GitHub and multiple GitLab instances in the same workflow,
-   or is one source provider per project an acceptable first milestone?
-4. Who authors workflow prototypes: Forge maintainers, platform engineers, or ordinary
-   project users? The last group implies a much larger security and UX scope.
-5. Should preview environments be created automatically after CI, or require an explicit
-   approval/command by default? The safer default is explicit approval with project-level
-   opt-in to automation.
-6. Which external deployment model should prove the contract first: invoking an
-   allowlisted automation job or reconciling a declarative environment resource? The
-   automation-job model is recommended first because its contract is narrower.
-7. What is the desired extension model: built-in adapters maintained by Forge, separately
-   deployed plugins, or both with different trust levels?
-8. Is Jira intended to remain the required system of record, or should issue-tracker
-   abstraction enter the longer-term roadmap?
+1. **Primary audience:** prioritize enterprise platform teams while preserving a simple,
+   supported adoption path for local and open-source users.
+2. **Kubernetes scope:** support both running the Forge control plane and running isolated
+   agent sandboxes, as separately shippable tracks.
+3. **Mixed source providers:** a Jira project must be able to mix GitHub repositories and
+   repositories from multiple GitLab instances from the first supported GitLab milestone.
+4. **Product prototyping:** Forge users start from an initial PRD, explore and revise one
+   or more working options, compare the results, and feed approved learning into a
+   coherent PRD and plan before production implementation.
+5. **Preview environments:** require explicit approval or command by default, with
+   project-policy opt-in for automatic creation.
+6. **First deployment integration:** prove the external deployment contract by invoking
+   an allowlisted automation job before adding declarative environment reconciliation.
+7. **Extension model:** provide Forge-maintained built-ins and interfaces/conformance
+   suites for separately deployed external plugins, with trust-appropriate isolation.
+8. **Issue tracking:** abstract Jira behind an issue-tracker interface. Ship Jira as the
+   built-in default while allowing external issue-tracker plugins; Jira is not a permanent
+   architectural requirement.
 
 ## Near-term proposal backlog
 
@@ -456,6 +552,9 @@ Before implementation, create and review focused proposals in this order:
 2. Stable correlation identity and idempotent side-effect journal.
 3. Source-control provider contract and repository connection model.
 4. Execution driver contract and Kubernetes threat model.
-5. Versioned workflow prototype, simulation, and rollout model.
+5. PRD-driven product-prototyping workflow and versioned workflow simulation/rollout model.
 6. Lifecycle hooks, environment state machine, and deployment plugin contract.
 7. Enterprise identity, credentials, and policy model spanning all adapters.
+8. Security remediation, generated-code scanning, and accepted-risk policy.
+9. Verification-debt workflow and risk-based test-planning contract.
+10. Dynamic model-routing policy and MLflow evaluation integration.
