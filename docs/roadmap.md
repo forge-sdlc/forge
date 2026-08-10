@@ -387,23 +387,6 @@ Platform breadth is only valuable if users can understand and govern it.
 - The same evaluation run can be inspected in Forge telemetry and, when configured,
   MLflow using a shared correlation ID.
 
-## Recommended sequence
-
-The themes overlap, but their enabling order should be explicit.
-
-| Horizon | Primary outcome | Included work |
-| --- | --- | --- |
-| **Now: Trust the core** | Forge never advances ambiguously and users can diagnose failures | Typed artifacts, execution failure semantics, correlation/indexing, idempotency, terminal notifications, redaction/injection defenses, sandbox hardening, security evidence, status/telemetry |
-| **Next: Create extension seams** | Current behavior runs through stable abstractions | Source-control and issue-tracker provider contracts with built-in adapters; execution driver contract with Podman adapter; versioned workflow definitions; lifecycle hook proposal |
-| **Then: Add enterprise backends** | Platform teams can centrally operate Forge in heterogeneous environments using an open, self-hostable platform | Mixed GitHub/GitLab workflows from the first GitLab milestone; GitLab.com and self-managed GitLab; Kubernetes agent Jobs; Helm/OpenShift deployment; short-lived credentials/private CA support |
-| **Then: Discover, experiment, and deploy** | Teams can learn through working product options, evaluate workflows, and create governed preview environments | PRD-driven competing prototypes and feedback into planning; simulator/dry-run/shadow/canary; security and verification-debt workflows; dynamic model routing and MLflow evaluation; deployment plugin runtime; allowlisted automation-job plugin; TTL reconciler |
-| **Later: Broaden the ecosystem** | External contributors can extend Forge without core changes | GitOps and deployment-controller plugins, supported SDKs, additional ticket/source/execution/deployment adapters, workflow template catalog, organization policy and portfolio analytics |
-
-Do not start all integrations simultaneously. A useful vertical-slice order is GitHub
-through the new source contract, Podman through the new execution contract, then one
-GitLab instance and one Kubernetes Job. Each abstraction should be proven by at least two
-implementations before being declared stable.
-
 ## Cross-cutting architecture decisions
 
 These decisions should be captured as proposals/ADRs before implementation:
