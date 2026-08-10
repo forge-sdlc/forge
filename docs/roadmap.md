@@ -73,15 +73,22 @@ state or unrecoverable failures.
 - **Proof under failure:** contract, replay, failure-injection, and migration tests verify
   these guarantees across restarts and workflow upgrades.
 
-**Current backlog incorporated:**
-[artifact contracts #150](https://github.com/forge-sdlc/forge/issues/150),
-[execution failure routing #147](https://github.com/forge-sdlc/forge/issues/147),
-[terminal retry notification #140](https://github.com/forge-sdlc/forge/issues/140),
-[container transcript errors #79](https://github.com/forge-sdlc/forge/issues/79),
-[heartbeats #78](https://github.com/forge-sdlc/forge/issues/78),
-[secret redaction #77](https://github.com/forge-sdlc/forge/issues/77),
-[prompt-injection scanning #76](https://github.com/forge-sdlc/forge/issues/76), and
-[short-lived credentials #82](https://github.com/forge-sdlc/forge/issues/82).
+**Related tracking (reviewed 2026-08-10)**
+
+- Open issues: [typed artifact contracts #150](https://github.com/forge-sdlc/forge/issues/150),
+  [structured model outputs #252](https://github.com/forge-sdlc/forge/issues/252),
+  [heartbeats #78](https://github.com/forge-sdlc/forge/issues/78),
+  [container transcript errors #79](https://github.com/forge-sdlc/forge/issues/79), and
+  [idempotent terminal retrospectives #261](https://github.com/forge-sdlc/forge/issues/261).
+- Active PRs: [heartbeat logging #158](https://github.com/forge-sdlc/forge/pull/158),
+  [transcript error surfacing #239](https://github.com/forge-sdlc/forge/pull/239), and
+  [terminal retrospectives #271](https://github.com/forge-sdlc/forge/pull/271).
+- Merged foundations: [execution failure routing #147](https://github.com/forge-sdlc/forge/issues/147),
+  [terminal retry notification PR #155](https://github.com/forge-sdlc/forge/pull/155),
+  [per-run trace IDs #80](https://github.com/forge-sdlc/forge/issues/80), and
+  [cross-worker ticket serialization PR #212](https://github.com/forge-sdlc/forge/pull/212).
+- Tracking gap: the side-effect journal and cross-provider correlation index do not yet
+  have dedicated issues.
 
 **Exit criteria**
 
@@ -206,6 +213,15 @@ revisions, not mutable branch names.
 5. Harden mixed-provider workflows across multiple simultaneous GitLab instances, with
    independent change requests but one aggregate approval and completion view.
 
+**Related tracking (reviewed 2026-08-10)**
+
+- Open issue: [configurable source providers and mixed-provider workflows #162](https://github.com/forge-sdlc/forge/issues/162).
+- Merged foundation: [multi-repository PR lifecycle tracking PR #238](https://github.com/forge-sdlc/forge/pull/238)
+  resolved [issue #135](https://github.com/forge-sdlc/forge/issues/135).
+- Tracking gaps: GitLab.com, self-managed GitLab, multiple simultaneous GitLab instances,
+  provider conformance tests, and checkpoint migration need dedicated issues beneath
+  #162.
+
 **Exit criteria**
 
 - The same provider contract suite passes for GitHub, GitLab.com, and a supported
@@ -253,6 +269,17 @@ independently.
 
 This theme implements the intent of
 [pluggable sandbox drivers #30](https://github.com/forge-sdlc/forge/issues/30).
+
+**Related tracking (reviewed 2026-08-10)**
+
+- Open issue and implementation PR: [pluggable sandbox drivers #30](https://github.com/forge-sdlc/forge/issues/30)
+  and [Kubernetes driver PR #243](https://github.com/forge-sdlc/forge/pull/243).
+- Security and runtime design: [OpenShell boundary spike #262](https://github.com/forge-sdlc/forge/issues/262),
+  [driver capabilities #265](https://github.com/forge-sdlc/forge/issues/265),
+  [sandbox hardening #266](https://github.com/forge-sdlc/forge/issues/266), and
+  [structured execution security evidence #264](https://github.com/forge-sdlc/forge/issues/264).
+- Tracking gap: production OCI images, Helm/OpenShift deployment, HA operations,
+  upgrades, backup, and disaster recovery do not yet have dedicated issues.
 
 **Exit criteria**
 
@@ -303,6 +330,18 @@ capability.
   first-pass rate, completion rate, cost, and time.
 - A stable extension API only after two internal workflow prototypes prove the contract.
 
+**Related tracking (reviewed 2026-08-10)**
+
+- Merged foundation: [PRD approval workflow issue #33](https://github.com/forge-sdlc/forge/issues/33)
+  and [implementation PR #83](https://github.com/forge-sdlc/forge/pull/83).
+- Open feedback work: [artifact Q&A #163](https://github.com/forge-sdlc/forge/issues/163),
+  [decompose draft review #218](https://github.com/forge-sdlc/forge/issues/218), and
+  [draft review PR #242](https://github.com/forge-sdlc/forge/pull/242).
+- Related developer tooling: [local skill testing #296](https://github.com/forge-sdlc/forge/issues/296).
+- Tracking gaps: competing PRD-driven product prototypes, prototype comparison and
+  learning capture, disposable preview workspaces, workflow simulation, dry-run/shadow
+  execution, version pinning, canary rollout, and rollback need dedicated issues.
+
 **Exit criteria**
 
 - Given one PRD with an unresolved product or implementation choice, a user can create,
@@ -331,6 +370,13 @@ The first use case is a preview/demo environment built from unmerged change requ
 Conversational ticket intake is a separate upstream integration and is not required for
 the deployment MVP. Creation requires explicit approval or command by default; projects
 may opt into automatic creation after CI through policy.
+
+**Related tracking (reviewed 2026-08-10)**
+
+- Open proposal: [staging/demo environments #28](https://github.com/forge-sdlc/forge/issues/28).
+- Tracking gaps: lifecycle hooks, the environment state machine, plugin conformance,
+  allowlisted automation jobs, approval policy, and TTL reconciliation need dedicated
+  issues after #28 is refined.
 
 **Environment record**
 
@@ -415,15 +461,29 @@ existing code whose behavior is insufficiently verified.
 - Measure meaningful verification gains with behavior/risk coverage, mutation score,
   escaped-defect history, and flaky-test impact rather than line coverage alone.
 
-**Current security backlog incorporated:**
-[sandbox capability requirements #265](https://github.com/forge-sdlc/forge/issues/265),
-[sandbox hardening #266](https://github.com/forge-sdlc/forge/issues/266),
-[structured security evidence #264](https://github.com/forge-sdlc/forge/issues/264),
-[fail-closed pre-push validation #263](https://github.com/forge-sdlc/forge/issues/263),
-[OpenShell boundary spike #262](https://github.com/forge-sdlc/forge/issues/262),
-[credential isolation #82](https://github.com/forge-sdlc/forge/issues/82),
-[secret scanning #77](https://github.com/forge-sdlc/forge/issues/77), and
-[prompt-injection auditing #76](https://github.com/forge-sdlc/forge/issues/76).
+**Related tracking (reviewed 2026-08-10)**
+
+- Open security issues: [sandbox capability requirements #265](https://github.com/forge-sdlc/forge/issues/265),
+  [sandbox hardening #266](https://github.com/forge-sdlc/forge/issues/266),
+  [structured security evidence #264](https://github.com/forge-sdlc/forge/issues/264),
+  [fail-closed pre-push validation #263](https://github.com/forge-sdlc/forge/issues/263),
+  [OpenShell boundary spike #262](https://github.com/forge-sdlc/forge/issues/262),
+  [credential isolation #82](https://github.com/forge-sdlc/forge/issues/82),
+  [secret scanning #77](https://github.com/forge-sdlc/forge/issues/77), and
+  [prompt-injection auditing #76](https://github.com/forge-sdlc/forge/issues/76).
+- Active security PRs: [pre-push validation #272](https://github.com/forge-sdlc/forge/pull/272)
+  and [prompt-injection auditing #287](https://github.com/forge-sdlc/forge/pull/287).
+- Merged Forge hardening: [security batch PR #231](https://github.com/forge-sdlc/forge/pull/231)
+  resolved issues [#219–#226](https://github.com/forge-sdlc/forge/pull/231),
+  covering CORS, authorization, command/path injection, endpoint exposure, error leakage,
+  and skill-source validation.
+- Verification-debt proposals: [test generation node #256](https://github.com/forge-sdlc/forge/issues/256)
+  and [test coverage workflow #257](https://github.com/forge-sdlc/forge/issues/257)
+  were closed without implementation; [deterministic pre-PR validation #174](https://github.com/forge-sdlc/forge/issues/174)
+  remains open.
+- Tracking gaps: CVE intake/remediation, normalized security stages and findings,
+  accepted-risk policy, risk-based test planning, mutation/behavior coverage, and flaky
+  test accounting need dedicated issues.
 
 **Exit criteria**
 
@@ -461,13 +521,19 @@ Platform breadth is only valuable if users can understand and govern it.
   making MLflow a runtime dependency or storing secrets/raw sensitive context by default.
 - Pre-change-request validation defined by project policy/skills.
 
-**Current backlog incorporated:**
-[revision identity #91](https://github.com/forge-sdlc/forge/issues/91),
-[parent-first review #84](https://github.com/forge-sdlc/forge/issues/84),
-[concurrent CI/review #137](https://github.com/forge-sdlc/forge/issues/137),
-[Langfuse labels #138](https://github.com/forge-sdlc/forge/issues/138), and
-[prompt efficiency #39](https://github.com/forge-sdlc/forge/issues/39), plus the existing
-workflow-status and statistics proposals.
+**Related tracking (reviewed 2026-08-10)**
+
+- Open issues and PRs: [revision identity #91](https://github.com/forge-sdlc/forge/issues/91),
+  [concurrent CI/review #137](https://github.com/forge-sdlc/forge/issues/137) with
+  [PR #143](https://github.com/forge-sdlc/forge/pull/143), and
+  [prompt efficiency #39](https://github.com/forge-sdlc/forge/issues/39).
+- Merged foundations: [parent-first review #84](https://github.com/forge-sdlc/forge/issues/84),
+  [Langfuse labels #138](https://github.com/forge-sdlc/forge/issues/138), and
+  [provider-neutral per-stage model policy issue #175](https://github.com/forge-sdlc/forge/issues/175)
+  with [PR #251](https://github.com/forge-sdlc/forge/pull/251).
+- Tracking gaps: automatic model routing and escalation, routing evaluation baselines,
+  MLflow integration, aggregate provider-neutral status, and end-to-end workflow economics
+  need dedicated issues.
 
 **Exit criteria**
 
