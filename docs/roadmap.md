@@ -387,26 +387,6 @@ Platform breadth is only valuable if users can understand and govern it.
 - The same evaluation run can be inspected in Forge telemetry and, when configured,
   MLflow using a shared correlation ID.
 
-## Cross-cutting architecture decisions
-
-These decisions should be captured as proposals/ADRs before implementation:
-
-1. **Configuration ownership:** move from GitHub-shaped Jira properties to project
-   configuration referencing centrally managed provider connections.
-2. **Plugin boundary:** support both Forge-maintained built-in adapters and separately
-   deployed external plugins behind the same versioned interfaces and conformance suites.
-   Begin with in-process Python interfaces for trusted built-ins; use a versioned
-   HTTP/event contract for external or higher-privilege plugins. Do not load arbitrary
-   plugin code into the worker.
-3. **State durability:** define which state belongs in LangGraph checkpoints versus a
-   queryable operational store for correlation, idempotency, and environment lifecycle.
-4. **Workflow compatibility:** define immutable workflow versions and checkpoint
-   migrations before user-authored graph definitions.
-5. **Identity and authorization:** map Jira, GitHub, GitLab, and Forge service identities
-   into an auditable actor model with project policy enforcement.
-6. **Support matrix:** publish tested GitLab, Kubernetes, OpenShift, Redis, and plugin API
-   versions with deprecation policy.
-
 ## Measures of success
 
 Track these by project, provider, workflow version, and execution driver:
