@@ -55,6 +55,9 @@ uv run uvicorn forge.main:app --reload --port 8000 --host 0.0.0.0
 # Start queue worker
 uv run forge worker
 
+# Print Forge version
+uv run forge version
+
 # Build container
 podman build -t forge-dev:latest containers/
 ```

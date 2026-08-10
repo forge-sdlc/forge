@@ -716,6 +716,16 @@ For workflows paused at `review_response_gate` (due to contested comments):
 - Reset `is_paused` and `is_blocked` to `False`
 - Set `force_fresh_invoke` to `True` to await a fresh human review
 
+### Forge Version Command
+
+To print the currently installed Forge package version, run:
+
+```bash
+uv run forge version
+```
+
+This will print the package version in the format `Forge v<version>` (e.g., `Forge v0.1.0`) and exit with a success status code.
+
 ### Worker logs
 
 The worker logs to stdout. Useful log entries to grep for:

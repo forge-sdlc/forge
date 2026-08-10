@@ -1205,6 +1205,14 @@ async def cmd_smoke_test(_args: argparse.Namespace) -> int:
     return await run_smoke_test(settings)
 
 
+async def cmd_version(_args: argparse.Namespace) -> int:
+    """Print the installed Forge package version."""
+    from forge import __version__
+
+    print(f"Forge v{__version__}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -1324,6 +1332,12 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser(
         "smoke-test",
         help="Run an end-to-end smoke test to verify Forge runtime connectivity and execution",
+    )
+
+    # version command
+    subparsers.add_parser(
+        "version",
+        help="Print the installed Forge package version",
     )
 
     # skills subparser group
@@ -1607,6 +1621,7 @@ Examples:
         "retry": cmd_retry,
         "logs": cmd_logs,
         "smoke-test": cmd_smoke_test,
+        "version": cmd_version,
         "project-setup": cmd_project_setup,
         "get-config": cmd_get_config,
     }
