@@ -28,6 +28,12 @@ async def human_review_gate(state: WorkflowState) -> WorkflowState:
     ticket_key = state["ticket_key"]
     ci_status = state.get("ci_status")
 
+    if state.get("pr_merged"):
+        logger.info(f"PR already merged for {ticket_key}, skipping pause at human_review_gate")
+        return update_state_timestamp(
+            {**state, "current_node": "human_review_gate", "is_paused": False}
+        )
+
     if ci_status is None:
         jira = JiraClient()
         try:

@@ -92,7 +92,7 @@ class TestHumanReviewRoutingToImplementReview:
             pr_merged=True,
         )
         result = await human_review_gate(state)
-        assert result["is_paused"] is True
+        assert result["is_paused"] is False
         assert result["current_node"] == "human_review_gate"
 
     async def test_human_review_gate_clears_stale_pause_when_pr_merged(self):
@@ -105,7 +105,7 @@ class TestHumanReviewRoutingToImplementReview:
             pr_merged=True,
         )
         result = await human_review_gate(state)
-        assert result["is_paused"] is True
+        assert result["is_paused"] is False
 
     async def test_human_review_gate_pauses_when_pr_not_merged(self):
         """human_review_gate pauses normally when pr_merged is False."""
@@ -505,7 +505,7 @@ class TestThreadAwareReviewHandling:
             result = await implement_review(state)
 
         post_objection.assert_awaited_once()
-        assert result["current_node"] == "human_review_gate"
+        assert result["current_node"] == "review_response_gate"
         assert result["contested_comments"] == [{"text": "Legacy objection"}]
 
     @pytest.mark.asyncio
@@ -578,7 +578,7 @@ class TestThreadAwareReviewHandling:
             result = await implement_review(state)
 
         assert mock_runner.run.await_count == 2
-        assert result["current_node"] == "human_review_gate"
+        assert result["current_node"] == "review_response_gate"
         assert result["contested_comments"] == [decisions[1]]
         assert result["review_comments"][0] == {
             **decisions[0],

@@ -384,7 +384,8 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             decisions=accepted_decisions,
         )
 
-        next_node = "human_review_gate"
+        # Contested threads require human arbitration before re-entering the review cycle.
+        next_node = "review_response_gate" if contested_comments else "human_review_gate"
 
         return update_state_timestamp(
             {
