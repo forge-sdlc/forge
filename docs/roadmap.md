@@ -35,10 +35,17 @@ workflows—while making Jira, GitHub, and Podman defaults rather than permanent
    environment, and deployment must share stable Forge correlation IDs.
 5. **Credentials never enter agent context.** Drivers and adapters obtain short-lived,
    least-privilege credentials outside the model boundary.
-6. **Progressive adoption.** Local Podman and GitHub remain simple; enterprise features
-   are additive.
-7. **No built-in cloud provisioner.** Forge coordinates deployment systems; it does not
-   manage raw cloud infrastructure state.
+6. **Enterprise-grade without enterprise lock-in.** Prioritize the governance,
+   isolation, identity, and heterogeneous-provider needs of platform teams while keeping
+   a complete local and open-source path with sensible defaults. Advanced backends and
+   policies extend the core workflow; they must not make GitHub and local Podman users
+   operate enterprise infrastructure to adopt Forge.
+7. **Orchestrate infrastructure; do not become its control plane.** Forge owns deployment
+   intent, policy gates, lifecycle records, correlation, and reconciliation. External
+   deployment plugins own provider-specific provisioning and teardown, and the target
+   platform remains authoritative for infrastructure state. This boundary lets Forge
+   govern environments without embedding cloud credentials, resource schemas, or a
+   general-purpose cloud provisioner in the core.
 
 ## Roadmap themes
 
