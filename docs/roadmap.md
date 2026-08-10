@@ -391,28 +391,11 @@ Platform breadth is only valuable if users can understand and govern it.
 
 Track these by project, provider, workflow version, and execution driver:
 
-- Workflow completion and human-escalation rates.
-- Incorrect-advance rate after failed/malformed agent or execution output (target: zero).
-- Duplicate external side effects under event replay (target: zero).
-- Median and p95 lead time by workflow stage; time waiting for humans is separate.
-- Artifact revision count and CI first-pass rate.
-- Cost per completed change and model tokens by stage.
-- PR/MR review turnaround and change failure/reopen rate.
-- Execution queue time, success rate, orphan rate, and cleanup latency.
-- Preview-environment provision time, success rate, TTL compliance, and leaked resources.
-- Provider/driver conformance pass rate and upgrade compatibility.
-
-## Near-term proposal backlog
-
-Before implementation, create and review focused proposals in this order:
-
-1. Typed agent artifact and node-result contract.
-2. Stable correlation identity and idempotent side-effect journal.
-3. Source-control provider contract and repository connection model.
-4. Execution driver contract and Kubernetes threat model.
-5. PRD-driven product-prototyping workflow and versioned workflow simulation/rollout model.
-6. Lifecycle hooks, environment state machine, and deployment plugin contract.
-7. Enterprise identity, credentials, and policy model spanning all adapters.
-8. Security remediation, generated-code scanning, and accepted-risk policy.
-9. Verification-debt workflow and risk-based test-planning contract.
-10. Dynamic model-routing policy and MLflow evaluation integration.
+- **Reliability:** incorrect advances and duplicate external effects (target: zero), plus
+  visible and recoverable terminal failures.
+- **Delivery:** workflow completion, human escalation, stage lead time excluding human
+  wait, CI first-pass rate, review turnaround, and change failure or reopen rate.
+- **Quality and economics:** artifact revisions, quality outcomes, model tokens and cost
+  per completed change, and routing performance against pinned-model baselines.
+- **Platform operations:** provider/driver conformance, execution queue and success rates,
+  orphan cleanup, environment provisioning, TTL compliance, and leaked resources.
