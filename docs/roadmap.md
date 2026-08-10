@@ -35,11 +35,11 @@ workflows—while making Jira, GitHub, and Podman defaults rather than permanent
    environment, and deployment must share stable Forge correlation IDs.
 5. **Credentials never enter agent context.** Drivers and adapters obtain short-lived,
    least-privilege credentials outside the model boundary.
-6. **Enterprise-grade without enterprise lock-in.** Prioritize the governance,
-   isolation, identity, and heterogeneous-provider needs of platform teams while keeping
-   a complete local and open-source path with sensible defaults. Advanced backends and
-   policies extend the core workflow; they must not make GitHub and local Podman users
-   operate enterprise infrastructure to adopt Forge.
+6. **A central platform with an open ecosystem.** Forge is designed to run as a centrally
+   operated service that gives platform teams consistent governance, identity,
+   isolation, and orchestration across projects and providers. Its open-source model
+   should enable organizations to self-host, inspect, extend, and contribute to that
+   platform without redefining Forge as a local developer tool.
 7. **Orchestrate infrastructure; do not become its control plane.** Forge owns deployment
    intent, policy gates, lifecycle records, correlation, and reconciliation. External
    deployment plugins own provider-specific provisioning and teardown, and the target
@@ -486,7 +486,7 @@ The themes overlap, but their enabling order should be explicit.
 | --- | --- | --- |
 | **Now: Trust the core** | Forge never advances ambiguously and users can diagnose failures | Typed artifacts, execution failure semantics, correlation/indexing, idempotency, terminal notifications, redaction/injection defenses, sandbox hardening, security evidence, status/telemetry |
 | **Next: Create extension seams** | Current behavior runs through stable abstractions | Source-control and issue-tracker provider contracts with built-in adapters; execution driver contract with Podman adapter; versioned workflow definitions; lifecycle hook proposal |
-| **Then: Add enterprise backends** | Enterprise platform teams can operate Forge in heterogeneous environments while open-source users retain a simple path | Mixed GitHub/GitLab workflows from the first GitLab milestone; GitLab.com and self-managed GitLab; Kubernetes agent Jobs; Helm/OpenShift deployment; short-lived credentials/private CA support |
+| **Then: Add enterprise backends** | Platform teams can centrally operate Forge in heterogeneous environments using an open, self-hostable platform | Mixed GitHub/GitLab workflows from the first GitLab milestone; GitLab.com and self-managed GitLab; Kubernetes agent Jobs; Helm/OpenShift deployment; short-lived credentials/private CA support |
 | **Then: Discover, experiment, and deploy** | Teams can learn through working product options, evaluate workflows, and create governed preview environments | PRD-driven competing prototypes and feedback into planning; simulator/dry-run/shadow/canary; security and verification-debt workflows; dynamic model routing and MLflow evaluation; deployment plugin runtime; allowlisted automation-job plugin; TTL reconciler |
 | **Later: Broaden the ecosystem** | External contributors can extend Forge without core changes | GitOps and deployment-controller plugins, supported SDKs, additional ticket/source/execution/deployment adapters, workflow template catalog, organization policy and portfolio analytics |
 
@@ -532,8 +532,9 @@ Track these by project, provider, workflow version, and execution driver:
 
 ## Product decisions
 
-1. **Primary audience:** prioritize enterprise platform teams while preserving a simple,
-   supported adoption path for local and open-source users.
+1. **Primary audience:** prioritize enterprise platform teams operating Forge as a
+   central service. Preserve open-source self-hosting, extensibility, and contribution;
+   local execution of Forge is not a primary product mode.
 2. **Kubernetes scope:** support both running the Forge control plane and running isolated
    agent sandboxes, as separately shippable tracks.
 3. **Mixed source providers:** a Jira project must be able to mix GitHub repositories and
