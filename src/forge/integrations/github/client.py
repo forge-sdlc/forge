@@ -194,6 +194,9 @@ class GitHubClient:
         Returns:
             API response with comment details.
         """
+        from forge.workflow.utils.automated_review_triage import prepend_bot_prefix
+
+        body = prepend_bot_prefix(body, self.settings.forge_bot_comment_prefix)
         client = await self._get_client()
         response = await client.post(
             f"/repos/{owner}/{repo}/pulls/{pr_number}/comments",
@@ -217,6 +220,9 @@ class GitHubClient:
         body: str,
     ) -> dict[str, Any]:
         """Reply in the review thread containing ``comment_id``."""
+        from forge.workflow.utils.automated_review_triage import prepend_bot_prefix
+
+        body = prepend_bot_prefix(body, self.settings.forge_bot_comment_prefix)
         client = await self._get_client()
         response = await client.post(
             f"/repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies",
@@ -437,6 +443,9 @@ class GitHubClient:
         Returns:
             API response with comment details.
         """
+        from forge.workflow.utils.automated_review_triage import prepend_bot_prefix
+
+        body = prepend_bot_prefix(body, self.settings.forge_bot_comment_prefix)
         client = await self._get_client()
         response = await client.post(
             f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
