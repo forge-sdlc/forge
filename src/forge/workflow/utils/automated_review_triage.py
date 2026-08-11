@@ -36,7 +36,7 @@ def is_bot_sender(payload: dict[str, Any]) -> bool:
 
 def is_self_comment(
     sender_login: str,
-    comment_body: str,
+    comment_body: str | None,
     bot_login: str,
     prefix: str | None = None,
 ) -> bool:
@@ -45,6 +45,7 @@ def is_self_comment(
     Uses dual-check or legacy username logic with O(1) prefix match complexity
     and no external I/O overhead.
     """
+    comment_body = comment_body or ""
     sender_lower = sender_login.lower()
     bot_lower = bot_login.lower()
 
@@ -83,8 +84,9 @@ def is_self_comment(
     return is_same_bot
 
 
-def prepend_bot_prefix(comment_body: str, prefix: str | None = None) -> str:
+def prepend_bot_prefix(comment_body: str | None, prefix: str | None = None) -> str:
     """Prepend a bot signature/comment prefix to the comment body."""
+    comment_body = comment_body or ""
     if prefix is None:
         from forge.config import get_settings
 
