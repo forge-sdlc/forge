@@ -1275,6 +1275,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#forge-version-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Forge Version Command
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#worker-logs" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2572,6 +2583,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#forge-version-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Forge Version Command
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#worker-logs" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -3398,98 +3420,103 @@ unit, contract, flow, integration, or E2E gates must not be ignored.</p>
 - Clear <code>contested_comments</code>, <code>feedback_comment</code>, <code>revision_requested</code>, and other review state
 - Reset <code>is_paused</code> and <code>is_blocked</code> to <code>False</code>
 - Set <code>force_fresh_invoke</code> to <code>True</code> to await a fresh human review</p>
+<h3 id="forge-version-command">Forge Version Command<a class="headerlink" href="#forge-version-command" title="Permanent link">&para;</a></h3>
+<p>To print the currently installed Forge package version, run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>version
+</code></pre></div>
+<p>This will print the package version in the format <code>Forge v&lt;version&gt;</code> (e.g., <code>Forge v0.1.0</code>) and exit with a success status code.</p>
 <h3 id="worker-logs">Worker logs<a class="headerlink" href="#worker-logs" title="Permanent link">&para;</a></h3>
 <p>The worker logs to stdout. Useful log entries to grep for:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a><span class="c1"># Watch for a specific ticket</span>
-<a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>AISOS-376
-<a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>
-<a id="__codelineno-37-4" name="__codelineno-37-4" href="#__codelineno-37-4"></a><span class="c1"># See what signals are detected</span>
-<a id="__codelineno-37-5" name="__codelineno-37-5" href="#__codelineno-37-5"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;Detected&quot;</span>
-<a id="__codelineno-37-6" name="__codelineno-37-6" href="#__codelineno-37-6"></a>
-<a id="__codelineno-37-7" name="__codelineno-37-7" href="#__codelineno-37-7"></a><span class="c1"># See CI evaluation results</span>
-<a id="__codelineno-37-8" name="__codelineno-37-8" href="#__codelineno-37-8"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;CI&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="c1"># Watch for a specific ticket</span>
+<a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>AISOS-376
+<a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>
+<a id="__codelineno-38-4" name="__codelineno-38-4" href="#__codelineno-38-4"></a><span class="c1"># See what signals are detected</span>
+<a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;Detected&quot;</span>
+<a id="__codelineno-38-6" name="__codelineno-38-6" href="#__codelineno-38-6"></a>
+<a id="__codelineno-38-7" name="__codelineno-38-7" href="#__codelineno-38-7"></a><span class="c1"># See CI evaluation results</span>
+<a id="__codelineno-38-8" name="__codelineno-38-8" href="#__codelineno-38-8"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;CI&quot;</span>
 </code></pre></div>
 <h3 id="check-redis-state-directly">Check Redis state directly<a class="headerlink" href="#check-redis-state-directly" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="c1"># Connect to Redis</span>
-<a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>redis-cli<span class="w"> </span>-p<span class="w"> </span><span class="m">6380</span>
-<a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>
-<a id="__codelineno-38-4" name="__codelineno-38-4" href="#__codelineno-38-4"></a><span class="c1"># List all checkpoints</span>
-<a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a>KEYS<span class="w"> </span>checkpoint:*
-<a id="__codelineno-38-6" name="__codelineno-38-6" href="#__codelineno-38-6"></a>
-<a id="__codelineno-38-7" name="__codelineno-38-7" href="#__codelineno-38-7"></a><span class="c1"># Get a specific checkpoint (LangGraph stores them as JSON)</span>
-<a id="__codelineno-38-8" name="__codelineno-38-8" href="#__codelineno-38-8"></a>GET<span class="w"> </span>checkpoint:AISOS-376:...
+<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="c1"># Connect to Redis</span>
+<a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a>redis-cli<span class="w"> </span>-p<span class="w"> </span><span class="m">6380</span>
+<a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a>
+<a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a><span class="c1"># List all checkpoints</span>
+<a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a>KEYS<span class="w"> </span>checkpoint:*
+<a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a>
+<a id="__codelineno-39-7" name="__codelineno-39-7" href="#__codelineno-39-7"></a><span class="c1"># Get a specific checkpoint (LangGraph stores them as JSON)</span>
+<a id="__codelineno-39-8" name="__codelineno-39-8" href="#__codelineno-39-8"></a>GET<span class="w"> </span>checkpoint:AISOS-376:...
 </code></pre></div>
 <hr />
 <h2 id="11-common-workflows">11. Common Workflows<a class="headerlink" href="#11-common-workflows" title="Permanent link">&para;</a></h2>
 <h3 id="start-a-new-feature-end-to-end-local-test">Start a new feature end-to-end (local test)<a class="headerlink" href="#start-a-new-feature-end-to-end-local-test" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="c1"># 1. Make sure worker and API are running</span>
-<a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>redis<span class="w"> </span>forge-api<span class="w"> </span>-d
-<a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="p">&amp;</span>
-<a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a>
-<a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a><span class="c1"># 2. Create the feature</span>
-<a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-39-7" name="__codelineno-39-7" href="#__codelineno-39-7"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-39-8" name="__codelineno-39-8" href="#__codelineno-39-8"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/01-feature-created.json
-<a id="__codelineno-39-9" name="__codelineno-39-9" href="#__codelineno-39-9"></a>
-<a id="__codelineno-39-10" name="__codelineno-39-10" href="#__codelineno-39-10"></a><span class="c1"># 3. Watch worker logs, approve each stage as it completes</span>
-<a id="__codelineno-39-11" name="__codelineno-39-11" href="#__codelineno-39-11"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-39-12" name="__codelineno-39-12" href="#__codelineno-39-12"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-39-13" name="__codelineno-39-13" href="#__codelineno-39-13"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/03-prd-approved.json
-<a id="__codelineno-39-14" name="__codelineno-39-14" href="#__codelineno-39-14"></a><span class="c1"># ... and so on through task approval</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="c1"># 1. Make sure worker and API are running</span>
+<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>docker<span class="w"> </span>compose<span class="w"> </span>up<span class="w"> </span>redis<span class="w"> </span>forge-api<span class="w"> </span>-d
+<a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="p">&amp;</span>
+<a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a>
+<a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a><span class="c1"># 2. Create the feature</span>
+<a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/01-feature-created.json
+<a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a>
+<a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a><span class="c1"># 3. Watch worker logs, approve each stage as it completes</span>
+<a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-12" name="__codelineno-40-12" href="#__codelineno-40-12"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-40-13" name="__codelineno-40-13" href="#__codelineno-40-13"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/03-prd-approved.json
+<a id="__codelineno-40-14" name="__codelineno-40-14" href="#__codelineno-40-14"></a><span class="c1"># ... and so on through task approval</span>
 </code></pre></div>
 <h3 id="test-ci-gate-skip">Test CI gate skip<a class="headerlink" href="#test-ci-gate-skip" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="c1"># 1. Get a PR with failing CI checks</span>
-<a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>gh<span class="w"> </span>pr<span class="w"> </span>checks<span class="w"> </span><span class="m">42</span><span class="w"> </span>--repo<span class="w"> </span>org/repo
-<a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a>
-<a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a><span class="c1"># 2. Patch the checkpoint to wait_for_ci_gate if not already there</span>
-<a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>TICKET-123<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a><span class="w">  </span><span class="nv">current_node</span><span class="o">=</span>wait_for_ci_gate<span class="w"> </span><span class="nv">is_paused</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ci_fix_attempts</span><span class="o">=</span><span class="m">0</span>
-<a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a>
-<a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a><span class="c1"># 3. Send the skip-gate command</span>
-<a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: issue_comment&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-40-12" name="__codelineno-40-12" href="#__codelineno-40-12"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
-<a id="__codelineno-40-13" name="__codelineno-40-13" href="#__codelineno-40-13"></a><span class="s1">    &quot;action&quot;: &quot;created&quot;,</span>
-<a id="__codelineno-40-14" name="__codelineno-40-14" href="#__codelineno-40-14"></a><span class="s1">    &quot;issue&quot;: {</span>
-<a id="__codelineno-40-15" name="__codelineno-40-15" href="#__codelineno-40-15"></a><span class="s1">      &quot;number&quot;: 42,</span>
-<a id="__codelineno-40-16" name="__codelineno-40-16" href="#__codelineno-40-16"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Title&quot;,</span>
-<a id="__codelineno-40-17" name="__codelineno-40-17" href="#__codelineno-40-17"></a><span class="s1">      &quot;pull_request&quot;: {&quot;url&quot;: &quot;https://api.github.com/repos/org/repo/pulls/42&quot;}</span>
-<a id="__codelineno-40-18" name="__codelineno-40-18" href="#__codelineno-40-18"></a><span class="s1">    },</span>
-<a id="__codelineno-40-19" name="__codelineno-40-19" href="#__codelineno-40-19"></a><span class="s1">    &quot;comment&quot;: {&quot;body&quot;: &quot;/forge skip-gate failing-check-name&quot;},</span>
-<a id="__codelineno-40-20" name="__codelineno-40-20" href="#__codelineno-40-20"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
-<a id="__codelineno-40-21" name="__codelineno-40-21" href="#__codelineno-40-21"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;you&quot;}</span>
-<a id="__codelineno-40-22" name="__codelineno-40-22" href="#__codelineno-40-22"></a><span class="s1">  }&#39;</span>
-<a id="__codelineno-40-23" name="__codelineno-40-23" href="#__codelineno-40-23"></a>
-<a id="__codelineno-40-24" name="__codelineno-40-24" href="#__codelineno-40-24"></a><span class="c1"># 4. Send a CI webhook to trigger re-evaluation</span>
-<a id="__codelineno-40-25" name="__codelineno-40-25" href="#__codelineno-40-25"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-40-26" name="__codelineno-40-26" href="#__codelineno-40-26"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-40-27" name="__codelineno-40-27" href="#__codelineno-40-27"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: check_run&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-40-28" name="__codelineno-40-28" href="#__codelineno-40-28"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;action&quot;:&quot;completed&quot;,&quot;check_run&quot;:{&quot;status&quot;:&quot;completed&quot;,&quot;conclusion&quot;:&quot;failure&quot;,&quot;head_sha&quot;:&quot;SHA&quot;,&quot;pull_requests&quot;:[{&quot;number&quot;:42,&quot;head&quot;:{&quot;ref&quot;:&quot;forge/ticket-123&quot;}}]},&quot;repository&quot;:{&quot;full_name&quot;:&quot;org/repo&quot;},&quot;sender&quot;:{&quot;login&quot;:&quot;you&quot;}}&#39;</span>
-</code></pre></div>
-<h3 id="trigger-the-human-review-flow">Trigger the human review flow<a class="headerlink" href="#trigger-the-human-review-flow" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="c1"># After CI passes, the workflow pauses at human_review_gate.</span>
-<a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a><span class="c1"># Send a review webhook to trigger implement_review:</span>
-<a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-41-4" name="__codelineno-41-4" href="#__codelineno-41-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-41-5" name="__codelineno-41-5" href="#__codelineno-41-5"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: pull_request_review&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-41-6" name="__codelineno-41-6" href="#__codelineno-41-6"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
-<a id="__codelineno-41-7" name="__codelineno-41-7" href="#__codelineno-41-7"></a><span class="s1">    &quot;action&quot;: &quot;submitted&quot;,</span>
-<a id="__codelineno-41-8" name="__codelineno-41-8" href="#__codelineno-41-8"></a><span class="s1">    &quot;review&quot;: {</span>
-<a id="__codelineno-41-9" name="__codelineno-41-9" href="#__codelineno-41-9"></a><span class="s1">      &quot;id&quot;: 999,</span>
-<a id="__codelineno-41-10" name="__codelineno-41-10" href="#__codelineno-41-10"></a><span class="s1">      &quot;state&quot;: &quot;commented&quot;,</span>
-<a id="__codelineno-41-11" name="__codelineno-41-11" href="#__codelineno-41-11"></a><span class="s1">      &quot;body&quot;: &quot;Please fix the jitter constant comment in controller.go.&quot;,</span>
-<a id="__codelineno-41-12" name="__codelineno-41-12" href="#__codelineno-41-12"></a><span class="s1">      &quot;commit_id&quot;: &quot;YOUR_HEAD_SHA&quot;</span>
-<a id="__codelineno-41-13" name="__codelineno-41-13" href="#__codelineno-41-13"></a><span class="s1">    },</span>
-<a id="__codelineno-41-14" name="__codelineno-41-14" href="#__codelineno-41-14"></a><span class="s1">    &quot;pull_request&quot;: {</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="c1"># 1. Get a PR with failing CI checks</span>
+<a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a>gh<span class="w"> </span>pr<span class="w"> </span>checks<span class="w"> </span><span class="m">42</span><span class="w"> </span>--repo<span class="w"> </span>org/repo
+<a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a>
+<a id="__codelineno-41-4" name="__codelineno-41-4" href="#__codelineno-41-4"></a><span class="c1"># 2. Patch the checkpoint to wait_for_ci_gate if not already there</span>
+<a id="__codelineno-41-5" name="__codelineno-41-5" href="#__codelineno-41-5"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>devtools/patch_checkpoint.py<span class="w"> </span>TICKET-123<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-6" name="__codelineno-41-6" href="#__codelineno-41-6"></a><span class="w">  </span><span class="nv">current_node</span><span class="o">=</span>wait_for_ci_gate<span class="w"> </span><span class="nv">is_paused</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ci_fix_attempts</span><span class="o">=</span><span class="m">0</span>
+<a id="__codelineno-41-7" name="__codelineno-41-7" href="#__codelineno-41-7"></a>
+<a id="__codelineno-41-8" name="__codelineno-41-8" href="#__codelineno-41-8"></a><span class="c1"># 3. Send the skip-gate command</span>
+<a id="__codelineno-41-9" name="__codelineno-41-9" href="#__codelineno-41-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-10" name="__codelineno-41-10" href="#__codelineno-41-10"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-11" name="__codelineno-41-11" href="#__codelineno-41-11"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: issue_comment&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-12" name="__codelineno-41-12" href="#__codelineno-41-12"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<a id="__codelineno-41-13" name="__codelineno-41-13" href="#__codelineno-41-13"></a><span class="s1">    &quot;action&quot;: &quot;created&quot;,</span>
+<a id="__codelineno-41-14" name="__codelineno-41-14" href="#__codelineno-41-14"></a><span class="s1">    &quot;issue&quot;: {</span>
 <a id="__codelineno-41-15" name="__codelineno-41-15" href="#__codelineno-41-15"></a><span class="s1">      &quot;number&quot;: 42,</span>
 <a id="__codelineno-41-16" name="__codelineno-41-16" href="#__codelineno-41-16"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Title&quot;,</span>
-<a id="__codelineno-41-17" name="__codelineno-41-17" href="#__codelineno-41-17"></a><span class="s1">      &quot;head&quot;: {&quot;ref&quot;: &quot;forge/ticket-123&quot;, &quot;sha&quot;: &quot;YOUR_HEAD_SHA&quot;},</span>
-<a id="__codelineno-41-18" name="__codelineno-41-18" href="#__codelineno-41-18"></a><span class="s1">      &quot;state&quot;: &quot;open&quot;</span>
-<a id="__codelineno-41-19" name="__codelineno-41-19" href="#__codelineno-41-19"></a><span class="s1">    },</span>
+<a id="__codelineno-41-17" name="__codelineno-41-17" href="#__codelineno-41-17"></a><span class="s1">      &quot;pull_request&quot;: {&quot;url&quot;: &quot;https://api.github.com/repos/org/repo/pulls/42&quot;}</span>
+<a id="__codelineno-41-18" name="__codelineno-41-18" href="#__codelineno-41-18"></a><span class="s1">    },</span>
+<a id="__codelineno-41-19" name="__codelineno-41-19" href="#__codelineno-41-19"></a><span class="s1">    &quot;comment&quot;: {&quot;body&quot;: &quot;/forge skip-gate failing-check-name&quot;},</span>
 <a id="__codelineno-41-20" name="__codelineno-41-20" href="#__codelineno-41-20"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
 <a id="__codelineno-41-21" name="__codelineno-41-21" href="#__codelineno-41-21"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;you&quot;}</span>
 <a id="__codelineno-41-22" name="__codelineno-41-22" href="#__codelineno-41-22"></a><span class="s1">  }&#39;</span>
+<a id="__codelineno-41-23" name="__codelineno-41-23" href="#__codelineno-41-23"></a>
+<a id="__codelineno-41-24" name="__codelineno-41-24" href="#__codelineno-41-24"></a><span class="c1"># 4. Send a CI webhook to trigger re-evaluation</span>
+<a id="__codelineno-41-25" name="__codelineno-41-25" href="#__codelineno-41-25"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-26" name="__codelineno-41-26" href="#__codelineno-41-26"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-27" name="__codelineno-41-27" href="#__codelineno-41-27"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: check_run&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-41-28" name="__codelineno-41-28" href="#__codelineno-41-28"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;action&quot;:&quot;completed&quot;,&quot;check_run&quot;:{&quot;status&quot;:&quot;completed&quot;,&quot;conclusion&quot;:&quot;failure&quot;,&quot;head_sha&quot;:&quot;SHA&quot;,&quot;pull_requests&quot;:[{&quot;number&quot;:42,&quot;head&quot;:{&quot;ref&quot;:&quot;forge/ticket-123&quot;}}]},&quot;repository&quot;:{&quot;full_name&quot;:&quot;org/repo&quot;},&quot;sender&quot;:{&quot;login&quot;:&quot;you&quot;}}&#39;</span>
+</code></pre></div>
+<h3 id="trigger-the-human-review-flow">Trigger the human review flow<a class="headerlink" href="#trigger-the-human-review-flow" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="c1"># After CI passes, the workflow pauses at human_review_gate.</span>
+<a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a><span class="c1"># Send a review webhook to trigger implement_review:</span>
+<a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-42-4" name="__codelineno-42-4" href="#__codelineno-42-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-42-5" name="__codelineno-42-5" href="#__codelineno-42-5"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;X-GitHub-Event: pull_request_review&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-42-6" name="__codelineno-42-6" href="#__codelineno-42-6"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{</span>
+<a id="__codelineno-42-7" name="__codelineno-42-7" href="#__codelineno-42-7"></a><span class="s1">    &quot;action&quot;: &quot;submitted&quot;,</span>
+<a id="__codelineno-42-8" name="__codelineno-42-8" href="#__codelineno-42-8"></a><span class="s1">    &quot;review&quot;: {</span>
+<a id="__codelineno-42-9" name="__codelineno-42-9" href="#__codelineno-42-9"></a><span class="s1">      &quot;id&quot;: 999,</span>
+<a id="__codelineno-42-10" name="__codelineno-42-10" href="#__codelineno-42-10"></a><span class="s1">      &quot;state&quot;: &quot;commented&quot;,</span>
+<a id="__codelineno-42-11" name="__codelineno-42-11" href="#__codelineno-42-11"></a><span class="s1">      &quot;body&quot;: &quot;Please fix the jitter constant comment in controller.go.&quot;,</span>
+<a id="__codelineno-42-12" name="__codelineno-42-12" href="#__codelineno-42-12"></a><span class="s1">      &quot;commit_id&quot;: &quot;YOUR_HEAD_SHA&quot;</span>
+<a id="__codelineno-42-13" name="__codelineno-42-13" href="#__codelineno-42-13"></a><span class="s1">    },</span>
+<a id="__codelineno-42-14" name="__codelineno-42-14" href="#__codelineno-42-14"></a><span class="s1">    &quot;pull_request&quot;: {</span>
+<a id="__codelineno-42-15" name="__codelineno-42-15" href="#__codelineno-42-15"></a><span class="s1">      &quot;number&quot;: 42,</span>
+<a id="__codelineno-42-16" name="__codelineno-42-16" href="#__codelineno-42-16"></a><span class="s1">      &quot;title&quot;: &quot;[TICKET-123] Title&quot;,</span>
+<a id="__codelineno-42-17" name="__codelineno-42-17" href="#__codelineno-42-17"></a><span class="s1">      &quot;head&quot;: {&quot;ref&quot;: &quot;forge/ticket-123&quot;, &quot;sha&quot;: &quot;YOUR_HEAD_SHA&quot;},</span>
+<a id="__codelineno-42-18" name="__codelineno-42-18" href="#__codelineno-42-18"></a><span class="s1">      &quot;state&quot;: &quot;open&quot;</span>
+<a id="__codelineno-42-19" name="__codelineno-42-19" href="#__codelineno-42-19"></a><span class="s1">    },</span>
+<a id="__codelineno-42-20" name="__codelineno-42-20" href="#__codelineno-42-20"></a><span class="s1">    &quot;repository&quot;: {&quot;full_name&quot;: &quot;org/repo&quot;},</span>
+<a id="__codelineno-42-21" name="__codelineno-42-21" href="#__codelineno-42-21"></a><span class="s1">    &quot;sender&quot;: {&quot;login&quot;: &quot;you&quot;}</span>
+<a id="__codelineno-42-22" name="__codelineno-42-22" href="#__codelineno-42-22"></a><span class="s1">  }&#39;</span>
 </code></pre></div>
 <hr />
 <h2 id="12-service-reference">12. Service Reference<a class="headerlink" href="#12-service-reference" title="Permanent link">&para;</a></h2>
@@ -3649,17 +3676,17 @@ unit, contract, flow, integration, or E2E gates must not be ignored.</p>
 </tbody>
 </table>
 <h3 id="useful-env-knobs-for-development">Useful <code>.env</code> knobs for development<a class="headerlink" href="#useful-env-knobs-for-development" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="nv">LOG_LEVEL</span><span class="o">=</span>DEBUG<span class="w">              </span><span class="c1"># verbose logging</span>
-<a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a><span class="nv">CONTAINER_LANGCHAIN_VERBOSE</span><span class="o">=</span><span class="nb">true</span><span class="w">  </span><span class="c1"># verbose container agent logs</span>
-<a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a><span class="nv">LANGFUSE_ENABLED</span><span class="o">=</span><span class="nb">false</span><span class="w">       </span><span class="c1"># disable tracing for speed</span>
-<a id="__codelineno-42-4" name="__codelineno-42-4" href="#__codelineno-42-4"></a><span class="nv">JIRA_WEBHOOK_SECRET</span><span class="o">=</span><span class="w">         </span><span class="c1"># skip signature validation</span>
-<a id="__codelineno-42-5" name="__codelineno-42-5" href="#__codelineno-42-5"></a><span class="nv">GITHUB_WEBHOOK_SECRET</span><span class="o">=</span><span class="w">       </span><span class="c1"># skip signature validation</span>
-<a id="__codelineno-42-6" name="__codelineno-42-6" href="#__codelineno-42-6"></a><span class="nv">CI_FIX_MAX_RETRIES</span><span class="o">=</span><span class="m">1</span><span class="w">         </span><span class="c1"># fail fast during CI testing</span>
-<a id="__codelineno-42-7" name="__codelineno-42-7" href="#__codelineno-42-7"></a>
-<a id="__codelineno-42-8" name="__codelineno-42-8" href="#__codelineno-42-8"></a><span class="c1"># ⚠️ Dev only — fall back to env vars instead of requiring Jira project properties</span>
-<a id="__codelineno-42-9" name="__codelineno-42-9" href="#__codelineno-42-9"></a><span class="nv">FORGE_REQUIRE_PROJECT_CONFIG</span><span class="o">=</span><span class="nb">false</span>
-<a id="__codelineno-42-10" name="__codelineno-42-10" href="#__codelineno-42-10"></a><span class="nv">GITHUB_KNOWN_REPOS</span><span class="o">=</span>acme/backend,acme/frontend
-<a id="__codelineno-42-11" name="__codelineno-42-11" href="#__codelineno-42-11"></a><span class="nv">GITHUB_DEFAULT_REPO</span><span class="o">=</span>acme/backend
+<div class="highlight"><pre><span></span><code><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a><span class="nv">LOG_LEVEL</span><span class="o">=</span>DEBUG<span class="w">              </span><span class="c1"># verbose logging</span>
+<a id="__codelineno-43-2" name="__codelineno-43-2" href="#__codelineno-43-2"></a><span class="nv">CONTAINER_LANGCHAIN_VERBOSE</span><span class="o">=</span><span class="nb">true</span><span class="w">  </span><span class="c1"># verbose container agent logs</span>
+<a id="__codelineno-43-3" name="__codelineno-43-3" href="#__codelineno-43-3"></a><span class="nv">LANGFUSE_ENABLED</span><span class="o">=</span><span class="nb">false</span><span class="w">       </span><span class="c1"># disable tracing for speed</span>
+<a id="__codelineno-43-4" name="__codelineno-43-4" href="#__codelineno-43-4"></a><span class="nv">JIRA_WEBHOOK_SECRET</span><span class="o">=</span><span class="w">         </span><span class="c1"># skip signature validation</span>
+<a id="__codelineno-43-5" name="__codelineno-43-5" href="#__codelineno-43-5"></a><span class="nv">GITHUB_WEBHOOK_SECRET</span><span class="o">=</span><span class="w">       </span><span class="c1"># skip signature validation</span>
+<a id="__codelineno-43-6" name="__codelineno-43-6" href="#__codelineno-43-6"></a><span class="nv">CI_FIX_MAX_RETRIES</span><span class="o">=</span><span class="m">1</span><span class="w">         </span><span class="c1"># fail fast during CI testing</span>
+<a id="__codelineno-43-7" name="__codelineno-43-7" href="#__codelineno-43-7"></a>
+<a id="__codelineno-43-8" name="__codelineno-43-8" href="#__codelineno-43-8"></a><span class="c1"># ⚠️ Dev only — fall back to env vars instead of requiring Jira project properties</span>
+<a id="__codelineno-43-9" name="__codelineno-43-9" href="#__codelineno-43-9"></a><span class="nv">FORGE_REQUIRE_PROJECT_CONFIG</span><span class="o">=</span><span class="nb">false</span>
+<a id="__codelineno-43-10" name="__codelineno-43-10" href="#__codelineno-43-10"></a><span class="nv">GITHUB_KNOWN_REPOS</span><span class="o">=</span>acme/backend,acme/frontend
+<a id="__codelineno-43-11" name="__codelineno-43-11" href="#__codelineno-43-11"></a><span class="nv">GITHUB_DEFAULT_REPO</span><span class="o">=</span>acme/backend
 </code></pre></div>
 
 
