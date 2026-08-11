@@ -342,6 +342,68 @@ class TestHandlePrdPrComment:
         assert result.get("is_paused", True) is True
 
     @pytest.mark.asyncio
+    async def test_self_comment_with_signature_is_ignored(self, worker):
+        msg = _make_message(
+            "issue_comment:created",
+            {
+                "repository": {"full_name": "org/proposals"},
+                "issue": {"number": 7},
+                "comment": {
+                    "body": "<!-- my-signature -->\n\nSome automated message.",
+                    "user": {"login": "forge-bot"},
+                },
+                "sender": {"login": "forge-bot"},
+            },
+        )
+        state = _prd_gate_state()
+        settings = MagicMock(forge_bot_comment_prefix="my-signature")
+
+        with (
+            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            patch("forge.orchestrator.worker.get_settings", return_value=settings),
+        ):
+            mock_gh = MagicMock()
+            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
+            mock_gh.close = AsyncMock()
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(msg, state)
+
+        # Should remain paused -- self-comment with signature ignored
+        assert result.get("is_paused", True) is True
+
+    @pytest.mark.asyncio
+    async def test_own_comment_without_signature_is_not_ignored(self, worker):
+        msg = _make_message(
+            "issue_comment:created",
+            {
+                "repository": {"full_name": "org/proposals"},
+                "issue": {"number": 7},
+                "comment": {
+                    "body": "!This is a comment without signature, treated as human comment.",
+                    "user": {"login": "forge-bot"},
+                },
+                "sender": {"login": "forge-bot"},
+            },
+        )
+        state = _prd_gate_state()
+        settings = MagicMock(forge_bot_comment_prefix="my-signature")
+
+        with (
+            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            patch("forge.orchestrator.worker.get_settings", return_value=settings),
+        ):
+            mock_gh = MagicMock()
+            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
+            mock_gh.close = AsyncMock()
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(msg, state)
+
+        # Should be processed and no longer paused
+        assert result.get("is_paused") is False
+
+    @pytest.mark.asyncio
     async def test_question_comment_sets_question_flag(self, worker):
         msg = _make_message(
             "issue_comment:created",

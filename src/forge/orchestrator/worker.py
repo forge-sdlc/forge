@@ -40,6 +40,7 @@ from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.automated_review_triage import (
     is_bot_sender,
+    is_self_comment,
     triage_automated_review,
 )
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
@@ -567,10 +568,18 @@ class OrchestratorWorker:
             reply = payload.get("comment", {})
             replied_to = reply.get("in_reply_to_id")
             sender_login = payload.get("sender", {}).get("login", "")
-            forge_login = await self._get_forge_github_login()
-            if sender_login and sender_login == forge_login:
-                logger.debug("Ignoring Forge's own inline review comment")
-                return current_state
+            if sender_login:
+                forge_login = await self._get_forge_github_login()
+                settings = get_settings()
+                forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                if is_self_comment(
+                    sender_login=sender_login,
+                    comment_body=reply.get("body", ""),
+                    bot_login=forge_login,
+                    prefix=forge_bot_comment_prefix,
+                ):
+                    logger.debug("Ignoring Forge's own inline review comment")
+                    return current_state
             if replied_to:
                 contested = current_state.get("contested_comments", [])
                 remaining = [
@@ -975,10 +984,18 @@ class OrchestratorWorker:
             reply = payload.get("comment", {})
             replied_to = reply.get("in_reply_to_id")
             if is_proposal_reply:
-                forge_login = await self._get_forge_github_login()
                 sender_login = payload.get("sender", {}).get("login", "")
-                if sender_login and sender_login == forge_login:
-                    return current_state
+                if sender_login:
+                    forge_login = await self._get_forge_github_login()
+                    settings = get_settings()
+                    forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                    if is_self_comment(
+                        sender_login=sender_login,
+                        comment_body=reply.get("body", ""),
+                        bot_login=forge_login,
+                        prefix=forge_bot_comment_prefix,
+                    ):
+                        return current_state
             if is_proposal_reply and replied_to:
                 previous = current_state.get("proposal_review_decisions", [])
                 matching = next(
@@ -1115,7 +1132,14 @@ class OrchestratorWorker:
                     finally:
                         await gh.close()
 
-                    if sender_login == forge_login:
+                    settings = get_settings()
+                    forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                    if is_self_comment(
+                        sender_login=sender_login,
+                        comment_body=comment_body,
+                        bot_login=forge_login,
+                        prefix=forge_bot_comment_prefix,
+                    ):
                         logger.debug(f"Ignoring self-comment on PRD PR for {message.ticket_key}")
                         return current_state
 
@@ -1246,7 +1270,14 @@ class OrchestratorWorker:
                     finally:
                         await gh.close()
 
-                    if sender_login == forge_login:
+                    settings = get_settings()
+                    forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                    if is_self_comment(
+                        sender_login=sender_login,
+                        comment_body=comment_body,
+                        bot_login=forge_login,
+                        prefix=forge_bot_comment_prefix,
+                    ):
                         logger.debug(f"Ignoring self-comment on spec PR for {message.ticket_key}")
                         return current_state
 
@@ -1394,13 +1425,22 @@ class OrchestratorWorker:
             and current_state.get("is_paused", True)
         ):
             sender_login = payload.get("sender", {}).get("login", "")
-            if sender_login and sender_login == await self._get_forge_github_login():
-                logger.debug("Ignoring Forge's own pull request review")
-                return current_state
-
-            review = payload.get("review", {})
-            review_state = review.get("state", "").lower()
+            review = payload.get("review", {}) or {}
             review_body = review.get("body", "") or ""
+            if sender_login:
+                forge_login = await self._get_forge_github_login()
+                settings = get_settings()
+                forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                if is_self_comment(
+                    sender_login=sender_login,
+                    comment_body=review_body,
+                    bot_login=forge_login,
+                    prefix=forge_bot_comment_prefix,
+                ):
+                    logger.debug("Ignoring Forge's own pull request review")
+                    return current_state
+
+            review_state = review.get("state", "").lower()
 
             if review_state == "approved":
                 if targets_implementation_pr:

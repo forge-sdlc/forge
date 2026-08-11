@@ -45,11 +45,21 @@ def is_self_comment(
     Uses dual-check or legacy username logic with O(1) prefix match complexity
     and no external I/O overhead.
     """
-    if sender_login.lower().endswith("[bot]"):
+    sender_lower = sender_login.lower()
+    bot_lower = bot_login.lower()
+
+    # Check if the sender is our bot or matches our bot suffix
+    is_same_bot = (
+        sender_lower == bot_lower
+        or sender_lower == f"{bot_lower}[bot]"
+        or (sender_lower.endswith("[bot]") and sender_lower[:-5] == bot_lower)
+    )
+
+    if sender_lower.endswith("[bot]") and is_same_bot:
         return True
 
     if prefix and prefix.strip():
-        if sender_login.lower() == bot_login.lower():
+        if is_same_bot:
             prefix_stripped = prefix.strip()
             prefixes_to_check: tuple[str, ...]
             if prefix_stripped.startswith("<!--") and prefix_stripped.endswith("-->"):
@@ -70,7 +80,7 @@ def is_self_comment(
             )
         return False
 
-    return sender_login.lower() == bot_login.lower()
+    return is_same_bot
 
 
 def prepend_bot_prefix(comment_body: str, prefix: str | None = None) -> str:

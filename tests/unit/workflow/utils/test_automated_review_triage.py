@@ -118,9 +118,9 @@ def test_prepend_bot_prefix_settings_fallback(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_is_self_comment_bot_suffix() -> None:
-    # Usernames ending in [bot] are always identified as self-comments
-    assert is_self_comment("my-app[bot]", "Hello", "forge-bot", "some-prefix") is True
-    assert is_self_comment("my-app[BOT]", "Hello", "forge-bot", "some-prefix") is True
+    # Usernames ending in [bot] are identified as self-comments if they match the bot login base
+    assert is_self_comment("my-app[bot]", "Hello", "my-app", "some-prefix") is True
+    assert is_self_comment("my-app[BOT]", "Hello", "my-app", "some-prefix") is True
     assert is_self_comment("forge-bot[bot]", "Some text", "forge-bot", None) is True
 
 
@@ -256,7 +256,7 @@ def test_is_self_comment_sc003_prefix_configured_body_not_start_with_prefix() ->
 
 def test_is_self_comment_sc004_sender_username_bot_suffix() -> None:
     # Sender username ending in [bot] (case-insensitive)
-    assert is_self_comment("my-app[bot]", "Hello", "forge-bot", "some-prefix") is True
-    assert is_self_comment("my-app[BOT]", "Hello", "forge-bot", "some-prefix") is True
+    assert is_self_comment("my-app[bot]", "Hello", "my-app", "some-prefix") is True
+    assert is_self_comment("my-app[BOT]", "Hello", "my-app", "some-prefix") is True
     assert is_self_comment("forge-bot[bot]", "Some text", "forge-bot", None) is True
-    assert is_self_comment("github-actions[bot]", "Any comment body", "forge-bot", "") is True
+    assert is_self_comment("github-actions[bot]", "Any comment body", "github-actions", "") is True
