@@ -4,6 +4,7 @@ import pytest
 
 from forge.workflow.utils.automated_review_triage import (
     is_bot_sender,
+    is_self_comment,
     parse_automated_review_decision,
     prepend_bot_prefix,
 )
@@ -114,3 +115,64 @@ def test_prepend_bot_prefix_settings_fallback(monkeypatch: pytest.MonkeyPatch) -
     assert (
         prepend_bot_prefix("This is a comment") == "<!-- settings-prefix -->\n\nThis is a comment"
     )
+
+
+def test_is_self_comment_bot_suffix() -> None:
+    # Usernames ending in [bot] are always identified as self-comments
+    assert is_self_comment("my-app[bot]", "Hello", "forge-bot", "some-prefix") is True
+    assert is_self_comment("my-app[BOT]", "Hello", "forge-bot", "some-prefix") is True
+    assert is_self_comment("forge-bot[bot]", "Some text", "forge-bot", None) is True
+
+
+def test_is_self_comment_prefix_matching() -> None:
+    # Configured prefix matching correctly identifies self-comments when the comment body starts with the prefix
+    assert (
+        is_self_comment(
+            "forge-bot", "<!-- my-prefix --> This is bot comment", "forge-bot", "my-prefix"
+        )
+        is True
+    )
+    assert (
+        is_self_comment("forge-bot", "my-prefix This is bot comment", "forge-bot", "my-prefix")
+        is True
+    )
+    assert (
+        is_self_comment(
+            "FORGE-BOT", "<!-- my-prefix --> This is bot comment", "forge-bot", "my-prefix"
+        )
+        is True
+    )
+    # Check leading whitespace handling
+    assert (
+        is_self_comment(
+            "forge-bot", "  \n <!-- my-prefix --> This is bot comment", "forge-bot", "my-prefix"
+        )
+        is True
+    )
+
+
+def test_is_self_comment_prefix_matching_returns_false_if_no_match() -> None:
+    # Configured prefix matching returns False when the comment is from the bot login but the body does not start with the prefix
+    assert is_self_comment("forge-bot", "This is human comment", "forge-bot", "my-prefix") is False
+    assert (
+        is_self_comment("forge-bot", "Some prefix-like text but not it", "forge-bot", "my-prefix")
+        is False
+    )
+
+
+def test_is_self_comment_prefix_matching_returns_false_if_sender_mismatch() -> None:
+    assert (
+        is_self_comment(
+            "other-user", "<!-- my-prefix --> This is bot comment", "forge-bot", "my-prefix"
+        )
+        is False
+    )
+
+
+def test_is_self_comment_legacy_fallback() -> None:
+    # Legacy fallback (empty/unset prefix) matches exactly by username (case-insensitive)
+    assert is_self_comment("forge-bot", "Hello", "forge-bot", None) is True
+    assert is_self_comment("forge-bot", "Hello", "forge-bot", "") is True
+    assert is_self_comment("forge-bot", "Hello", "forge-bot", "   ") is True
+    assert is_self_comment("FORGE-bot", "Hello", "forge-bot", "") is True
+    assert is_self_comment("other-user", "Hello", "forge-bot", None) is False

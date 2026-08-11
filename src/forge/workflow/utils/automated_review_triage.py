@@ -34,6 +34,37 @@ def is_bot_sender(payload: dict[str, Any]) -> bool:
     return bool(sender_type.lower() == "bot" or review_user_type.lower() == "bot")
 
 
+def is_self_comment(
+    sender_login: str,
+    comment_body: str,
+    bot_login: str,
+    prefix: str | None = None,
+) -> bool:
+    """Determine if an incoming comment or review belongs to the bot itself.
+
+    Uses dual-check or legacy username logic with O(1) prefix match complexity
+    and no external I/O overhead.
+    """
+    if sender_login.lower().endswith("[bot]"):
+        return True
+
+    if prefix and prefix.strip():
+        if sender_login.lower() == bot_login.lower():
+            prefix_stripped = prefix.strip()
+            if prefix_stripped.startswith("<!--") and prefix_stripped.endswith("-->"):
+                wrapped_prefix = prefix_stripped
+            else:
+                wrapped_prefix = f"<!-- {prefix_stripped} -->"
+
+            prefixes_to_check = (prefix, prefix_stripped, wrapped_prefix)
+            return comment_body.startswith(prefixes_to_check) or comment_body.lstrip().startswith(
+                prefixes_to_check
+            )
+        return False
+
+    return sender_login.lower() == bot_login.lower()
+
+
 def prepend_bot_prefix(comment_body: str, prefix: str | None = None) -> str:
     """Prepend a bot signature/comment prefix to the comment body."""
     if prefix is None:
