@@ -103,6 +103,10 @@ class Settings(BaseSettings):
         default="",
         description="GitHub account/org where forks are created (defaults to authenticated user if empty)",
     )
+    forge_bot_comment_prefix: str = Field(
+        default="",
+        description="Prefix to use for all comments made by the Forge bot",
+    )
     git_user_name: str = Field(
         default="Forge",
         description="Git user name for commits made by Forge",
