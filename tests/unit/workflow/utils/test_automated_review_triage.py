@@ -133,6 +133,12 @@ def test_is_self_comment_prefix_matching() -> None:
         is True
     )
     assert (
+        is_self_comment(
+            "forge-bot", "<!--my-prefix--> This is bot comment", "forge-bot", "my-prefix"
+        )
+        is True
+    )
+    assert (
         is_self_comment("forge-bot", "my-prefix This is bot comment", "forge-bot", "my-prefix")
         is True
     )

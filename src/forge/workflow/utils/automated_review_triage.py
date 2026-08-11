@@ -51,12 +51,20 @@ def is_self_comment(
     if prefix and prefix.strip():
         if sender_login.lower() == bot_login.lower():
             prefix_stripped = prefix.strip()
+            prefixes_to_check: tuple[str, ...]
             if prefix_stripped.startswith("<!--") and prefix_stripped.endswith("-->"):
                 wrapped_prefix = prefix_stripped
+                prefixes_to_check = (prefix, prefix_stripped, wrapped_prefix)
             else:
                 wrapped_prefix = f"<!-- {prefix_stripped} -->"
+                wrapped_prefix_no_space = f"<!--{prefix_stripped}-->"
+                prefixes_to_check = (
+                    prefix,
+                    prefix_stripped,
+                    wrapped_prefix,
+                    wrapped_prefix_no_space,
+                )
 
-            prefixes_to_check = (prefix, prefix_stripped, wrapped_prefix)
             return comment_body.startswith(prefixes_to_check) or comment_body.lstrip().startswith(
                 prefixes_to_check
             )
