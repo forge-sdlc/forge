@@ -1,8 +1,8 @@
 """Tests for CI attribution and evaluate_ci_status pending_ci_event clearing."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import pytest
 
 BASE_STATE = {
     "ticket_key": "TEST-1",
@@ -81,7 +81,7 @@ async def test_evaluate_ci_status_clears_pending_ci_event_on_passed(MockJira, Mo
 @patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
 @patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
 async def test_attribution_external_skips_fix(
-    mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
+    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
 ):
     """Phase 0 verdict attributable=false → external_failure, no fix attempt increment."""
     from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
@@ -109,9 +109,23 @@ async def test_attribution_external_skips_fix(
     result = await attempt_ci_fix(state)
 
     assert result["ci_status"] == "external_failure"
-    assert result["ci_fix_attempt"] == 1  # NOT incremented
+    assert result["ci_fix_attempt"] == 0  # Reserved attempt refunded
     assert result["current_node"] == "human_review_gate"
     assert result.get("pending_ci_event", True) is False
+
+
+def test_attribution_prompt_compares_full_pr_against_default_branch():
+    """Attribution must inspect the whole PR, not only its latest commit."""
+    from forge.prompts import load_prompt
+
+    prompt = load_prompt(
+        "ci-attribution",
+        failures_file_path=".forge/ci-failures.md",
+        base_branch="develop",
+    )
+
+    assert "git merge-base HEAD origin/develop" in prompt
+    assert "HEAD~1 HEAD" not in prompt
 
 
 @pytest.mark.asyncio
@@ -121,7 +135,7 @@ async def test_attribution_external_skips_fix(
 @patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
 @patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
 async def test_attribution_attributable_proceeds_to_fix(
-    mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
+    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
 ):
     """Phase 0 verdict attributable=true → proceeds to fix, increments attempt."""
     from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
@@ -163,7 +177,7 @@ async def test_attribution_attributable_proceeds_to_fix(
 @patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
 @patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
 async def test_attribution_missing_file_proceeds_as_attributable(
-    mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
+    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
 ):
     """Missing ci-attribution.json is treated as attributable (fail-safe)."""
     from forge.workflow.nodes.ci_evaluator import attempt_ci_fix

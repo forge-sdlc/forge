@@ -332,6 +332,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         attribution_prompt = load_prompt(
             "ci-attribution",
             failures_file_path=str(failures_file),
+            base_branch=state.get("context", {}).get("default_branch", "main"),
         )
         runner = ContainerRunner(settings)
         await runner.run(
@@ -374,6 +375,9 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 {
                     **state,
                     "ci_status": "external_failure",
+                    # evaluate_ci_status reserves an attempt before attribution.
+                    # External failures must not consume the autonomous-fix budget.
+                    "ci_fix_attempt": max(0, ci_fix_attempt - 1),
                     "current_node": "human_review_gate",
                     "pending_ci_event": False,
                     "last_error": None,
@@ -471,7 +475,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         if not unpushed:
             logger.warning(f"Container made no changes for {ticket_key} (attempt {ci_fix_attempt})")
         else:
-            await run_post_change_review(
+            _, review_result = await run_post_change_review(
                 workspace_path=str(workspace_path),
                 ticket_key=ticket_key,
                 current_repo=state.get("current_repo", ""),
@@ -480,6 +484,10 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 guardrails=state.get("context", {}).get("guardrails", ""),
                 label=f"ci-fix-{ci_fix_attempt}",
             )
+            if review_result is not None:
+                state = merge_review_exhaustion(
+                    state, review_result, ticket_key, "code_review"
+                )
             if fork_owner and fork_repo:
                 git.push_to_fork(force=False)
             else:

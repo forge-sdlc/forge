@@ -13,14 +13,14 @@ All available log files are in `.forge/logs/`.
 Read the failure logs carefully. Compare the failing test names, file paths,
 and error messages against the files changed in this PR.
 
-To see which files this PR touches, run:
+To see every file this PR touches, compare the branch with the merge base of
+the repository's default branch (`{base_branch}`):
 ```
-git diff --name-only HEAD~1 HEAD
+git diff --name-only "$(git merge-base HEAD origin/{base_branch})" HEAD
 ```
-or inspect the most recent commit:
-```
-git show --stat HEAD
-```
+
+Do not use only `HEAD~1..HEAD` or `git show HEAD`: those commands omit changes
+from earlier commits in a multi-commit pull request.
 
 Determine whether each failing check is caused by changes introduced in this PR,
 or by external factors such as:
