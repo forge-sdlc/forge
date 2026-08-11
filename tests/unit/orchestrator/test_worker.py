@@ -2115,3 +2115,264 @@ class TestHandleResumeEventReviewGates:
         result = await worker._handle_resume_event(message, state)
 
         assert route_review_response(result) == "implement_review"
+
+
+class TestWorkerWebhookCommentFiltering:
+    """Tests confirming worker webhook filter/processing dual-check logic."""
+
+    @pytest.mark.asyncio
+    async def test_integration_bot_login_comment_without_prefix_processed_as_human_feedback(self):
+        """Integration test confirms that a bot-login comment without a configured prefix signature is processed as human feedback."""
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        state = {
+            "ticket_key": "TEST-123",
+            "current_node": "human_review_gate",
+            "current_repo": "owner/repo",
+            "current_pr_number": 42,
+            "is_paused": True,
+            "context": {},
+        }
+        # Sender matches the bot login 'dev-user', but body does NOT contain the prefix signature
+        message = QueueMessage(
+            message_id="msg-123",
+            event_id="evt-123",
+            source=EventSource.GITHUB,
+            event_type="pull_request_review:submitted",
+            ticket_key="TEST-123",
+            payload={
+                "review": {
+                    "id": 100,
+                    "state": "changes_requested",
+                    "body": "!This is a human review comment without signature prefix.",
+                    "user": {"login": "dev-user", "type": "User"},
+                },
+                "pull_request": {"number": 42},
+                "repository": {"full_name": "owner/repo"},
+                "sender": {"login": "dev-user", "type": "User"},
+            },
+        )
+
+        settings = MagicMock(forge_bot_comment_prefix="my-signature")
+
+        with (
+            patch.object(
+                worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")
+            ),
+            patch("forge.orchestrator.worker.get_settings", return_value=settings),
+            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+        ):
+            mock_gh = AsyncMock()
+            mock_gh.get_review_comments.return_value = []
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(message, state)
+
+        # It should be processed (not ignored), so state will have updated to resume (is_paused becomes False)
+        assert result is not state
+        assert result.get("is_paused") is False
+        assert result.get("revision_requested") is True
+        assert "!This is a human review comment" in result.get("feedback_comment", "")
+
+    @pytest.mark.asyncio
+    async def test_integration_bot_login_comment_with_prefix_ignored_as_self_comment(self):
+        """Integration test confirms that a bot-login comment with a configured prefix signature is ignored as a self-comment."""
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        state = {
+            "ticket_key": "TEST-123",
+            "current_node": "human_review_gate",
+            "current_repo": "owner/repo",
+            "current_pr_number": 42,
+            "is_paused": True,
+            "context": {},
+        }
+        # Sender matches the bot login 'dev-user', and body contains the prefix signature
+        message = QueueMessage(
+            message_id="msg-123",
+            event_id="evt-123",
+            source=EventSource.GITHUB,
+            event_type="pull_request_review:submitted",
+            ticket_key="TEST-123",
+            payload={
+                "review": {
+                    "id": 100,
+                    "state": "changes_requested",
+                    "body": "<!-- my-signature -->\n\nThis is an automated comment with signature.",
+                    "user": {"login": "dev-user", "type": "User"},
+                },
+                "pull_request": {"number": 42},
+                "repository": {"full_name": "owner/repo"},
+                "sender": {"login": "dev-user", "type": "User"},
+            },
+        )
+
+        settings = MagicMock(forge_bot_comment_prefix="my-signature")
+
+        with (
+            patch.object(
+                worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")
+            ),
+            patch("forge.orchestrator.worker.get_settings", return_value=settings),
+            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+        ):
+            mock_gh = AsyncMock()
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(message, state)
+
+        # It should be ignored (is_self_comment is True), so returns unchanged state
+        assert result is state
+        assert result.get("is_paused") is True
+
+    @pytest.mark.asyncio
+    async def test_integration_app_bot_comment_ending_in_bot_ignored_as_self_comment(self):
+        """Integration test confirms that standard App bot comments ending in [bot] are ignored as self-comments."""
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        state = {
+            "ticket_key": "TEST-123",
+            "current_node": "human_review_gate",
+            "current_repo": "owner/repo",
+            "current_pr_number": 42,
+            "is_paused": True,
+            "context": {},
+        }
+        # Sender is an App bot (ends with [bot]) and matches the bot login
+        message = QueueMessage(
+            message_id="msg-123",
+            event_id="evt-123",
+            source=EventSource.GITHUB,
+            event_type="pull_request_review:submitted",
+            ticket_key="TEST-123",
+            payload={
+                "review": {
+                    "id": 100,
+                    "state": "changes_requested",
+                    "body": "Some comment body from app bot",
+                    "user": {"login": "forge-bot[bot]", "type": "Bot"},
+                },
+                "pull_request": {"number": 42},
+                "repository": {"full_name": "owner/repo"},
+                "sender": {"login": "forge-bot[bot]", "type": "Bot"},
+            },
+        )
+
+        settings = MagicMock(forge_bot_comment_prefix="my-signature")
+
+        with (
+            patch.object(
+                worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
+            ),
+            patch("forge.orchestrator.worker.get_settings", return_value=settings),
+            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+        ):
+            mock_gh = AsyncMock()
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(message, state)
+
+        # It should be ignored because of the App bot suffix matching our bot login
+        assert result is state
+        assert result.get("is_paused") is True
+
+    @pytest.mark.asyncio
+    async def test_integration_other_app_bot_comment_ending_in_bot_is_not_ignored(self):
+        """Confirm that external App bot reviews/comments (not our bot) are not ignored and are processed."""
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        state = {
+            "ticket_key": "TEST-123",
+            "current_node": "human_review_gate",
+            "current_repo": "owner/repo",
+            "current_pr_number": 42,
+            "is_paused": True,
+            "context": {},
+        }
+        # Sender is another App bot (ends with [bot], e.g., 'coderabbitai[bot]')
+        message = QueueMessage(
+            message_id="msg-123",
+            event_id="evt-123",
+            source=EventSource.GITHUB,
+            event_type="pull_request_review:submitted",
+            ticket_key="TEST-123",
+            payload={
+                "review": {
+                    "id": 100,
+                    "state": "changes_requested",
+                    "body": "!This is an external bot review comment.",
+                    "user": {"login": "coderabbitai[bot]", "type": "Bot"},
+                },
+                "pull_request": {"number": 42},
+                "repository": {"full_name": "owner/repo"},
+                "sender": {"login": "coderabbitai[bot]", "type": "Bot"},
+            },
+        )
+
+        settings = MagicMock(forge_bot_comment_prefix="my-signature")
+
+        with (
+            patch.object(
+                worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
+            ),
+            patch("forge.orchestrator.worker.get_settings", return_value=settings),
+            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+        ):
+            mock_gh = AsyncMock()
+            mock_gh.get_review_comments.return_value = []
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(message, state)
+
+        # It should be processed (not ignored)
+        assert result is not state
+        assert result.get("is_paused") is False
+        assert result.get("revision_requested") is True
+        assert "!This is an external bot review comment." in result.get("feedback_comment", "")
+
+    @pytest.mark.asyncio
+    async def test_integration_legacy_fallback_no_prefix_ignored(self):
+        """Integration test confirms that when no prefix is configured, matching bot-login comments are always ignored (legacy fallback)."""
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        state = {
+            "ticket_key": "TEST-123",
+            "current_node": "human_review_gate",
+            "current_repo": "owner/repo",
+            "current_pr_number": 42,
+            "is_paused": True,
+            "context": {},
+        }
+        # Sender matches bot login, prefix is not configured
+        message = QueueMessage(
+            message_id="msg-123",
+            event_id="evt-123",
+            source=EventSource.GITHUB,
+            event_type="pull_request_review:submitted",
+            ticket_key="TEST-123",
+            payload={
+                "review": {
+                    "id": 100,
+                    "state": "changes_requested",
+                    "body": "Some body without signature",
+                    "user": {"login": "dev-user", "type": "User"},
+                },
+                "pull_request": {"number": 42},
+                "repository": {"full_name": "owner/repo"},
+                "sender": {"login": "dev-user", "type": "User"},
+            },
+        )
+
+        # Prefix is empty/None/disabled
+        settings = MagicMock(forge_bot_comment_prefix="")
+
+        with (
+            patch.object(
+                worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")
+            ),
+            patch("forge.orchestrator.worker.get_settings", return_value=settings),
+            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+        ):
+            mock_gh = AsyncMock()
+            MockGH.return_value = mock_gh
+
+            result = await worker._handle_resume_event(message, state)
+
+        # It should be ignored under the legacy fallback because prefix is empty
+        assert result is state
+        assert result.get("is_paused") is True
