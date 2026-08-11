@@ -1196,6 +1196,117 @@ async def cmd_health(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_test_skill_run(args: argparse.Namespace) -> int:
+    """Run a skill against test cases using deepagents (or legacy mode)."""
+    import importlib.util
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    run_module_path = project_root / "devtools" / "test-skill" / "run.py"
+    if not run_module_path.exists():
+        print(f"Error: test-skill runner not found at {run_module_path}", file=sys.stderr)
+        return 1
+
+    spec = importlib.util.spec_from_file_location("test_skill_run", run_module_path)
+    if spec is None or spec.loader is None:
+        print(f"Error: cannot load {run_module_path}", file=sys.stderr)
+        return 1
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    config = mod.load_config()
+    if args.model:
+        config["model"] = args.model
+    if getattr(args, "project", None):
+        config["project"] = args.project
+    if getattr(args, "references", None):
+        import json as _json
+
+        refs_path = Path(args.references)
+        if not refs_path.exists():
+            print(f"Error: references file not found: {refs_path}", file=sys.stderr)
+            return 1
+        with open(refs_path) as f:
+            config["references"] = _json.load(f)
+
+    if args.mlflow:
+        import logging
+
+        logging.getLogger("mlflow.tracing.export").setLevel(logging.ERROR)
+        config["mlflow_enabled"] = mod._setup_mlflow(args.mlflow, args.mlflow_experiment)
+    else:
+        config["mlflow_enabled"] = False
+
+    skill_dir = Path(args.skill_dir).resolve()
+    if not (skill_dir / "SKILL.md").exists():
+        print(f"Error: No SKILL.md found in {skill_dir}", file=sys.stderr)
+        return 1
+
+    output_dir = Path(args.output).resolve()
+
+    if args.input:
+        mod.run_single_case(args.skill, skill_dir, Path(args.input), output_dir, config)
+    elif args.dataset:
+        dataset_dir = Path(args.dataset)
+        for case_dir in sorted(dataset_dir.iterdir()):
+            if not case_dir.is_dir():
+                continue
+            input_yaml = case_dir / "input.yaml"
+            if not input_yaml.exists():
+                continue
+            case_output = output_dir / case_dir.name
+            mod.run_single_case(args.skill, skill_dir, input_yaml, case_output, config)
+    else:
+        print("Error: Provide either --input or --dataset", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+def cmd_test_skill_eval(args: argparse.Namespace) -> int:
+    """Evaluate skill outputs against gold standards."""
+    import importlib.util
+    from pathlib import Path
+
+    project_root = Path(__file__).resolve().parent.parent.parent
+    eval_module_path = project_root / "devtools" / "test-skill" / "evaluate.py"
+    if not eval_module_path.exists():
+        print(f"Error: test-skill evaluator not found at {eval_module_path}", file=sys.stderr)
+        return 1
+
+    spec = importlib.util.spec_from_file_location("test_skill_evaluate", eval_module_path)
+    if spec is None or spec.loader is None:
+        print(f"Error: cannot load {eval_module_path}", file=sys.stderr)
+        return 1
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    if args.mlflow and mod.HAS_MLFLOW:
+        import logging
+
+        logging.getLogger("mlflow.tracing.export").setLevel(logging.ERROR)
+        mod.mlflow.set_tracking_uri(args.mlflow)
+        mod.mlflow.set_experiment(args.mlflow_experiment)
+        mod.mlflow.anthropic.autolog()
+        mod._mlflow_enabled = True
+
+    criteria_path = Path(args.criteria)
+    output_dir = Path(args.output)
+
+    if args.generated and args.gold:
+        mod.run_single(criteria_path, Path(args.generated), Path(args.gold), output_dir)
+    elif args.dataset and args.results_dir:
+        mod.run_batch(criteria_path, Path(args.dataset), Path(args.results_dir), output_dir)
+    else:
+        print(
+            "Error: provide either --generated + --gold, or --dataset + --results-dir",
+            file=sys.stderr,
+        )
+        return 1
+
+    return 0
+
+
 async def cmd_smoke_test(_args: argparse.Namespace) -> int:
     """Run an end-to-end smoke test to verify Forge runtime connectivity and execution."""
     from forge.config import get_settings
@@ -1338,6 +1449,71 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser(
         "version",
         help="Print the installed Forge package version",
+    )
+
+    # test-skill subparser group
+    test_skill_parser = subparsers.add_parser(
+        "test-skill",
+        help="Test and evaluate Forge skills locally",
+    )
+    test_skill_subparsers = test_skill_parser.add_subparsers(
+        dest="test_skill_command",
+        help="Test-skill commands",
+    )
+
+    # test-skill run
+    ts_run_parser = test_skill_subparsers.add_parser(
+        "run",
+        help="Run a skill against test cases",
+    )
+    ts_run_parser.add_argument("--skill", required=True, help="Skill name (e.g., generate-prd)")
+    ts_run_parser.add_argument("--skill-dir", required=True, help="Path to skill directory")
+    ts_run_parser.add_argument("--input", help="Path to a single input.yaml test case")
+    ts_run_parser.add_argument("--dataset", help="Path to dataset directory (runs all cases)")
+    ts_run_parser.add_argument("--output", required=True, help="Output directory")
+    ts_run_parser.add_argument("--model", help="Override model from config")
+    ts_run_parser.add_argument(
+        "--mlflow",
+        metavar="URI",
+        help="MLflow tracking URI (e.g., http://host:5000)",
+    )
+    ts_run_parser.add_argument(
+        "--mlflow-experiment",
+        default="forge-skill-eval",
+        help="MLflow experiment name (default: forge-skill-eval)",
+    )
+    ts_run_parser.add_argument(
+        "--project",
+        help="Project name for skill path (e.g., osac). Overrides config.yaml.",
+    )
+    ts_run_parser.add_argument(
+        "--references",
+        metavar="FILE",
+        help="JSON file with reference documentation (same format as forge.references).",
+    )
+
+    # test-skill eval
+    ts_eval_parser = test_skill_subparsers.add_parser(
+        "eval",
+        help="Evaluate skill outputs against gold standards",
+    )
+    ts_eval_parser.add_argument("--criteria", required=True, help="Path to criteria YAML")
+    ts_eval_parser.add_argument("--generated", help="Path to generated artifact")
+    ts_eval_parser.add_argument("--gold", help="Path to gold standard artifact")
+    ts_eval_parser.add_argument("--dataset", help="Path to dataset directory (batch mode)")
+    ts_eval_parser.add_argument(
+        "--results-dir", help="Path to runner output directory (batch mode)"
+    )
+    ts_eval_parser.add_argument("--output", required=True, help="Output directory for reports")
+    ts_eval_parser.add_argument(
+        "--mlflow",
+        metavar="URI",
+        help="MLflow tracking URI (e.g., http://host:5000)",
+    )
+    ts_eval_parser.add_argument(
+        "--mlflow-experiment",
+        default="forge-skill-eval",
+        help="MLflow experiment name (default: forge-skill-eval)",
     )
 
     # skills subparser group
@@ -1587,6 +1763,22 @@ Examples:
 
     if args.command is None:
         parser.print_help()
+        return 0
+
+    # Handle test-skill subcommands (sync handlers — no asyncio.run wrapper)
+    if args.command == "test-skill":
+        test_skill_handlers = {
+            "run": cmd_test_skill_run,
+            "eval": cmd_test_skill_eval,
+        }
+        ts_cmd = getattr(args, "test_skill_command", None)
+        if ts_cmd is None:
+            test_skill_parser.print_help()
+            return 0
+        ts_handler = test_skill_handlers.get(ts_cmd)
+        if ts_handler:
+            return ts_handler(args)
+        test_skill_parser.print_help()
         return 0
 
     # Handle skills subcommands

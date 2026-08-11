@@ -1,0 +1,11 @@
+# Model used for skill execution (not for judging — judge model is in criteria YAML)
+model: claude-opus-4-6
+max_tokens: 16384
+
+# Project name — determines skill path: /opt/forge/skills/{project}/{skill-name}/
+# Override per project or use --project CLI flag (e.g., myproject)
+project: default
+
+# Paths inside the temp workspace (match Forge's container layout)
+skill_base_path: /opt/forge/skills
+workspace_path: /home/user

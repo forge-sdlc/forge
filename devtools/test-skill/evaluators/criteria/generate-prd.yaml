@@ -1,0 +1,90 @@
+skill: generate-prd
+description: "PRD generation quality criteria based on 7 gaps identified in the Forge experiment"
+
+gold_standard_file: gold-prd.md
+generated_file_patterns:
+  - "enhancements/*/prd.md"
+  - ".artifacts/prd/*/03-prd.md"
+
+judge_model: claude-sonnet-4-6
+
+criteria:
+  - id: persona-coverage
+    name: "Persona Coverage"
+    weight: critical
+    prompt: |
+      Check if all 4 OSAC personas are addressed (Cloud Provider Admin,
+      Cloud Infrastructure Admin, Tenant Admin, Tenant User). Each must
+      have user stories or an explicit "Not affected" note.
+      Pay special attention to Cloud Infrastructure Admin — if the feature
+      automates a process they currently perform, they MUST have stories.
+
+  - id: persona-alignment
+    name: "Persona-Story Alignment"
+    weight: critical
+    prompt: |
+      For each user story, verify the capability matches the persona's role:
+      - Infrastructure ops (sanitization, hardware lifecycle) → Cloud Infrastructure Admin
+      - Tenant management (quotas, catalogs, cross-tenant visibility) → Cloud Provider Admin
+      - Self-service provisioning → Tenant User
+      - Org config, IDP, org users → Tenant Admin
+      - Internal system stories ("As the CaaS system...") should not exist
+      A sanitization story under Cloud Provider Admin is a misattribution.
+
+  - id: scope-accuracy
+    name: "In Scope / Out of Scope Accuracy"
+    weight: important
+    prompt: |
+      Compare In Scope and Out of Scope items against the gold standard.
+      Flag items in the wrong section (e.g., billing In Scope when gold
+      has it Out of Scope). Flag missing items that appear in the gold.
+      Flag items the generated added that the gold doesn't have — are they
+      accurate or scope creep?
+
+  - id: design-leakage
+    name: "Design Leakage"
+    weight: critical
+    prompt: |
+      Check for internal implementation details that don't belong in a PRD:
+      controller names, reconciler logic, finalizer behavior, playbook
+      parameters, CRD field names, internal conditions, agent/InfraEnv
+      terminology, AAP job parameters. Platform vocabulary (ClusterOrder,
+      BareMetalInstance, Hosted Control Planes) is acceptable.
+
+  - id: problem-statement
+    name: "Problem Statement Quality"
+    weight: important
+    prompt: |
+      The Problem Statement should describe user pain and cost of inaction
+      only. It should NOT describe the solution, what the feature introduces,
+      or how it works. Check for solution language — sentences starting with
+      "This feature introduces...", "The X eliminates...", etc.
+
+  - id: status-visibility
+    name: "Async Status Visibility"
+    weight: important
+    prompt: |
+      If the feature involves asynchronous resource creation, check that
+      status/progress visibility is addressed in In Scope or User Stories.
+      The user should be able to see the current state and failure reasons.
+
+  - id: template-compliance
+    name: "Template Compliance"
+    weight: important
+    prompt: |
+      The OSAC PRD template has exactly 6 sections: Problem Statement,
+      In Scope, Out of Scope, User Stories, Assumptions, Dependencies.
+      Check for extra sections (Risks, Acceptance Criteria, Open Questions,
+      Terminology, Milestone) or missing required sections.
+
+  - id: completeness
+    name: "Content Completeness"
+    weight: important
+    prompt: |
+      Compare the generated PRD against the gold standard section by section.
+      What key requirements are present in the gold but missing in the generated?
+      What did the generated add that the gold doesn't have?
+      Focus on substantive content gaps, not wording differences.
+
+pass_threshold: 6
+fail_on_critical: true
