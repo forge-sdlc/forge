@@ -1,0 +1,63 @@
+image:
+  repository: image-registry.openshift-image-registry.svc:5000/forge/forge
+  tag: pr-243
+  pullPolicy: Always
+
+sandboxImage:
+  repository: image-registry.openshift-image-registry.svc:5000/forge/forge-sandbox
+  tag: pr-243
+
+# Create this secret separately from .env; both API and worker import its keys.
+existingSecret: forge-env
+
+api:
+  replicas: 1
+  service:
+    port: 8000
+  route:
+    enabled: true
+    host: ""
+    tlsTermination: edge
+
+worker:
+  replicas: 1
+  serviceAccountName: forge-worker
+  metricsPort: 8001
+
+workspace:
+  claimName: forge-workspaces
+  mountPath: /mnt/workspaces
+  size: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3-csi
+
+redis:
+  enabled: true
+  image: redis/redis-stack-server:latest
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClassName: gp3-csi
+
+imagePullSecrets: []
+podAnnotations: {}
+podSecurityContext: {}
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+resources:
+  api: {}
+  worker: {}
+
+sandbox:
+  memory: 4Gi
+  cpus: "2"
+  timeout: "1800"
+  jobServiceAccountName: forge-runner
+  imagePullSecrets: ""

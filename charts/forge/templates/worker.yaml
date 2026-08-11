@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "forge.fullname" . }}-worker
+  labels:
+    {{- include "forge.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: worker
+    spec:
+      serviceAccountName: {{ .Values.worker.serviceAccountName }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: {{ include "forge.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["forge", "worker"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          env:
+            - name: REDIS_URL
+              value: redis://{{ include "forge.fullname" . }}-redis:6379/0
+            - name: FORGE_SANDBOX_DRIVER
+              value: kubernetes
+            - name: CONTAINER_IMAGE
+              value: {{ include "forge.sandboxImage" . }}
+            - name: WORKSPACE_BASE_DIR
+              value: {{ .Values.workspace.mountPath }}
+            - name: K8S_NAMESPACE
+              value: {{ .Release.Namespace }}
+            - name: K8S_WORKSPACE_PVC
+              value: {{ .Values.workspace.claimName }}
+            - name: K8S_WORKSPACE_BASE_PATH
+              value: {{ .Values.workspace.mountPath }}
+            - name: K8S_IMAGE_PULL_SECRETS
+              value: {{ .Values.sandbox.imagePullSecrets | quote }}
+            - name: K8S_SERVICE_ACCOUNT
+              value: {{ .Values.sandbox.jobServiceAccountName }}
+            - name: CONTAINER_MEMORY
+              value: {{ .Values.sandbox.memory | quote }}
+            - name: CONTAINER_CPUS
+              value: {{ .Values.sandbox.cpus | quote }}
+            - name: CONTAINER_TIMEOUT
+              value: {{ .Values.sandbox.timeout | quote }}
+            - name: WORKER_METRICS_PORT
+              value: {{ .Values.worker.metricsPort | quote }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.worker.metricsPort }}
+          volumeMounts:
+            - name: workspaces
+              mountPath: {{ .Values.workspace.mountPath }}
+          resources:
+            {{- toYaml .Values.resources.worker | nindent 12 }}
+      volumes:
+        - name: workspaces
+          persistentVolumeClaim:
+            claimName: {{ .Values.workspace.claimName }}

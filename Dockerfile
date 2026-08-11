@@ -16,7 +16,7 @@ COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
 RUN pip install --no-cache-dir build && \
-    pip wheel --no-cache-dir --wheel-dir /wheels -e .
+    pip wheel --no-cache-dir --wheel-dir /wheels -e ".[k8s]"
 
 # Production stage
 FROM python:3.11-slim

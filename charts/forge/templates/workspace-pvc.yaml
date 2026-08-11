@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.workspace.claimName }}
+  labels:
+    {{- include "forge.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.workspace.accessModes | nindent 4 }}
+  {{- with .Values.workspace.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.workspace.size }}
