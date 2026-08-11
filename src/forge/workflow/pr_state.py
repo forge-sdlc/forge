@@ -38,7 +38,6 @@ _ACTIVE_FIELDS = {
 }
 
 _PR_LIFECYCLE_NODES = {
-    "wait_for_ci_gate",
     "ci_evaluator",
     "attempt_ci_fix",
     "human_review_gate",
@@ -97,7 +96,9 @@ def save_active_pull_request(state: dict[str, Any]) -> dict[str, Any]:
     if current_node in _PR_LIFECYCLE_NODES:
         record["lifecycle_node"] = current_node
     else:
-        record.setdefault("lifecycle_node", "wait_for_ci_gate")
+        # Default to the post-PR entry node (teardown_workspace → human_review_gate)
+        # so a stale record resolves to a real node on resume rather than a removed one.
+        record.setdefault("lifecycle_node", "human_review_gate")
     pull_requests[repo] = record
     return {**state, "pull_requests": pull_requests}
 

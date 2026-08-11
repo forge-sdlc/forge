@@ -1,6 +1,7 @@
 """Human review handling node for processing review feedback and merges."""
 
 import logging
+from typing import Any
 
 from langgraph.graph import END
 
@@ -20,10 +21,13 @@ logger = logging.getLogger(__name__)
 async def human_review_gate(state: WorkflowState) -> WorkflowState:
     """Pause workflow for CI and human review.
 
-    On initial entry (ci_status is None), posts a PR creation status comment
+    On the first entry after PR creation, posts a PR creation status comment
     and transitions Jira labels from forge:implementing to forge:ci-pending.
     On subsequent entries (CI cycle or review cycle re-entries), skips the
-    Jira comment to avoid duplicate noise.
+    Jira comment to avoid duplicate noise. The one-time post is tracked with
+    pr_created_comment_posted rather than ci_status, because the first CI
+    webhook re-enters this gate while ci_status is still None (ci_evaluator
+    has not run yet).
     """
     ticket_key = state["ticket_key"]
     ci_status = state.get("ci_status")
@@ -34,7 +38,8 @@ async def human_review_gate(state: WorkflowState) -> WorkflowState:
             {**state, "current_node": "human_review_gate", "is_paused": False}
         )
 
-    if ci_status is None:
+    updates: dict[str, Any] = {}
+    if ci_status is None and not state.get("pr_created_comment_posted"):
         jira = JiraClient()
         try:
             pr_number = state.get("current_pr_number")
@@ -52,6 +57,7 @@ async def human_review_gate(state: WorkflowState) -> WorkflowState:
             await set_ci_pending_label(jira, ticket_key)
         finally:
             await jira.close()
+        updates["pr_created_comment_posted"] = True
         logger.info(f"Pausing {ticket_key} at human_review_gate after PR creation")
     else:
         logger.info(f"Pausing {ticket_key} at human_review_gate (ci_status={ci_status!r})")
@@ -59,6 +65,7 @@ async def human_review_gate(state: WorkflowState) -> WorkflowState:
     return update_state_timestamp(
         {
             **state,
+            **updates,
             "is_paused": True,
             "current_node": "human_review_gate",
         }

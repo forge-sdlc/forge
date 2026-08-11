@@ -1,9 +1,9 @@
 """Tests for the updated human_review_gate and route_human_review."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
-from langgraph.graph import END
 
+import pytest
+from langgraph.graph import END
 
 BASE_STATE = {
     "ticket_key": "TEST-1",
@@ -93,6 +93,7 @@ class TestHumanReviewGate:
         mock_set_label.assert_called_once()
         assert result["is_paused"] is True
         assert result["current_node"] == "human_review_gate"
+        assert result["pr_created_comment_posted"] is True
 
     @pytest.mark.asyncio
     @patch("forge.workflow.nodes.human_review.post_status_comment", new_callable=AsyncMock)
@@ -106,6 +107,33 @@ class TestHumanReviewGate:
         mock_jira.close = AsyncMock()
 
         state = {**BASE_STATE, "ci_status": "pending", "pending_ci_event": False}
+        result = await human_review_gate(state)
+
+        mock_post.assert_not_called()
+        assert result["is_paused"] is True
+
+    @pytest.mark.asyncio
+    @patch("forge.workflow.nodes.human_review.post_status_comment", new_callable=AsyncMock)
+    @patch("forge.workflow.nodes.human_review.JiraClient")
+    async def test_first_ci_webhook_reentry_does_not_repost_comment(self, MockJira, mock_post):
+        """The first CI webhook re-enters the gate while ci_status is still None.
+
+        ci_evaluator has not run yet, so the guard must rely on
+        pr_created_comment_posted (not ci_status) to avoid a duplicate
+        'Pull request created' Jira comment.
+        """
+        from forge.workflow.nodes.human_review import human_review_gate
+
+        mock_jira = AsyncMock()
+        MockJira.return_value = mock_jira
+        mock_jira.close = AsyncMock()
+
+        state = {
+            **BASE_STATE,
+            "ci_status": None,
+            "pending_ci_event": True,
+            "pr_created_comment_posted": True,
+        }
         result = await human_review_gate(state)
 
         mock_post.assert_not_called()

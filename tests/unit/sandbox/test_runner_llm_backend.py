@@ -52,3 +52,19 @@ def test_build_env_vars_passes_only_selected_backend_credentials(
     assert env.items() >= expected.items()
     assert absent not in env
     assert env["CONTAINER_COMMAND_TIMEOUT"] == "1200"
+
+
+def test_command_timeout_clamped_to_container_lifetime():
+    """A shorter ad-hoc container lifetime caps the per-command timeout.
+
+    podman kills the container at config.timeout_seconds, so exporting a larger
+    per-command budget would surface as a confusing 'container killed' instead of
+    a clean 'command timed out'.
+    """
+    runner = ContainerRunner.__new__(ContainerRunner)
+    runner.settings = _settings("anthropic")  # container_command_timeout=1200
+
+    with patch("forge.sandbox.runner.load_prompt", return_value="prompt"):
+        env = runner._build_env_vars(ContainerConfig(timeout_seconds=300))
+
+    assert env["CONTAINER_COMMAND_TIMEOUT"] == "300"

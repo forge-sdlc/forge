@@ -626,7 +626,7 @@ class OrchestratorWorker:
         event = message.event_type
         is_check_event = "check_suite" in event or "check_run" in event
         if message.source == EventSource.GITHUB and (
-            current_node in ("wait_for_ci_gate", "ci_evaluator")
+            current_node == "ci_evaluator"
             or (targets_implementation_pr and is_check_event)
         ):
             if is_check_event:
@@ -1055,6 +1055,46 @@ class OrchestratorWorker:
                     ]
                     is_rejected = True
                     feedback = body
+            elif current_node == "review_response_gate" and current_state.get("is_paused", True):
+                # An inline reply at the review-response gate applies only to its
+                # thread. Preserve unrelated contested threads and re-run review
+                # analysis so any newly accepted item can proceed without globally
+                # clearing objections.
+                sender_login = payload.get("sender", {}).get("login", "")
+                forge_login = await self._get_forge_github_login()
+                if sender_login and sender_login == forge_login:
+                    logger.debug("Ignoring Forge's own inline review comment")
+                    return current_state
+                if replied_to:
+                    contested = current_state.get("contested_comments", [])
+                    remaining = [
+                        item for item in contested if not decision_matches_comment(item, replied_to)
+                    ]
+                    return {
+                        **current_state,
+                        "is_paused": False,
+                        "revision_requested": True,
+                        "feedback_comment": reply.get("body", ""),
+                        "contested_comments": remaining,
+                        "context": {
+                            **current_state.get("context", {}),
+                            "resume_event": message.event_type,
+                            "payload": payload,
+                            "review_thread_comment_id": replied_to,
+                        },
+                    }
+                return {
+                    **current_state,
+                    "is_paused": False,
+                    "revision_requested": True,
+                    "feedback_comment": reply.get("body", ""),
+                    "context": {
+                        **current_state.get("context", {}),
+                        "resume_event": message.event_type,
+                        "payload": payload,
+                        "review_thread_comment_id": reply.get("id"),
+                    },
+                }
 
         # GitHub events targeting the PRD proposals PR — handled at prd_approval_gate.
         # Merge = approval. Review with feedback = revision. Comment = feedback/question.

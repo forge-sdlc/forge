@@ -217,7 +217,16 @@ class ContainerRunner:
         # Pass git configuration for commits
         env["GIT_USER_NAME"] = self.settings.git_user_name
         env["GIT_USER_EMAIL"] = self.settings.git_user_email
-        env["CONTAINER_COMMAND_TIMEOUT"] = str(self.settings.container_command_timeout)
+        # The per-command timeout must not exceed the container's overall lifetime:
+        # podman kills the container at --timeout (config.timeout_seconds), so a larger
+        # per-command budget would never fire and would surface as a confusing
+        # "container killed" instead of a clean "command timed out". Ad-hoc
+        # ContainerConfig instances (e.g. the smoke test) may set a shorter lifetime
+        # than settings.container_command_timeout, so clamp here. validate_container_timeouts
+        # only guards settings-derived configs, not hand-built ones.
+        env["CONTAINER_COMMAND_TIMEOUT"] = str(
+            min(self.settings.container_command_timeout, config.timeout_seconds)
+        )
 
         # Pass Langfuse tracing credentials if enabled
         if self.settings.langfuse_enabled:
