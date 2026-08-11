@@ -182,3 +182,81 @@ def test_is_self_comment_legacy_fallback() -> None:
     assert is_self_comment("forge-bot", "Hello", "forge-bot", "   ") is True
     assert is_self_comment("FORGE-bot", "Hello", "forge-bot", "") is True
     assert is_self_comment("other-user", "Hello", "forge-bot", None) is False
+
+
+def test_is_self_comment_sc001_prefix_configured() -> None:
+    # 1. Body starts with prefix (exact, wrapped with space, wrapped without space)
+    assert (
+        is_self_comment(
+            "forge-bot", "<!-- my-prefix --> This is bot comment", "forge-bot", "my-prefix"
+        )
+        is True
+    )
+    assert (
+        is_self_comment(
+            "forge-bot", "<!--my-prefix--> This is bot comment", "forge-bot", "my-prefix"
+        )
+        is True
+    )
+    assert (
+        is_self_comment("forge-bot", "my-prefix This is bot comment", "forge-bot", "my-prefix")
+        is True
+    )
+
+    # 2. Body contains prefix but not at start
+    assert (
+        is_self_comment(
+            "forge-bot",
+            "This is bot comment but <!-- my-prefix --> is in middle",
+            "forge-bot",
+            "my-prefix",
+        )
+        is False
+    )
+    assert (
+        is_self_comment(
+            "forge-bot",
+            "Some text, then my-prefix",
+            "forge-bot",
+            "my-prefix",
+        )
+        is False
+    )
+
+    # 3. Incorrect username with prefix (even if body starts with prefix, sender mismatch should return False)
+    assert (
+        is_self_comment(
+            "other-user", "<!-- my-prefix --> This is bot comment", "forge-bot", "my-prefix"
+        )
+        is False
+    )
+
+
+def test_is_self_comment_sc002_prefix_empty_disabled() -> None:
+    # 1. Matching username (should fallback to username match and return True)
+    assert is_self_comment("forge-bot", "Hello", "forge-bot", None) is True
+    assert is_self_comment("forge-bot", "Hello", "forge-bot", "") is True
+    assert is_self_comment("forge-bot", "Hello", "forge-bot", "   ") is True
+    assert is_self_comment("FORGE-bot", "Hello", "forge-bot", None) is True
+
+    # 2. Different username (should fallback to username match and return False)
+    assert is_self_comment("other-user", "Hello", "forge-bot", None) is False
+    assert is_self_comment("other-user", "Hello", "forge-bot", "") is False
+    assert is_self_comment("other-user", "Hello", "forge-bot", "   ") is False
+
+
+def test_is_self_comment_sc003_prefix_configured_body_not_start_with_prefix() -> None:
+    # Prefix configured, matching username, body does NOT start with prefix
+    assert is_self_comment("forge-bot", "This is human comment", "forge-bot", "my-prefix") is False
+    assert (
+        is_self_comment("forge-bot", "Some prefix-like text but not it", "forge-bot", "my-prefix")
+        is False
+    )
+
+
+def test_is_self_comment_sc004_sender_username_bot_suffix() -> None:
+    # Sender username ending in [bot] (case-insensitive)
+    assert is_self_comment("my-app[bot]", "Hello", "forge-bot", "some-prefix") is True
+    assert is_self_comment("my-app[BOT]", "Hello", "forge-bot", "some-prefix") is True
+    assert is_self_comment("forge-bot[bot]", "Some text", "forge-bot", None) is True
+    assert is_self_comment("github-actions[bot]", "Any comment body", "forge-bot", "") is True
