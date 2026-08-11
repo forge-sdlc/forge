@@ -31,7 +31,7 @@ def make_settings(**kwargs: Any) -> Settings:
     kwargs.setdefault("llm_backend", "vertex-ai")
     kwargs.setdefault("llm_model", "gemini-3.5-flash")
     kwargs.setdefault("google_cloud_project", "test-project")
-    return Settings(_env_file=None, **kwargs)
+    return Settings(**kwargs)
 
 
 class TestBotSignatureConfig:

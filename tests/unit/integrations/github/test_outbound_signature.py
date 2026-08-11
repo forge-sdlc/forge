@@ -1,5 +1,6 @@
 """Tests for GitHub outbound comment signature/prefix integration."""
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -22,7 +23,7 @@ def github_client(mock_settings: Settings) -> GitHubClient:
 class TestGitHubOutboundCommentSigning:
     @pytest.mark.asyncio
     async def test_create_review_comment_with_prefix(
-        self, github_client: GitHubClient, mock_settings: Settings
+        self, github_client: Any, mock_settings: Any
     ) -> None:
         # 1. Enable setting
         mock_settings.forge_bot_comment_prefix = "ForgeBotSignature"
@@ -54,7 +55,7 @@ class TestGitHubOutboundCommentSigning:
 
     @pytest.mark.asyncio
     async def test_create_review_comment_no_prefix(
-        self, github_client: GitHubClient, mock_settings: Settings
+        self, github_client: Any, mock_settings: Any
     ) -> None:
         # 2. Disable setting (empty)
         mock_settings.forge_bot_comment_prefix = ""
@@ -81,7 +82,7 @@ class TestGitHubOutboundCommentSigning:
 
     @pytest.mark.asyncio
     async def test_create_issue_comment_with_prefix(
-        self, github_client: GitHubClient, mock_settings: Settings
+        self, github_client: Any, mock_settings: Any
     ) -> None:
         # 1. Enable setting
         mock_settings.forge_bot_comment_prefix = "ForgeBotSignature"
@@ -110,7 +111,7 @@ class TestGitHubOutboundCommentSigning:
 
     @pytest.mark.asyncio
     async def test_create_issue_comment_no_prefix(
-        self, github_client: GitHubClient, mock_settings: Settings
+        self, github_client: Any, mock_settings: Any
     ) -> None:
         # 2. Disable setting (empty)
         mock_settings.forge_bot_comment_prefix = ""
@@ -134,7 +135,7 @@ class TestGitHubOutboundCommentSigning:
 
     @pytest.mark.asyncio
     async def test_reply_to_review_comment_with_prefix(
-        self, github_client: GitHubClient, mock_settings: Settings
+        self, github_client: Any, mock_settings: Any
     ) -> None:
         # 1. Enable setting
         mock_settings.forge_bot_comment_prefix = "ForgeBotSignature"
@@ -164,7 +165,7 @@ class TestGitHubOutboundCommentSigning:
 
     @pytest.mark.asyncio
     async def test_reply_to_review_comment_no_prefix(
-        self, github_client: GitHubClient, mock_settings: Settings
+        self, github_client: Any, mock_settings: Any
     ) -> None:
         # 2. Disable setting (empty)
         mock_settings.forge_bot_comment_prefix = ""
