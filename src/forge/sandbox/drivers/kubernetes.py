@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_POLL_INTERVAL = 5.0
 _COMPLETION_WAIT_BUFFER = 120
+_LEGACY_GOOGLE_CREDENTIALS_PATH = "/root/.config/gcloud/application_default_credentials.json"
 
 
 class KubernetesDriver(SandboxDriver):
@@ -39,6 +40,9 @@ class KubernetesDriver(SandboxDriver):
             s.strip() for s in settings.k8s_image_pull_secrets.split(",") if s.strip()
         ]
         self._service_account = settings.k8s_service_account
+        self._google_credentials_secret = settings.k8s_google_credentials_secret
+        self._google_credentials_key = settings.k8s_google_credentials_key
+        self._google_credentials_mount_path = settings.k8s_google_credentials_mount_path
         self._poll_interval = _DEFAULT_POLL_INTERVAL
 
     # ------------------------------------------------------------------
@@ -112,7 +116,10 @@ class KubernetesDriver(SandboxDriver):
     ) -> dict[str, Any]:
         from kubernetes import client as k8s_client
 
-        env_vars = [k8s_client.V1EnvVar(name=k, value=v) for k, v in spec.env_vars.items()]
+        env_values = dict(spec.env_vars)
+        if self._google_credentials_secret:
+            env_values["GOOGLE_APPLICATION_CREDENTIALS"] = self._google_credentials_mount_path
+        env_vars = [k8s_client.V1EnvVar(name=k, value=v) for k, v in env_values.items()]
 
         volume_mounts = [
             k8s_client.V1VolumeMount(
@@ -149,6 +156,24 @@ class KubernetesDriver(SandboxDriver):
                 ),
             ),
         ]
+
+        if self._google_credentials_secret:
+            volume_mounts.append(
+                k8s_client.V1VolumeMount(
+                    name="google-credentials",
+                    mount_path=self._google_credentials_mount_path,
+                    sub_path=self._google_credentials_key,
+                    read_only=True,
+                )
+            )
+            volumes.append(
+                k8s_client.V1Volume(
+                    name="google-credentials",
+                    secret=k8s_client.V1SecretVolumeSource(
+                        secret_name=self._google_credentials_secret,
+                    ),
+                )
+            )
 
         container_args = [
             "--task-file",
@@ -232,6 +257,14 @@ class KubernetesDriver(SandboxDriver):
         staging_dir: Path | None = None
 
         for index, (host_path, container_path, mode) in enumerate(spec.volume_mounts):
+            if (
+                self._google_credentials_secret
+                and container_path == _LEGACY_GOOGLE_CREDENTIALS_PATH
+            ):
+                # The Job mounts the credential directly from a Secret. Copying the
+                # worker credential into the shared workspace would be redundant and
+                # would leave sensitive material on the PVC.
+                continue
             try:
                 host_path.relative_to(spec.workspace_path)
                 staged_mounts.append((host_path, container_path, mode))

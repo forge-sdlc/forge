@@ -4,12 +4,26 @@ This chart deploys the Forge API, worker, Redis Stack, worker RBAC, and the
 workspace PVC used by Kubernetes sandbox Jobs. It targets OpenShift by default.
 
 Create the namespace and application secret before installing. Keep secrets out
-of Helm values and source control:
+of Helm values and source control. Values consumed as JSON, such as
+`MODEL_CONNECTIONS`, must contain raw JSON in the env file; do not surround
+them with shell quotes because `oc --from-env-file` preserves those quotes.
 
 ```bash
 oc new-project forge
 oc create secret generic forge-env --from-env-file=.env -n forge
 helm upgrade --install forge charts/forge -n forge
+```
+
+For Vertex AI, create a Secret from the same service-account credential used by
+the existing Forge deployment and enable the optional mount. The chart mounts
+the credential into both the worker and every sandbox Job:
+
+```bash
+oc create secret generic google-adc \
+  --from-file=forge-gcp-credentials.json=/path/to/forge-gcp-credentials.json \
+  -n forge
+helm upgrade --install forge charts/forge -n forge \
+  --set googleCredentials.enabled=true
 ```
 
 Build and push two images before installing:
@@ -20,3 +34,6 @@ Build and push two images before installing:
 Override repositories, tags, storage class, or Route settings in a local values
 file. The worker uses in-cluster service-account authentication; do not mount a
 kubeconfig into it.
+
+The workspace PVC is retained when the Helm release is removed. Delete it
+explicitly when its workspaces are no longer needed.

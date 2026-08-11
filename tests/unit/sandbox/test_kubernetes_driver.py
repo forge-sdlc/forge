@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -43,6 +44,9 @@ def _make_settings() -> MagicMock:
     settings.k8s_workspace_base_path = "/mnt/workspaces"
     settings.k8s_image_pull_secrets = ""
     settings.k8s_service_account = ""
+    settings.k8s_google_credentials_secret = ""
+    settings.k8s_google_credentials_key = "forge-gcp-credentials.json"
+    settings.k8s_google_credentials_mount_path = "/etc/forge-gcp-credentials.json"
     return settings
 
 
@@ -80,6 +84,7 @@ def _build_fake_k8s_modules() -> tuple[ModuleType, ModuleType, ModuleType]:
         "V1Job",
         "V1DeleteOptions",
         "V1LocalObjectReference",
+        "V1SecretVolumeSource",
     ):
         setattr(k8s_client, name, type(name, (_Stub,), {}))
 
@@ -102,7 +107,9 @@ def fake_k8s():
     sys.modules["kubernetes"] = k8s_top
     sys.modules["kubernetes.client"] = k8s_client
     sys.modules["kubernetes.config"] = k8s_config
-    yield k8s_client, k8s_config
+    run_in_executor = AsyncMock(side_effect=lambda _executor, func: func())
+    with patch.object(asyncio.BaseEventLoop, "run_in_executor", run_in_executor):
+        yield k8s_client, k8s_config
     for k, v in saved.items():
         if v is None:
             sys.modules.pop(k, None)
@@ -197,6 +204,38 @@ class TestBuildJobManifest:
         assert mount.sub_path == "org/repo/.forge/task.json"
         assert mount.read_only is True
 
+    def test_google_credentials_secret_mounted(self, fake_k8s) -> None:  # noqa: ARG002
+        settings = _make_settings()
+        settings.k8s_google_credentials_secret = "google-adc"
+        driver = _make_driver(settings)
+
+        job = driver._build_job_manifest(
+            _make_spec(env_vars={"GOOGLE_APPLICATION_CREDENTIALS": "/worker/adc.json"})
+        )
+
+        pod_spec = job.spec.template.spec
+        credential_volume = next(v for v in pod_spec.volumes if v.name == "google-credentials")
+        credential_mount = next(
+            m for m in pod_spec.containers[0].volume_mounts if m.name == "google-credentials"
+        )
+        credential_env = next(
+            e for e in pod_spec.containers[0].env if e.name == "GOOGLE_APPLICATION_CREDENTIALS"
+        )
+
+        assert credential_volume.secret.secret_name == "google-adc"
+        assert credential_mount.mount_path == "/etc/forge-gcp-credentials.json"
+        assert credential_mount.sub_path == "forge-gcp-credentials.json"
+        assert credential_mount.read_only is True
+        assert credential_env.value == "/etc/forge-gcp-credentials.json"
+
+    def test_google_credentials_omitted_when_unconfigured(self, fake_k8s) -> None:  # noqa: ARG002
+        driver = _make_driver()
+        job = driver._build_job_manifest(_make_spec())
+
+        pod_spec = job.spec.template.spec
+        assert all(v.name != "google-credentials" for v in pod_spec.volumes)
+        assert all(m.name != "google-credentials" for m in pod_spec.containers[0].volume_mounts)
+
     def test_job_name_is_dns_safe_and_preserves_unique_suffix(self) -> None:
         driver = _make_driver()
 
@@ -236,6 +275,32 @@ class TestExternalMountStaging:
 
         driver._remove_staging_dir(staging_dir)
         assert not staging_dir.exists()
+
+    def test_does_not_stage_google_credentials_when_secret_is_configured(self, tmp_path) -> None:
+        settings = _make_settings()
+        settings.k8s_google_credentials_secret = "google-adc"
+        driver = _make_driver(settings)
+        workspace = tmp_path / "workspaces" / "org" / "repo"
+        workspace.mkdir(parents=True)
+        credentials = tmp_path / "credentials.json"
+        credentials.write_text("secret")
+        spec = _make_spec(
+            workspace_path=workspace,
+            task_file=workspace / ".forge" / "task.json",
+            volume_mounts=[
+                (
+                    credentials,
+                    "/root/.config/gcloud/application_default_credentials.json",
+                    "ro",
+                )
+            ],
+        )
+
+        prepared, staging_dir = driver._stage_external_mounts(spec)
+
+        assert prepared.volume_mounts == []
+        assert staging_dir is None
+        assert not (workspace / ".forge").exists()
 
     def test_image_pull_secrets(self, fake_k8s) -> None:  # noqa: ARG002
         settings = _make_settings()

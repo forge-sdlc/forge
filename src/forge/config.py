@@ -531,6 +531,18 @@ class Settings(BaseSettings):
         default="",
         description="Kubernetes service account for sandbox pods",
     )
+    k8s_google_credentials_secret: str = Field(
+        default="",
+        description="Secret containing Google ADC credentials for sandbox pods",
+    )
+    k8s_google_credentials_key: str = Field(
+        default="forge-gcp-credentials.json",
+        description="Key in the Google ADC credentials secret",
+    )
+    k8s_google_credentials_mount_path: str = Field(
+        default="/etc/forge-gcp-credentials.json",
+        description="File path where sandbox pods mount Google ADC credentials",
+    )
 
     # Auto Review Configuration
     auto_review_poll_interval: float = Field(

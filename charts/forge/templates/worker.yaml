@@ -6,6 +6,8 @@ metadata:
     {{- include "forge.labels" . | nindent 4 }}
     app.kubernetes.io/component: worker
 spec:
+  strategy:
+    type: Recreate
   replicas: {{ .Values.worker.replicas }}
   selector:
     matchLabels:
@@ -26,6 +28,16 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: initialize-workspace
+          image: {{ include "forge.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c", "mkdir -p {{ .Values.skills.directory }}/default"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: workspaces
+              mountPath: {{ .Values.workspace.mountPath }}
       containers:
         - name: worker
           image: {{ include "forge.image" . }}
@@ -63,15 +75,40 @@ spec:
               value: {{ .Values.sandbox.timeout | quote }}
             - name: WORKER_METRICS_PORT
               value: {{ .Values.worker.metricsPort | quote }}
+            - name: AGENT_WORKING_DIRECTORY
+              value: {{ .Values.workspace.mountPath }}
+            {{- if .Values.googleCredentials.enabled }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: {{ .Values.googleCredentials.mountPath }}
+            {{- end }}
+            - name: SKILLS_DIR
+              value: {{ .Values.skills.directory }}
+            - name: K8S_GOOGLE_CREDENTIALS_SECRET
+              value: {{ ternary .Values.googleCredentials.existingSecret "" .Values.googleCredentials.enabled | quote }}
+            - name: K8S_GOOGLE_CREDENTIALS_KEY
+              value: {{ .Values.googleCredentials.key | quote }}
+            - name: K8S_GOOGLE_CREDENTIALS_MOUNT_PATH
+              value: {{ .Values.googleCredentials.mountPath | quote }}
           ports:
             - name: metrics
               containerPort: {{ .Values.worker.metricsPort }}
           volumeMounts:
             - name: workspaces
               mountPath: {{ .Values.workspace.mountPath }}
+            {{- if .Values.googleCredentials.enabled }}
+            - name: google-credentials
+              mountPath: {{ .Values.googleCredentials.mountPath }}
+              subPath: {{ .Values.googleCredentials.key }}
+              readOnly: true
+            {{- end }}
           resources:
             {{- toYaml .Values.resources.worker | nindent 12 }}
       volumes:
         - name: workspaces
           persistentVolumeClaim:
             claimName: {{ .Values.workspace.claimName }}
+        {{- if .Values.googleCredentials.enabled }}
+        - name: google-credentials
+          secret:
+            secretName: {{ .Values.googleCredentials.existingSecret }}
+        {{- end }}

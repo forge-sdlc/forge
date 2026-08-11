@@ -24,6 +24,15 @@ worker:
   serviceAccountName: forge-worker
   metricsPort: 8001
 
+googleCredentials:
+  enabled: false
+  existingSecret: google-adc
+  key: forge-gcp-credentials.json
+  mountPath: /etc/forge-gcp-credentials.json
+
+skills:
+  directory: /mnt/workspaces/skills
+
 workspace:
   claimName: forge-workspaces
   mountPath: /mnt/workspaces
@@ -31,6 +40,7 @@ workspace:
   accessModes:
     - ReadWriteOnce
   storageClassName: gp3-csi
+  retain: true
 
 redis:
   enabled: true
