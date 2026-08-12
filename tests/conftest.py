@@ -1,5 +1,13 @@
 """Shared test fixtures for Forge test suite."""
 
+import os
+
+# Set dummy environment variables for Pydantic Settings validation during test initialization
+os.environ.setdefault("JIRA_BASE_URL", "https://test.atlassian.net")
+os.environ.setdefault("JIRA_API_TOKEN", "test-token")
+os.environ.setdefault("JIRA_USER_EMAIL", "test@example.com")
+os.environ.setdefault("GITHUB_TOKEN", "test-github-token")
+
 from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock

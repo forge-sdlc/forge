@@ -2155,9 +2155,7 @@ class TestWorkerWebhookCommentFiltering:
         settings = MagicMock(forge_bot_comment_prefix="my-signature")
 
         with (
-            patch.object(
-                worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")
-            ),
+            patch.object(worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
             patch("forge.orchestrator.worker.GitHubClient") as MockGH,
         ):
@@ -2208,9 +2206,7 @@ class TestWorkerWebhookCommentFiltering:
         settings = MagicMock(forge_bot_comment_prefix="my-signature")
 
         with (
-            patch.object(
-                worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")
-            ),
+            patch.object(worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
             patch("forge.orchestrator.worker.GitHubClient") as MockGH,
         ):
@@ -2362,9 +2358,7 @@ class TestWorkerWebhookCommentFiltering:
         settings = MagicMock(forge_bot_comment_prefix="")
 
         with (
-            patch.object(
-                worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")
-            ),
+            patch.object(worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
             patch("forge.orchestrator.worker.GitHubClient") as MockGH,
         ):
