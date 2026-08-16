@@ -1404,6 +1404,45 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#test-skill-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        test-skill Commands
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="test-skill Commands">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#forge-test-skill-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        forge test-skill run
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forge-test-skill-eval" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        forge test-skill eval
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1664,6 +1703,45 @@
     <span class="md-ellipsis">
       <span class="md-typeset">
         MCP Servers
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-skill-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        test-skill Commands
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="test-skill Commands">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#forge-test-skill-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        forge test-skill run
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forge-test-skill-eval" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        forge test-skill eval
       </span>
     </span>
   </a>
@@ -2290,6 +2368,129 @@ global stage mapping, then the global default, and finally the legacy
 </table>
 <h3 id="mcp-servers">MCP Servers<a class="headerlink" href="#mcp-servers" title="Permanent link">&para;</a></h3>
 <p>MCP server configuration lives in <code>mcp-servers.json</code>, not <code>.env</code>. See the <a href="https://github.com/forge-sdlc/forge/blob/main/mcp-servers.json">MCP servers section</a> of the repository.</p>
+<h2 id="test-skill-commands">test-skill Commands<a class="headerlink" href="#test-skill-commands" title="Permanent link">&para;</a></h2>
+<p>Local skill testing and evaluation. See <a href="../../dev/test-skill/">Testing Skills Locally</a> for the full guide.</p>
+<h3 id="forge-test-skill-run">forge test-skill run<a class="headerlink" href="#forge-test-skill-run" title="Permanent link">&para;</a></h3>
+<p>Run a skill against test cases using deepagents.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--skill NAME</code></td>
+<td>Yes</td>
+<td>Skill name (e.g., <code>generate-prd</code>)</td>
+</tr>
+<tr>
+<td><code>--skill-dir PATH</code></td>
+<td>Yes</td>
+<td>Path to skill directory containing <code>SKILL.md</code></td>
+</tr>
+<tr>
+<td><code>--output DIR</code></td>
+<td>Yes</td>
+<td>Output directory for results and trace</td>
+</tr>
+<tr>
+<td><code>--input FILE</code></td>
+<td>One of input/dataset</td>
+<td>Single <code>input.yaml</code> test case</td>
+</tr>
+<tr>
+<td><code>--dataset DIR</code></td>
+<td>One of input/dataset</td>
+<td>Directory of test cases (runs all)</td>
+</tr>
+<tr>
+<td><code>--project NAME</code></td>
+<td>No</td>
+<td>Project name for skill path (overrides <code>config.yaml</code>)</td>
+</tr>
+<tr>
+<td><code>--model MODEL</code></td>
+<td>No</td>
+<td>Override model (default: from <code>config.yaml</code>)</td>
+</tr>
+<tr>
+<td><code>--references FILE</code></td>
+<td>No</td>
+<td>JSON file with reference docs (same format as <code>forge.references</code>)</td>
+</tr>
+<tr>
+<td><code>--repos DIR [DIR...]</code></td>
+<td>No</td>
+<td>Local repo directories to copy into workspace</td>
+</tr>
+<tr>
+<td><code>--mlflow URI</code></td>
+<td>No</td>
+<td>MLflow tracking URI for auto-tracing</td>
+</tr>
+<tr>
+<td><code>--mlflow-experiment NAME</code></td>
+<td>No</td>
+<td>MLflow experiment name (default: <code>forge-skill-eval</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="forge-test-skill-eval">forge test-skill eval<a class="headerlink" href="#forge-test-skill-eval" title="Permanent link">&para;</a></h3>
+<p>Evaluate skill outputs against gold standards. See <a href="../../dev/skill-evaluation/">Skill Evaluation</a> for criteria format.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--criteria FILE</code></td>
+<td>Yes</td>
+<td>Path to criteria YAML file</td>
+</tr>
+<tr>
+<td><code>--output DIR</code></td>
+<td>Yes</td>
+<td>Output directory for reports</td>
+</tr>
+<tr>
+<td><code>--generated FILE</code></td>
+<td>Single mode</td>
+<td>Path to generated artifact</td>
+</tr>
+<tr>
+<td><code>--gold FILE</code></td>
+<td>Single mode</td>
+<td>Path to gold standard artifact</td>
+</tr>
+<tr>
+<td><code>--dataset DIR</code></td>
+<td>Batch mode</td>
+<td>Dataset directory</td>
+</tr>
+<tr>
+<td><code>--results-dir DIR</code></td>
+<td>Batch mode</td>
+<td>Runner output directory</td>
+</tr>
+<tr>
+<td><code>--mlflow URI</code></td>
+<td>No</td>
+<td>MLflow tracking URI</td>
+</tr>
+<tr>
+<td><code>--mlflow-experiment NAME</code></td>
+<td>No</td>
+<td>MLflow experiment name</td>
+</tr>
+</tbody>
+</table>
 
 
 
