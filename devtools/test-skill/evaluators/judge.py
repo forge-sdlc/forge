@@ -84,7 +84,9 @@ def load_criteria(criteria_path: Path) -> dict:
 def _extract_json(text: str) -> dict | None:
     """Try to extract a JSON object from text that may contain preamble."""
     if text.startswith("```"):
-        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+        parts = text.split("\n", 1)
+        if len(parts) == 2:
+            text = parts[1].rsplit("```", 1)[0]
 
     try:
         return json.loads(text.strip())

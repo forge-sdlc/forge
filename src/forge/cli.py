@@ -1197,7 +1197,7 @@ async def cmd_health(_args: argparse.Namespace) -> int:
 
 
 def cmd_test_skill_run(args: argparse.Namespace) -> int:
-    """Run a skill against test cases using deepagents (or legacy mode)."""
+    """Run a skill against test cases using deepagents."""
     import importlib.util
     from pathlib import Path
 
@@ -1244,8 +1244,12 @@ def cmd_test_skill_run(args: argparse.Namespace) -> int:
 
     output_dir = Path(args.output).resolve()
 
+    repo_dirs = [Path(r) for r in args.repos] if getattr(args, "repos", None) else None
+
     if args.input:
-        mod.run_single_case(args.skill, skill_dir, Path(args.input), output_dir, config)
+        mod.run_single_case(
+            args.skill, skill_dir, Path(args.input), output_dir, config, repo_dirs=repo_dirs
+        )
     elif args.dataset:
         dataset_dir = Path(args.dataset)
         for case_dir in sorted(dataset_dir.iterdir()):
@@ -1255,7 +1259,9 @@ def cmd_test_skill_run(args: argparse.Namespace) -> int:
             if not input_yaml.exists():
                 continue
             case_output = output_dir / case_dir.name
-            mod.run_single_case(args.skill, skill_dir, input_yaml, case_output, config)
+            mod.run_single_case(
+                args.skill, skill_dir, input_yaml, case_output, config, repo_dirs=repo_dirs
+            )
     else:
         print("Error: Provide either --input or --dataset", file=sys.stderr)
         return 1
@@ -1490,6 +1496,13 @@ def main(argv: list[str] | None = None) -> int:
         "--references",
         metavar="FILE",
         help="JSON file with reference documentation (same format as forge.references).",
+    )
+    ts_run_parser.add_argument(
+        "--repos",
+        nargs="+",
+        metavar="DIR",
+        help="Local repo directories to copy into the workspace, giving the agent "
+        "codebase access via read/grep tools.",
     )
 
     # test-skill eval
