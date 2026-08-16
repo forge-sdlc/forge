@@ -118,6 +118,55 @@ The reviewer issues APPROVED or REJECTED verdicts. On rejection, the skill re-ru
 
 See the [Auto-Review Guide](../guide/auto-review.md) for configuration options and writing effective review instructions.
 
+## Testing Your Skill
+
+Use `forge test-skill` to iterate on skills locally without the hosted beta.
+
+### 1. Prepare a test case
+
+Save pre-fetched Jira content as `input.yaml`:
+
+```yaml
+jira_key: MYTEAM-100
+title: "Feature Title"
+prompt: |
+  # MYTEAM-100: Feature Title
+  ## Description
+  ...
+```
+
+### 2. Run the skill
+
+```bash
+forge test-skill run \
+  --skill generate-prd \
+  --skill-dir skills/myteam/generate-prd \
+  --project myteam \
+  --input test-cases/MYTEAM-100/input.yaml \
+  --output output/
+```
+
+### 3. Check the output
+
+Output files land in the `--output` directory. A `trace.json` captures
+every agent iteration, tool call, and token usage.
+
+### 4. Add automated grading (optional)
+
+Create a criteria YAML and evaluate against a gold standard:
+
+```bash
+forge test-skill eval \
+  --criteria devtools/test-skill/evaluators/criteria/generate-prd.yaml \
+  --generated output/enhancements/MYTEAM-100/prd.md \
+  --gold test-cases/MYTEAM-100/gold.md \
+  --output output/eval/
+```
+
+See [Testing Skills Locally](../dev/test-skill.md) for the full guide and
+[Skill Evaluation](../dev/skill-evaluation.md) for criteria file format
+and grading details.
+
 ## Using your skills with Forge
 
 See [Customize Forge for your project](../dev/contributing.md#customize-forge-for-your-project) for how to point a Jira project at your skills repo using `forge project-setup` and the skill installer.

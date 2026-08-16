@@ -257,7 +257,18 @@ async def run_agent_deepagents(
     }
 
 
-def collect_output_files(workspace: Path, repo_dirs: list[Path] | None = None) -> dict[str, str]:
+def collect_output_files(
+    workspace: Path,
+    repo_dirs: list[Path] | None = None,
+    written_paths: set[str] | None = None,
+) -> dict[str, str]:
+    """Collect files the agent wrote during execution.
+
+    When *written_paths* is provided (a set of virtual paths the agent
+    passed to write_file), only those files are collected — this avoids
+    capturing pre-existing repo and skill files.  Falls back to the
+    heuristic exclude-list when the set is not available.
+    """
     repo_names = {Path(r).resolve().name for r in (repo_dirs or [])}
     files = {}
     for search_root in [workspace / "home" / "user", workspace / "opt" / "forge"]:
@@ -266,9 +277,14 @@ def collect_output_files(workspace: Path, repo_dirs: list[Path] | None = None) -
         for fpath in search_root.rglob("*"):
             if fpath.is_file() and fpath.suffix != ".pyc":
                 rel = str(fpath.relative_to(search_root))
-                top_dir = rel.split("/")[0] if "/" in rel else ""
-                if top_dir in repo_names:
-                    continue
+                if written_paths is not None:
+                    virt = "/" + str(fpath.relative_to(workspace))
+                    if virt not in written_paths:
+                        continue
+                else:
+                    top_dir = rel.split("/")[0] if "/" in rel else ""
+                    if top_dir in repo_names or top_dir == "skills":
+                        continue
                 if rel not in files:
                     with contextlib.suppress(UnicodeDecodeError, PermissionError):
                         files[rel] = fpath.read_text()
@@ -299,12 +315,12 @@ def _save_outputs(result, workspace, output_dir, config, repo_dirs=None):
         print(f"Output: {out_path}")
 
     final_text = result.get("final_text", "")
-    if final_text.strip() and not any(p.endswith(".md") for p in output_files):
-        skill_name = result.get("_skill_name", "")
-        filename = "design.md" if "spec" in skill_name else "prd.md"
-        inline_path = output_dir / filename
-        inline_path.write_text(final_text)
-        print(f"Output (inline): {inline_path}")
+    skill_name = result.get("_skill_name", "")
+    filename = "design.md" if "spec" in skill_name else "prd.md"
+    artifact_path = output_dir / filename
+    if not artifact_path.exists() and final_text.strip():
+        artifact_path.write_text(final_text)
+        print(f"Output (inline): {artifact_path}")
 
     trace_path = output_dir / "trace.json"
     with open(trace_path, "w") as f:

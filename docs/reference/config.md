@@ -322,3 +322,40 @@ These variables are used by `docker-compose.yml`, `devtools/docker-compose.dev.y
 ### MCP Servers
 
 MCP server configuration lives in `mcp-servers.json`, not `.env`. See the [MCP servers section](https://github.com/forge-sdlc/forge/blob/main/mcp-servers.json) of the repository.
+
+## test-skill Commands
+
+Local skill testing and evaluation. See [Testing Skills Locally](../dev/test-skill.md) for the full guide.
+
+### forge test-skill run
+
+Run a skill against test cases using deepagents.
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--skill NAME` | Yes | Skill name (e.g., `generate-prd`) |
+| `--skill-dir PATH` | Yes | Path to skill directory containing `SKILL.md` |
+| `--output DIR` | Yes | Output directory for results and trace |
+| `--input FILE` | One of input/dataset | Single `input.yaml` test case |
+| `--dataset DIR` | One of input/dataset | Directory of test cases (runs all) |
+| `--project NAME` | No | Project name for skill path (overrides `config.yaml`) |
+| `--model MODEL` | No | Override model (default: from `config.yaml`) |
+| `--references FILE` | No | JSON file with reference docs (same format as `forge.references`) |
+| `--repos DIR [DIR...]` | No | Local repo directories to copy into workspace |
+| `--mlflow URI` | No | MLflow tracking URI for auto-tracing |
+| `--mlflow-experiment NAME` | No | MLflow experiment name (default: `forge-skill-eval`) |
+
+### forge test-skill eval
+
+Evaluate skill outputs against gold standards. See [Skill Evaluation](../dev/skill-evaluation.md) for criteria format.
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--criteria FILE` | Yes | Path to criteria YAML file |
+| `--output DIR` | Yes | Output directory for reports |
+| `--generated FILE` | Single mode | Path to generated artifact |
+| `--gold FILE` | Single mode | Path to gold standard artifact |
+| `--dataset DIR` | Batch mode | Dataset directory |
+| `--results-dir DIR` | Batch mode | Runner output directory |
+| `--mlflow URI` | No | MLflow tracking URI |
+| `--mlflow-experiment NAME` | No | MLflow experiment name |
