@@ -103,3 +103,17 @@ def test_skills_install_dir_nonexistent_project_returns_default(
 
     result = resolve_skill_paths("PROJ-123", skills_dir, skills_install_dir=cache)
     assert result == [str(skills_dir / "default") + "/"]
+
+
+def test_skills_install_dir_same_as_source_does_not_duplicate_project(
+    skills_dir: Path,
+) -> None:
+    """The default local install directory is already the committed override tier."""
+    (skills_dir / "proj").mkdir()
+
+    result = resolve_skill_paths("PROJ-123", skills_dir, skills_install_dir=skills_dir)
+
+    assert result == [
+        str(skills_dir / "default") + "/",
+        str(skills_dir / "proj") + "/",
+    ]

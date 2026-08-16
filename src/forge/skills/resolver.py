@@ -36,7 +36,7 @@ def resolve_skill_paths(
 
     if skills_install_dir is not None:
         cached_dir = skills_install_dir / project
-        if cached_dir.is_dir():
+        if cached_dir.is_dir() and cached_dir.resolve() != override_dir.resolve():
             paths.append(str(cached_dir) + "/")
             logger.info(f"Skills: fetched skills active for '{project}' ({cached_dir})")
 

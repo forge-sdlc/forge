@@ -1,7 +1,6 @@
 """Configuration management using Pydantic settings."""
 
 import logging
-import tempfile
 from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -403,7 +402,7 @@ class Settings(BaseSettings):
     @property
     def skills_install_dir(self) -> Path:
         """Directory for runtime-fetched skill packages."""
-        return Path(tempfile.gettempdir()) / "forge" / "skills"
+        return Path(self.skills_dir).resolve()
 
     container_langchain_verbose: bool = Field(
         default=False,
