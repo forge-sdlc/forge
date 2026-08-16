@@ -254,8 +254,10 @@ class ContainerRunner:
     ) -> tuple[list[tuple[Path, str]], str]:
         """Get skill directory mounts and container paths.
 
-        Resolves skill directories via the resolver using settings.skills_dir as
-        the base, with per-project overrides and fallback to skills/default/.
+        Resolves skill directories via the resolver in ascending priority:
+        committed defaults (``skills_dir/default/``), committed per-project
+        overrides (``skills_dir/{project}/``), and runtime-fetched project
+        skills (``skills_install_dir/{project}/``), with later sources winning.
 
         Returns:
             Tuple of (mounts, container_paths) where:

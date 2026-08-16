@@ -49,8 +49,10 @@ async def ensure_skills(
             ``skills/default/``).  Used as the install target only when
             *skills_install_dir* is not provided.
         skills_install_dir: When provided, fetched skills and the lock file are
-            written here instead of *skills_dir*.  Keeps runtime artifacts
-            out of the source tree.
+            written here instead of *skills_dir*.  Point this at a location
+            outside the source tree to keep runtime artifacts out of it; when
+            it coincides with *skills_dir* (the default), fetched artifacts are
+            written alongside the committed skills.
     """
     # ------------------------------------------------------------------
     # 1. Fetch the forge.skills configuration from Jira.
