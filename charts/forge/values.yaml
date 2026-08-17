@@ -62,6 +62,13 @@ containerSecurityContext:
   seccompProfile:
     type: RuntimeDefault
 
+# Numeric ownership shared by the API, worker, and sandbox Jobs. Leave empty on
+# OpenShift so its SCC assigns namespace-scoped values. Set both on vanilla
+# Kubernetes so runAsNonRoot is verifiable and PVC ownership is consistent.
+runtimeSecurity:
+  runAsUser: ""
+  fsGroup: ""
+
 resources:
   api: {}
   worker: {}
@@ -72,14 +79,6 @@ sandbox:
   timeout: "1800"
   jobServiceAccountName: forge-runner
   imagePullSecrets: ""
-  # UID and fsGroup for the worker and sandbox Job pods. Leave empty on
-  # OpenShift, where the SCC assigns both from the namespace range. On vanilla
-  # Kubernetes set them explicitly (e.g. runAsUser 1000 to match the image's
-  # user) so runAsNonRoot is satisfiable and both pods can read/write the shared
-  # workspace PVC. runAsUser applies to worker and sandbox pods; fsGroup is
-  # shared by both so PVC files created by the worker are accessible to sandboxes.
-  runAsUser: ""
-  fsGroup: ""
   networkPolicy:
     enabled: true
     # Prevent sandbox code from reaching cluster services, the Kubernetes API,

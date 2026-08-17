@@ -61,16 +61,27 @@ jobs:
             tests/cluster/kind-config.yaml.template > /tmp/kind-config.yaml
           kind create cluster --name forge-ci --config /tmp/kind-config.yaml --wait 120s
 
-      - name: Build and load deterministic sandbox image
+      - name: Build and load application and sandbox images
         run: |
+          docker build --tag forge-kind-app:ci .
           docker build --tag forge-sandbox-fixture:ci \
             --file tests/cluster/sandbox-fixture/Containerfile \
             tests/cluster/sandbox-fixture
+          kind load docker-image forge-kind-app:ci --name forge-ci
           kind load docker-image forge-sandbox-fixture:ci --name forge-ci
 
       - name: Create shared workspace PVC
         run: |
           kubectl create namespace forge
+          kubectl create secret generic forge-env -n forge \
+            --from-literal=JIRA_BASE_URL=https://example.atlassian.net \
+            --from-literal=JIRA_API_TOKEN=dummy \
+            --from-literal=JIRA_USER_EMAIL=dummy@example.com \
+            --from-literal=GITHUB_TOKEN=dummy \
+            --from-literal=LLM_BACKEND=vertex-ai \
+            --from-literal=LLM_MODEL=gemini-3.5-flash \
+            --from-literal=GOOGLE_CLOUD_PROJECT=test-project \
+            --from-literal=OTEL_SDK_DISABLED=true
           kubectl apply -f tests/cluster/workspace-pv.yaml
 
       - name: Server-validate Helm resources
@@ -79,9 +90,30 @@ jobs:
           --set api.route.enabled=false
           --set workspace.claimName=forge-chart-validation
           --set workspace.storageClassName=forge-kind
-          --set sandbox.runAsUser=1000
-          --set sandbox.fsGroup=1000
+          --set runtimeSecurity.runAsUser=1000
+          --set runtimeSecurity.fsGroup=1000
           | kubectl apply --dry-run=server -f -
+
+      - name: Install and start Helm workloads
+        run: >-
+          helm upgrade --install forge charts/forge --namespace forge
+          --wait --timeout 4m
+          --set api.route.enabled=false
+          --set image.repository=forge-kind-app
+          --set image.tag=ci
+          --set image.pullPolicy=IfNotPresent
+          --set sandboxImage.repository=forge-sandbox-fixture
+          --set sandboxImage.tag=ci
+          --set workspace.claimName=forge-chart-workspaces
+          --set workspace.size=1Gi
+          --set runtimeSecurity.runAsUser=1000
+          --set runtimeSecurity.fsGroup=1000
+
+      - name: Verify application workloads
+        run: |
+          kubectl rollout status deployment/forge-api -n forge --timeout=60s
+          kubectl rollout status deployment/forge-worker -n forge --timeout=60s
+          test "$(kubectl exec -n forge deployment/forge-api -- id -u)" = "1000"
 
       - name: Run Kubernetes driver cluster tests
         env:

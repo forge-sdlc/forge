@@ -48,10 +48,9 @@ remain blocked. Adjust that list for the cluster network before deployment.
 
 ## Pod UID and workspace ownership
 
-By default `sandbox.runAsUser` and `sandbox.fsGroup` are empty, which suits
+By default `runtimeSecurity.runAsUser` and `runtimeSecurity.fsGroup` are empty, which suits
 OpenShift: its SCC assigns a non-root UID and an fsGroup from the namespace
-range to both the worker and every sandbox Job, and the shared workspace PVC is
-owned accordingly.
+range to the API, worker, and every sandbox Job.
 
 On vanilla Kubernetes there is no SCC to assign these, so `runAsNonRoot` cannot
 be satisfied and the worker-created PVC files may not be readable by sandbox
@@ -59,10 +58,10 @@ pods. Set both values so the worker and sandbox pods share a UID and fsGroup:
 
 ```bash
 helm upgrade --install forge charts/forge -n forge \
-  --set sandbox.runAsUser=1000 \
-  --set sandbox.fsGroup=1000
+  --set runtimeSecurity.runAsUser=1000 \
+  --set runtimeSecurity.fsGroup=1000
 ```
 
-`runAsUser` should match the sandbox image's user; `fsGroup` is applied to both
-the worker and sandbox pods (with `fsGroupChangePolicy: OnRootMismatch`) so PVC
-files created by the worker remain accessible to sandbox Jobs.
+`runAsUser` should be valid for both application and sandbox images. The
+`fsGroup` is applied with `fsGroupChangePolicy: OnRootMismatch`, ensuring files
+created by the worker remain accessible to sandbox Jobs.
