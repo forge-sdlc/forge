@@ -164,9 +164,23 @@ class TestBuildJobManifest:
         driver = _make_driver()
         job = driver._build_job_manifest(_make_spec(memory_limit="8g", cpu_limit="4"))
         res = job.spec.template.spec.containers[0].resources
-        assert res.requests["memory"] == "8g"
+        assert res.requests["memory"] == "8Gi"
         assert res.requests["cpu"] == "4"
-        assert res.limits["memory"] == "8g"
+        assert res.limits["memory"] == "8Gi"
+
+    @pytest.mark.parametrize(
+        ("configured", "expected"),
+        [("512m", "512Mi"), ("1.5g", "1.5Gi"), ("4Gi", "4Gi"), ("500M", "500M")],
+    )
+    def test_memory_quantity_normalization(
+        self, fake_k8s, configured: str, expected: str
+    ) -> None:
+        del fake_k8s
+        driver = _make_driver()
+        job = driver._build_job_manifest(_make_spec(memory_limit=configured))
+        resources = job.spec.template.spec.containers[0].resources
+        assert resources.requests["memory"] == expected
+        assert resources.limits["memory"] == expected
 
     def test_skip_tests_flag(self, fake_k8s) -> None:  # noqa: ARG002
         driver = _make_driver()

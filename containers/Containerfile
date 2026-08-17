@@ -32,6 +32,12 @@ RUN pip install --no-cache-dir \
     pydantic \
     pydantic-settings
 
+# OpenShift runs containers with an arbitrary non-root UID. The universal
+# image keeps Python under /home/codespace, so make the runtime traversable
+# and readable without relying on the image's codespace user or group.
+RUN chmod a+rx /home/codespace && \
+    chmod -R a+rX /home/codespace/.python
+
 # Create workspace directory (will be mounted at runtime)
 RUN mkdir -p /workspace && chmod 777 /workspace
 

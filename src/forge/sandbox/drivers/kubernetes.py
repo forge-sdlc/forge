@@ -20,6 +20,23 @@ logger = logging.getLogger(__name__)
 _DEFAULT_POLL_INTERVAL = 5.0
 _COMPLETION_WAIT_BUFFER = 120
 _LEGACY_GOOGLE_CREDENTIALS_PATH = "/root/.config/gcloud/application_default_credentials.json"
+_PODMAN_MEMORY_UNITS = {
+    "k": "Ki",
+    "m": "Mi",
+    "g": "Gi",
+    "t": "Ti",
+    "p": "Pi",
+    "e": "Ei",
+}
+
+
+def _normalize_memory_quantity(value: str) -> str:
+    """Translate Podman-style memory suffixes into Kubernetes quantities."""
+    match = re.fullmatch(r"([+-]?[0-9]+(?:\.[0-9]+)?)([kmgtpe])", value)
+    if not match:
+        return value
+    number, unit = match.groups()
+    return f"{number}{_PODMAN_MEMORY_UNITS[unit]}"
 
 
 class KubernetesDriver(SandboxDriver):
@@ -184,9 +201,10 @@ class KubernetesDriver(SandboxDriver):
         if spec.skip_tests:
             container_args.append("--skip-tests")
 
+        memory_limit = _normalize_memory_quantity(spec.memory_limit)
         resources = k8s_client.V1ResourceRequirements(
-            requests={"memory": spec.memory_limit, "cpu": spec.cpu_limit},
-            limits={"memory": spec.memory_limit},
+            requests={"memory": memory_limit, "cpu": spec.cpu_limit},
+            limits={"memory": memory_limit},
         )
 
         container = k8s_client.V1Container(

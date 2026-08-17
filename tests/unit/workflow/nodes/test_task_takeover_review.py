@@ -138,6 +138,7 @@ class TestRunQualitativeReview:
         mock_runner.run.assert_called_once()
         _, kwargs = mock_runner.run.call_args
         assert kwargs["task_summary"] == "Review task takeover changes for TASK-101"
+        assert "config" not in kwargs
         assert kwargs["task_key"] == "TASK-101-review"
         assert kwargs["repo_name"] == "owner/repo"
         assert "previous_task_keys" not in kwargs
