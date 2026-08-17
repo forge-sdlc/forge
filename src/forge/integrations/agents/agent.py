@@ -499,9 +499,7 @@ class ForgeAgent:
             tools=mcp_tools if mcp_tools else None,
             response_format=response_format,
             middleware=[
-                HostToolAllowlistMiddleware(
-                    set(builtin_tools) | {tool.name for tool in mcp_tools}
-                )
+                HostToolAllowlistMiddleware(set(builtin_tools) | {tool.name for tool in mcp_tools})
             ],
             permissions=[FilesystemPermission(operations=["write"], paths=["/**"], mode="deny")],
         )
