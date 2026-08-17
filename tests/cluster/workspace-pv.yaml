@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: forge-kind-workspaces
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Delete
+  storageClassName: forge-kind
+  hostPath:
+    path: /mnt/forge-workspaces
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forge-workspaces
+  namespace: forge
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: forge-kind
+  volumeName: forge-kind-workspaces
+  resources:
+    requests:
+      storage: 1Gi

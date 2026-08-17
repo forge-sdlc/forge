@@ -1,0 +1,8 @@
+FROM python:3.11-alpine
+
+RUN adduser -D -u 1000 sandbox
+COPY entrypoint.py /entrypoint.py
+
+USER 1000
+WORKDIR /workspace
+ENTRYPOINT ["python", "/entrypoint.py"]

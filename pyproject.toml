@@ -115,6 +115,7 @@ markers = [
     "slow: tests taking >5s",
     "flow: workflow state machine tests",
     "integration: tests spanning Forge components or real infrastructure",
+    "cluster: tests requiring an ephemeral Kubernetes cluster",
     "e2e: end-to-end tests through a complete user-visible workflow boundary",
     "external: tests requiring live third-party credentials or services",
     "quarantine: known-obsolete scenarios excluded from required gates pending rewrite",
