@@ -19,6 +19,7 @@ from forge.api.routes.metrics import (
 )
 from forge.config import get_settings
 from forge.integrations.github.client import GitHubClient
+from forge.integrations.github.comment_signature import is_self_comment
 from forge.integrations.jira.client import JiraClient
 from forge.models.events import EventSource
 from forge.models.workflow import ForgeLabel, TicketType
@@ -40,7 +41,6 @@ from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.automated_review_triage import (
     is_bot_sender,
-    is_self_comment,
     triage_automated_review,
 )
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
@@ -571,7 +571,7 @@ class OrchestratorWorker:
             if sender_login:
                 forge_login = await self._get_forge_github_login()
                 settings = get_settings()
-                forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                forge_bot_comment_prefix = settings.forge_bot_comment_prefix
                 if is_self_comment(
                     sender_login=sender_login,
                     comment_body=reply.get("body", ""),
@@ -988,7 +988,7 @@ class OrchestratorWorker:
                 if sender_login:
                     forge_login = await self._get_forge_github_login()
                     settings = get_settings()
-                    forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                    forge_bot_comment_prefix = settings.forge_bot_comment_prefix
                     if is_self_comment(
                         sender_login=sender_login,
                         comment_body=reply.get("body", ""),
@@ -1133,7 +1133,7 @@ class OrchestratorWorker:
                         await gh.close()
 
                     settings = get_settings()
-                    forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                    forge_bot_comment_prefix = settings.forge_bot_comment_prefix
                     if is_self_comment(
                         sender_login=sender_login,
                         comment_body=comment_body,
@@ -1271,7 +1271,7 @@ class OrchestratorWorker:
                         await gh.close()
 
                     settings = get_settings()
-                    forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                    forge_bot_comment_prefix = settings.forge_bot_comment_prefix
                     if is_self_comment(
                         sender_login=sender_login,
                         comment_body=comment_body,
@@ -1430,7 +1430,7 @@ class OrchestratorWorker:
             if sender_login:
                 forge_login = await self._get_forge_github_login()
                 settings = get_settings()
-                forge_bot_comment_prefix = getattr(settings, "forge_bot_comment_prefix", None)
+                forge_bot_comment_prefix = settings.forge_bot_comment_prefix
                 if is_self_comment(
                     sender_login=sender_login,
                     comment_body=review_body,

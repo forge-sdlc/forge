@@ -19,7 +19,7 @@ All configuration is via environment variables in `.env`. See `.env.example` in 
 |----------|-------------|
 | `GITHUB_TOKEN` | Personal Access Token with `repo` and `read:org` scopes |
 | `GITHUB_WEBHOOK_SECRET` | Secret for validating GitHub webhook signatures |
-| `FORGE_BOT_COMMENT_PREFIX` | Prefix to add to all comments made by the Forge bot (e.g., signature or identifier), also used for webhook self-comment filtering to prevent loops. Note: This configuration is intended to allow development and testing with the same user API keys that are used to comment (to prevent webhook loops), and it should not be used in production. |
+| `FORGE_BOT_COMMENT_PREFIX` | Prefix to add to all comments made by the Forge bot (e.g., signature or identifier), also used for webhook self-comment filtering to prevent loops. Note: This configuration is intended to allow development and testing with the same user API keys that are used to comment (to prevent webhook loops), and it should not be used in production. A warning is logged at startup when this is set. |
 
 ### LLM
 
