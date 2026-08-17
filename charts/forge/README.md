@@ -35,5 +35,8 @@ Override repositories, tags, storage class, or Route settings in a local values
 file. The worker uses in-cluster service-account authentication; do not mount a
 kubeconfig into it.
 
+When `redis.enabled=false`, provide `REDIS_URL` in `existingSecret`. The chart
+only injects its internal Redis URL when the bundled Redis deployment is enabled.
+
 The workspace PVC is retained when the Helm release is removed. Delete it
 explicitly when its workspaces are no longer needed.

@@ -49,8 +49,10 @@ spec:
             - secretRef:
                 name: {{ .Values.existingSecret }}
           env:
+            {{- if .Values.redis.enabled }}
             - name: REDIS_URL
               value: redis://{{ include "forge.fullname" . }}-redis:6379/0
+            {{- end }}
             - name: FORGE_SANDBOX_DRIVER
               value: kubernetes
             - name: CONTAINER_IMAGE

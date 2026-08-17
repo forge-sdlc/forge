@@ -1,11 +1,11 @@
 image:
-  repository: image-registry.openshift-image-registry.svc:5000/forge/forge
-  tag: pr-243
+  repository: forge
+  tag: latest
   pullPolicy: Always
 
 sandboxImage:
-  repository: image-registry.openshift-image-registry.svc:5000/forge/forge-sandbox
-  tag: pr-243
+  repository: forge-sandbox
+  tag: latest
 
 # Create this secret separately from .env; both API and worker import its keys.
 existingSecret: forge-env
@@ -39,7 +39,8 @@ workspace:
   size: 20Gi
   accessModes:
     - ReadWriteOnce
-  storageClassName: gp3-csi
+  # Empty uses the cluster's default StorageClass.
+  storageClassName: ""
   retain: true
 
 redis:
@@ -48,7 +49,7 @@ redis:
   persistence:
     enabled: false
     size: 5Gi
-    storageClassName: gp3-csi
+    storageClassName: ""
 
 imagePullSecrets: []
 podAnnotations: {}

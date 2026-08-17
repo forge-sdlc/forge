@@ -64,10 +64,11 @@ class _Stub:
             setattr(self, k, v)
 
 
-def _build_fake_k8s_modules() -> tuple[ModuleType, ModuleType, ModuleType]:
+def _build_fake_k8s_modules() -> tuple[ModuleType, ModuleType, ModuleType, ModuleType]:
     """Build fake kubernetes, kubernetes.client, kubernetes.config modules."""
     k8s_top = ModuleType("kubernetes")
     k8s_client = ModuleType("kubernetes.client")
+    k8s_rest = ModuleType("kubernetes.client.rest")
     k8s_config = ModuleType("kubernetes.config")
 
     for name in (
@@ -88,24 +89,31 @@ def _build_fake_k8s_modules() -> tuple[ModuleType, ModuleType, ModuleType]:
     ):
         setattr(k8s_client, name, type(name, (_Stub,), {}))
 
-    k8s_client.ApiException = type("ApiException", (Exception,), {})  # type: ignore[attr-defined]
+    k8s_rest.ApiException = type("ApiException", (Exception,), {})  # type: ignore[attr-defined]
 
     k8s_top.client = k8s_client  # type: ignore[attr-defined]
     k8s_top.config = k8s_config  # type: ignore[attr-defined]
     k8s_config.load_config = lambda: None  # type: ignore[attr-defined]
 
-    return k8s_top, k8s_client, k8s_config
+    return k8s_top, k8s_client, k8s_config, k8s_rest
 
 
 @pytest.fixture()
 def fake_k8s():
     """Patch sys.modules so `from kubernetes import client` resolves to stubs."""
-    k8s_top, k8s_client, k8s_config = _build_fake_k8s_modules()
+    k8s_top, k8s_client, k8s_config, k8s_rest = _build_fake_k8s_modules()
     saved = {
-        k: sys.modules.get(k) for k in ("kubernetes", "kubernetes.client", "kubernetes.config")
+        k: sys.modules.get(k)
+        for k in (
+            "kubernetes",
+            "kubernetes.client",
+            "kubernetes.client.rest",
+            "kubernetes.config",
+        )
     }
     sys.modules["kubernetes"] = k8s_top
     sys.modules["kubernetes.client"] = k8s_client
+    sys.modules["kubernetes.client.rest"] = k8s_rest
     sys.modules["kubernetes.config"] = k8s_config
     run_in_executor = AsyncMock(side_effect=lambda _executor, func: func())
     with patch.object(asyncio.BaseEventLoop, "run_in_executor", run_in_executor):
@@ -127,15 +135,22 @@ class TestWorkspaceSubpath:
         driver = _make_driver()
         assert driver._workspace_subpath(Path("/mnt/workspaces/org/repo")) == "org/repo"
 
-    def test_empty_when_no_base_configured(self) -> None:
+    def test_driver_rejects_missing_base_path(self) -> None:
         settings = _make_settings()
         settings.k8s_workspace_base_path = ""
-        driver = _make_driver(settings)
-        assert driver._workspace_subpath(Path("/some/path")) == ""
+        with pytest.raises(ValueError, match="K8S_WORKSPACE_BASE_PATH"):
+            _make_driver(settings)
 
-    def test_fallback_when_outside_base(self) -> None:
+    def test_driver_rejects_missing_pvc(self) -> None:
+        settings = _make_settings()
+        settings.k8s_workspace_pvc = ""
+        with pytest.raises(ValueError, match="K8S_WORKSPACE_PVC"):
+            _make_driver(settings)
+
+    def test_rejects_workspace_outside_base(self) -> None:
         driver = _make_driver()
-        assert driver._workspace_subpath(Path("/other/location")) == ""
+        with pytest.raises(ValueError, match="outside K8S_WORKSPACE_BASE_PATH"):
+            driver._workspace_subpath(Path("/other/location"))
 
 
 class TestBuildJobManifest:
@@ -415,6 +430,31 @@ class TestExecute:
 
         assert result.exit_code == 0
         mock_batch.delete_namespaced_job.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_log_api_error_is_returned_as_stderr(self, fake_k8s) -> None:
+        del fake_k8s
+        from kubernetes.client.rest import ApiException
+
+        driver = _make_driver()
+        mock_core = MagicMock()
+        mock_core.list_namespaced_pod.side_effect = ApiException("logs unavailable")
+
+        stdout, stderr = await driver._collect_logs(mock_core, "forge-test-abc123")
+
+        assert stdout == ""
+        assert "logs unavailable" in stderr
+
+    @pytest.mark.asyncio
+    async def test_delete_api_error_is_handled(self, fake_k8s) -> None:
+        del fake_k8s
+        from kubernetes.client.rest import ApiException
+
+        driver = _make_driver()
+        mock_batch = MagicMock()
+        mock_batch.delete_namespaced_job.side_effect = ApiException("already deleted")
+
+        await driver._delete_job(mock_batch, "forge-test-abc123")
 
 
 class TestDriverSelection:

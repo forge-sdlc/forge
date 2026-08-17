@@ -51,8 +51,12 @@ class KubernetesDriver(SandboxDriver):
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._namespace = settings.k8s_namespace
-        self._workspace_pvc = settings.k8s_workspace_pvc
-        self._workspace_base_path = settings.k8s_workspace_base_path
+        self._workspace_pvc = settings.k8s_workspace_pvc.strip()
+        self._workspace_base_path = settings.k8s_workspace_base_path.strip()
+        if not self._workspace_pvc:
+            raise ValueError("K8S_WORKSPACE_PVC is required for the Kubernetes driver")
+        if not self._workspace_base_path:
+            raise ValueError("K8S_WORKSPACE_BASE_PATH is required for the Kubernetes driver")
         self._image_pull_secrets = [
             s.strip() for s in settings.k8s_image_pull_secrets.split(",") if s.strip()
         ]
@@ -324,17 +328,13 @@ class KubernetesDriver(SandboxDriver):
         workspace is at `/mnt/workspaces/org/repo`, the sub-path is
         `org/repo`.
         """
-        if not self._workspace_base_path:
-            return ""
         try:
             return str(workspace_path.relative_to(self._workspace_base_path))
-        except ValueError:
-            logger.warning(
-                "Workspace %s is not under base path %s; mounting PVC root",
-                workspace_path,
-                self._workspace_base_path,
-            )
-            return ""
+        except ValueError as exc:
+            raise ValueError(
+                f"Workspace {workspace_path} is outside K8S_WORKSPACE_BASE_PATH "
+                f"{self._workspace_base_path}"
+            ) from exc
 
     async def _wait_for_completion(
         self,
@@ -398,12 +398,12 @@ class KubernetesDriver(SandboxDriver):
         job_name: str,
     ) -> tuple[str, str]:
         """Retrieve stdout from the first pod of the Job."""
-        from kubernetes import client as k8s_client
+        from kubernetes.client.rest import ApiException
 
         loop = asyncio.get_running_loop()
 
         try:
-            pods: k8s_client.V1PodList = await loop.run_in_executor(
+            pods: Any = await loop.run_in_executor(
                 None,
                 lambda: core_api.list_namespaced_pod(
                     namespace=self._namespace,
@@ -423,13 +423,14 @@ class KubernetesDriver(SandboxDriver):
                 ),
             )
             return log_text, ""
-        except k8s_client.ApiException as exc:
+        except ApiException as exc:
             logger.warning("Failed to collect logs for Job %s: %s", job_name, exc)
             return "", str(exc)
 
     async def _delete_job(self, batch_api: Any, job_name: str) -> None:
         """Delete a Job and its pods."""
         from kubernetes import client as k8s_client
+        from kubernetes.client.rest import ApiException
 
         loop = asyncio.get_running_loop()
         try:
@@ -444,5 +445,5 @@ class KubernetesDriver(SandboxDriver):
                 ),
             )
             logger.info("Deleted Job %s", job_name)
-        except k8s_client.ApiException as exc:
+        except ApiException as exc:
             logger.warning("Failed to delete Job %s: %s", job_name, exc)

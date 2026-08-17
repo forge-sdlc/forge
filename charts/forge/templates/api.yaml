@@ -34,9 +34,11 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ .Values.existingSecret }}
+          {{- if .Values.redis.enabled }}
           env:
             - name: REDIS_URL
               value: redis://{{ include "forge.fullname" . }}-redis:6379/0
+          {{- end }}
           ports:
             - name: http
               containerPort: 8000
