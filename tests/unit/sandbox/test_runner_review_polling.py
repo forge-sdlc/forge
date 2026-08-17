@@ -1,6 +1,7 @@
 """Unit tests for review polling integration in ContainerRunner."""
 
 import asyncio
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1327,3 +1328,53 @@ class TestStaleReviewFilesCleared:
         assert result.review_cycles[0].feedback == "NEW feedback from current run", (
             f"Got stale feedback: {result.review_cycles[0].feedback}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Debug-hint logging for kept containers
+# ---------------------------------------------------------------------------
+
+
+class TestKeptContainerDebugHint:
+    """Tests for driver-provided debug hints when a container is kept."""
+
+    def test_logs_driver_debug_hint_when_kept(self, caplog):
+        """A kept container should append the driver's debug hint to the log."""
+        runner = _runner_without_init()
+        runner.settings = MagicMock()
+        runner.settings.container_keep = True
+        runner._driver = MagicMock()
+        runner._driver.debug_hint.return_value = "  Inspect logs:      podman logs forge-x"
+
+        with caplog.at_level(logging.WARNING):
+            result = runner._build_container_result(
+                exit_code=1,
+                stdout_str="",
+                stderr_str="boom",
+                collected_cycles=[],
+                container_name="forge-x",
+            )
+
+        assert result.exit_code == 1
+        runner._driver.debug_hint.assert_called_once_with("forge-x")
+        assert "Container kept for debugging" in caplog.text
+        assert "podman logs forge-x" in caplog.text
+
+    def test_no_hint_appended_when_driver_returns_none(self, caplog):
+        """When the driver has no hint, only the base message is logged."""
+        runner = _runner_without_init()
+        runner.settings = MagicMock()
+        runner.settings.container_keep = True
+        runner._driver = MagicMock()
+        runner._driver.debug_hint.return_value = None
+
+        with caplog.at_level(logging.WARNING):
+            runner._build_container_result(
+                exit_code=1,
+                stdout_str="",
+                stderr_str="boom",
+                collected_cycles=[],
+                container_name="forge-x",
+            )
+
+        assert "Container kept for debugging" in caplog.text

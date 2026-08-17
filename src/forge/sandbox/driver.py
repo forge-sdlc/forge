@@ -60,6 +60,15 @@ class SandboxDriver(ABC):
         """Check if this driver's runtime is available."""
         ...
 
+    def debug_hint(self, container_name: str) -> str | None:  # noqa: ARG002
+        """Return runtime-specific instructions for inspecting a kept container.
+
+        Only meaningful when the container/pod is preserved after execution
+        (e.g. FORGE_CONTAINER_KEEP=true). Returns None when the driver has no
+        additional guidance to offer.
+        """
+        return None
+
     async def build_image(self, containerfile_path: Path | None = None, tag: str = "") -> bool:
         """Build a container image. Optional — not all drivers support this."""
         raise NotImplementedError(f"{type(self).__name__} does not support local image building")

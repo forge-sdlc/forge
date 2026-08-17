@@ -153,6 +153,16 @@ class TestWorkspaceSubpath:
             driver._workspace_subpath(Path("/other/location"))
 
 
+class TestDebugHint:
+    def test_debug_hint_references_job_and_namespace(self) -> None:
+        driver = _make_driver()
+        hint = driver.debug_hint("forge-TEST-abc123")
+
+        assert hint is not None
+        assert "kubectl logs -n forge job/forge-test-abc123" in hint
+        assert "kubectl delete -n forge job/forge-test-abc123" in hint
+
+
 class TestBuildJobManifest:
     def test_basic_manifest_structure(self, fake_k8s) -> None:  # noqa: ARG002
         driver = _make_driver()
@@ -187,9 +197,7 @@ class TestBuildJobManifest:
         ("configured", "expected"),
         [("512m", "512Mi"), ("1.5g", "1.5Gi"), ("4Gi", "4Gi"), ("500M", "500M")],
     )
-    def test_memory_quantity_normalization(
-        self, fake_k8s, configured: str, expected: str
-    ) -> None:
+    def test_memory_quantity_normalization(self, fake_k8s, configured: str, expected: str) -> None:
         del fake_k8s
         driver = _make_driver()
         job = driver._build_job_manifest(_make_spec(memory_limit=configured))

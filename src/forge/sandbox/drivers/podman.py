@@ -27,6 +27,14 @@ class PodmanDriver(SandboxDriver):
     def is_available(self) -> bool:
         return shutil.which("podman") is not None
 
+    def debug_hint(self, container_name: str) -> str | None:
+        return (
+            f"  Inspect logs:      podman logs {container_name}\n"
+            f"  Enter filesystem:  podman export {container_name} | "
+            f"tar -xC /tmp/{container_name}\n"
+            f"  Remove when done:  podman rm {container_name}"
+        )
+
     async def execute(self, spec: ExecutionSpec) -> ExecutionResult:
         cmd = self._build_command(spec)
 

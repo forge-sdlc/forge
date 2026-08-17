@@ -654,9 +654,13 @@ class ContainerRunner:
             if stdout_str:
                 logger.debug(f"Container stdout:\n{stdout_str}")
             if self.settings.container_keep:
-                logger.warning(
+                message = (
                     f"Container kept for debugging (FORGE_CONTAINER_KEEP=true): {container_name}"
                 )
+                hint = self._driver.debug_hint(container_name)
+                if hint:
+                    message = f"{message}\n{hint}"
+                logger.warning(message)
         else:
             # Success: stderr at DEBUG only
             if stderr_str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import re
 import shutil
@@ -77,6 +78,15 @@ class KubernetesDriver(SandboxDriver):
             return True
         except ImportError:
             return False
+
+    def debug_hint(self, container_name: str) -> str | None:
+        job_name = self._job_name(container_name)
+        namespace = self._namespace
+        return (
+            f"  Inspect logs:      kubectl logs -n {namespace} job/{job_name}\n"
+            f"  Describe job:      kubectl describe -n {namespace} job/{job_name}\n"
+            f"  Remove when done:  kubectl delete -n {namespace} job/{job_name}"
+        )
 
     async def execute(self, spec: ExecutionSpec) -> ExecutionResult:
         from kubernetes import client as k8s_client
@@ -379,7 +389,7 @@ class KubernetesDriver(SandboxDriver):
     @staticmethod
     def _extract_exit_code(job: Any) -> int:
         """Best-effort extraction of the container exit code from a Job."""
-        try:
+        with contextlib.suppress(AttributeError):
             conditions = job.status.conditions or []
             for cond in conditions:
                 if (
@@ -388,8 +398,6 @@ class KubernetesDriver(SandboxDriver):
                     and cond.reason == "DeadlineExceeded"
                 ):
                     return -1
-        except AttributeError:
-            pass
         return 1
 
     async def _collect_logs(
