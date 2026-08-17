@@ -6,6 +6,23 @@ on:
       - main
 
 jobs:
+  helm-lint:
+    name: Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v4.2.4
+
+      - name: Lint chart
+        run: helm lint charts/forge
+
+      - name: Lint chart with Google credentials enabled
+        run: helm lint charts/forge --set googleCredentials.enabled=true
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
