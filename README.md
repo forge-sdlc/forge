@@ -210,6 +210,30 @@ uv run forge worker
 
 See [Getting Started](https://Forge-sdlc.github.io/forge/getting-started/) for the full setup path, including environment variables, webhooks, and local development options.
 
+## Worker of the Week API
+
+The API Gateway includes an endpoint to retrieve the worker of the week.
+
+### Endpoint
+
+* **URL**: `/api/v1/worker-of-the-week`
+* **Method**: `GET`
+* **Response Format**: `application/json`
+* **Response Body**:
+  ```json
+  {
+    "worker": "JohnDoe"
+  }
+  ```
+
+### Configuration
+
+The worker's name is configured using the `WORKER_OF_THE_WEEK` environment variable:
+
+* **Variable**: `WORKER_OF_THE_WEEK`
+* **Description**: Sets the name of the worker of the week returned by the `/api/v1/worker-of-the-week` API endpoint.
+* **Default**: If unset or empty, the endpoint returns an empty worker name: `{"worker": ""}`.
+
 ## Documentation
 
 - [Getting Started](https://Forge-sdlc.github.io/forge/getting-started/): Install Forge and run your first workflow.
