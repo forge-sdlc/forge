@@ -45,3 +45,24 @@ Sandbox Jobs do not mount service-account tokens and are selected by a default
 deny NetworkPolicy. Jobs configured with networking may use DNS and public
 egress, while the private CIDRs listed under `sandbox.networkPolicy.privateCidrs`
 remain blocked. Adjust that list for the cluster network before deployment.
+
+## Pod UID and workspace ownership
+
+By default `sandbox.runAsUser` and `sandbox.fsGroup` are empty, which suits
+OpenShift: its SCC assigns a non-root UID and an fsGroup from the namespace
+range to both the worker and every sandbox Job, and the shared workspace PVC is
+owned accordingly.
+
+On vanilla Kubernetes there is no SCC to assign these, so `runAsNonRoot` cannot
+be satisfied and the worker-created PVC files may not be readable by sandbox
+pods. Set both values so the worker and sandbox pods share a UID and fsGroup:
+
+```bash
+helm upgrade --install forge charts/forge -n forge \
+  --set sandbox.runAsUser=1000 \
+  --set sandbox.fsGroup=1000
+```
+
+`runAsUser` should match the sandbox image's user; `fsGroup` is applied to both
+the worker and sandbox pods (with `fsGroupChangePolicy: OnRootMismatch`) so PVC
+files created by the worker remain accessible to sandbox Jobs.

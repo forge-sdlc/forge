@@ -65,6 +65,8 @@ class KubernetesDriver(SandboxDriver):
         self._google_credentials_secret = settings.k8s_google_credentials_secret
         self._google_credentials_key = settings.k8s_google_credentials_key
         self._google_credentials_mount_path = settings.k8s_google_credentials_mount_path
+        self._run_as_user = settings.k8s_run_as_user
+        self._fs_group = settings.k8s_fs_group
         self._poll_interval = _DEFAULT_POLL_INTERVAL
 
     # ------------------------------------------------------------------
@@ -242,16 +244,27 @@ class KubernetesDriver(SandboxDriver):
             "forge.sdlc/network-access": network_access,
         }
 
+        # UID and fsGroup are left unset by default so OpenShift's SCC can assign
+        # them from the namespace range. On vanilla Kubernetes they must be set
+        # explicitly, otherwise runAsNonRoot cannot be satisfied and the pod
+        # cannot write the worker-owned files on the shared workspace PVC.
+        pod_security_context = k8s_client.V1PodSecurityContext(
+            run_as_non_root=True,
+            seccomp_profile=k8s_client.V1SeccompProfile(type="RuntimeDefault"),
+        )
+        if self._run_as_user is not None:
+            pod_security_context.run_as_user = self._run_as_user
+        if self._fs_group is not None:
+            pod_security_context.fs_group = self._fs_group
+            pod_security_context.fs_group_change_policy = "OnRootMismatch"
+
         pod_spec = k8s_client.V1PodSpec(
             containers=[container],
             volumes=volumes,
             restart_policy="Never",
             service_account_name=self._service_account or None,
             automount_service_account_token=False,
-            security_context=k8s_client.V1PodSecurityContext(
-                run_as_non_root=True,
-                seccomp_profile=k8s_client.V1SeccompProfile(type="RuntimeDefault"),
-            ),
+            security_context=pod_security_context,
         )
 
         if self._image_pull_secrets:

@@ -23,7 +23,15 @@ spec:
     spec:
       serviceAccountName: {{ .Values.worker.serviceAccountName }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- $psc := deepCopy .Values.podSecurityContext }}
+        {{- if .Values.sandbox.runAsUser }}
+        {{- $_ := set $psc "runAsUser" (.Values.sandbox.runAsUser | int) }}
+        {{- end }}
+        {{- if .Values.sandbox.fsGroup }}
+        {{- $_ := set $psc "fsGroup" (.Values.sandbox.fsGroup | int) }}
+        {{- $_ := set $psc "fsGroupChangePolicy" "OnRootMismatch" }}
+        {{- end }}
+        {{- toYaml $psc | nindent 8 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -69,6 +77,14 @@ spec:
               value: {{ .Values.sandbox.imagePullSecrets | quote }}
             - name: K8S_SERVICE_ACCOUNT
               value: {{ .Values.sandbox.jobServiceAccountName }}
+            {{- if .Values.sandbox.runAsUser }}
+            - name: K8S_RUN_AS_USER
+              value: {{ .Values.sandbox.runAsUser | quote }}
+            {{- end }}
+            {{- if .Values.sandbox.fsGroup }}
+            - name: K8S_FS_GROUP
+              value: {{ .Values.sandbox.fsGroup | quote }}
+            {{- end }}
             - name: CONTAINER_MEMORY
               value: {{ .Values.sandbox.memory | quote }}
             - name: CONTAINER_CPUS

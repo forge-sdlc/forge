@@ -47,6 +47,8 @@ def _make_settings() -> MagicMock:
     settings.k8s_google_credentials_secret = ""
     settings.k8s_google_credentials_key = "forge-gcp-credentials.json"
     settings.k8s_google_credentials_mount_path = "/etc/forge-gcp-credentials.json"
+    settings.k8s_run_as_user = None
+    settings.k8s_fs_group = None
     return settings
 
 
@@ -412,6 +414,27 @@ class TestExternalMountStaging:
         job = driver._build_job_manifest(_make_spec(network_mode="slirp4netns"))
 
         assert job.spec.template.metadata.labels["forge.sdlc/network-access"] == "external"
+
+    def test_run_as_user_and_fs_group_omitted_by_default(self, fake_k8s) -> None:  # noqa: ARG002
+        driver = _make_driver()
+        job = driver._build_job_manifest(_make_spec())
+
+        security = job.spec.template.spec.security_context
+        assert getattr(security, "run_as_user", None) is None
+        assert getattr(security, "fs_group", None) is None
+
+    def test_run_as_user_and_fs_group_applied_when_configured(self, fake_k8s) -> None:  # noqa: ARG002
+        settings = _make_settings()
+        settings.k8s_run_as_user = 1000
+        settings.k8s_fs_group = 1000
+        driver = _make_driver(settings)
+
+        job = driver._build_job_manifest(_make_spec())
+
+        security = job.spec.template.spec.security_context
+        assert security.run_as_user == 1000
+        assert security.fs_group == 1000
+        assert security.fs_group_change_policy == "OnRootMismatch"
 
 
 class TestExecute:

@@ -543,6 +543,23 @@ class Settings(BaseSettings):
         default="/etc/forge-gcp-credentials.json",
         description="File path where sandbox pods mount Google ADC credentials",
     )
+    k8s_run_as_user: int | None = Field(
+        default=None,
+        description=(
+            "UID for sandbox Job pods. Leave unset on OpenShift (the SCC assigns a "
+            "non-root UID); set explicitly (e.g. 1000) on vanilla Kubernetes so the "
+            "runAsNonRoot requirement is satisfiable."
+        ),
+    )
+    k8s_fs_group: int | None = Field(
+        default=None,
+        description=(
+            "fsGroup applied to sandbox Job pods so they can read and write the "
+            "shared workspace PVC created by the worker. Leave unset on OpenShift "
+            "(assigned by the SCC); set to match the worker's fsGroup on vanilla "
+            "Kubernetes."
+        ),
+    )
 
     # Auto Review Configuration
     auto_review_poll_interval: float = Field(
