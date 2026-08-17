@@ -118,6 +118,8 @@ flowchart TD
 
 ### Implementation
 
+When implementation starts, Forge sets up the workspace, posts a progress comment to Jira, sets the `forge:implementing` label, and automatically transitions all associated Tasks and Epics, as well as the parent Epic (if present), to **`In Progress`** status in Jira.
+
 Tasks are executed in ephemeral Podman containers. Each container:
 
 - Clones the target repository
@@ -165,6 +167,8 @@ Forge reviews the completed PR against the original spec, checking for completen
 ### Human Review
 
 The PR is now ready for human review. Merge when satisfied, or request changes to trigger another implementation pass.
+
+Once the PR is merged, Forge automatically completes the workflow by transitioning the Feature, all associated Tasks and Epics, and its parent Epic (if present) to **`Closed`** status in Jira.
 
 ## Q&A Mode
 

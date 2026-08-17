@@ -2,7 +2,7 @@
 
 **Author:** eshulman2
 **Date:** 2026-04-19
-**Status:** Draft
+**Status:** Implemented
 
 ## Summary
 
@@ -25,7 +25,7 @@ From the user's perspective, the workflow has two Jira-visible states: "waiting 
 | **task-approved → PR created** | **Silence** (hours can pass here) |
 | PR created | Comment with PR URL |
 | CI failure → blocked | Error comment, sets `forge:blocked` |
-| Human review approved | Transitions tasks/epics/feature to Closed |
+| Human review approved | Transitions tasks/epics/feature and parent Epic to Closed |
 
 ### Current Workarounds
 
@@ -58,7 +58,7 @@ Add `jira_progress_comment(jira, ticket_key, message)` to a shared utility modul
 **1. Workspace setup starts** (`setup_workspace` node)
 - Feature ticket: comment `"⚙️ Implementation starting for {repo}. Setting up workspace..."`
 - Feature ticket: set label `forge:implementing`
-- Each task ticket: transition to **In Progress** Jira status
+- Each task, epic, and parent Epic ticket: transition to **In Progress** Jira status
 
 **2. Task implementation starts** (`implement_task` node, per task)
 - Task ticket: comment `"🔨 Forge is implementing this task."`

@@ -25,7 +25,7 @@ For smaller changes (bug fixes, default skill improvements), open a GitHub issue
 | # | Title | Status |
 |---|-------|--------|
 | [001](https://github.com/forge-sdlc/forge/blob/main/proposals/001-qa-mode-for-generated-artifacts.md) | Q&A Mode for Generated Artifacts | Implemented |
-| [002](https://github.com/forge-sdlc/forge/blob/main/proposals/002-workflow-status-updates-in-jira.md) | Workflow Status Updates in Jira | Draft |
+| [002](https://github.com/forge-sdlc/forge/blob/main/proposals/002-workflow-status-updates-in-jira.md) | Workflow Status Updates in Jira | Implemented |
 | [003](https://github.com/forge-sdlc/forge/blob/main/proposals/003-retryable-blocked-state.md) | Retryable Blocked State via `forge:retry` | Implemented |
 | [004](https://github.com/forge-sdlc/forge/blob/main/proposals/004-dynamic-skill-loading.md) | Dynamic Skill Loading by Jira Project | Implemented |
 | [005](https://github.com/forge-sdlc/forge/blob/main/proposals/005-ci-gate-skip-command.md) | CI Gate Skip via Comment Command | Implemented |
