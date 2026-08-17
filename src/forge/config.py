@@ -415,10 +415,6 @@ class Settings(BaseSettings):
         default="*",
         description="MCP servers to enable: '*' for all from config, or comma-separated list",
     )
-    agent_mcp_read_only: bool = Field(
-        default=True,
-        description="Restrict MCP tools to read-only operations (no create/update/delete)",
-    )
     agent_mcp_allowed_tools: str = Field(
         default="",
         description="Exact MCP tool allowlist using server:tool names (empty denies all)",

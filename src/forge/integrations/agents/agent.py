@@ -1402,7 +1402,7 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
                 "ticket_key": context.get("ticket_key", ""),
             },
             trace_context=_forward_trace_fields(context),
-            # Q&A gets read-only MCP tools for lookups (filtered by agent_mcp_read_only)
+            # Q&A gets only the exactly allowlisted MCP tools for lookups.
         )
 
         logger.info(f"Generated answer ({len(result)} chars)")
