@@ -485,9 +485,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 label=f"ci-fix-{ci_fix_attempt}",
             )
             if review_result is not None:
-                state = merge_review_exhaustion(
-                    state, review_result, ticket_key, "code_review"
-                )
+                state = merge_review_exhaustion(state, review_result, ticket_key, "code_review")
             if fork_owner and fork_repo:
                 git.push_to_fork(force=False)
             else:

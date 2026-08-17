@@ -626,8 +626,7 @@ class OrchestratorWorker:
         event = message.event_type
         is_check_event = "check_suite" in event or "check_run" in event
         if message.source == EventSource.GITHUB and (
-            current_node == "ci_evaluator"
-            or (targets_implementation_pr and is_check_event)
+            current_node == "ci_evaluator" or (targets_implementation_pr and is_check_event)
         ):
             if is_check_event:
                 suite_status = payload.get("check_suite", {}).get("status") or payload.get(
