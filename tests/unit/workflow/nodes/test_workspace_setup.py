@@ -252,6 +252,47 @@ class TestWorkspaceSetupLabelAndTransitions:
         mock_jira.transition_issue.assert_any_call("AISOS-101", "In Progress")
         mock_jira.transition_issue.assert_any_call("AISOS-102", "In Progress")
 
+    @pytest.mark.asyncio
+    async def test_workspace_setup_transitions_epics_and_parent_epic(self):
+        """Should transition tasks, epic keys, and parent epic to In Progress."""
+        mock_jira = create_mock_jira_client()
+        mock_issue = MagicMock()
+        mock_issue.parent_key = "EPIC-999"
+        mock_jira.get_issue = AsyncMock(return_value=mock_issue)
+
+        mock_manager, mock_workspace = create_mock_workspace_manager()
+        mock_git = create_mock_git_operations()
+        mock_guardrails_loader = create_mock_guardrails_loader()
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-101",
+            current_repo="owner/test-repo",
+            task_keys=["TASK-1", "TASK-2"],
+        )
+        state["epic_keys"] = ["EPIC-1", "EPIC-2"]
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.JiraClient", return_value=mock_jira),
+            patch(
+                "forge.workflow.nodes.workspace_setup.get_workspace_manager",
+                return_value=mock_manager,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+        ):
+            await setup_workspace(state)
+
+        # Asserts that transition_issue is called for TASK-1, TASK-2, EPIC-1, EPIC-2, and EPIC-999
+        assert mock_jira.transition_issue.call_count == 5
+        mock_jira.transition_issue.assert_any_call("TASK-1", "In Progress")
+        mock_jira.transition_issue.assert_any_call("TASK-2", "In Progress")
+        mock_jira.transition_issue.assert_any_call("EPIC-1", "In Progress")
+        mock_jira.transition_issue.assert_any_call("EPIC-2", "In Progress")
+        mock_jira.transition_issue.assert_any_call("EPIC-999", "In Progress")
+
+        # Asserts that get_issue was called with the Feature's ticket key
+        mock_jira.get_issue.assert_called_once_with("TEST-101")
+
 
 class TestWorkspaceSetupErrorHandling:
     """Test cases for workspace setup error handling."""
@@ -295,13 +336,9 @@ class TestWorkspaceSetupErrorHandling:
         mock_jira.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_workspace_setup_fails_when_fork_cannot_be_created(
-        self, mock_workspace_github
-    ):
+    async def test_workspace_setup_fails_when_fork_cannot_be_created(self, mock_workspace_github):
         """Implementation must not start without its durable backup remote."""
-        mock_workspace_github.get_or_create_fork.side_effect = RuntimeError(
-            "fork creation denied"
-        )
+        mock_workspace_github.get_or_create_fork.side_effect = RuntimeError("fork creation denied")
         mock_jira = create_mock_jira_client()
         mock_manager, _ = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
@@ -331,9 +368,7 @@ class TestWorkspaceSetupForkBootstrap:
     """Tests for creating and checkpointing the implementation backup fork."""
 
     @pytest.mark.asyncio
-    async def test_creates_fork_remote_before_implementation(
-        self, mock_workspace_github
-    ):
+    async def test_creates_fork_remote_before_implementation(self, mock_workspace_github):
         mock_jira = create_mock_jira_client()
         mock_manager, _ = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
@@ -354,9 +389,7 @@ class TestWorkspaceSetupForkBootstrap:
         ):
             result = await setup_workspace(state)
 
-        mock_workspace_github.get_or_create_fork.assert_awaited_once_with(
-            "upstream", "repo"
-        )
+        mock_workspace_github.get_or_create_fork.assert_awaited_once_with("upstream", "repo")
         mock_workspace_github.sync_fork_with_upstream.assert_awaited_once_with(
             "fork-owner", "test-repo", branch="main"
         )
@@ -391,18 +424,14 @@ class TestWorkspaceSetupForkBootstrap:
         ):
             result = await setup_workspace(state)
 
-        mock_workspace_github.get_or_create_fork.assert_awaited_once_with(
-            "upstream", "repo"
-        )
+        mock_workspace_github.get_or_create_fork.assert_awaited_once_with("upstream", "repo")
         mock_git.push_to_fork.assert_called_once_with()
         assert result["current_node"] == "setup_workspace"
         assert result["retry_count"] == 1
         assert "invalid refspec" in result["last_error"]
 
     @pytest.mark.asyncio
-    async def test_existing_fork_branch_is_checked_out_without_push(
-        self, mock_workspace_github
-    ):
+    async def test_existing_fork_branch_is_checked_out_without_push(self, mock_workspace_github):
         mock_jira = create_mock_jira_client()
         mock_manager, mock_workspace = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
@@ -430,9 +459,7 @@ class TestWorkspaceSetupForkBootstrap:
         mock_git.remote_branch_exists.assert_called_once_with(
             mock_workspace.branch_name, remote="fork"
         )
-        mock_git.checkout_branch.assert_called_once_with(
-            mock_workspace.branch_name, remote="fork"
-        )
+        mock_git.checkout_branch.assert_called_once_with(mock_workspace.branch_name, remote="fork")
         mock_git.create_branch.assert_not_called()
         mock_git.push_to_fork.assert_not_called()
         assert result["current_node"] == "implementation"

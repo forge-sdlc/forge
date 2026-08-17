@@ -198,6 +198,15 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         await jira.transition_issue(ticket_key, JiraStatus.CLOSED.value)
         logger.info(f"Feature {ticket_key} marked as Done")
 
+        # Transition parent Epic if present
+        try:
+            feature_issue = await jira.get_issue(ticket_key)
+            if feature_issue.parent_key:
+                await jira.transition_issue(feature_issue.parent_key, JiraStatus.CLOSED.value)
+                logger.info(f"Transitioned parent Epic {feature_issue.parent_key} to Closed")
+        except Exception as e:
+            logger.warning(f"Failed to fetch issue {ticket_key} or transition its parent Epic: {e}")
+
         # Add completion comment
         await post_status_comment(
             jira, ticket_key, "All Epics and Tasks completed. Feature implementation done."
