@@ -57,9 +57,7 @@ async def test_evaluate_ci_status_clears_pending_ci_event_on_passed(MockJira, Mo
     MockGitHub.return_value = mock_github
     mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc123"}})
     mock_github.get_check_runs = AsyncMock(
-        return_value=[
-            {"name": "unit-tests", "status": "completed", "conclusion": "success"}
-        ]
+        return_value=[{"name": "unit-tests", "status": "completed", "conclusion": "success"}]
     )
     mock_github.close = AsyncMock()
 
@@ -90,13 +88,18 @@ async def test_attribution_external_skips_fix(
     forge_dir = tmp_path / ".forge"
     forge_dir.mkdir()
     attribution_file = forge_dir / "ci-attribution.json"
-    attribution_file.write_text('{"attributable": false, "reason": "Flaky infra", "confidence": "high"}')
 
     mock_prep.return_value = (str(tmp_path), None)
 
     mock_runner = AsyncMock()
     MockRunner.return_value = mock_runner
-    mock_runner.run = AsyncMock()
+
+    async def write_attribution(**_kwargs):
+        attribution_file.write_text(
+            '{"attributable": false, "reason": "Flaky infra", "confidence": "high"}'
+        )
+
+    mock_runner.run = AsyncMock(side_effect=write_attribution)
 
     mock_jira = AsyncMock()
     MockJira.return_value = mock_jira
@@ -202,6 +205,42 @@ async def test_attribution_missing_file_proceeds_as_attributable(
     # Fail-safe: assumes attributable, proceeds
     assert result.get("ci_status") != "external_failure"
     assert result["current_node"] == "human_review_gate"
+
+
+@pytest.mark.asyncio
+@patch("forge.workflow.nodes.ci_evaluator.ContainerRunner")
+@patch("forge.workflow.nodes.ci_evaluator.prepare_workspace")
+@patch("forge.workflow.nodes.ci_evaluator.JiraClient")
+@patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
+@patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
+async def test_attribution_does_not_reuse_stale_external_verdict(
+    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
+):
+    """A missing fresh verdict must not reuse an external verdict from an earlier CI cycle."""
+    from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
+
+    forge_dir = tmp_path / ".forge"
+    forge_dir.mkdir()
+    attribution_file = forge_dir / "ci-attribution.json"
+    attribution_file.write_text(
+        '{"attributable": false, "reason": "Previous infrastructure failure"}'
+    )
+
+    mock_prep.return_value = (str(tmp_path), None)
+    mock_runner = AsyncMock()
+    MockRunner.return_value = mock_runner
+    mock_runner.run = AsyncMock()  # Simulate a run that writes no fresh verdict.
+    mock_jira = AsyncMock()
+    MockJira.return_value = mock_jira
+    mock_jira.close = AsyncMock()
+    mock_github = AsyncMock()
+    MockGitHub.return_value = mock_github
+
+    result = await attempt_ci_fix({**ATTEMPT_BASE_STATE, "workspace_path": str(tmp_path)})
+
+    assert result.get("ci_status") != "external_failure"
+    assert result["ci_fix_attempt"] == 1
+    assert not attribution_file.exists()
 
 
 def test_wait_for_ci_gate_does_not_exist():

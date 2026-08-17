@@ -334,6 +334,10 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             failures_file_path=str(failures_file),
             base_branch=state.get("context", {}).get("default_branch", "main"),
         )
+        # Workspaces are reused across CI cycles. Remove any previous verdict so
+        # a runner that produces no output falls back to the safe attributable
+        # default instead of silently reusing stale attribution.
+        attribution_file.unlink(missing_ok=True)
         runner = ContainerRunner(settings)
         await runner.run(
             workspace_path=Path(workspace_path),
