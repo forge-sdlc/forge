@@ -140,7 +140,9 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
         for epic_key in epic_keys:
             # Check if all Tasks under this Epic are done
             # In practice, would query Jira for child issues
-            epic_done = await _check_epic_completion(jira, epic_key)
+            epic_done = await _check_epic_completion(
+                jira, epic_key, completed_keys=set(implemented_tasks)
+            )
 
             if epic_done:
                 # Transition Epic to Closed status
@@ -188,6 +190,8 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         Updated state with Feature completed.
     """
     ticket_key = state["ticket_key"]
+    epic_keys = state.get("epic_keys", [])
+    implemented_tasks = state.get("implemented_tasks", [])
 
     logger.info(f"Aggregating Feature status for {ticket_key}")
 
@@ -202,7 +206,10 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         try:
             feature_issue = await jira.get_issue(ticket_key)
             if feature_issue.parent_key:
-                parent_epic_done = await _check_epic_completion(jira, feature_issue.parent_key)
+                completed_keys = set(implemented_tasks) | set(epic_keys) | {ticket_key}
+                parent_epic_done = await _check_epic_completion(
+                    jira, feature_issue.parent_key, completed_keys=completed_keys
+                )
                 if parent_epic_done:
                     await jira.transition_issue(feature_issue.parent_key, JiraStatus.CLOSED.value)
                     logger.info(f"Transitioned parent Epic {feature_issue.parent_key} to Closed")
@@ -241,12 +248,15 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         await jira.close()
 
 
-async def _check_epic_completion(jira: JiraClient, epic_key: str) -> bool:
+async def _check_epic_completion(
+    jira: JiraClient, epic_key: str, completed_keys: set[str] | None = None
+) -> bool:
     """Check if all Tasks under an Epic are done.
 
     Args:
         jira: Jira client.
         epic_key: Epic to check.
+        completed_keys: Optional set of issue keys to assume are already completed/done.
 
     Returns:
         True if all Tasks are done.
@@ -260,7 +270,12 @@ async def _check_epic_completion(jira: JiraClient, epic_key: str) -> bool:
             return True
 
         done_statuses = {"Done", "Closed", "Resolved"}
-        incomplete = [child for child in children if child.status not in done_statuses]
+        incomplete = [
+            child
+            for child in children
+            if child.status not in done_statuses
+            and not (completed_keys and child.key in completed_keys)
+        ]
 
         if incomplete:
             logger.info(
