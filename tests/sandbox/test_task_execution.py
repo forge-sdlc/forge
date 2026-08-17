@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.models.workflow import TicketType
+from forge.sandbox.drivers.podman import PodmanDriver
 from forge.sandbox.runner import ContainerConfig, ContainerResult, ContainerRunner
 from forge.workflow.nodes.task_takeover_execution import execute_task_changes
 from forge.workflow.nodes.workspace_setup import teardown_workspace
@@ -76,7 +77,7 @@ class TestTaskExecutionSandbox:
         mock_proc.returncode = 0
         mock_create_proc.return_value = mock_proc
 
-        runner = ContainerRunner()
+        runner = ContainerRunner(driver=PodmanDriver())
         config = ContainerConfig()
 
         with tempfile.TemporaryDirectory() as tmpdir:
