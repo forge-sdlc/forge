@@ -3,7 +3,6 @@
 import contextlib
 import logging
 import operator
-import shutil
 import subprocess
 import tempfile
 import uuid
@@ -124,20 +123,24 @@ async def run_smoke_test(settings: Settings) -> int:
             stage2_status = "FAIL"
             logger.info("Starting Stage 2: Workspace Setup & Container Verification")
 
-            if not shutil.which("podman"):
-                raise RuntimeError("podman not found in system PATH")
-
             runner = ContainerRunner(settings=settings)
 
-            # Verify that the configured image exists
+            # Podman can verify its local image before execution. Kubernetes
+            # images are resolved by the cluster when Stage 3 creates its Job.
             image_name = settings.container_image
-            if not await runner.image_exists(image_name):
+            if settings.sandbox_driver == "podman" and not await runner.image_exists(image_name):
                 raise RuntimeError(
                     f"Configured container image {image_name!r} does not exist locally"
                 )
 
-            # Create the disposable workspace directory
-            temp_dir = tempfile.TemporaryDirectory()
+            # Kubernetes workspaces must be created on the PVC shared with the
+            # sandbox Job; Podman may continue using the system temporary path.
+            workspace_parent = (
+                settings.k8s_workspace_base_path
+                if settings.sandbox_driver == "kubernetes"
+                else None
+            )
+            temp_dir = tempfile.TemporaryDirectory(dir=workspace_parent)
             temp_dir_path = Path(temp_dir.name)
 
             # Initialize mock Git repository inside temporary workspace

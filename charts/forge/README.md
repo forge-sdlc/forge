@@ -40,3 +40,8 @@ only injects its internal Redis URL when the bundled Redis deployment is enabled
 
 The workspace PVC is retained when the Helm release is removed. Delete it
 explicitly when its workspaces are no longer needed.
+
+Sandbox Jobs do not mount service-account tokens and are selected by a default
+deny NetworkPolicy. Jobs configured with networking may use DNS and public
+egress, while the private CIDRs listed under `sandbox.networkPolicy.privateCidrs`
+remain blocked. Adjust that list for the cluster network before deployment.

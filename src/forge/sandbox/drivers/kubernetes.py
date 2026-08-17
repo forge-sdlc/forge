@@ -97,18 +97,14 @@ class KubernetesDriver(SandboxDriver):
         core_api = k8s_client.CoreV1Api()
 
         job_name = self._job_name(spec.container_name)
-        prepared_spec, staging_dir = self._stage_external_mounts(spec)
-        job_manifest = self._build_job_manifest(prepared_spec, job_name=job_name)
-
-        logger.info(
-            "Creating K8s Job %s in namespace %s",
-            job_name,
-            self._namespace,
-        )
-
+        staging_dir: Path | None = None
         job_created = False
         job_deleted = False
         try:
+            prepared_spec, staging_dir = await asyncio.to_thread(self._stage_external_mounts, spec)
+            job_manifest = self._build_job_manifest(prepared_spec, job_name=job_name)
+            logger.info("Creating K8s Job %s in namespace %s", job_name, self._namespace)
+
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None,
@@ -119,6 +115,8 @@ class KubernetesDriver(SandboxDriver):
             )
             job_created = True
             exit_code = await self._wait_for_completion(batch_api, job_name, spec.timeout_seconds)
+            if exit_code not in (0, -1):
+                exit_code = await self._read_pod_exit_code(core_api, job_name, default=exit_code)
             stdout, stderr = await self._collect_logs(core_api, job_name)
 
             return ExecutionResult(
@@ -218,7 +216,7 @@ class KubernetesDriver(SandboxDriver):
         memory_limit = _normalize_memory_quantity(spec.memory_limit)
         resources = k8s_client.V1ResourceRequirements(
             requests={"memory": memory_limit, "cpu": spec.cpu_limit},
-            limits={"memory": memory_limit},
+            limits={"memory": memory_limit, "cpu": spec.cpu_limit},
         )
 
         container = k8s_client.V1Container(
@@ -229,13 +227,31 @@ class KubernetesDriver(SandboxDriver):
             volume_mounts=volume_mounts,
             resources=resources,
             working_dir="/workspace",
+            security_context=k8s_client.V1SecurityContext(
+                allow_privilege_escalation=False,
+                capabilities=k8s_client.V1Capabilities(drop=["ALL"]),
+                run_as_non_root=True,
+                seccomp_profile=k8s_client.V1SeccompProfile(type="RuntimeDefault"),
+            ),
         )
+
+        network_access = "disabled" if spec.network_mode == "none" else "external"
+        pod_labels = {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.sdlc/component": "sandbox",
+            "forge.sdlc/network-access": network_access,
+        }
 
         pod_spec = k8s_client.V1PodSpec(
             containers=[container],
             volumes=volumes,
             restart_policy="Never",
             service_account_name=self._service_account or None,
+            automount_service_account_token=False,
+            security_context=k8s_client.V1PodSecurityContext(
+                run_as_non_root=True,
+                seccomp_profile=k8s_client.V1SeccompProfile(type="RuntimeDefault"),
+            ),
         )
 
         if self._image_pull_secrets:
@@ -244,9 +260,7 @@ class KubernetesDriver(SandboxDriver):
             ]
 
         template = k8s_client.V1PodTemplateSpec(
-            metadata=k8s_client.V1ObjectMeta(
-                labels={"app.kubernetes.io/managed-by": "forge"},
-            ),
+            metadata=k8s_client.V1ObjectMeta(labels=pod_labels),
             spec=pod_spec,
         )
 
@@ -285,6 +299,18 @@ class KubernetesDriver(SandboxDriver):
 
     def _stage_external_mounts(self, spec: ExecutionSpec) -> tuple[ExecutionSpec, Path | None]:
         """Copy worker-local mounts into the workspace shared through the PVC."""
+        expected_staging_dir = (
+            spec.workspace_path / ".forge" / "k8s-mounts" / self._job_name(spec.container_name)
+        )
+        try:
+            return self._stage_external_mounts_unchecked(spec)
+        except Exception:
+            self._remove_staging_dir(expected_staging_dir)
+            raise
+
+    def _stage_external_mounts_unchecked(
+        self, spec: ExecutionSpec
+    ) -> tuple[ExecutionSpec, Path | None]:
         staged_mounts: list[tuple[Path, str, str]] = []
         staging_dir: Path | None = None
 
@@ -434,6 +460,36 @@ class KubernetesDriver(SandboxDriver):
         except ApiException as exc:
             logger.warning("Failed to collect logs for Job %s: %s", job_name, exc)
             return "", str(exc)
+
+    async def _read_pod_exit_code(
+        self,
+        core_api: Any,
+        job_name: str,
+        *,
+        default: int = 1,
+    ) -> int:
+        """Read the sandbox entrypoint exit code from the Job pod status."""
+        from kubernetes.client.rest import ApiException
+
+        loop = asyncio.get_running_loop()
+        try:
+            pods: Any = await loop.run_in_executor(
+                None,
+                lambda: core_api.list_namespaced_pod(
+                    namespace=self._namespace,
+                    label_selector=f"job-name={job_name}",
+                ),
+            )
+            for pod in pods.items:
+                for status in pod.status.container_statuses or []:
+                    if status.name != "forge-task":
+                        continue
+                    terminated = status.state.terminated
+                    if terminated is not None and terminated.exit_code is not None:
+                        return int(terminated.exit_code)
+        except (ApiException, AttributeError) as exc:
+            logger.warning("Failed to read exit code for Job %s: %s", job_name, exc)
+        return default
 
     async def _delete_job(self, batch_api: Any, job_name: str) -> None:
         """Delete a Job and its pods."""

@@ -72,3 +72,12 @@ sandbox:
   timeout: "1800"
   jobServiceAccountName: forge-runner
   imagePullSecrets: ""
+  networkPolicy:
+    enabled: true
+    # Prevent sandbox code from reaching cluster services, the Kubernetes API,
+    # cloud instance metadata, and other private networks.
+    privateCidrs:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - 169.254.0.0/16

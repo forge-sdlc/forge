@@ -19,6 +19,7 @@ def mock_settings() -> Settings:
         jira_user_email="mock-email@company.com",
         github_token="mock-token",
         container_image="localhost/forge-dev:latest",
+        forge_sandbox_driver="podman",
     )
 
 
@@ -120,6 +121,48 @@ async def test_smoke_test_missing_podman_or_image(mock_settings: Settings) -> No
     ):
         exit_code = await run_smoke_test(mock_settings)
         assert exit_code == 1
+
+
+@pytest.mark.asyncio
+async def test_kubernetes_smoke_test_executes_job_from_shared_workspace(
+    mock_settings: Settings, tmp_path: Path
+) -> None:
+    """Kubernetes smoke tests skip local image checks and execute from the shared PVC."""
+    mock_settings.sandbox_driver = "kubernetes"
+    mock_settings.k8s_workspace_pvc = "forge-workspaces"
+    mock_settings.k8s_workspace_base_path = str(tmp_path)
+
+    mock_compiled_graph = MagicMock()
+    mock_compiled_graph.ainvoke = AsyncMock(
+        side_effect=lambda state, **_kwargs: (
+            {"passed_nodes": ["start"], "status": "running"}
+            if state is not None
+            else {"passed_nodes": ["start", "end"], "status": "success"}
+        )
+    )
+    mock_runner = MagicMock()
+    mock_runner.image_exists = AsyncMock()
+
+    async def execute_job(workspace_path: Path, *_args, **_kwargs) -> ContainerResult:
+        assert workspace_path.is_relative_to(tmp_path)
+        (workspace_path / "smoke_test_result.txt").write_text(
+            "FORGE_SMOKE_TEST_PASSED", encoding="utf-8"
+        )
+        return ContainerResult(success=True, exit_code=0, stdout="Done", stderr="")
+
+    mock_runner.run = AsyncMock(side_effect=execute_job)
+
+    with (
+        patch("langgraph.graph.StateGraph.compile", return_value=mock_compiled_graph),
+        patch("forge.smoke_test.get_checkpointer", new_callable=AsyncMock),
+        patch("forge.smoke_test.clear_checkpoint", new_callable=AsyncMock),
+        patch("forge.smoke_test.ContainerRunner", return_value=mock_runner),
+    ):
+        exit_code = await run_smoke_test(mock_settings)
+
+    assert exit_code == 0
+    mock_runner.image_exists.assert_not_awaited()
+    mock_runner.run.assert_awaited_once()
 
 
 @pytest.mark.asyncio

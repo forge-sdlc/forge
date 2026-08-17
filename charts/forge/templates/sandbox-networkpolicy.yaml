@@ -1,0 +1,37 @@
+{{- if .Values.sandbox.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "forge.fullname" . }}-sandbox-default-deny
+  labels:
+    {{- include "forge.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      forge.sdlc/component: sandbox
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "forge.fullname" . }}-sandbox-external-egress
+  labels:
+    {{- include "forge.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      forge.sdlc/component: sandbox
+      forge.sdlc/network-access: external
+  policyTypes: [Egress]
+  egress:
+    # Cluster DNS may live in a distribution-specific namespace, so permit
+    # DNS by port while keeping all other cluster-local destinations blocked.
+    - ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              {{- toYaml .Values.sandbox.networkPolicy.privateCidrs | nindent 14 }}
+{{- end }}

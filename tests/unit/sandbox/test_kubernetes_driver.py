@@ -77,6 +77,10 @@ def _build_fake_k8s_modules() -> tuple[ModuleType, ModuleType, ModuleType, Modul
         "V1Volume",
         "V1PersistentVolumeClaimVolumeSource",
         "V1ResourceRequirements",
+        "V1SecurityContext",
+        "V1PodSecurityContext",
+        "V1Capabilities",
+        "V1SeccompProfile",
         "V1Container",
         "V1PodSpec",
         "V1ObjectMeta",
@@ -192,6 +196,7 @@ class TestBuildJobManifest:
         assert res.requests["memory"] == "8Gi"
         assert res.requests["cpu"] == "4"
         assert res.limits["memory"] == "8Gi"
+        assert res.limits["cpu"] == "4"
 
     @pytest.mark.parametrize(
         ("configured", "expected"),
@@ -313,6 +318,27 @@ class TestExternalMountStaging:
         driver._remove_staging_dir(staging_dir)
         assert not staging_dir.exists()
 
+    def test_partial_staging_is_removed_when_copy_fails(self, tmp_path) -> None:
+        driver = _make_driver()
+        workspace = tmp_path / "workspaces" / "org" / "repo"
+        workspace.mkdir(parents=True)
+        external_file = tmp_path / "credentials.json"
+        external_file.write_text("secret")
+        spec = _make_spec(
+            workspace_path=workspace,
+            task_file=workspace / ".forge" / "task.json",
+            volume_mounts=[(external_file, "/credentials.json", "ro")],
+        )
+
+        with (
+            patch("forge.sandbox.drivers.kubernetes.shutil.copy2", side_effect=OSError("full")),
+            pytest.raises(OSError, match="full"),
+        ):
+            driver._stage_external_mounts(spec)
+
+        staging_dir = workspace / ".forge" / "k8s-mounts" / "forge-test-abc123"
+        assert not staging_dir.exists()
+
     def test_does_not_stage_google_credentials_when_secret_is_configured(self, tmp_path) -> None:
         settings = _make_settings()
         settings.k8s_google_credentials_secret = "google-adc"
@@ -365,6 +391,28 @@ class TestExternalMountStaging:
         assert job.metadata.labels["app.kubernetes.io/managed-by"] == "forge"
         assert job.spec.template.metadata.labels["app.kubernetes.io/managed-by"] == "forge"
 
+    def test_sandbox_isolation(self, fake_k8s) -> None:  # noqa: ARG002
+        driver = _make_driver()
+        job = driver._build_job_manifest(_make_spec(network_mode="none"))
+
+        pod_spec = job.spec.template.spec
+        security = pod_spec.containers[0].security_context
+        assert pod_spec.automount_service_account_token is False
+        assert pod_spec.security_context.run_as_non_root is True
+        assert pod_spec.security_context.seccomp_profile.type == "RuntimeDefault"
+        assert security.allow_privilege_escalation is False
+        assert security.run_as_non_root is True
+        assert security.capabilities.drop == ["ALL"]
+        assert security.seccomp_profile.type == "RuntimeDefault"
+        assert job.spec.template.metadata.labels["forge.sdlc/component"] == "sandbox"
+        assert job.spec.template.metadata.labels["forge.sdlc/network-access"] == "disabled"
+
+    def test_networked_sandbox_gets_external_access_label(self, fake_k8s) -> None:  # noqa: ARG002
+        driver = _make_driver()
+        job = driver._build_job_manifest(_make_spec(network_mode="slirp4netns"))
+
+        assert job.spec.template.metadata.labels["forge.sdlc/network-access"] == "external"
+
 
 class TestExecute:
     @pytest.mark.asyncio
@@ -407,15 +455,22 @@ class TestExecute:
         mock_batch.read_namespaced_job_status = MagicMock(return_value=_Stub(status=job_status))
         mock_batch.delete_namespaced_job = MagicMock()
 
-        mock_core.list_namespaced_pod = MagicMock(return_value=_Stub(items=[]))
+        terminated = _Stub(exit_code=2)
+        container_status = _Stub(name="forge-task", state=_Stub(terminated=terminated))
+        mock_pod = _Stub(
+            metadata=_Stub(name="forge-TEST-abc123-pod"),
+            status=_Stub(container_statuses=[container_status]),
+        )
+        mock_core.list_namespaced_pod = MagicMock(return_value=_Stub(items=[mock_pod]))
+        mock_core.read_namespaced_pod_log = MagicMock(return_value="tests failed")
 
         k8s_client_mod.BatchV1Api = MagicMock(return_value=mock_batch)
         k8s_client_mod.CoreV1Api = MagicMock(return_value=mock_core)
 
         result = await driver.execute(_make_spec())
 
-        assert result.exit_code == 1
-        assert result.stdout == ""
+        assert result.exit_code == 2
+        assert result.stdout == "tests failed"
 
     @pytest.mark.asyncio
     async def test_no_cleanup_when_remove_after_false(self, fake_k8s) -> None:
