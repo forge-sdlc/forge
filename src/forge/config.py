@@ -404,8 +404,8 @@ class Settings(BaseSettings):
         description="Enable agent tools (Read, Glob, Grep, WebSearch)",
     )
     agent_allowed_tools: str = Field(
-        default="*",
-        description="Allowed agent tools: '*' for all, or comma-separated list",
+        default="ls,read_file,glob,grep",
+        description="Exact allowlist of safe host agent built-in tools",
     )
     agent_enable_mcp: bool = Field(
         default=True,
@@ -419,6 +419,10 @@ class Settings(BaseSettings):
         default=True,
         description="Restrict MCP tools to read-only operations (no create/update/delete)",
     )
+    agent_mcp_allowed_tools: str = Field(
+        default="",
+        description="Exact MCP tool allowlist using server:tool names (empty denies all)",
+    )
     agent_mcp_config_path: str = Field(
         default="",
         description="Path to MCP servers config file (default: mcp-servers.json in project root)",
@@ -426,6 +430,10 @@ class Settings(BaseSettings):
     agent_working_directory: str = Field(
         default="",
         description="Working directory for agent file operations (empty = current dir)",
+    )
+    agent_root_dir: str = Field(
+        default=".forge/agent",
+        description="Isolated root exposed to host agents",
     )
     skills_dir: str = Field(
         default="skills/",

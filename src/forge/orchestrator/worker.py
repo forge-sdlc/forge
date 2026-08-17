@@ -31,6 +31,7 @@ from forge.effects.jira import (
     JIRA_COMMENT_OPERATION,
 )
 from forge.effects.source_control import SC_COMMENT_CREATE_OPERATION
+from forge.integrations.agents.security import refresh_agent_skills, validate_agent_root
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import RepositoryRef
 from forge.integrations.source_control.registry import get_registry
@@ -59,6 +60,7 @@ from forge.reconciliation import (
     RedisObservationLedger,
 )
 from forge.skills.orchestrator import ensure_skills
+from forge.skills.resolver import resolve_skill_paths
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
 from forge.workflow.command_operations import execute_command_operation
@@ -422,6 +424,23 @@ class OrchestratorWorker:
                 jira_client,
                 skills_dir,
                 skills_install_dir=self.settings.skills_install_dir,
+            )
+            project_root = Path(os.environ.get("FORGE_PROJECT_ROOT", Path.cwd())).resolve()
+            agent_root = validate_agent_root(
+                Path(self.settings.agent_root_dir),
+                project_root,
+                self.settings.workspace_base_dir or "",
+            )
+            refresh_agent_skills(
+                agent_root,
+                [
+                    Path(path)
+                    for path in resolve_skill_paths(
+                        ticket_key,
+                        skills_dir,
+                        skills_install_dir=self.settings.skills_install_dir,
+                    )
+                ],
             )
         except Exception:
             logger.warning(
