@@ -124,8 +124,8 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
         Updated state with Epic aggregation.
     """
     ticket_key = state["ticket_key"]
-    epic_keys = state.get("epic_keys", [])
-    implemented_tasks = state.get("implemented_tasks", [])
+    epic_keys = state.get("epic_keys") or []
+    implemented_tasks = state.get("implemented_tasks") or []
 
     logger.info(f"Aggregating Epic status for {ticket_key}")
 
@@ -190,8 +190,8 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         Updated state with Feature completed.
     """
     ticket_key = state["ticket_key"]
-    epic_keys = state.get("epic_keys", [])
-    implemented_tasks = state.get("implemented_tasks", [])
+    epic_keys = state.get("epic_keys") or []
+    implemented_tasks = state.get("implemented_tasks") or []
 
     logger.info(f"Aggregating Feature status for {ticket_key}")
 
@@ -270,11 +270,12 @@ async def _check_epic_completion(
             return True
 
         done_statuses = {"Done", "Closed", "Resolved"}
+        completed_set = {k.upper() for k in completed_keys} if completed_keys else set()
         incomplete = [
             child
             for child in children
             if child.status not in done_statuses
-            and not (completed_keys and child.key in completed_keys)
+            and not (completed_set and child.key.upper() in completed_set)
         ]
 
         if incomplete:

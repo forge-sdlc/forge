@@ -149,3 +149,48 @@ async def test_aggregate_feature_status_handles_jira_search_lag():
     # Asserts that the updated state has feature_completed=True and current_node="complete"
     assert result["feature_completed"] is True
     assert result["current_node"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_aggregate_feature_status_handles_jira_search_lag_case_insensitive():
+    """Should transition Feature and parent Epic to Closed even if search returns incomplete statuses and keys have different casing."""
+    state = {
+        "ticket_key": "feat-123",
+        "implemented_tasks": ["task-1"],
+        "epic_keys": ["epic-1"],
+        "current_node": "aggregate_feature_status",
+    }
+
+    jira = MagicMock()
+    mock_feature_issue = SimpleNamespace(parent_key="epic-parent")
+    jira.get_issue = AsyncMock(return_value=mock_feature_issue)
+
+    # Simulating lag where TASK-1, EPIC-1 and FEAT-123 are returned with old status and mixed casing
+    jira.get_epic_children = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                key="TASK-1", status="In Progress"
+            ),  # In implemented_tasks (lowercase in state)
+            SimpleNamespace(
+                key="feat-123", status="Under Review"
+            ),  # ticket_key (lowercase in state)
+            SimpleNamespace(
+                key="Epic-1", status="In Progress"
+            ),  # In epic_keys (lowercase in state)
+        ]
+    )
+    jira.transition_issue = AsyncMock()
+    jira.add_comment = AsyncMock()
+    jira.close = AsyncMock()
+
+    with patch("forge.workflow.nodes.human_review.JiraClient", return_value=jira):
+        result = await aggregate_feature_status(state)
+
+    # Asserts that transition_issue is called on the Feature key and the parent key
+    assert jira.transition_issue.call_count == 2
+    jira.transition_issue.assert_any_call("feat-123", JiraStatus.CLOSED.value)
+    jira.transition_issue.assert_any_call("epic-parent", JiraStatus.CLOSED.value)
+
+    # Asserts that the updated state has feature_completed=True and current_node="complete"
+    assert result["feature_completed"] is True
+    assert result["current_node"] == "complete"

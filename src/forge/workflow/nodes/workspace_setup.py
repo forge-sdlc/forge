@@ -285,12 +285,12 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         await set_implementing_label(jira_client, ticket_key)
 
         # Transition task tickets to In Progress if present
-        task_keys = state.get("task_keys", [])
+        task_keys = state.get("task_keys") or []
         if task_keys:
             await transition_tasks_to_in_progress(jira_client, task_keys)
 
         # Transition epic tickets to In Progress if present
-        epic_keys = state.get("epic_keys", [])
+        epic_keys = state.get("epic_keys") or []
         if epic_keys:
             await transition_tasks_to_in_progress(jira_client, epic_keys)
 
