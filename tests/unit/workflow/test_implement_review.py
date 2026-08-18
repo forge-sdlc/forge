@@ -453,7 +453,13 @@ class TestThreadAwareReviewHandling:
         github.close = AsyncMock()
 
         with patch("forge.workflow.nodes.implement_review.GitHubClient", return_value=github):
-            result = await _fetch_pr_review_comments("org", "repo", 7, "", {"already-accepted"})
+            result = await _fetch_pr_review_comments(
+                "org",
+                "repo",
+                7,
+                "",
+                review_comments=[{"thread_id": "already-accepted", "disposition": "accept"}],
+            )
 
         assert "already-accepted" not in result
         assert "new-thread" in result
@@ -579,12 +585,15 @@ class TestThreadAwareReviewHandling:
 
         assert mock_runner.run.await_count == 2
         assert result["current_node"] == "review_response_gate"
-        assert result["contested_comments"] == [decisions[1]]
+        # Once Forge has replied to the contested thread, it's marked addressed
+        # so the skip_addressed guard in reply_to_review_decisions can catch a
+        # stray re-reply if the same decision ever resurfaces unchanged.
+        assert result["contested_comments"] == [{**decisions[1], "status": "addressed"}]
         assert result["review_comments"][0] == {
             **decisions[0],
             "response": "Forge verified this feedback; no additional code change was needed.",
         }
-        assert result["review_comments"][1] == decisions[1]
+        assert result["review_comments"][1] == {**decisions[1], "status": "addressed"}
         assert reply_threads.await_count == 2
 
     def test_confirming_one_thread_routes_to_implementation_with_others_pending(self):
