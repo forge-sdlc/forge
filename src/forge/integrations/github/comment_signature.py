@@ -7,6 +7,23 @@ because both the outbound client and the orchestrator webhook handlers depend
 on them.
 """
 
+from typing import Any, Protocol
+
+
+class _AuthenticatedUserClient(Protocol):
+    async def get_authenticated_user(self) -> dict[str, Any]: ...
+
+
+async def resolve_bot_login(github: _AuthenticatedUserClient) -> str:
+    """Resolve the GitHub login attached to Forge's own credentials.
+
+    Derives identity from whichever account the configured GITHUB_TOKEN
+    belongs to, rather than a separately maintained setting that could drift.
+    """
+    user = await github.get_authenticated_user()
+    login = user.get("login", "")
+    return login if isinstance(login, str) else ""
+
 
 def is_self_comment(
     sender_login: str,

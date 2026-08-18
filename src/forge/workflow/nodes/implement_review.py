@@ -9,6 +9,7 @@ from langgraph.graph import END
 
 from forge.config import get_settings
 from forge.integrations.github.client import GitHubClient
+from forge.integrations.github.comment_signature import is_self_comment, resolve_bot_login
 from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
@@ -60,23 +61,58 @@ def route_review_response(state: WorkflowState) -> str:
     return "human_review_gate"
 
 
+def _thread_is_settled(
+    thread: dict[str, Any],
+    disposition: str | None,
+    bot_login: str,
+    prefix: str | None,
+) -> bool:
+    """A thread needs no further analysis until something new happens in it.
+
+    Accepted/ignored threads are settled permanently. Contested/clarified
+    threads are settled only while Forge's own reply is still the last word —
+    once a human comments after it, the thread is live again.
+    """
+    if disposition in ("accept", "ignore"):
+        return True
+    if disposition not in ("contest", "clarify"):
+        return False
+    if not bot_login:
+        # An unresolved identity must never coincidentally match an empty
+        # author (e.g. a deleted account) — fail toward re-analysis.
+        return False
+    comments = sorted(thread.get("comments", []), key=lambda c: c.get("created_at") or "")
+    if not comments:
+        return False
+    last_comment = comments[-1]
+    return is_self_comment(
+        sender_login=last_comment.get("author", ""),
+        comment_body=last_comment.get("body", ""),
+        bot_login=bot_login,
+        prefix=prefix,
+    )
+
+
 async def _fetch_pr_review_comments(
     owner: str,
     repo: str,
     pr_number: int,
     review_body: str,
-    processed_thread_ids: set[str] | None = None,
+    review_comments: list[dict[str, Any]] | None = None,
 ) -> str:
     """Fetch all PR review comments and format them for the analysis container.
 
     Combines the review summary body with all inline review comments so the
-    analysis agent has the full picture.
+    analysis agent has the full picture. Threads already settled (accepted,
+    ignored, or contested with no human reply since Forge's own response) are
+    excluded so the analysis agent isn't re-fed the same resolved feedback.
 
     Args:
         owner: Repository owner.
         repo: Repository name.
         pr_number: PR number.
         review_body: The review summary body from the webhook.
+        review_comments: Prior per-thread decisions from earlier review cycles.
 
     Returns:
         Formatted markdown string of all review feedback.
@@ -118,8 +154,34 @@ async def _fetch_pr_review_comments(
         lines.append(review_body.strip())
         lines.append("\n")
 
-    processed_thread_ids = processed_thread_ids or set()
-    threads = [thread for thread in threads if thread["thread_id"] not in processed_thread_ids]
+    review_comments = review_comments or []
+    dispositions_by_thread = {
+        item["thread_id"]: item.get("disposition")
+        for item in review_comments
+        if item.get("thread_id")
+    }
+
+    bot_login = ""
+    if any(
+        dispositions_by_thread.get(thread["thread_id"]) in ("contest", "clarify")
+        for thread in threads
+    ):
+        login_client = GitHubClient()
+        try:
+            bot_login = await resolve_bot_login(login_client)
+        except Exception as e:
+            logger.warning(f"Could not resolve Forge's bot login: {e}")
+        finally:
+            await login_client.close()
+
+    prefix = get_settings().forge_bot_comment_prefix
+    threads = [
+        thread
+        for thread in threads
+        if not _thread_is_settled(
+            thread, dispositions_by_thread.get(thread["thread_id"]), bot_login, prefix
+        )
+    ]
     if threads:
         lines.append("## Unresolved Review Threads\n")
         for thread in threads:
@@ -163,10 +225,16 @@ async def _reply_to_review_threads(
     *, owner: str, repo: str, pr_number: int | None, decisions: list[dict[str, Any]]
 ) -> None:
     """Post decision responses in their originating GitHub review threads."""
+    # skip_addressed is defense-in-depth, not the primary guard: decisions here
+    # are freshly parsed from review-decisions.json each cycle and never carry
+    # a prior "addressed" status, so _thread_is_settled (which keeps a settled
+    # thread out of the analysis input entirely) is what actually prevents
+    # re-posting today.
     await reply_to_review_decisions(
         repo_full_name=f"{owner}/{repo}",
         pr_number=pr_number,
         decisions=decisions,
+        skip_addressed=True,
     )
 
 
@@ -229,11 +297,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             repo=_repo,
             pr_number=pr_number or 0,
             review_body=feedback_comment,
-            processed_thread_ids={
-                item["thread_id"]
-                for item in state.get("review_comments", [])
-                if item.get("disposition") in ("accept", "ignore") and item.get("thread_id")
-            },
+            review_comments=state.get("review_comments", []),
         )
 
         # Write all review comments to a file so the container can read them
@@ -281,6 +345,8 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             pr_number=pr_number,
             decisions=response_decisions,
         )
+        for decision in contested_comments:
+            decision["status"] = "addressed"
 
         # Backward-compatible fallback if an older analysis prompt writes only
         # the legacy objections file. New analysis never blocks accepted work.

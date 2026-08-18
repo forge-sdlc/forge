@@ -19,7 +19,7 @@ from forge.api.routes.metrics import (
 )
 from forge.config import get_settings
 from forge.integrations.github.client import GitHubClient
-from forge.integrations.github.comment_signature import is_self_comment
+from forge.integrations.github.comment_signature import is_self_comment, resolve_bot_login
 from forge.integrations.jira.client import JiraClient
 from forge.models.events import EventSource
 from forge.models.workflow import ForgeLabel, TicketType
@@ -144,7 +144,7 @@ class OrchestratorWorker:
             return cached
         github = GitHubClient()
         try:
-            login = (await github.get_authenticated_user()).get("login", "")
+            login = await resolve_bot_login(github)
         finally:
             await github.close()
         if login:
