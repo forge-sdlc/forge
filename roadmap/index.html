@@ -1,0 +1,1866 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="AI-powered SDLC orchestrator — from Jira ticket to shipped PR">
+      
+      
+      
+        <link rel="canonical" href="https://forge-sdlc.github.io/forge/roadmap/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../images/logo.png">
+      <meta name="generator" content="zensical-0.0.40">
+    
+    
+      
+        <title>Forge Product Roadmap - Forge SDLC Guide</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.fba56155.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#forge-product-roadmap" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="Forge SDLC Guide" class="md-header__button md-logo" aria-label="Forge SDLC Guide" data-md-component="logo">
+      
+  <img src="../images/logo.png" alt="Forge SDLC Guide">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Forge SDLC Guide
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Forge Product Roadmap
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/forge-sdlc/forge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    forge-sdlc/forge
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="./.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../getting-started/" class="md-tabs__link">
+        
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../guide/feature-workflow/" class="md-tabs__link">
+          
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../developer-guide/" class="md-tabs__link">
+          
+  
+  Developer Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../skills/" class="md-tabs__link">
+          
+  
+  Skills
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../reference/api/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="Forge SDLC Guide" class="md-nav__button md-logo" aria-label="Forge SDLC Guide" data-md-component="logo">
+      
+  <img src="../images/logo.png" alt="Forge SDLC Guide">
+
+    </a>
+    Forge SDLC Guide
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/forge-sdlc/forge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    forge-sdlc/forge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting Started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  User Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  User Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/feature-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Feature Workflow
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/bug-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Bug Workflow
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/task-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Task Workflow
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/labels/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jira Labels
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../guide/pr-commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  PR Commands
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Developer Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Developer Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developer-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Overview
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Architecture
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Architecture
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Overview
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  System & Components
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Local Setup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Testing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Contributing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Skills
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Skills
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Overview
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/authoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Authoring Guide
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../skills/defaults/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Default Skills
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  API Endpoints
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/proposals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Proposals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#product-direction" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Product direction
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#product-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Product principles
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#product-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Product decisions
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#roadmap-themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Roadmap themes
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Roadmap themes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-deterministic-and-recoverable-orchestration" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        1. Deterministic and recoverable orchestration
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-source-control-provider-platform" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        2. Source control provider platform
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-pluggable-execution-and-kubernetes-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        3. Pluggable execution and Kubernetes support
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-product-prototyping-and-workflow-evolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        4. Product prototyping and workflow evolution
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-external-deployment-and-ephemeral-environments" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        5. External deployment and ephemeral environments
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-security-remediation-and-verification-debt" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        6. Security remediation and verification debt
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#7-human-experience-quality-and-economics" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        7. Human experience, quality, and economics
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measures-of-success" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Measures of success
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/roadmap.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="forge-product-roadmap">Forge Product Roadmap<a class="headerlink" href="#forge-product-roadmap" title="Permanent link">&para;</a></h1>
+<p><strong>Status:</strong> Draft for discussion<br />
+<strong>Planning horizon:</strong> Outcome-based; dates and release assignments are intentionally TBD<br />
+<strong>Last reviewed:</strong> 2026-08-10</p>
+<h2 id="product-direction">Product direction<a class="headerlink" href="#product-direction" title="Permanent link">&para;</a></h2>
+<p>Forge is a governed SDLC orchestrator for turning product intent into traceable artifacts
+and validated changes through long-running agent workflows. This roadmap evolves Forge
+into an extensible control plane spanning issue tracking, source control, execution, CI,
+review, and deployment, including policy-governed temporary environments. These systems
+remain the authoritative owners of their respective operations.</p>
+<p>The durable product boundary is:</p>
+<ul>
+<li>Forge owns workflow state, policy gates, orchestration, audit history, and recovery.</li>
+<li>Provider adapters own interactions with Jira, GitHub, GitLab, and future systems.</li>
+<li>Execution drivers own where isolated agent work runs.</li>
+<li>Deployment plugins own provisioning and teardown in external platforms.</li>
+<li>Agents propose typed outcomes; the workflow validates them and performs side effects.</li>
+</ul>
+<p>This direction preserves Forge's differentiator—long-running, human-governed delivery
+workflows—while making Jira, GitHub, and Podman defaults rather than permanent limits.</p>
+<h2 id="product-principles">Product principles<a class="headerlink" href="#product-principles" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Provider-neutral core.</strong> Workflow state and logic depend on versioned domain
+   interfaces, never a specific external system; every backend declares its capabilities
+   and proves the same contract through conformance tests.</li>
+<li><strong>Fail closed at trust boundaries.</strong> Invalid artifacts, failed execution, ambiguous
+   events, or unavailable policy checks stop progression with evidence and a deliberate
+   recovery path.</li>
+<li><strong>Humans govern consequential changes.</strong> Publication, accepted risk, and deployment
+   require explicit, auditable policy gates; automation is enabled by scoped policy, not
+   inferred by an agent.</li>
+<li><strong>Traceability survives every backend.</strong> Stable Forge identities correlate artifacts,
+   actors, policies, repositories, changes, CI runs, environments, and deployments across
+   provider boundaries.</li>
+<li><strong>Credentials never enter agent context.</strong> Brokers provide short-lived,
+   least-privilege operations outside the model boundary, keeping secrets out of prompts,
+   artifacts, workspaces, logs, and comments.</li>
+<li><strong>A central platform with an open ecosystem.</strong> Forge is centrally operated for
+   consistent cross-project governance while remaining open source, self-hostable,
+   extensible, and open to contribution—not repositioned as a local developer tool.</li>
+<li><strong>Orchestrate infrastructure; do not become its control plane.</strong> Forge owns deployment
+   intent, policy, and lifecycle reconciliation; plugins and target platforms own
+   provisioning and infrastructure state.</li>
+</ol>
+<h2 id="product-decisions">Product decisions<a class="headerlink" href="#product-decisions" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Primary audience:</strong> enterprise platform teams operating Forge as a central service;
+   open source supports self-hosting, extension, and contribution rather than making
+   local execution the primary product mode.</li>
+<li><strong>Kubernetes scope:</strong> both the Forge control plane and isolated agent execution,
+   delivered as separate tracks.</li>
+<li><strong>Mixed source providers:</strong> GitHub and multiple GitLab instances must coexist within
+   one project from the first supported GitLab milestone.</li>
+<li><strong>Product prototyping:</strong> users compare working options from an initial PRD and feed
+   approved learning into the PRD and plan before production implementation.</li>
+<li><strong>Preview environments:</strong> explicit approval by default, with project-policy opt-in to
+   automatic creation.</li>
+<li><strong>First deployment integration:</strong> invoke an allowlisted automation job before adding
+   declarative environment reconciliation.</li>
+<li><strong>Extension model:</strong> Forge-maintained built-ins and separately deployed external
+   plugins share interfaces and conformance suites with trust-appropriate isolation.</li>
+<li><strong>Issue tracking:</strong> Jira is the built-in default behind an interface, not a permanent
+   architectural requirement.</li>
+</ol>
+<h2 id="roadmap-themes">Roadmap themes<a class="headerlink" href="#roadmap-themes" title="Permanent link">&para;</a></h2>
+<p>Each theme uses the same structure: intended outcomes, related tracking, and observable
+exit criteria. Technical schemas and implementation contracts belong in the linked issues
+and proposals. Tracking status was reviewed on 2026-08-10.</p>
+<h3 id="1-deterministic-and-recoverable-orchestration">1. Deterministic and recoverable orchestration<a class="headerlink" href="#1-deterministic-and-recoverable-orchestration" title="Permanent link">&para;</a></h3>
+<p>Forge is moving toward transitions that are validated, replay-safe, traceable, and
+recoverable. These capabilities should be delivered incrementally and adopted by each
+new provider, runtime, and workflow, enabling expansion without multiplying ambiguous
+state or unrecoverable failures.</p>
+<p><strong>Outcomes</strong></p>
+<ul>
+<li><strong>Explicit outcomes:</strong> nodes and execution drivers return validated, versioned results
+  with unambiguous completion and failure semantics; invalid results fail closed.</li>
+<li><strong>Replay-safe effects:</strong> an idempotent journal governs comments, branches, PRs/MRs,
+  deployments, and teardown so retries and duplicate events cannot repeat mutations.</li>
+<li><strong>Durable identity:</strong> stable correlation IDs link tickets, repositories, revisions,
+  PRs/MRs, CI runs, and environments without relying on titles or URLs for routing.</li>
+<li><strong>Visible recovery:</strong> heartbeats, status updates, transcript summaries, retry ownership,
+  and terminal notifications show what failed, who acts next, and how work can resume.</li>
+<li><strong>Baseline trust controls:</strong> redact secrets, scan untrusted instructions and outputs,
+  and broker short-lived credentials outside agent context, beginning with Vertex AI
+  OIDC.</li>
+<li><strong>Proof under failure:</strong> contract, replay, failure-injection, and migration tests verify
+  these guarantees across restarts and workflow upgrades.</li>
+</ul>
+<p><strong>Tracking</strong></p>
+<ul>
+<li>Open issues: <a href="https://github.com/forge-sdlc/forge/issues/150">typed artifact contracts #150</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/252">structured model outputs #252</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/78">heartbeats #78</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/79">container transcript errors #79</a>, and
+  <a href="https://github.com/forge-sdlc/forge/issues/261">idempotent terminal retrospectives #261</a>.</li>
+<li>Active PRs: <a href="https://github.com/forge-sdlc/forge/pull/158">heartbeat logging #158</a>,
+  <a href="https://github.com/forge-sdlc/forge/pull/239">transcript error surfacing #239</a>, and
+  <a href="https://github.com/forge-sdlc/forge/pull/271">terminal retrospectives #271</a>.</li>
+<li>Merged foundations: <a href="https://github.com/forge-sdlc/forge/issues/147">execution failure routing #147</a>,
+  <a href="https://github.com/forge-sdlc/forge/pull/155">terminal retry notification PR #155</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/80">per-run trace IDs #80</a>, and
+  <a href="https://github.com/forge-sdlc/forge/pull/212">cross-worker ticket serialization PR #212</a>.</li>
+<li>Tracking gap: the side-effect journal and cross-provider correlation index do not yet
+  have dedicated issues.</li>
+</ul>
+<p><strong>Exit criteria</strong></p>
+<ul>
+<li>Every transition consumes a validated outcome; unsuccessful or unknown execution cannot
+  create a PR/MR or cross another consequential gate.</li>
+<li>Replaying supported events or recovering after restart produces no duplicate effect and
+  preserves correlation history.</li>
+<li>Every stalled or terminal workflow exposes its failure, owner, evidence, and supported
+  recovery action.</li>
+</ul>
+<h3 id="2-source-control-provider-platform">2. Source control provider platform<a class="headerlink" href="#2-source-control-provider-platform" title="Permanent link">&para;</a></h3>
+<p>“Multiple git sources” has two dimensions: a project may span repositories, and each
+repository may live on a different provider or provider instance. Forge already supports
+the first for GitHub; this theme adds provider choice without weakening coordinated
+multi-repository delivery.</p>
+<p><strong>Outcomes</strong></p>
+<ul>
+<li>GitHub, GitLab.com, and self-managed GitLab operate behind one provider-neutral source
+  control capability, with provider differences exposed deliberately.</li>
+<li>A single workflow can mix GitHub repositories and repositories from multiple GitLab
+  instances from the first supported GitLab milestone.</li>
+<li>Repository changes progress independently while Forge presents unified approval, CI,
+  and completion status across the workflow.</li>
+<li>Connections, credentials, webhook identity, and provider-specific configuration remain
+  centrally governed and outside agent context.</li>
+</ul>
+<p><strong>Sequence</strong></p>
+<ol>
+<li>Move current GitHub behavior behind the provider boundary without regression.</li>
+<li>Introduce GitLab.com together with mixed GitHub/GitLab workflow support.</li>
+<li>Add self-managed and multiple GitLab instances, then harden compatibility across the
+   supported provider matrix.</li>
+</ol>
+<p>Issue <a href="https://github.com/forge-sdlc/forge/issues/162">#162</a> is the canonical technical
+plan for repository identity, workflow state, provider contracts, migrations, and event
+routing.</p>
+<p><strong>Tracking</strong></p>
+<ul>
+<li>Open issue: <a href="https://github.com/forge-sdlc/forge/issues/162">configurable source providers and mixed-provider workflows #162</a>.</li>
+<li>Merged foundation: <a href="https://github.com/forge-sdlc/forge/pull/238">multi-repository PR lifecycle tracking PR #238</a>
+  resolved <a href="https://github.com/forge-sdlc/forge/issues/135">issue #135</a>.</li>
+<li>Tracking gaps: the delivery slices in #162 should be split into implementation issues
+  as work is scheduled.</li>
+</ul>
+<p><strong>Exit criteria</strong></p>
+<ul>
+<li>One workflow produces coordinated changes across GitHub and GitLab.com, and across the
+  supported self-managed GitLab matrix.</li>
+<li>Mixed-provider events and failures remain isolated to the correct repository change
+  while aggregate workflow gates stay correct.</li>
+<li>Provider conformance tests show equivalent core behavior, and credentials or private
+  connection material never enter agent prompts or logs.</li>
+</ul>
+<h3 id="3-pluggable-execution-and-kubernetes-support">3. Pluggable execution and Kubernetes support<a class="headerlink" href="#3-pluggable-execution-and-kubernetes-support" title="Permanent link">&para;</a></h3>
+<p>Kubernetes support has two independent tracks: running isolated agent work and operating
+the Forge control plane. Both build on provider-neutral execution semantics so workflow
+logic does not depend on Podman, Kubernetes, or a future runtime.</p>
+<p><strong>Outcomes</strong></p>
+<ul>
+<li>Podman and Kubernetes execute the same bounded work specification and expose consistent
+  lifecycle, logs, artifacts, cancellation, and cleanup behavior.</li>
+<li>Kubernetes agent jobs use workload identity, least privilege, resource limits,
+  controlled egress, and durable workspace/artifact transport.</li>
+<li>Forge ships as an operable Kubernetes/OpenShift service with supported installation,
+  upgrades, rollback, scaling, recovery, and production security guidance.</li>
+<li>Runtime failures, restarts, and orphaned resources converge without losing or
+  duplicating workflow work.</li>
+</ul>
+<p><strong>Sequence</strong></p>
+<ol>
+<li>Establish the execution-driver boundary and retain Podman behavior.</li>
+<li>Add conformant Kubernetes agent execution and sandbox hardening.</li>
+<li>Deliver and harden the Kubernetes/OpenShift control-plane distribution.</li>
+</ol>
+<p><strong>Tracking</strong></p>
+<ul>
+<li>Open issue and implementation PR: <a href="https://github.com/forge-sdlc/forge/issues/30">pluggable sandbox drivers #30</a>
+  and <a href="https://github.com/forge-sdlc/forge/pull/243">Kubernetes driver PR #243</a>.</li>
+<li>Security and runtime design: <a href="https://github.com/forge-sdlc/forge/issues/262">OpenShell boundary spike #262</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/265">driver capabilities #265</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/266">sandbox hardening #266</a>, and
+  <a href="https://github.com/forge-sdlc/forge/issues/264">structured execution security evidence #264</a>.</li>
+<li>Tracking gap: production OCI images, Helm/OpenShift deployment, HA operations,
+  upgrades, backup, and disaster recovery do not yet have dedicated issues.</li>
+</ul>
+<p><strong>Exit criteria</strong></p>
+<ul>
+<li>Podman and Kubernetes drivers pass one conformance suite.</li>
+<li>A Forge deployment survives worker replacement without losing or duplicating work.</li>
+<li>An OpenShift restricted-profile installation completes an end-to-end workflow.</li>
+<li>Orphaned jobs and workspaces are reconciled after control-plane restart.</li>
+</ul>
+<h3 id="4-product-prototyping-and-workflow-evolution">4. Product prototyping and workflow evolution<a class="headerlink" href="#4-product-prototyping-and-workflow-evolution" title="Permanent link">&para;</a></h3>
+<p>This theme contains two related capabilities: product discovery for Forge users and safe
+evolution of Forge workflows by platform engineers. Both rely on isolated experiments,
+measured comparison, and an explicit decision before promotion.</p>
+<p><strong>Outcomes</strong></p>
+<ul>
+<li>Users can turn an uncertain PRD or feature idea into multiple time-boxed prototypes,
+  revise and compare them, and approve evidence-backed updates to the PRD and plan.</li>
+<li>Prototype code and environments remain disposable and clearly separate from production
+  delivery; validated decisions may carry forward, but production code is regenerated.</li>
+<li>Platform engineers can define, validate, simulate, and evaluate versioned workflows
+  without editing orchestrator routing code or mutating live projects.</li>
+<li>Dry-run, shadow, pinning, canary, migration, and rollback controls support measured
+  workflow evolution without changing in-flight runs unexpectedly.</li>
+<li>Stable extension APIs follow proven internal implementations rather than speculative
+  abstraction.</li>
+</ul>
+<p><strong>Tracking</strong></p>
+<ul>
+<li>Merged foundation: <a href="https://github.com/forge-sdlc/forge/issues/33">PRD approval workflow issue #33</a>
+  and <a href="https://github.com/forge-sdlc/forge/pull/83">implementation PR #83</a>.</li>
+<li>Open feedback work: <a href="https://github.com/forge-sdlc/forge/issues/163">artifact Q&amp;A #163</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/218">decompose draft review #218</a>, and
+  <a href="https://github.com/forge-sdlc/forge/pull/242">draft review PR #242</a>.</li>
+<li>Related developer tooling: <a href="https://github.com/forge-sdlc/forge/issues/296">local skill testing #296</a>.</li>
+<li>Tracking gaps: competing PRD-driven product prototypes, prototype comparison and
+  learning capture, disposable preview workspaces, workflow simulation, dry-run/shadow
+  execution, version pinning, canary rollout, and rollback need dedicated issues.</li>
+</ul>
+<p><strong>Exit criteria</strong></p>
+<ul>
+<li>A user can compare at least two working options for one unresolved PRD decision and
+  apply only approved learnings to the canonical artifacts.</li>
+<li>Prototype resources are isolated, visibly disposable, and cleaned up by policy.</li>
+<li>A candidate workflow can be simulated, evaluated, promoted, and rolled back without
+  external dry-run mutations or unintended changes to in-flight runs.</li>
+</ul>
+<h3 id="5-external-deployment-and-ephemeral-environments">5. External deployment and ephemeral environments<a class="headerlink" href="#5-external-deployment-and-ephemeral-environments" title="Permanent link">&para;</a></h3>
+<p>Forge should govern deployment intent and environment lifecycle while external systems
+remain responsible for infrastructure operations and state. The first use case is a
+preview environment for unmerged changes, created only after explicit approval by
+default.</p>
+<p><strong>Outcomes</strong></p>
+<ul>
+<li>A provider-neutral lifecycle and plugin boundary supports deployment controllers,
+  GitOps systems, and automation services without making them Forge dependencies.</li>
+<li>Environment records connect immutable inputs, policy, ownership, status, outputs, TTL,
+  teardown, and audit history without exposing credentials.</li>
+<li>Allowlisted templates, quotas, budgets, approvals, and target connections constrain
+  what can be provisioned and where.</li>
+<li>Idempotent reconciliation converges provisioning and teardown across duplicate events,
+  missed callbacks, expiry, and Forge restarts.</li>
+</ul>
+<p><strong>Sequence</strong></p>
+<ol>
+<li>Define the lifecycle, threat model, and reference plugin.</li>
+<li>Prove the contract by invoking an allowlisted automation job.</li>
+<li>Add declarative/GitOps integrations, automatic teardown, quotas, cost reporting, and
+   an external plugin SDK.</li>
+</ol>
+<p><strong>Tracking</strong></p>
+<ul>
+<li>Open proposal: <a href="https://github.com/forge-sdlc/forge/issues/28">staging/demo environments #28</a>.</li>
+<li>Tracking gaps: lifecycle hooks, environment state, plugin conformance, allowlisted
+  automation jobs, approval policy, and TTL reconciliation need dedicated issues after
+  #28 is refined.</li>
+</ul>
+<p><strong>Exit criteria</strong></p>
+<ul>
+<li>Killing Forge during provision or teardown converges to the correct state after restart.</li>
+<li>Duplicate hooks cannot create duplicate environments.</li>
+<li>Expired environments are detected and destroyed within the defined SLO.</li>
+<li>No infrastructure or access credentials are exposed to agents or ticket/change-request
+  comments.</li>
+</ul>
+<h3 id="6-security-remediation-and-verification-debt">6. Security remediation and verification debt<a class="headerlink" href="#6-security-remediation-and-verification-debt" title="Permanent link">&para;</a></h3>
+<p>Security and testing are workflow outcomes, not only implementation-stage tools. Forge
+should support both urgent vulnerability remediation and systematic improvement of
+existing code whose behavior is insufficiently verified.</p>
+<p><strong>Outcomes</strong></p>
+<ul>
+<li>A CVE workflow traces advisories or findings to affected code, assesses risk, proposes
+  minimal remediation, adds regression tests, and preserves advisory-to-change evidence.</li>
+<li>Policy-controlled security stages scan dependencies, secrets, source, and generated
+  changes; required checks fail closed and accepted risk requires an auditable exception.</li>
+<li>Forge hardening covers sandbox boundaries, pre-push validation, credential isolation,
+  security evidence, secret scanning, and prompt-injection defenses.</li>
+<li>A verification-debt workflow discovers risky unverified behavior in existing code,
+  prioritizes it, and opens focused test-only changes with behavior-level traceability.</li>
+<li>Planning uses risk-based behavior matrices and measures verification gains beyond line
+  coverage, including mutation effectiveness and flaky-test impact.</li>
+</ul>
+<p><strong>Tracking</strong></p>
+<ul>
+<li>Open security issues: <a href="https://github.com/forge-sdlc/forge/issues/265">sandbox capability requirements #265</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/266">sandbox hardening #266</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/264">structured security evidence #264</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/263">fail-closed pre-push validation #263</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/262">OpenShell boundary spike #262</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/82">credential isolation #82</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/77">secret scanning #77</a>, and
+  <a href="https://github.com/forge-sdlc/forge/issues/76">prompt-injection auditing #76</a>.</li>
+<li>Active security PRs: <a href="https://github.com/forge-sdlc/forge/pull/272">pre-push validation #272</a>
+  and <a href="https://github.com/forge-sdlc/forge/pull/287">prompt-injection auditing #287</a>.</li>
+<li>Merged Forge hardening: <a href="https://github.com/forge-sdlc/forge/pull/231">security batch PR #231</a>
+  resolved issues <a href="https://github.com/forge-sdlc/forge/pull/231">#219–#226</a>,
+  covering CORS, authorization, command/path injection, endpoint exposure, error leakage,
+  and skill-source validation.</li>
+<li>Verification-debt proposals: <a href="https://github.com/forge-sdlc/forge/issues/256">test generation node #256</a>
+  and <a href="https://github.com/forge-sdlc/forge/issues/257">test coverage workflow #257</a>
+  were closed without implementation; <a href="https://github.com/forge-sdlc/forge/issues/174">deterministic pre-PR validation #174</a>
+  remains open.</li>
+<li>Tracking gaps: CVE intake/remediation, normalized security stages and findings,
+  accepted-risk policy, risk-based test planning, mutation/behavior coverage, and flaky
+  test accounting need dedicated issues.</li>
+</ul>
+<p><strong>Exit criteria</strong></p>
+<ul>
+<li>A CVE advisory can produce a policy-compliant remediation PR/MR with linked scan and
+  regression-test evidence.</li>
+<li>Generated changes cannot be published when a required security stage fails, is
+  unavailable, or returns invalid output.</li>
+<li>A verification-debt run can add tests to existing code and report the behaviors and
+  risks newly covered without changing production behavior.</li>
+<li>Forge execution security controls and accepted exceptions are queryable by correlation
+  ID.</li>
+</ul>
+<h3 id="7-human-experience-quality-and-economics">7. Human experience, quality, and economics<a class="headerlink" href="#7-human-experience-quality-and-economics" title="Permanent link">&para;</a></h3>
+<p>Platform breadth is only valuable if users can understand and govern it.</p>
+<p><strong>Outcomes</strong></p>
+<ul>
+<li>Users see concise progress, ownership, next actions, and aggregate status across every
+  repository and environment associated with a workflow.</li>
+<li>Artifact review preserves stable identity and happens before irreversible decomposition
+  or publication; CI and human review may proceed concurrently without weakening gates.</li>
+<li>End-to-end telemetry reports outcome, latency, revisions, failures, quality, and cost by
+  workflow stage and configuration.</li>
+<li>Per-stage model policy supports a pinned model or auditable <code>auto</code> routing with budgets,
+  capability constraints, deterministic fallback, and escalation.</li>
+<li>Optional MLflow export compares workflow and routing variants using shared correlation
+  IDs without becoming a runtime dependency or exporting sensitive context by default.</li>
+<li>Prompt efficiency, context budgets, caching, and repository-owned pre-PR validation
+  reduce cost and avoidable feedback cycles without lowering quality.</li>
+</ul>
+<p><strong>Tracking</strong></p>
+<ul>
+<li>Open issues and PRs: <a href="https://github.com/forge-sdlc/forge/issues/91">revision identity #91</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/137">concurrent CI/review #137</a> with
+  <a href="https://github.com/forge-sdlc/forge/pull/143">PR #143</a>, and
+  <a href="https://github.com/forge-sdlc/forge/issues/39">prompt efficiency #39</a>.</li>
+<li>Merged foundations: <a href="https://github.com/forge-sdlc/forge/issues/84">parent-first review #84</a>,
+  <a href="https://github.com/forge-sdlc/forge/issues/138">Langfuse labels #138</a>, and
+  <a href="https://github.com/forge-sdlc/forge/issues/175">provider-neutral per-stage model policy issue #175</a>
+  with <a href="https://github.com/forge-sdlc/forge/pull/251">PR #251</a>.</li>
+<li>Tracking gaps: automatic model routing and escalation, routing evaluation baselines,
+  MLflow integration, aggregate provider-neutral status, and end-to-end workflow economics
+  need dedicated issues.</li>
+</ul>
+<p><strong>Exit criteria</strong></p>
+<ul>
+<li>Users can identify current stage, owner, next action, and every related PR/MR/environment
+  from the parent ticket.</li>
+<li>Every major stage reports latency, cost, revision count, and outcome.</li>
+<li>Baseline and post-change evaluation show cost improvements without lower completion or
+  quality scores.</li>
+<li>Automatic routing meets configured quality and latency floors while reducing cost
+  against pinned-model baselines, with every routing decision auditable.</li>
+<li>The same evaluation run can be inspected in Forge telemetry and, when configured,
+  MLflow using a shared correlation ID.</li>
+</ul>
+<h2 id="measures-of-success">Measures of success<a class="headerlink" href="#measures-of-success" title="Permanent link">&para;</a></h2>
+<p>Track these by project, provider, workflow version, and execution driver:</p>
+<ul>
+<li><strong>Reliability:</strong> incorrect advances and duplicate external effects (target: zero), plus
+  visible and recoverable terminal failures.</li>
+<li><strong>Delivery:</strong> workflow completion, human escalation, stage lead time excluding human
+  wait, CI first-pass rate, review turnaround, and change failure or reopen rate.</li>
+<li><strong>Quality and economics:</strong> artifact revisions, quality outcomes, model tokens and cost
+  per completed change, and routing performance against pinned-model baselines.</li>
+<li><strong>Platform operations:</strong> provider/driver conformance, execution queue and success rates,
+  orphan cleanup, environment provisioning, TTL compliance, and leaked resources.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/forge-sdlc/forge" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.tabs","navigation.sections","navigation.expand","navigation.top","toc.follow","search.suggest","search.highlight","content.code.copy","content.code.annotate","content.action.edit"],"search":"../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.dbc0afdc.min.js"></script>
+      
+    
+  </body>
+</html>
