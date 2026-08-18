@@ -13,9 +13,12 @@ from forge.integrations.source_control.contracts import (
     NormalizedEvent,
     Provider,
     RepositoryRef,
+    RepositoryResolver,
+    ResolvedRepository,
     Review,
     ReviewComment,
     ReviewState,
+    SourceControlProvider,
     WriteTarget,
 )
 from forge.integrations.source_control.errors import (
@@ -46,10 +49,13 @@ __all__ = [
     "ProviderConfigError",
     "RateLimitedError",
     "RepositoryRef",
+    "RepositoryResolver",
+    "ResolvedRepository",
     "Review",
     "ReviewComment",
     "ReviewState",
     "SourceControlError",
+    "SourceControlProvider",
     "TransientProviderError",
     "WriteTarget",
 ]

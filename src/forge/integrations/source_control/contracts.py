@@ -8,7 +8,7 @@ I/O and no provider-specific imports.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Any, Literal, Protocol, runtime_checkable
 
 
 class Provider(StrEnum):
@@ -152,3 +152,99 @@ class NormalizedEvent:
     review: Review | None = None
     check: CheckRun | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+@runtime_checkable
+class SourceControlProvider(Protocol):
+    """Provider-neutral operations every source control adapter implements."""
+
+    async def verify_webhook(self, headers: dict[str, str], body: bytes) -> bool: ...
+
+    async def parse_webhook(
+        self, headers: dict[str, str], body: bytes, resolver: "RepositoryResolver"
+    ) -> NormalizedEvent: ...
+
+    async def resolve_default_branch(self, repo_ref: RepositoryRef) -> str: ...
+
+    async def ensure_write_target(self, repo_ref: RepositoryRef) -> WriteTarget: ...
+
+    async def create_change_request(
+        self,
+        repo_ref: RepositoryRef,
+        target: WriteTarget,
+        title: str,
+        body: str,
+        draft: bool = False,
+    ) -> ChangeRequest: ...
+
+    async def get_change_request(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+    ) -> ChangeRequest: ...
+
+    async def update_change_request(
+        self,
+        repo_ref: RepositoryRef,
+        identity: ChangeRequestIdentity,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: ChangeRequestState | None = None,
+    ) -> ChangeRequest: ...
+
+    async def create_comment(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity, body: str
+    ) -> ReviewComment: ...
+
+    async def reply_to_comment(
+        self,
+        repo_ref: RepositoryRef,
+        identity: ChangeRequestIdentity,
+        comment_id: str,
+        body: str,
+    ) -> ReviewComment: ...
+
+    async def get_review_threads(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+    ) -> list[Review]: ...
+
+    async def get_checks(self, repo_ref: RepositoryRef, ref: str) -> list[CheckRun]: ...
+
+    async def get_check_logs(self, repo_ref: RepositoryRef, check: CheckRun) -> str: ...
+
+    async def get_file(self, repo_ref: RepositoryRef, path: str, ref: str) -> str: ...
+
+    async def put_file(
+        self,
+        repo_ref: RepositoryRef,
+        path: str,
+        content: str,
+        message: str,
+        branch: str,
+    ) -> None: ...
+
+    async def create_branch(self, repo_ref: RepositoryRef, name: str, base: str) -> None: ...
+
+    async def get_authenticated_identity(self, repo_ref: RepositoryRef) -> Actor: ...
+
+
+@dataclass(frozen=True)
+class ResolvedRepository:
+    """Resolving an identifier yields a repository, its connection, and (if a provider has
+    registered one) an adapter instance. `adapter` is None until a provider registers a
+    factory (see registry.register_adapter_factory, added in Task 5)."""
+
+    repo_ref: RepositoryRef
+    connection: Connection
+    adapter: SourceControlProvider | None = None
+
+
+class RepositoryResolver(Protocol):
+    """Structural interface that registry.Registry satisfies.
+
+    Declared here (not imported from registry.py) so SourceControlProvider.parse_webhook
+    can reference it without contracts.py importing registry.py.
+    """
+
+    def resolve(
+        self, identifier: str, provider_hint: Provider | None = None
+    ) -> ResolvedRepository: ...
