@@ -7,14 +7,69 @@ adapter.
 """
 
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
 
 from forge.config import Settings, get_settings
-from forge.integrations.source_control.contracts import Connection, Provider, RepositoryRef
-from forge.integrations.source_control.errors import ProviderConfigError
+from forge.integrations.source_control.contracts import (
+    Connection,
+    Provider,
+    RepositoryRef,
+    ResolvedRepository,
+    SourceControlProvider,
+)
+from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
+
+IMPLICIT_GITHUB_CONNECTION_NAME = "github-default"
+
+AdapterFactory = Callable[[Connection], SourceControlProvider]
+_ADAPTER_FACTORIES: dict[Provider, AdapterFactory] = {}
+
+
+def register_adapter_factory(provider: Provider, factory: AdapterFactory) -> None:
+    """Register the adapter constructor a provider's connections resolve to.
+
+    Called by each provider's integration package at import time (the GitHub
+    adapter registers itself in segment 2) — contracts.py and registry.py stay
+    free of provider-specific imports.
+    """
+    _ADAPTER_FACTORIES[provider] = factory
+
+
+@dataclass(frozen=True)
+class _ImplicitConnection:
+    """An implicit connection paired with whether its credential is usable right now."""
+
+    connection: Connection
+    configured: bool
+
+
+def _build_implicit_connections(settings: Settings) -> dict[Provider, _ImplicitConnection]:
+    """The zero-config GitHub connection every unregistered GitHub namespace resolves to.
+
+    `configured` is checked against `settings.github_token` rather than
+    `os.environ`, since Settings can load GITHUB_TOKEN from .env without ever
+    adding it to the environment.
+    """
+    return {
+        Provider.GITHUB: _ImplicitConnection(
+            connection=Connection(
+                name=IMPLICIT_GITHUB_CONNECTION_NAME,
+                provider=Provider.GITHUB,
+                base_url="https://api.github.com",
+                credential_env="GITHUB_TOKEN",
+                webhook_secret_env="GITHUB_WEBHOOK_SECRET",
+                ca_path=None,
+                allowed_namespaces=None,
+            ),
+            configured=bool(settings.github_token.get_secret_value()),
+        )
+    }
 
 
 class Registry:
@@ -24,15 +79,69 @@ class Registry:
         self,
         connections: dict[str, Connection],
         repositories: dict[str, RepositoryRef],
+        implicit_connections: dict[Provider, _ImplicitConnection],
     ) -> None:
         self._connections = connections
         self._repositories = repositories
+        self._implicit_connections = implicit_connections
+        self._namespace_index: dict[tuple[Provider, str], RepositoryRef] = {
+            (repo.provider, repo.namespace): repo for repo in repositories.values()
+        }
 
     def get_connection(self, name: str) -> Connection | None:
         return self._connections.get(name)
 
     def get_repository(self, repository_id: str) -> RepositoryRef | None:
         return self._repositories.get(repository_id)
+
+    def resolve(self, identifier: str, provider_hint: Provider | None = None) -> ResolvedRepository:
+        """Resolve an explicit repository id or a provider-native namespace.
+
+        Explicit repos.yaml ids are tried first. Anything else is treated as a
+        namespace under provider_hint (defaulting to GitHub, since that's the
+        only provider a bare namespace has ever meant). A namespace with no
+        explicit repositories: entry falls back to that provider's implicit
+        default connection; a provider with no implicit default raises
+        NotFoundError.
+        """
+        repo_ref = self._repositories.get(identifier)
+        if repo_ref is not None:
+            return self._build_resolved(repo_ref, self._connections[repo_ref.connection])
+
+        provider = provider_hint or Provider.GITHUB
+        repo_ref = self._namespace_index.get((provider, identifier))
+        if repo_ref is not None:
+            return self._build_resolved(repo_ref, self._connections[repo_ref.connection])
+
+        implicit_entry = self._implicit_connections.get(provider)
+        if implicit_entry is None:
+            raise NotFoundError(
+                f"'{identifier}' does not match a registered repository, and "
+                f"'{provider}' has no implicit default connection"
+            )
+        if not implicit_entry.configured:
+            raise ProviderConfigError(
+                f"'{identifier}' resolves to the implicit '{provider}' connection, but "
+                f"credential_env '{implicit_entry.connection.credential_env}' is not set"
+            )
+
+        implicit_connection = implicit_entry.connection
+        implicit_ref = RepositoryRef(
+            id=identifier,
+            provider=provider,
+            connection=implicit_connection.name,
+            namespace=identifier,
+            default_branch="main",
+            change_request_mode="fork",
+        )
+        return self._build_resolved(implicit_ref, implicit_connection)
+
+    def _build_resolved(
+        self, repo_ref: RepositoryRef, connection: Connection
+    ) -> ResolvedRepository:
+        factory = _ADAPTER_FACTORIES.get(connection.provider)
+        adapter = factory(connection) if factory else None
+        return ResolvedRepository(repo_ref=repo_ref, connection=connection, adapter=adapter)
 
 
 def _parse_connections(raw: dict[str, Any]) -> dict[str, Connection]:
@@ -180,4 +289,15 @@ def load_registry(
 
     connections = _parse_connections(connections_raw)
     repositories = _parse_repositories(repositories_raw, connections)
-    return Registry(connections=connections, repositories=repositories)
+    implicit_connections = _build_implicit_connections(settings)
+    return Registry(
+        connections=connections,
+        repositories=repositories,
+        implicit_connections=implicit_connections,
+    )
+
+
+@lru_cache
+def get_registry() -> Registry:
+    """Get the cached, process-wide registry loaded from settings.forge_repos_config_path."""
+    return load_registry()
