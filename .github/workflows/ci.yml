@@ -187,7 +187,7 @@ jobs:
           LLM_MODEL: gemini-3.5-flash
           GOOGLE_CLOUD_PROJECT: test-project
         run: >-
-          uv run pytest tests/unit/ tests/contracts tests/flows -q --strict-markers
+          uv run pytest tests/unit/ tests/workflow tests/contracts tests/flows -q --strict-markers
           --cov=forge --cov-branch
           --cov-report=term-missing
           --cov-report=xml

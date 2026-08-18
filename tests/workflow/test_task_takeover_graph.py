@@ -8,13 +8,13 @@ from langgraph.graph import END, StateGraph
 
 from forge.models.workflow import ForgeLabel, JiraStatus, TicketType
 from forge.workflow.gates.task_plan_approval import route_task_plan_approval
+from forge.workflow.post_pr import _route_ci_evaluation
 from forge.workflow.task_takeover.graph import (
     _route_after_answer,
     _route_after_execution,
     _route_after_generate_plan,
     _route_after_triage_check,
     _route_after_workspace_setup,
-    _route_ci_evaluation,
     _route_human_review_task_takeover,
     build_task_takeover_graph,
     complete_task_takeover,
@@ -66,12 +66,12 @@ class TestTaskTakeoverGraphStructure:
             "run_qualitative_review",
             "create_pr",
             "teardown_workspace",
-            "wait_for_ci_gate",
             "ci_evaluator",
             "attempt_ci_fix",
             "human_review_gate",
             "implement_review",
             "review_response_gate",
+            "rebase_pr",
             "complete_task_takeover",
         }
         for node in expected_nodes:
@@ -94,7 +94,9 @@ class TestPathTransitions:
             ("qualitative_review", "run_qualitative_review"),
             ("create_pr", "create_pr"),
             ("teardown_workspace", "teardown_workspace"),
-            ("wait_for_ci_gate", "wait_for_ci_gate"),
+            # Removed lifecycle nodes safely restart at triage rather than
+            # resolving to a node that no longer exists.
+            ("wait_for_ci_gate", "triage_check"),
             ("ci_evaluator", "ci_evaluator"),
             ("attempt_ci_fix", "ci_evaluator"),
             ("human_review_gate", "human_review_gate"),
@@ -322,7 +324,8 @@ class TestPostPrRouting:
         [
             ("passed", "human_review_gate"),
             ("fixing", "attempt_ci_fix"),
-            ("pending", END),
+            ("pending", "human_review_gate"),
+            ("external_failure", "human_review_gate"),
             ("failed", "escalate_blocked"),
             ("", "escalate_blocked"),
         ],
