@@ -11,9 +11,17 @@ Implement the code changes described in `.forge/review-plan.md`, then ensure the
    - Run the linter/formatter on changed files
    - Verify the build compiles
 
-4. Commit everything (implementation + any generated or formatted files) in a single commit:
-   `git commit -m "[{ticket_key}] review: address PR feedback"`
+4. Amend the existing HEAD commit so review fixes stay on the original commit
+   (preserves the original message and avoids a second commit that may fail
+   per-commit CI checks):
+   ```
+   git add -A
+   git commit --amend --no-edit
+   ```
+   Do **not** create a new commit with a different message. Only create a new
+   commit if `git commit --amend` is impossible (for example, HEAD has no
+   commits yet); in that rare case keep the original project commit style.
 
-5. Do NOT push — the orchestrator handles that.
+5. Do NOT push — the orchestrator handles that (force-push after amend).
 
 Ticket: {ticket_key}
