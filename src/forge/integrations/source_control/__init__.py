@@ -30,6 +30,7 @@ from forge.integrations.source_control.errors import (
     SourceControlError,
     TransientProviderError,
 )
+from forge.integrations.source_control.registry import Registry, load_registry
 
 __all__ = [
     "Actor",
@@ -48,6 +49,7 @@ __all__ = [
     "Provider",
     "ProviderConfigError",
     "RateLimitedError",
+    "Registry",
     "RepositoryRef",
     "RepositoryResolver",
     "ResolvedRepository",
@@ -58,4 +60,5 @@ __all__ = [
     "SourceControlProvider",
     "TransientProviderError",
     "WriteTarget",
+    "load_registry",
 ]

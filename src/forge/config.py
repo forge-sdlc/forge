@@ -104,6 +104,14 @@ class Settings(BaseSettings):
         default="",
         description="GitHub account/org where forks are created (defaults to authenticated user if empty)",
     )
+    forge_repos_config_path: str = Field(
+        default="config/repos.yaml",
+        description=(
+            "Path to the source control provider/connection registry config file. "
+            "Optional — repositories not listed here resolve through the implicit "
+            "default GitHub connection built from GITHUB_TOKEN/GITHUB_WEBHOOK_SECRET."
+        ),
+    )
     forge_bot_comment_prefix: str = Field(
         default="",
         description="Prefix to use for all comments made by the Forge bot",
