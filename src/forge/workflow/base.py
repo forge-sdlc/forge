@@ -77,6 +77,9 @@ class CIIntegrationState(TypedDict, total=False):
     ci_skipped_checks: list[str]
     ci_fix_attempt: int
     ci_fix_max_attempts: int
+    # Append-only human guidance from `/forge hint` (see issue #173).
+    ci_fix_hints: list[dict[str, Any]]
+    ci_hint_bonus_attempts: int
 
 
 class ReviewIntegrationState(TypedDict, total=False):

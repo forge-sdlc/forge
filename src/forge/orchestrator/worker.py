@@ -732,6 +732,73 @@ class OrchestratorWorker:
                     "current_node": "rebase_pr",
                 }
 
+            from forge.workflow.utils.ci_hints import (
+                append_hint,
+                hint_entry,
+                parse_forge_hint,
+            )
+
+            hint_text = parse_forge_hint(gh_comment_body)
+            if hint_text is not None:
+                # Accept hints during CI-related stages and when the normal
+                # fix budget is exhausted (ci_status failed / blocked).
+                ci_status = (current_state.get("ci_status") or "").lower()
+                hint_stages = current_node in _CI_STAGES or ci_status in {
+                    "failed",
+                    "fixing",
+                    "blocked",
+                }
+                if not hint_stages:
+                    logger.info(
+                        "Ignoring /forge hint for %s: not in a CI-related state (%s)",
+                        message.ticket_key,
+                        current_node,
+                    )
+                    return current_state
+
+                comment_id = payload.get("comment", {}).get("id")
+                entry = hint_entry(
+                    text=hint_text,
+                    actor=sender or "unknown",
+                    comment_id=comment_id,
+                    repository=repo_full,
+                    pr_number=pr_number,
+                )
+                prior_hints = list(current_state.get("ci_fix_hints") or [])
+                prior_ids = {h.get("source_comment_id") for h in prior_hints}
+                updated_hints = append_hint(prior_hints, entry)
+                is_new = entry.get("source_comment_id") not in prior_ids
+                bonus = int(current_state.get("ci_hint_bonus_attempts") or 0)
+                if is_new:
+                    bonus += 1
+                    logger.info(
+                        "Recorded /forge hint for %s from @%s (bonus attempts=%s)",
+                        message.ticket_key,
+                        sender,
+                        bonus,
+                    )
+                    await self._post_hint_feedback(
+                        ticket_key=message.ticket_key,
+                        owner=_owner,
+                        repo=_repo,
+                        pr_number=pr_number,
+                        sender=sender,
+                        hint_text=hint_text,
+                    )
+
+                # If CI already failed/exhausted or checks are idle-failed,
+                # schedule the extra attempt immediately.
+                resume_now = ci_status in {"failed", "blocked", "fixing"} or (
+                    current_node in _CI_STAGES and ci_status != "pending"
+                )
+                return {
+                    **current_state,
+                    "ci_fix_hints": updated_hints,
+                    "ci_hint_bonus_attempts": bonus,
+                    "is_paused": False if resume_now else current_state.get("is_paused", False),
+                    "current_node": "ci_evaluator" if resume_now else current_node,
+                }
+
         for change in label_changes:
             to_labels = change.get("toString", "")
             from_labels = change.get("fromString", "")
@@ -1949,6 +2016,40 @@ class OrchestratorWorker:
                 await jira.close()
         except Exception as e:
             logger.warning(f"Failed to post rebase feedback: {e}")
+
+    async def _post_hint_feedback(
+        self,
+        ticket_key: str,
+        owner: str,
+        repo: str,
+        pr_number: int | None,
+        sender: str,
+        hint_text: str,
+    ) -> None:
+        """Acknowledge a /forge hint on the PR and Jira."""
+        try:
+            github = GitHubClient()
+            jira = JiraClient()
+            try:
+                preview = hint_text if len(hint_text) <= 240 else hint_text[:237] + "..."
+                gh_comment = (
+                    f"Hint recorded from @{sender}. "
+                    f"Forge will grant one additional CI fix attempt and include this "
+                    f"guidance in the next repair context.\n\n"
+                    f"> {preview}"
+                )
+                jira_comment = (
+                    f"CI hint recorded via `/forge hint` on PR #{pr_number} by {sender}: "
+                    f"{preview}"
+                )
+                if pr_number:
+                    await github.create_issue_comment(owner, repo, pr_number, gh_comment)
+                await post_status_comment(jira, ticket_key, jira_comment)
+            finally:
+                await github.close()
+                await jira.close()
+        except Exception as e:
+            logger.warning(f"Failed to post hint feedback: {e}")
 
     async def _post_terminal_error_comment(self, ticket_key: str, error: str) -> None:
         """Post a comment explaining how to retry a terminal error.

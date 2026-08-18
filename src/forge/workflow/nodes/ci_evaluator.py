@@ -67,7 +67,9 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
     else:
         pr_urls = state.get("pr_urls", [])
     ci_fix_attempt = state.get("ci_fix_attempt", 0)
-    ci_fix_max = state.get("ci_fix_max_attempts", 5)
+    ci_fix_max = state.get("ci_fix_max_attempts", 5) + int(
+        state.get("ci_hint_bonus_attempts") or 0
+    )
     settings = get_settings()
 
     if not pr_urls:
@@ -282,7 +284,9 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     # Post status comment to feature ticket at start of CI fix attempt
     ci_fix_attempt = state.get("ci_fix_attempt", 0)
-    ci_fix_max = state.get("ci_fix_max_attempts", 5)
+    ci_fix_max = state.get("ci_fix_max_attempts", 5) + int(
+        state.get("ci_hint_bonus_attempts") or 0
+    )
 
     jira = JiraClient()
     try:
@@ -326,7 +330,22 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         # agent can read them directly without needing gh CLI authentication.
         await _fetch_ci_logs_and_artifacts(failed_checks, logs_dir, GitHubClient())
 
-        failures_file.write_text(_collect_error_info(failed_checks))
+        from forge.workflow.utils.ci_hints import (
+            format_hints_for_fix,
+            mark_hints_consumed,
+            unconsumed_hints,
+        )
+
+        pending_hints = unconsumed_hints(state.get("ci_fix_hints"))
+        failures_text = _collect_error_info(failed_checks)
+        if pending_hints:
+            failures_text = failures_text + "\n\n" + format_hints_for_fix(pending_hints)
+        failures_file.write_text(failures_text)
+        if pending_hints:
+            state = {
+                **state,
+                "ci_fix_hints": mark_hints_consumed(state.get("ci_fix_hints")),
+            }
 
         analysis_prompt = load_prompt(
             "analyze-ci",
