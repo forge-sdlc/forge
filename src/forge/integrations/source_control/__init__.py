@@ -1,5 +1,23 @@
 """Provider-neutral source control contracts, errors, and registry."""
 
+from forge.integrations.source_control.contracts import (
+    Actor,
+    ChangeRequest,
+    ChangeRequestIdentity,
+    ChangeRequestState,
+    CheckConclusion,
+    CheckRun,
+    CheckStatus,
+    Connection,
+    EventKind,
+    NormalizedEvent,
+    Provider,
+    RepositoryRef,
+    Review,
+    ReviewComment,
+    ReviewState,
+    WriteTarget,
+)
 from forge.integrations.source_control.errors import (
     AuthenticationError,
     ConflictError,
@@ -11,11 +29,27 @@ from forge.integrations.source_control.errors import (
 )
 
 __all__ = [
+    "Actor",
     "AuthenticationError",
+    "ChangeRequest",
+    "ChangeRequestIdentity",
+    "ChangeRequestState",
+    "CheckConclusion",
+    "CheckRun",
+    "CheckStatus",
     "ConflictError",
+    "Connection",
+    "EventKind",
+    "NormalizedEvent",
     "NotFoundError",
+    "Provider",
     "ProviderConfigError",
     "RateLimitedError",
+    "RepositoryRef",
+    "Review",
+    "ReviewComment",
+    "ReviewState",
     "SourceControlError",
     "TransientProviderError",
+    "WriteTarget",
 ]
