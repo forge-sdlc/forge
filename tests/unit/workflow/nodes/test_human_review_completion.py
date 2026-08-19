@@ -101,10 +101,12 @@ async def test_aggregate_feature_status_transitions_parent_epic():
     jira = MagicMock()
     mock_feature_issue = SimpleNamespace(parent_key="EPIC-PARENT")
     jira.get_issue = AsyncMock(return_value=mock_feature_issue)
+    # The parent Epic's direct child is the Feature itself; include a done sibling
+    # to model a realistic hierarchy.
     jira.get_epic_children = AsyncMock(
         return_value=[
-            SimpleNamespace(key="TASK-1", status="Closed"),
-            SimpleNamespace(key="TASK-2", status="Done"),
+            SimpleNamespace(key="FEAT-123", status="Closed"),
+            SimpleNamespace(key="FEAT-SIBLING", status="Done"),
         ]
     )
     jira.transition_issue = AsyncMock()
@@ -120,6 +122,32 @@ async def test_aggregate_feature_status_transitions_parent_epic():
     jira.transition_issue.assert_any_call("EPIC-PARENT", JiraStatus.CLOSED.value)
 
     # Asserts that the updated state has feature_completed=True and current_node="complete"
+    assert result["feature_completed"] is True
+    assert result["current_node"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_aggregate_feature_status_skips_parent_epic_when_no_children_found():
+    """A parent Epic that returns no children (query/config mismatch) must not be closed."""
+    state = {
+        "ticket_key": "FEAT-123",
+        "current_node": "aggregate_feature_status",
+    }
+
+    jira = MagicMock()
+    mock_feature_issue = SimpleNamespace(parent_key="EPIC-PARENT")
+    jira.get_issue = AsyncMock(return_value=mock_feature_issue)
+    jira.get_epic_children = AsyncMock(return_value=[])
+    jira.transition_issue = AsyncMock()
+    jira.add_comment = AsyncMock()
+    jira.close = AsyncMock()
+
+    with patch("forge.workflow.nodes.human_review.JiraClient", return_value=jira):
+        result = await aggregate_feature_status(state)
+
+    # Feature is closed, but the parent Epic is left untouched.
+    assert jira.transition_issue.call_count == 1
+    jira.transition_issue.assert_called_once_with("FEAT-123", JiraStatus.CLOSED.value)
     assert result["feature_completed"] is True
     assert result["current_node"] == "complete"
 
