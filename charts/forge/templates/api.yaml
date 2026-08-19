@@ -34,8 +34,10 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ .Values.existingSecret }}
-          {{- if .Values.redis.enabled }}
           env:
+            - name: AGENT_ROOT_DIR
+              value: /var/lib/forge/agent
+          {{- if .Values.redis.enabled }}
             - name: REDIS_URL
               value: redis://{{ include "forge.fullname" . }}-redis:6379/0
           {{- end }}
@@ -48,6 +50,12 @@ spec:
             httpGet: {path: /api/v1/live, port: http}
           resources:
             {{- toYaml .Values.resources.api | nindent 12 }}
+          volumeMounts:
+            - name: agent-root
+              mountPath: /var/lib/forge/agent
+      volumes:
+        - name: agent-root
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

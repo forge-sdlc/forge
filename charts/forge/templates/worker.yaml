@@ -49,6 +49,8 @@ spec:
             - secretRef:
                 name: {{ .Values.existingSecret }}
           env:
+            - name: AGENT_ROOT_DIR
+              value: /var/lib/forge/agent
             {{- if .Values.redis.enabled }}
             - name: REDIS_URL
               value: redis://{{ include "forge.fullname" . }}-redis:6379/0
@@ -103,6 +105,8 @@ spec:
             - name: metrics
               containerPort: {{ .Values.worker.metricsPort }}
           volumeMounts:
+            - name: agent-root
+              mountPath: /var/lib/forge/agent
             - name: workspaces
               mountPath: {{ .Values.workspace.mountPath }}
             {{- if .Values.googleCredentials.enabled }}
@@ -114,6 +118,8 @@ spec:
           resources:
             {{- toYaml .Values.resources.worker | nindent 12 }}
       volumes:
+        - name: agent-root
+          emptyDir: {}
         - name: workspaces
           persistentVolumeClaim:
             claimName: {{ .Values.workspace.claimName }}
