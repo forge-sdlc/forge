@@ -3,6 +3,7 @@
 import json
 from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from pathlib import Path
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -276,13 +277,13 @@ def test_get_skill_paths_returns_default_without_ticket_key():
     """When ticket_key is None, resolver returns skills/default/ only."""
     agent = ForgeAgent.__new__(ForgeAgent)
     agent.settings = MagicMock()
-    agent.settings.skills_dir = "skills/"
+    agent.settings.agent_root_dir = ".forge/agent"
 
     with patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver:
         mock_resolver.return_value = ["skills/default/"]
         result = agent._get_skill_paths(None)
 
-    mock_resolver.assert_called_once_with("", ANY, skills_install_dir=ANY)
+    mock_resolver.assert_called_once_with("", Path(".forge/agent").resolve() / "skills")
     assert result == ["skills/default/"]
 
 

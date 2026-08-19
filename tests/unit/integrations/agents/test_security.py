@@ -6,9 +6,9 @@ import pytest
 
 from forge.integrations.agents.agent import ForgeAgent
 from forge.integrations.agents.security import (
+    initialize_agent_skills,
     operational_subprocess_env,
     parse_host_tools,
-    refresh_agent_skills,
     validate_agent_root,
 )
 from forge.skills.resolver import resolve_skill_paths
@@ -43,7 +43,7 @@ def test_agent_root_rejects_symlink(tmp_path: Path) -> None:
         validate_agent_root(link, project)
 
 
-def test_skill_refresh_rejects_symlinks(tmp_path: Path) -> None:
+def test_skill_initialization_rejects_symlinks(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
     (source / "SKILL.md").write_text("safe")
@@ -51,7 +51,7 @@ def test_skill_refresh_rejects_symlinks(tmp_path: Path) -> None:
     root = tmp_path / "agent"
     root.mkdir()
     with pytest.raises(ValueError, match="Symlinks"):
-        refresh_agent_skills(root, [source])
+        initialize_agent_skills(root, source)
 
 
 def test_skill_resolution_rejects_path_escape(tmp_path: Path) -> None:
@@ -59,34 +59,19 @@ def test_skill_resolution_rejects_path_escape(tmp_path: Path) -> None:
         resolve_skill_paths("../../-1", tmp_path)
 
 
-def test_skill_refresh_copies_into_agent_root(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-    (source / "SKILL.md").write_text("safe")
-    root = tmp_path / "agent"
-    root.mkdir()
-    paths = refresh_agent_skills(root, [source])
-    copied = Path(paths[0]) / "SKILL.md"
-    assert copied.read_text() == "safe"
-    assert root in copied.parents
-
-
-def test_skill_refresh_does_not_invalidate_existing_snapshot(tmp_path: Path) -> None:
-    first_source = tmp_path / "first"
-    first_source.mkdir()
-    (first_source / "SKILL.md").write_text("first")
-    second_source = tmp_path / "second"
-    second_source.mkdir()
-    (second_source / "SKILL.md").write_text("second")
+def test_skill_initialization_preserves_default_and_project_layout(tmp_path: Path) -> None:
+    source = tmp_path / "skills"
+    (source / "default" / "common").mkdir(parents=True)
+    (source / "default" / "common" / "SKILL.md").write_text("default")
+    (source / "aisos" / "project").mkdir(parents=True)
+    (source / "aisos" / "project" / "SKILL.md").write_text("project")
     root = tmp_path / "agent"
     root.mkdir()
 
-    first_path = Path(refresh_agent_skills(root, [first_source])[0])
-    second_path = Path(refresh_agent_skills(root, [second_source])[0])
+    skills_root = initialize_agent_skills(root, source)
 
-    assert first_path != second_path
-    assert (first_path / "SKILL.md").read_text() == "first"
-    assert (second_path / "SKILL.md").read_text() == "second"
+    assert (skills_root / "default" / "common" / "SKILL.md").read_text() == "default"
+    assert (skills_root / "aisos" / "project" / "SKILL.md").read_text() == "project"
 
 
 def test_operational_env_drops_secrets(monkeypatch: pytest.MonkeyPatch) -> None:

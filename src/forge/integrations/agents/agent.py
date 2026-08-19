@@ -41,7 +41,6 @@ from forge.integrations.agents.security import (
     HostToolAllowlistMiddleware,
     operational_subprocess_env,
     parse_host_tools,
-    refresh_agent_skills,
     validate_agent_root,
 )
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
@@ -289,10 +288,8 @@ class ForgeAgent:
         Resolves per-project skill overrides under settings.skills_dir, with
         fallback to skills/default/ for any skill not overridden by the project.
         """
-        skills_dir = PROJECT_ROOT / self.settings.skills_dir.rstrip("/")
-        paths = resolve_skill_paths(
-            ticket_key or "", skills_dir, skills_install_dir=self.settings.skills_install_dir
-        )
+        skills_dir = self._get_root_dir() / "skills"
+        paths = resolve_skill_paths(ticket_key or "", skills_dir)
         logger.debug(f"Using skill paths: {paths}")
         return paths
 
@@ -463,8 +460,7 @@ class ForgeAgent:
             Configured Deep Agent.
         """
         root_dir = self._get_root_dir()
-        source_paths = [Path(path) for path in self._get_skill_paths(ticket_key)]
-        skill_paths = refresh_agent_skills(root_dir, source_paths)
+        skill_paths = self._get_skill_paths(ticket_key)
         builtin_tools = parse_host_tools(
             self.settings.agent_allowed_tools, enabled=self.settings.agent_enable_tools
         )

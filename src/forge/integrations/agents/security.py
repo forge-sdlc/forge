@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import tempfile
@@ -90,39 +89,15 @@ def _assert_safe_tree(source: Path) -> Path:
     return resolved_source
 
 
-def refresh_agent_skills(agent_root: Path, sources: list[Path]) -> list[str]:
-    """Copy trusted skill sources into an immutable, content-addressed snapshot."""
+def initialize_agent_skills(agent_root: Path, source_root: Path) -> Path:
+    """Seed the isolated runtime skill tree from committed skill directories."""
+    safe_source = _assert_safe_tree(source_root)
     skills_root = agent_root / "skills"
     skills_root.mkdir(parents=True, exist_ok=True)
-    stage = Path(tempfile.mkdtemp(prefix=".refresh-", dir=skills_root))
-    child_names: list[str] = []
-    try:
-        for index, source in enumerate(sources):
-            safe_source = _assert_safe_tree(source)
-            destination = stage / f"{index}-{safe_source.name}"
-            shutil.copytree(safe_source, destination)
-            child_names.append(destination.name)
-
-        digest = hashlib.sha256()
-        for entry in sorted(stage.rglob("*")):
-            relative = entry.relative_to(stage).as_posix()
-            digest.update(relative.encode())
-            digest.update(b"\0")
-            if entry.is_file():
-                with entry.open("rb") as file_handle:
-                    for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
-                        digest.update(chunk)
-            digest.update(b"\0")
-
-        snapshot = skills_root / f"snapshot-{digest.hexdigest()}"
-        try:
-            stage.rename(snapshot)
-        except FileExistsError:
-            shutil.rmtree(stage)
-        return [str(snapshot / child_name) + "/" for child_name in child_names]
-    except Exception:
-        shutil.rmtree(stage, ignore_errors=True)
-        raise
+    for source in sorted(safe_source.iterdir()):
+        if source.is_dir():
+            shutil.copytree(source, skills_root / source.name, dirs_exist_ok=True)
+    return skills_root
 
 
 def operational_subprocess_env(explicit: dict[str, str] | None = None) -> dict[str, str]:

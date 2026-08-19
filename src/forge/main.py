@@ -26,7 +26,7 @@ from forge.api.routes import (
 )
 from forge.config import get_settings
 from forge.integrations.source_control.registry import get_registry
-from forge.integrations.agents.security import refresh_agent_skills, validate_agent_root
+from forge.integrations.agents.security import initialize_agent_skills, validate_agent_root
 from forge.observability.config import configure_tracing, shutdown_tracing
 from forge.orchestrator.checkpointer import close_redis_pool
 
@@ -56,7 +56,7 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     agent_root = validate_agent_root(
         Path(settings.agent_root_dir), project_root, settings.workspace_base_dir or ""
     )
-    refresh_agent_skills(agent_root, [project_root / settings.skills_dir / "default"])
+    initialize_agent_skills(agent_root, project_root / settings.skills_dir)
     logger.info("Host agent root initialized at %s", agent_root)
 
     # Startup - initialize tracing

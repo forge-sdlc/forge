@@ -446,8 +446,8 @@ class Settings(BaseSettings):
 
     @property
     def skills_install_dir(self) -> Path:
-        """Directory for runtime-fetched skill packages."""
-        return Path(self.skills_dir).resolve()
+        """Isolated runtime directory for installed skill packages."""
+        return (Path(self.agent_root_dir).resolve() / "skills")
 
     container_langchain_verbose: bool = Field(
         default=False,
