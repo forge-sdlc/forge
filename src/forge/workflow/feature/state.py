@@ -112,6 +112,7 @@ def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState
         "repos_to_process": [],
         "repos_completed": [],
         "implemented_tasks": [],
+        "jira_completed_tasks": [],
         "review_exhaustion_report": {},
         "current_task_key": None,
         "parallel_execution_enabled": True,

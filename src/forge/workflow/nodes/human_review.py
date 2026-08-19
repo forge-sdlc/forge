@@ -82,12 +82,14 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
     logger.info(f"Completing {len(implemented_tasks)} Tasks for {ticket_key}")
 
     jira = JiraClient()
+    jira_completed_tasks: list[str] = []
 
     try:
         for task_key in implemented_tasks:
             try:
                 # Transition to Closed status and remove forge workflow labels
                 await jira.transition_issue(task_key, JiraStatus.CLOSED.value)
+                jira_completed_tasks.append(task_key)
                 await jira.set_workflow_label(task_key, ForgeLabel.TASK_REVIEW_APPROVED)
                 logger.info(f"Task {task_key} marked as Done")
             except Exception as e:
@@ -97,6 +99,7 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
             {
                 **state,
                 "tasks_completed": True,
+                "jira_completed_tasks": jira_completed_tasks,
                 "current_node": "aggregate_epic_status",
                 "ci_fix_attempt": 0,
             }
@@ -126,6 +129,7 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
     ticket_key = state["ticket_key"]
     epic_keys = state.get("epic_keys") or []
     implemented_tasks = state.get("implemented_tasks") or []
+    jira_completed_tasks = state.get("jira_completed_tasks") or []
 
     logger.info(f"Aggregating Epic status for {ticket_key}")
 
@@ -141,7 +145,7 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
             # Check if all Tasks under this Epic are done
             # In practice, would query Jira for child issues
             epic_done = await _check_epic_completion(
-                jira, epic_key, completed_keys=set(implemented_tasks)
+                jira, epic_key, completed_keys=set(jira_completed_tasks)
             )
 
             if epic_done:
@@ -191,7 +195,7 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
     """
     ticket_key = state["ticket_key"]
     epic_keys = state.get("epic_keys") or []
-    implemented_tasks = state.get("implemented_tasks") or []
+    jira_completed_tasks = state.get("jira_completed_tasks") or []
 
     logger.info(f"Aggregating Feature status for {ticket_key}")
 
@@ -206,7 +210,7 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         try:
             feature_issue = await jira.get_issue(ticket_key)
             if feature_issue.parent_key:
-                completed_keys = set(implemented_tasks) | set(epic_keys) | {ticket_key}
+                completed_keys = set(jira_completed_tasks) | set(epic_keys) | {ticket_key}
                 parent_epic_done = await _check_epic_completion(
                     jira, feature_issue.parent_key, completed_keys=completed_keys
                 )

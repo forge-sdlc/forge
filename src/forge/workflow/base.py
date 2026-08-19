@@ -55,6 +55,7 @@ class PRIntegrationState(TypedDict, total=False):
     repos_to_process: list[str]
     repos_completed: list[str]
     implemented_tasks: list[str]
+    jira_completed_tasks: list[str]
     current_task_key: str | None
     fork_owner: str | None
     fork_repo: str | None

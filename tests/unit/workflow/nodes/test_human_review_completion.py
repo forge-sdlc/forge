@@ -6,7 +6,52 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.models.workflow import JiraStatus
-from forge.workflow.nodes.human_review import aggregate_epic_status, aggregate_feature_status
+from forge.workflow.nodes.human_review import (
+    aggregate_epic_status,
+    aggregate_feature_status,
+    complete_tasks,
+)
+
+
+@pytest.mark.asyncio
+async def test_complete_tasks_only_records_successful_jira_transitions():
+    state = {
+        "ticket_key": "FEAT-123",
+        "implemented_tasks": ["TASK-1", "TASK-2"],
+    }
+
+    jira = MagicMock()
+    jira.transition_issue = AsyncMock(side_effect=[None, RuntimeError("transition denied")])
+    jira.set_workflow_label = AsyncMock()
+    jira.close = AsyncMock()
+
+    with patch("forge.workflow.nodes.human_review.JiraClient", return_value=jira):
+        result = await complete_tasks(state)
+
+    assert result["jira_completed_tasks"] == ["TASK-1"]
+
+
+@pytest.mark.asyncio
+async def test_aggregate_epic_status_does_not_mask_failed_task_transition():
+    state = {
+        "ticket_key": "FEAT-123",
+        "implemented_tasks": ["TASK-1"],
+        "jira_completed_tasks": [],
+        "epic_keys": ["EPIC-1"],
+    }
+
+    jira = MagicMock()
+    jira.get_epic_children = AsyncMock(
+        return_value=[SimpleNamespace(key="TASK-1", status="In Progress")]
+    )
+    jira.transition_issue = AsyncMock()
+    jira.close = AsyncMock()
+
+    with patch("forge.workflow.nodes.human_review.JiraClient", return_value=jira):
+        result = await aggregate_epic_status(state)
+
+    jira.transition_issue.assert_not_awaited()
+    assert result["current_node"] == "complete"
 
 
 @pytest.mark.asyncio
@@ -118,6 +163,7 @@ async def test_aggregate_feature_status_handles_jira_search_lag():
     state = {
         "ticket_key": "FEAT-123",
         "implemented_tasks": ["TASK-1"],
+        "jira_completed_tasks": ["TASK-1"],
         "epic_keys": ["EPIC-1"],
         "current_node": "aggregate_feature_status",
     }
@@ -157,6 +203,7 @@ async def test_aggregate_feature_status_handles_jira_search_lag_case_insensitive
     state = {
         "ticket_key": "feat-123",
         "implemented_tasks": ["task-1"],
+        "jira_completed_tasks": ["task-1"],
         "epic_keys": ["epic-1"],
         "current_node": "aggregate_feature_status",
     }
