@@ -354,8 +354,7 @@ class ContainerRunner:
         """
         skills_dir = self.settings.skills_install_dir
         host_paths = [
-            Path(p.rstrip("/"))
-            for p in resolve_skill_paths(ticket_key or "", skills_dir)
+            Path(p.rstrip("/")) for p in resolve_skill_paths(ticket_key or "", skills_dir)
         ]
 
         mounts = []
