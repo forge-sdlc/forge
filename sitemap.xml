@@ -7,6 +7,9 @@
         <loc>https://forge-sdlc.github.io/forge/getting-started/</loc>
       </url>
       <url>
+        <loc>https://forge-sdlc.github.io/forge/roadmap/</loc>
+      </url>
+      <url>
         <loc>https://forge-sdlc.github.io/forge/guide/feature-workflow/</loc>
       </url>
       <url>
@@ -16,10 +19,19 @@
         <loc>https://forge-sdlc.github.io/forge/guide/task-workflow/</loc>
       </url>
       <url>
+        <loc>https://forge-sdlc.github.io/forge/guide/auto-review/</loc>
+      </url>
+      <url>
         <loc>https://forge-sdlc.github.io/forge/guide/labels/</loc>
       </url>
       <url>
         <loc>https://forge-sdlc.github.io/forge/guide/pr-commands/</loc>
+      </url>
+      <url>
+        <loc>https://forge-sdlc.github.io/forge/dev/test-skill/</loc>
+      </url>
+      <url>
+        <loc>https://forge-sdlc.github.io/forge/dev/skill-evaluation/</loc>
       </url>
       <url>
         <loc>https://forge-sdlc.github.io/forge/developer-guide/</loc>
@@ -43,6 +55,12 @@
         <loc>https://forge-sdlc.github.io/forge/dev/testing/</loc>
       </url>
       <url>
+        <loc>https://forge-sdlc.github.io/forge/dev/test-skill/</loc>
+      </url>
+      <url>
+        <loc>https://forge-sdlc.github.io/forge/dev/skill-evaluation/</loc>
+      </url>
+      <url>
         <loc>https://forge-sdlc.github.io/forge/dev/contributing/</loc>
       </url>
       <url>
@@ -62,5 +80,8 @@
       </url>
       <url>
         <loc>https://forge-sdlc.github.io/forge/reference/proposals/</loc>
+      </url>
+      <url>
+        <loc>https://forge-sdlc.github.io/forge/reference/review-md-schema/</loc>
       </url>
 </urlset>
