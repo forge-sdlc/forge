@@ -167,6 +167,55 @@ class TestJiraClientComments:
         assert http.get.await_args_list[1].kwargs["params"]["startAt"] == 1
 
 
+class TestJiraClientEpicChildren:
+    """Tests for paginated Epic child retrieval."""
+
+    @pytest.mark.asyncio
+    async def test_get_epic_children_retrieves_all_pages(self):
+        with patch("forge.integrations.jira.client.get_settings") as mock_settings:
+            mock_settings.return_value.jira_base_url = "https://test.atlassian.net"
+            mock_settings.return_value.jira_api_token = MagicMock()
+            mock_settings.return_value.jira_api_token.get_secret_value.return_value = "token"
+            mock_settings.return_value.jira_user_email = "test@example.com"
+            jira = JiraClient()
+
+        def issue(number: int) -> dict[str, Any]:
+            return {
+                "id": str(number),
+                "key": f"TASK-{number}",
+                "fields": {
+                    "issuetype": {"name": "Task"},
+                    "status": {"name": "Closed"},
+                    "summary": f"Task {number}",
+                },
+            }
+
+        first_response = MagicMock()
+        first_response.json.return_value = {
+            "startAt": 0,
+            "maxResults": 50,
+            "total": 51,
+            "issues": [issue(number) for number in range(1, 51)],
+        }
+        second_response = MagicMock()
+        second_response.json.return_value = {
+            "startAt": 50,
+            "maxResults": 50,
+            "total": 51,
+            "issues": [issue(51)],
+        }
+        http = AsyncMock()
+        http.get = AsyncMock(side_effect=[first_response, second_response])
+
+        with patch.object(jira, "_get_client", return_value=http):
+            children = await jira.get_epic_children("EPIC-1")
+
+        assert len(children) == 51
+        assert children[-1].key == "TASK-51"
+        assert http.get.await_args_list[0].kwargs["params"]["startAt"] == 0
+        assert http.get.await_args_list[1].kwargs["params"]["startAt"] == 50
+
+
 class TestJiraClientLabels:
     """Tests for label operations."""
 

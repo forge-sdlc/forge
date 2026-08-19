@@ -974,31 +974,47 @@ class JiraClient:
         self,
         jql: str,
         fields: list[str] | None = None,
-        max_results: int = 50,
+        max_results: int | None = 50,
     ) -> list[JiraIssue]:
         """Search for issues using JQL.
 
         Args:
             jql: JQL query string.
             fields: Optional list of fields to return.
-            max_results: Maximum number of results (default: 50).
+            max_results: Maximum number of results (default: 50), or None to
+                retrieve all matching issues.
 
         Returns:
             List of matching JiraIssue objects.
         """
         client = await self._get_client()
-        params: dict[str, Any] = {
-            "jql": jql,
-            "maxResults": max_results,
-        }
-        if fields:
-            params["fields"] = ",".join(fields)
+        issues: list[JiraIssue] = []
+        start_at = 0
 
-        response = await client.get("/search", params=params)
-        response.raise_for_status()
-        data = response.json()
+        while max_results is None or len(issues) < max_results:
+            page_size = 100 if max_results is None else min(100, max_results - len(issues))
+            params: dict[str, Any] = {
+                "jql": jql,
+                "startAt": start_at,
+                "maxResults": page_size,
+            }
+            if fields:
+                params["fields"] = ",".join(fields)
 
-        return [JiraIssue.from_api_response(issue) for issue in data.get("issues", [])]
+            response = await client.get("/search", params=params)
+            response.raise_for_status()
+            data = response.json()
+            page = data.get("issues", [])
+            issues.extend(JiraIssue.from_api_response(issue) for issue in page)
+
+            page_start = int(data.get("startAt", start_at))
+            total = int(data.get("total", page_start + len(page)))
+            next_start = page_start + len(page)
+            if not page or next_start >= total:
+                break
+            start_at = next_start
+
+        return issues
 
     async def get_epic_children(self, epic_key: str) -> list[JiraIssue]:
         """Get all child issues (Tasks/Stories) linked to an Epic.
@@ -1014,6 +1030,7 @@ class JiraClient:
         return await self.search_issues(
             jql=jql,
             fields=["summary", "status", "issuetype"],
+            max_results=None,
         )
 
     async def list_project_properties(self, project_key: str) -> list[str]:
