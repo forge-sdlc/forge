@@ -1836,6 +1836,7 @@ generating model must also answer questions about its artifact. See
     Update --&gt; Gate</code></pre>
 <hr />
 <h3 id="implementation">Implementation<a class="headerlink" href="#implementation" title="Permanent link">&para;</a></h3>
+<p>When implementation starts, Forge sets up the workspace, posts a progress comment to Jira, sets the <code>forge:implementing</code> label, and automatically transitions all associated Tasks and Epics, as well as the parent Epic (if present), to <strong><code>In Progress</code></strong> status in Jira.</p>
 <p>Tasks are executed in ephemeral Podman containers. Each container:</p>
 <ul>
 <li>Clones the target repository</li>
@@ -1867,6 +1868,7 @@ generating model must also answer questions about its artifact. See
 <hr />
 <h3 id="human-review">Human Review<a class="headerlink" href="#human-review" title="Permanent link">&para;</a></h3>
 <p>The PR is now ready for human review. Merge when satisfied, or request changes to trigger another implementation pass.</p>
+<p>Once the PR is merged, Forge automatically completes the workflow by transitioning the Feature, all associated Tasks and Epics, and its parent Epic (if present) to <strong><code>Closed</code></strong> status in Jira.</p>
 <h2 id="qa-mode">Q&amp;A Mode<a class="headerlink" href="#qa-mode" title="Permanent link">&para;</a></h2>
 <p>At any approval gate, you can ask questions without triggering regeneration:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>? Why did you choose this approach over X?

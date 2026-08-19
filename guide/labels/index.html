@@ -673,6 +673,45 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#automatic-jira-status-transitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Automatic Jira Status Transitions
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Automatic Jira Status Transitions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workspace-setup-implementation-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ⚙️ Workspace Setup &amp; Implementation Start
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#completion-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ✅ Completion &amp; Merge
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1443,6 +1482,45 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#automatic-jira-status-transitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Automatic Jira Status Transitions
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Automatic Jira Status Transitions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workspace-setup-implementation-start" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ⚙️ Workspace Setup &amp; Implementation Start
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#completion-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        ✅ Completion &amp; Merge
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1628,6 +1706,20 @@
 <p class="admonition-title">Don't remove <code>forge:managed</code></p>
 <p>Removing <code>forge:managed</code> won't stop an in-progress workflow. It only prevents new workflows from starting on the ticket.</p>
 </div>
+<h2 id="automatic-jira-status-transitions">Automatic Jira Status Transitions<a class="headerlink" href="#automatic-jira-status-transitions" title="Permanent link">&para;</a></h2>
+<p>While Forge primarily tracks internal state using workflow labels (to remain compatible with any Jira configuration), it also automatically transitions actual Jira issue statuses at key workflow milestones.</p>
+<p>Forge utilizes the standard Jira workflow statuses (<code>In Progress</code> and <code>Closed</code>) to transition tickets as they move through implementation and delivery:</p>
+<h3 id="workspace-setup-implementation-start">⚙️ Workspace Setup &amp; Implementation Start<a class="headerlink" href="#workspace-setup-implementation-start" title="Permanent link">&para;</a></h3>
+<p>When workspace setup begins and code implementation starts, Forge automatically transitions the following issues to <strong><code>In Progress</code></strong>:
+* <strong>Tasks:</strong> Any decomposed task tickets associated with the workflow.
+* <strong>Epics:</strong> Any decomposed epic tickets associated with the workflow.
+* <strong>Parent Epic:</strong> If the Feature or Bug ticket is linked to a parent Epic, that parent Epic is also automatically transitioned to <strong><code>In Progress</code></strong> (errors are gracefully caught and suppressed if the status transition is restricted in your project).</p>
+<h3 id="completion-merge">✅ Completion &amp; Merge<a class="headerlink" href="#completion-merge" title="Permanent link">&para;</a></h3>
+<p>When implementation is complete and the pull requests are successfully merged:
+* <strong>Tasks:</strong> Associated task sub-tickets are transitioned to <strong><code>Closed</code></strong>.
+* <strong>Epics:</strong> Associated epic sub-tickets are transitioned to <strong><code>Closed</code></strong> once all of their underlying tasks are completed.
+* <strong>Feature:</strong> The main Feature ticket is transitioned to <strong><code>Closed</code></strong>.
+* <strong>Parent Epic:</strong> The parent Epic of the Feature/Bug is automatically transitioned to <strong><code>Closed</code></strong> once all child tickets are merged and completed.</p>
 
 
 
