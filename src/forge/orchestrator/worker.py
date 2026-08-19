@@ -2153,7 +2153,9 @@ class OrchestratorWorker:
 
     async def start(self) -> None:
         """Start the worker and begin processing events."""
-        logger.info(f"Starting orchestrator worker: {self.consumer_name}")
+        from forge.utils.logging import log_startup_banner
+
+        log_startup_banner("Queue Worker")
 
         # Start Prometheus metrics HTTP server
         if self.settings.worker_metrics_enabled:

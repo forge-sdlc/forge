@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager for startup and shutdown."""
     settings = get_settings()
-    logger.info(f"Starting Forge v{__version__} ({settings.log_level})")
+    from forge.utils.logging import log_startup_banner
+
+    log_startup_banner("API Gateway")
 
     # Startup - initialize tracing
     if settings.tracing_enabled:

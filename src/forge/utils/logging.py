@@ -272,3 +272,69 @@ def log_llm_call(
             **extra,
         },
     )
+
+
+def log_startup_banner(component_name: str) -> None:
+    """Log a visual, secure startup configuration banner.
+
+    Args:
+        component_name: Name of the component starting up (e.g. API Gateway).
+    """
+    from urllib.parse import urlparse, urlunparse
+
+    from forge import __version__
+
+    settings = get_settings()
+
+    # Redact Redis URL connection details (username/password) safely
+    redis_url = settings.redis_url
+    redacted_redis = redis_url
+    if redis_url:
+        try:
+            parsed = urlparse(redis_url)
+            if parsed.netloc and (parsed.username or parsed.password or "@" in parsed.netloc):
+                host_port = parsed.hostname or ""
+                if parsed.port is not None:
+                    host_port = f"{host_port}:{parsed.port}"
+                if parsed.username:
+                    safe_netloc = f"{parsed.username}:****@{host_port}"
+                else:
+                    safe_netloc = f":****@{host_port}"
+                redacted_redis = urlunparse(parsed._replace(netloc=safe_netloc))
+        except Exception:
+            redacted_redis = "redis://[redacted]"
+
+    info_items = [
+        ("Component", component_name),
+        ("Version", __version__),
+        ("Log Level", settings.log_level),
+        ("LLM Backend", settings.llm_backend),
+        ("LLM Model", settings.llm_model),
+        ("Sandbox Driver", settings.sandbox_driver),
+        ("Redis URL", redacted_redis),
+        ("Jira Base URL", settings.jira_base_url),
+    ]
+
+    formatted_lines = [f"  {label:<15}: {val}" for label, val in info_items]
+    max_line_len = max(len(line) for line in formatted_lines)
+    inner_width = max(max_line_len + 2, 56)
+
+    border = "+" + "-" * (inner_width + 2) + "+"
+    title_text = f"Forge Startup - {component_name}"
+    title_line = "|" + f" {title_text} ".center(inner_width + 2) + "|"
+
+    banner_lines = [
+        border,
+        title_line,
+        border,
+    ]
+
+    for line in formatted_lines:
+        padded_line = line.ljust(inner_width + 1)
+        banner_lines.append(f"| {padded_line} |")
+
+    banner_lines.append(border)
+    banner_text = "\n" + "\n".join(banner_lines)
+
+    logger = logging.getLogger("forge")
+    logger.info(banner_text)
