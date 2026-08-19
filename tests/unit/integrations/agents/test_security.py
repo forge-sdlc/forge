@@ -71,6 +71,24 @@ def test_skill_refresh_copies_into_agent_root(tmp_path: Path) -> None:
     assert root in copied.parents
 
 
+def test_skill_refresh_does_not_invalidate_existing_snapshot(tmp_path: Path) -> None:
+    first_source = tmp_path / "first"
+    first_source.mkdir()
+    (first_source / "SKILL.md").write_text("first")
+    second_source = tmp_path / "second"
+    second_source.mkdir()
+    (second_source / "SKILL.md").write_text("second")
+    root = tmp_path / "agent"
+    root.mkdir()
+
+    first_path = Path(refresh_agent_skills(root, [first_source])[0])
+    second_path = Path(refresh_agent_skills(root, [second_source])[0])
+
+    assert first_path != second_path
+    assert (first_path / "SKILL.md").read_text() == "first"
+    assert (second_path / "SKILL.md").read_text() == "second"
+
+
 def test_operational_env_drops_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", "/bin")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")

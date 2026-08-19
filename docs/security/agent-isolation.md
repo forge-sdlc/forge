@@ -48,8 +48,11 @@ Never mount source, task workspaces, environment files, container-engine sockets
 credentials beneath `AGENT_ROOT_DIR`.
 
 At startup Forge stages default skills under the agent root. After project skill
-synchronization, it refreshes the staged default and project skills. Skill trees with
-symlinks or paths escaping their source are rejected.
+synchronization, it publishes immutable, content-addressed snapshots of the default
+and project skills. Skill trees with symlinks or paths escaping their source are
+rejected. Old snapshots remain available so concurrent agents cannot invalidate each
+other; remove obsolete snapshots only during a controlled maintenance window when no
+host agents are running.
 
 ### Built-in tools
 
@@ -166,8 +169,7 @@ and use read-only or repository-scoped tokens where possible.
 
 ## Kubernetes requirements
 
-This tree does not currently contain a Kubernetes sandbox driver. Do not substitute
-privileged pods or a mounted runtime socket. Before enabling a future driver, require:
+Forge includes a Kubernetes Job-based sandbox driver. Before enabling it, require:
 
 - distinct service accounts and no automatic API-token mount for task pods;
 - the Restricted Pod Security Standard;

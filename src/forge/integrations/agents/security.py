@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import tempfile
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -13,19 +13,6 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResp
 
 SAFE_BUILTIN_TOOLS = frozenset({"ls", "read_file", "glob", "grep"})
 PROHIBITED_BUILTIN_TOOLS = frozenset({"write_file", "edit_file", "execute"})
-
-
-@contextmanager
-def _refresh_lock(skills_root: Path):
-    """Serialize skill publication across concurrent worker tasks."""
-    import fcntl
-
-    with (skills_root / ".refresh.lock").open("a") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
 class HostToolAllowlistMiddleware(AgentMiddleware):
@@ -104,28 +91,35 @@ def _assert_safe_tree(source: Path) -> Path:
 
 
 def refresh_agent_skills(agent_root: Path, sources: list[Path]) -> list[str]:
-    """Copy trusted skill sources into the isolated root via a staged replacement."""
+    """Copy trusted skill sources into an immutable, content-addressed snapshot."""
     skills_root = agent_root / "skills"
     skills_root.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=".refresh-", dir=skills_root))
-    published: list[str] = []
+    child_names: list[str] = []
     try:
         for index, source in enumerate(sources):
             safe_source = _assert_safe_tree(source)
             destination = stage / f"{index}-{safe_source.name}"
             shutil.copytree(safe_source, destination)
-            published.append(str(skills_root / destination.name) + "/")
-        with _refresh_lock(skills_root):
-            current = skills_root / "current"
-            previous = skills_root / ".previous"
-            if previous.exists():
-                shutil.rmtree(previous)
-            if current.exists():
-                os.replace(current, previous)
-            os.replace(stage, current)
-            if previous.exists():
-                shutil.rmtree(previous)
-        return [path.replace(str(skills_root), str(current), 1) for path in published]
+            child_names.append(destination.name)
+
+        digest = hashlib.sha256()
+        for entry in sorted(stage.rglob("*")):
+            relative = entry.relative_to(stage).as_posix()
+            digest.update(relative.encode())
+            digest.update(b"\0")
+            if entry.is_file():
+                with entry.open("rb") as file_handle:
+                    for chunk in iter(lambda: file_handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            digest.update(b"\0")
+
+        snapshot = skills_root / f"snapshot-{digest.hexdigest()}"
+        try:
+            stage.rename(snapshot)
+        except FileExistsError:
+            shutil.rmtree(stage)
+        return [str(snapshot / child_name) + "/" for child_name in child_names]
     except Exception:
         shutil.rmtree(stage, ignore_errors=True)
         raise
