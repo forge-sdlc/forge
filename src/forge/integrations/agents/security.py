@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -74,7 +75,16 @@ def validate_agent_root(root: Path, project_root: Path, workspace_base: str = ""
     # mkdir's mode is ignored for an existing directory and is filtered by the
     # process umask for a new one. Enforce the isolation boundary only after the
     # path has passed validation so a rejected path is never chmodded.
-    resolved.chmod(0o700)
+    try:
+        resolved.chmod(0o700)
+    except PermissionError as exc:
+        # Kubernetes emptyDir volumes are commonly owned by root and made
+        # writable to the workload through fsGroup.  The workload can use the
+        # directory but cannot chmod it because it is not the owner.
+        mode = stat.S_IMODE(resolved.stat().st_mode)
+        accessible = all(os.access(resolved, flag) for flag in (os.R_OK, os.W_OK, os.X_OK))
+        if mode & 0o007 or not accessible:
+            raise ValueError(f"Agent root permissions are not private and writable: {resolved}") from exc
     return resolved
 
 

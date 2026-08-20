@@ -44,6 +44,37 @@ def test_agent_root_enforces_private_permissions(tmp_path: Path) -> None:
     assert stat.S_IMODE(root.stat().st_mode) == 0o700
 
 
+def test_agent_root_accepts_private_fs_group_volume(tmp_path: Path) -> None:
+    """A writable group-owned Kubernetes volume need not be chmod-able by the process."""
+    project = tmp_path / "forge"
+    project.mkdir()
+    root = tmp_path / "agent"
+    root.mkdir(mode=0o770)
+
+    original_chmod = Path.chmod
+
+    def deny_agent_root_chmod(path: Path, mode: int, *args, **kwargs) -> None:
+        if path == root.resolve():
+            raise PermissionError("not the volume owner")
+        original_chmod(path, mode, *args, **kwargs)
+
+    with patch.object(Path, "chmod", deny_agent_root_chmod):
+        assert validate_agent_root(root, project) == root.resolve()
+
+
+def test_agent_root_rejects_world_accessible_unowned_volume(tmp_path: Path) -> None:
+    project = tmp_path / "forge"
+    project.mkdir()
+    root = tmp_path / "agent"
+    root.mkdir(mode=0o777)
+
+    with (
+        patch.object(Path, "chmod", side_effect=PermissionError("not the volume owner")),
+        pytest.raises(ValueError, match="not private and writable"),
+    ):
+        validate_agent_root(root, project)
+
+
 def test_agent_root_does_not_chmod_rejected_path(tmp_path: Path) -> None:
     project = tmp_path / "forge"
     project.mkdir(mode=0o755)
