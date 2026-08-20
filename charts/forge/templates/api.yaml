@@ -52,7 +52,7 @@ spec:
             {{- toYaml .Values.resources.api | nindent 12 }}
           volumeMounts:
             - name: agent-root
-              mountPath: /var/lib/forge/agent
+              mountPath: /var/lib/forge
       volumes:
         - name: agent-root
           emptyDir: {}

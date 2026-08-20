@@ -171,9 +171,10 @@ and use read-only or repository-scoped tokens where possible.
 
 Forge includes a Kubernetes Job-based sandbox driver. Before enabling it, require:
 
-The bundled Helm chart mounts a separate ephemeral `emptyDir` at
-`/var/lib/forge/agent` for each API and worker pod. The runtime skill tree is rebuilt
-on pod startup; do not place task workspaces or credentials in that volume.
+The bundled Helm chart mounts a separate ephemeral `emptyDir` at `/var/lib/forge` for
+each API and worker pod. Forge creates its private, user-owned `agent/` subdirectory
+inside that volume on startup. The runtime skill tree is rebuilt on pod startup; do
+not place task workspaces or credentials in that volume.
 
 - distinct service accounts and no automatic API-token mount for task pods;
 - the Restricted Pod Security Standard;

@@ -106,7 +106,7 @@ spec:
               containerPort: {{ .Values.worker.metricsPort }}
           volumeMounts:
             - name: agent-root
-              mountPath: /var/lib/forge/agent
+              mountPath: /var/lib/forge
             - name: workspaces
               mountPath: {{ .Values.workspace.mountPath }}
             {{- if .Values.googleCredentials.enabled }}
