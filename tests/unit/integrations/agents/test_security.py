@@ -1,3 +1,4 @@
+import stat
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -30,6 +31,28 @@ def test_agent_root_cannot_expose_project_or_workspace(tmp_path: Path) -> None:
     assert validate_agent_root(project / ".forge" / "agent", project).is_dir()
     with pytest.raises(ValueError, match="Forge source"):
         validate_agent_root(tmp_path, project)
+
+
+def test_agent_root_enforces_private_permissions(tmp_path: Path) -> None:
+    project = tmp_path / "forge"
+    project.mkdir()
+    root = tmp_path / "agent"
+    root.mkdir(mode=0o755)
+
+    validate_agent_root(root, project)
+
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700
+
+
+def test_agent_root_does_not_chmod_rejected_path(tmp_path: Path) -> None:
+    project = tmp_path / "forge"
+    project.mkdir(mode=0o755)
+    original_mode = stat.S_IMODE(project.stat().st_mode)
+
+    with pytest.raises(ValueError, match="Forge source"):
+        validate_agent_root(project, project)
+
+    assert stat.S_IMODE(project.stat().st_mode) == original_mode
 
 
 def test_agent_root_rejects_symlink(tmp_path: Path) -> None:
@@ -108,6 +131,16 @@ async def test_mcp_tools_are_default_deny_and_exact_allowlisted() -> None:
 
     assert [tool.name for tool in loaded] == ["get_issue"]
     assert discovered == ["github:create_issue", "github:get_issue", "jira:get_issue"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_cannot_reenable_prohibited_builtin_by_name() -> None:
+    agent = ForgeAgent.__new__(ForgeAgent)
+    agent.settings = SimpleNamespace(agent_mcp_allowed_tools="local:execute")
+    agent._load_mcp_config = lambda: {"local": {}}
+
+    with pytest.raises(ValueError, match="collide.*local:execute"):
+        await agent._load_mcp_tools()
 
 
 def test_stdio_mcp_environment_is_sanitized(monkeypatch: pytest.MonkeyPatch) -> None:

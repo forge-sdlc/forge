@@ -71,6 +71,10 @@ def validate_agent_root(root: Path, project_root: Path, workspace_base: str = ""
     for path in protected:
         if path == resolved or resolved in path.parents:
             raise ValueError(f"Agent root exposes protected path: {path}")
+    # mkdir's mode is ignored for an existing directory and is filtered by the
+    # process umask for a new one. Enforce the isolation boundary only after the
+    # path has passed validation so a rejected path is never chmodded.
+    resolved.chmod(0o700)
     return resolved
 
 

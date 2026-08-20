@@ -81,7 +81,8 @@ AGENT_MCP_ALLOWED_TOOLS=github:get_issue,atlassian:get_issue
 
 Avoid write-capable MCP tools for host agents. Exact allowlisting replaces the old
 name heuristic: Forge does not infer safety from names such as `get`, `list`, or
-`read`.
+`read`. MCP identifiers whose tool name is `write_file`, `edit_file`, or `execute`
+are rejected because those names collide with prohibited host built-ins.
 
 Local stdio MCP servers receive only operational environment values plus values
 explicitly declared in that server's `env` configuration. Put only the credential
