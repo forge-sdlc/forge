@@ -23,9 +23,42 @@ All configuration is via environment variables in `.env`. See `.env.example` in 
 
 ### LLM
 
-Choose one backend explicitly. Gemini 3.5 Flash through Vertex AI is recommended.
+Use provider-neutral model connections. Gemini 3.5 Flash through Vertex AI is
+recommended. Connections declare permitted backends, models, locations, and
+capabilities without containing credentials; providers continue to use their
+native credential environment variables.
 
 === "Vertex AI (recommended)"
+
+    ```bash
+    GOOGLE_CLOUD_PROJECT=your-gcp-project
+    GOOGLE_CLOUD_LOCATION=global
+    MODEL_CONNECTIONS={"vertex-prod":{"backend":"vertex-ai","project":"your-gcp-project","location":"global","allowed_models":["gemini-3.5-flash"],"capabilities":["tools"]}}
+    MODEL_DEFAULT={"connection":"vertex-prod","model":"gemini-3.5-flash"}
+    ```
+
+=== "Gemini API"
+
+    ```bash
+    GOOGLE_API_KEY=your-google-api-key
+    MODEL_CONNECTIONS={"gemini-api":{"backend":"google-genai","allowed_models":["gemini-3.5-flash"],"capabilities":["tools"]}}
+    MODEL_DEFAULT={"connection":"gemini-api","model":"gemini-3.5-flash"}
+    ```
+
+=== "Anthropic API"
+
+    ```bash
+    ANTHROPIC_API_KEY=your-anthropic-api-key
+    MODEL_CONNECTIONS={"anthropic-prod":{"backend":"anthropic","allowed_models":["claude-sonnet-4-6"],"capabilities":["tools"]}}
+    MODEL_DEFAULT={"connection":"anthropic-prod","model":"claude-sonnet-4-6"}
+    ```
+
+Forge validates the backend, credentials, model allowlist, capabilities, and
+default target at startup.
+
+??? info "Legacy single-model configuration"
+    Deployments that do not need named connections or per-stage selection can
+    still set `LLM_BACKEND` and `LLM_MODEL` instead:
 
     ```bash
     LLM_BACKEND=vertex-ai
@@ -34,35 +67,15 @@ Choose one backend explicitly. Gemini 3.5 Flash through Vertex AI is recommended
     LLM_MODEL=gemini-3.5-flash
     ```
 
-=== "Gemini API"
-
-    ```bash
-    LLM_BACKEND=google-genai
-    GOOGLE_API_KEY=your-google-api-key
-    LLM_MODEL=gemini-3.5-flash
-    ```
-
-=== "Anthropic API"
-
-    ```bash
-    LLM_BACKEND=anthropic
-    ANTHROPIC_API_KEY=your-anthropic-api-key
-    LLM_MODEL=claude-sonnet-4-6
-    ```
-
-`LLM_BACKEND` and `LLM_MODEL` are required for legacy configuration. A complete
-`MODEL_CONNECTIONS` plus `MODEL_DEFAULT` configuration replaces them and
-derives the runtime backend, model, Vertex project, and location. Provider
-credentials must use the provider-native variables shown above; legacy aliases
-are not supported. Forge validates the backend, credentials, and model
-compatibility at startup.
+    `LLM_BACKEND` and `LLM_MODEL` are required together when
+    `MODEL_CONNECTIONS` and `MODEL_DEFAULT` are not configured. Provider
+    credentials must use the provider-native variables shown above; legacy
+    credential aliases are not supported.
 
 The legacy `CONTAINER_LLM_MODEL` override remains supported. For exact
-per-stage selection, administrators can define JSON `MODEL_CONNECTIONS`,
-`MODEL_DEFAULT`, and `MODEL_POLICY` values. Connections contain a backend,
-provider location, model allowlist, and declared capabilities—never a credential value. Each backend
-uses its existing provider-native environment credential. Jira projects then
-set `forge.model_policy`, restricted to those connections and models:
+per-stage selection, administrators can add a `MODEL_POLICY` value to the
+recommended connection configuration. Jira projects can then set
+`forge.model_policy`, restricted to those connections and models:
 
 ```bash
 MODEL_CONNECTIONS={"vertex-global":{"backend":"vertex-ai","project":"my-gcp-project","location":"global","allowed_models":["gemini-3.5-flash","claude-sonnet-5"],"capabilities":["tools"]}}

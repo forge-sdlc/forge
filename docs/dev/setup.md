@@ -33,10 +33,10 @@ JIRA_API_TOKEN=your-jira-api-token
 
 GITHUB_TOKEN=github_pat_your_token
 
-LLM_BACKEND=vertex-ai
 GOOGLE_CLOUD_PROJECT=your-gcp-project
 GOOGLE_CLOUD_LOCATION=global
-LLM_MODEL=gemini-3.5-flash
+MODEL_CONNECTIONS={"vertex-prod":{"backend":"vertex-ai","project":"your-gcp-project","location":"global","allowed_models":["gemini-3.5-flash"],"capabilities":["tools"]}}
+MODEL_DEFAULT={"connection":"vertex-prod","model":"gemini-3.5-flash"}
 REDIS_URL=redis://localhost:6380/0
 ```
 

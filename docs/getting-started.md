@@ -36,12 +36,18 @@ JIRA_API_TOKEN=your-jira-api-token
 # GitHub
 GITHUB_TOKEN=github_pat_your_token
 
-# Required LLM configuration (recommended Vertex AI setup)
-LLM_BACKEND=vertex-ai
+# Recommended provider-neutral model configuration (Vertex AI)
 GOOGLE_CLOUD_PROJECT=your-gcp-project
 GOOGLE_CLOUD_LOCATION=global
-LLM_MODEL=gemini-3.5-flash
+MODEL_CONNECTIONS={"vertex-prod":{"backend":"vertex-ai","project":"your-gcp-project","location":"global","allowed_models":["gemini-3.5-flash"],"capabilities":["tools"]}}
+MODEL_DEFAULT={"connection":"vertex-prod","model":"gemini-3.5-flash"}
 ```
+
+`MODEL_CONNECTIONS` declares the models an administrator permits Forge to use,
+while `MODEL_DEFAULT` selects the deployment-wide default. Connection JSON does
+not contain credentials; Vertex AI uses Application Default Credentials. See
+[Configuration](reference/config.md#llm) for Gemini API and Anthropic examples,
+legacy settings, and per-stage model policies.
 
 ## 3. Build the Container Image
 

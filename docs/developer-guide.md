@@ -68,12 +68,17 @@ JIRA_API_TOKEN=your-jira-api-token
 # GitHub
 GITHUB_TOKEN=github_pat_your_token
 
-# Required LLM configuration (recommended Vertex AI setup)
-LLM_BACKEND=vertex-ai
+# Recommended provider-neutral model configuration (Vertex AI)
 GOOGLE_CLOUD_PROJECT=your-gcp-project
 GOOGLE_CLOUD_LOCATION=global
-LLM_MODEL=gemini-3.5-flash
+MODEL_CONNECTIONS={"vertex-prod":{"backend":"vertex-ai","project":"your-gcp-project","location":"global","allowed_models":["gemini-3.5-flash"],"capabilities":["tools"]}}
+MODEL_DEFAULT={"connection":"vertex-prod","model":"gemini-3.5-flash"}
 ```
+
+Connections define the allowed backend and models without embedding credentials;
+`MODEL_DEFAULT` selects the deployment-wide target. See the
+[configuration reference](reference/config.md#llm) for alternative providers,
+legacy settings, and per-stage policy.
 
 ---
 
