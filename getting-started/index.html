@@ -1847,12 +1847,17 @@
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="c1"># GitHub</span>
 <a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nv">GITHUB_TOKEN</span><span class="o">=</span>github_pat_your_token
 <a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1"># Required LLM configuration (recommended Vertex AI setup)</span>
-<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nv">LLM_BACKEND</span><span class="o">=</span>vertex-ai
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span>your-gcp-project
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nv">GOOGLE_CLOUD_LOCATION</span><span class="o">=</span>global
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>gemini-3.5-flash
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="c1"># Recommended provider-neutral model configuration (Vertex AI)</span>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span>your-gcp-project
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nv">GOOGLE_CLOUD_LOCATION</span><span class="o">=</span>global
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nv">MODEL_CONNECTIONS</span><span class="o">={</span><span class="s2">&quot;vertex-prod&quot;</span>:<span class="o">{</span><span class="s2">&quot;backend&quot;</span>:<span class="s2">&quot;vertex-ai&quot;</span>,<span class="s2">&quot;project&quot;</span>:<span class="s2">&quot;your-gcp-project&quot;</span>,<span class="s2">&quot;location&quot;</span>:<span class="s2">&quot;global&quot;</span>,<span class="s2">&quot;allowed_models&quot;</span>:<span class="o">[</span><span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">]</span>,<span class="s2">&quot;capabilities&quot;</span>:<span class="o">[</span><span class="s2">&quot;tools&quot;</span><span class="o">]}}</span>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="nv">MODEL_DEFAULT</span><span class="o">={</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-prod&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}</span>
 </code></pre></div>
+<p><code>MODEL_CONNECTIONS</code> declares the models an administrator permits Forge to use,
+while <code>MODEL_DEFAULT</code> selects the deployment-wide default. Connection JSON does
+not contain credentials; Vertex AI uses Application Default Credentials. See
+<a href="../reference/config/#llm">Configuration</a> for Gemini API and Anthropic examples,
+legacy settings, and per-stage model policies.</p>
 <h2 id="3-build-the-container-image">3. Build the Container Image<a class="headerlink" href="#3-build-the-container-image" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>podman<span class="w"> </span>build<span class="w"> </span>-t<span class="w"> </span>forge-dev:latest<span class="w"> </span>-f<span class="w"> </span>containers/Containerfile<span class="w"> </span>containers/
 </code></pre></div>

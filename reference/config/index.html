@@ -2154,65 +2154,76 @@
 </tbody>
 </table>
 <h3 id="llm">LLM<a class="headerlink" href="#llm" title="Permanent link">&para;</a></h3>
-<p>Choose one backend explicitly. Gemini 3.5 Flash through Vertex AI is recommended.</p>
+<p>Use provider-neutral model connections. Gemini 3.5 Flash through Vertex AI is
+recommended. Connections declare permitted backends, models, locations, and
+capabilities without containing credentials; providers continue to use their
+native credential environment variables.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Vertex AI (recommended)</label><label for="__tabbed_1_2">Gemini API</label><label for="__tabbed_1_3">Anthropic API</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">LLM_BACKEND</span><span class="o">=</span>vertex-ai
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span>your-gcp-project
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nv">GOOGLE_CLOUD_LOCATION</span><span class="o">=</span>global
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>gemini-3.5-flash
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span>your-gcp-project
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nv">GOOGLE_CLOUD_LOCATION</span><span class="o">=</span>global
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nv">MODEL_CONNECTIONS</span><span class="o">={</span><span class="s2">&quot;vertex-prod&quot;</span>:<span class="o">{</span><span class="s2">&quot;backend&quot;</span>:<span class="s2">&quot;vertex-ai&quot;</span>,<span class="s2">&quot;project&quot;</span>:<span class="s2">&quot;your-gcp-project&quot;</span>,<span class="s2">&quot;location&quot;</span>:<span class="s2">&quot;global&quot;</span>,<span class="s2">&quot;allowed_models&quot;</span>:<span class="o">[</span><span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">]</span>,<span class="s2">&quot;capabilities&quot;</span>:<span class="o">[</span><span class="s2">&quot;tools&quot;</span><span class="o">]}}</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nv">MODEL_DEFAULT</span><span class="o">={</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-prod&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">LLM_BACKEND</span><span class="o">=</span>google-genai
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span>your-google-api-key
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>gemini-3.5-flash
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span>your-google-api-key
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">MODEL_CONNECTIONS</span><span class="o">={</span><span class="s2">&quot;gemini-api&quot;</span>:<span class="o">{</span><span class="s2">&quot;backend&quot;</span>:<span class="s2">&quot;google-genai&quot;</span>,<span class="s2">&quot;allowed_models&quot;</span>:<span class="o">[</span><span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">]</span>,<span class="s2">&quot;capabilities&quot;</span>:<span class="o">[</span><span class="s2">&quot;tools&quot;</span><span class="o">]}}</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">MODEL_DEFAULT</span><span class="o">={</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;gemini-api&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">LLM_BACKEND</span><span class="o">=</span>anthropic
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>your-anthropic-api-key
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>claude-sonnet-4-6
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">ANTHROPIC_API_KEY</span><span class="o">=</span>your-anthropic-api-key
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">MODEL_CONNECTIONS</span><span class="o">={</span><span class="s2">&quot;anthropic-prod&quot;</span>:<span class="o">{</span><span class="s2">&quot;backend&quot;</span>:<span class="s2">&quot;anthropic&quot;</span>,<span class="s2">&quot;allowed_models&quot;</span>:<span class="o">[</span><span class="s2">&quot;claude-sonnet-4-6&quot;</span><span class="o">]</span>,<span class="s2">&quot;capabilities&quot;</span>:<span class="o">[</span><span class="s2">&quot;tools&quot;</span><span class="o">]}}</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">MODEL_DEFAULT</span><span class="o">={</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;anthropic-prod&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-sonnet-4-6&quot;</span><span class="o">}</span>
 </code></pre></div>
 </div>
 </div>
 </div>
-<p><code>LLM_BACKEND</code> and <code>LLM_MODEL</code> are required for legacy configuration. A complete
-<code>MODEL_CONNECTIONS</code> plus <code>MODEL_DEFAULT</code> configuration replaces them and
-derives the runtime backend, model, Vertex project, and location. Provider
-credentials must use the provider-native variables shown above; legacy aliases
-are not supported. Forge validates the backend, credentials, and model
-compatibility at startup.</p>
+<p>Forge validates the backend, credentials, model allowlist, capabilities, and
+default target at startup.</p>
+<details class="info">
+<summary>Legacy single-model configuration</summary>
+<p>Deployments that do not need named connections or per-stage selection can
+still set <code>LLM_BACKEND</code> and <code>LLM_MODEL</code> instead:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">LLM_BACKEND</span><span class="o">=</span>vertex-ai
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">GOOGLE_CLOUD_PROJECT</span><span class="o">=</span>your-gcp-project
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">GOOGLE_CLOUD_LOCATION</span><span class="o">=</span>global
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="nv">LLM_MODEL</span><span class="o">=</span>gemini-3.5-flash
+</code></pre></div>
+<p><code>LLM_BACKEND</code> and <code>LLM_MODEL</code> are required together when
+<code>MODEL_CONNECTIONS</code> and <code>MODEL_DEFAULT</code> are not configured. Provider
+credentials must use the provider-native variables shown above; legacy
+credential aliases are not supported.</p>
+</details>
 <p>The legacy <code>CONTAINER_LLM_MODEL</code> override remains supported. For exact
-per-stage selection, administrators can define JSON <code>MODEL_CONNECTIONS</code>,
-<code>MODEL_DEFAULT</code>, and <code>MODEL_POLICY</code> values. Connections contain a backend,
-provider location, model allowlist, and declared capabilities—never a credential value. Each backend
-uses its existing provider-native environment credential. Jira projects then
-set <code>forge.model_policy</code>, restricted to those connections and models:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">MODEL_CONNECTIONS</span><span class="o">={</span><span class="s2">&quot;vertex-global&quot;</span>:<span class="o">{</span><span class="s2">&quot;backend&quot;</span>:<span class="s2">&quot;vertex-ai&quot;</span>,<span class="s2">&quot;project&quot;</span>:<span class="s2">&quot;my-gcp-project&quot;</span>,<span class="s2">&quot;location&quot;</span>:<span class="s2">&quot;global&quot;</span>,<span class="s2">&quot;allowed_models&quot;</span>:<span class="o">[</span><span class="s2">&quot;gemini-3.5-flash&quot;</span>,<span class="s2">&quot;claude-sonnet-5&quot;</span><span class="o">]</span>,<span class="s2">&quot;capabilities&quot;</span>:<span class="o">[</span><span class="s2">&quot;tools&quot;</span><span class="o">]}}</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">MODEL_DEFAULT</span><span class="o">={</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nv">MODEL_POLICY</span><span class="o">={</span><span class="s2">&quot;generate_prd&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-sonnet-5&quot;</span><span class="o">}</span>,<span class="s2">&quot;generate_spec&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}}</span>
+per-stage selection, administrators can add a <code>MODEL_POLICY</code> value to the
+recommended connection configuration. Jira projects can then set
+<code>forge.model_policy</code>, restricted to those connections and models:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">MODEL_CONNECTIONS</span><span class="o">={</span><span class="s2">&quot;vertex-global&quot;</span>:<span class="o">{</span><span class="s2">&quot;backend&quot;</span>:<span class="s2">&quot;vertex-ai&quot;</span>,<span class="s2">&quot;project&quot;</span>:<span class="s2">&quot;my-gcp-project&quot;</span>,<span class="s2">&quot;location&quot;</span>:<span class="s2">&quot;global&quot;</span>,<span class="s2">&quot;allowed_models&quot;</span>:<span class="o">[</span><span class="s2">&quot;gemini-3.5-flash&quot;</span>,<span class="s2">&quot;claude-sonnet-5&quot;</span><span class="o">]</span>,<span class="s2">&quot;capabilities&quot;</span>:<span class="o">[</span><span class="s2">&quot;tools&quot;</span><span class="o">]}}</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">MODEL_DEFAULT</span><span class="o">={</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">MODEL_POLICY</span><span class="o">={</span><span class="s2">&quot;generate_prd&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-sonnet-5&quot;</span><span class="o">}</span>,<span class="s2">&quot;generate_spec&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;gemini-3.5-flash&quot;</span><span class="o">}}</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">generate_prd</span><span class="o">=</span>vertex-production:gemini-3.5-pro<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">implement_task</span><span class="o">=</span>anthropic-production:claude-sonnet-4-6
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="c1"># Set a separate project-wide fallback (individual --model overrides still win)</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">  </span>--model-all<span class="w"> </span>vertex-production:gemini-3.5-pro
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="c1"># Remove one stage override and preserve the rest</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--remove-model<span class="w"> </span>generate_prd
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="c1"># Delete all per-stage overrides</span>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--clear-model-policy
-<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
-<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="c1"># Delete the project-wide fallback</span>
-<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--clear-model-default
-<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>
-<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="c1"># Validate against the local runtime configuration and print every target</span>
-<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>forge<span class="w"> </span>get-config<span class="w"> </span>MYPROJ<span class="w"> </span>--models
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">generate_prd</span><span class="o">=</span>vertex-production:gemini-3.5-pro<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">implement_task</span><span class="o">=</span>anthropic-production:claude-sonnet-4-6
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="c1"># Set a separate project-wide fallback (individual --model overrides still win)</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>--model-all<span class="w"> </span>vertex-production:gemini-3.5-pro
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="c1"># Remove one stage override and preserve the rest</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--remove-model<span class="w"> </span>generate_prd
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="c1"># Delete all per-stage overrides</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--clear-model-policy
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="c1"># Delete the project-wide fallback</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--clear-model-default
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="c1"># Validate against the local runtime configuration and print every target</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>forge<span class="w"> </span>get-config<span class="w"> </span>MYPROJ<span class="w"> </span>--models
 </code></pre></div>
 <p>Project overrides require administrators to configure <code>MODEL_CONNECTIONS</code>.
 The user-facing <code>project-setup</code> command validates policy syntax and canonical
@@ -2358,11 +2369,11 @@ PRD generation and later <code>!</code> revision requests resolve <code>generate
 submitted with <code>?</code> do not regenerate the artifact and resolve the separate
 <code>answer_question</code> key. Configure both keys when the answer must use the same
 model that created the PRD:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">MODEL_POLICY</span><span class="o">={</span><span class="s2">&quot;generate_prd&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-opus-4-6&quot;</span><span class="o">}</span>,<span class="s2">&quot;answer_question&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-opus-4-6&quot;</span><span class="o">}}</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">generate_prd</span><span class="o">=</span>vertex-global:claude-opus-4-6<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">answer_question</span><span class="o">=</span>vertex-global:claude-opus-4-6
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">MODEL_POLICY</span><span class="o">={</span><span class="s2">&quot;generate_prd&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-opus-4-6&quot;</span><span class="o">}</span>,<span class="s2">&quot;answer_question&quot;</span>:<span class="o">{</span><span class="s2">&quot;connection&quot;</span>:<span class="s2">&quot;vertex-global&quot;</span>,<span class="s2">&quot;model&quot;</span>:<span class="s2">&quot;claude-opus-4-6&quot;</span><span class="o">}}</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">generate_prd</span><span class="o">=</span>vertex-global:claude-opus-4-6<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>--model<span class="w"> </span><span class="nv">answer_question</span><span class="o">=</span>vertex-global:claude-opus-4-6
 </code></pre></div>
 <p>The same pattern applies to <code>generate_spec</code>, <code>decompose_epics</code>, and
 <code>generate_tasks</code>: revisions reuse their generation key, while Q&amp;A uses
@@ -2477,32 +2488,32 @@ global stage mapping, then the global default, and finally the legacy
 <p>In production, Forge reads repository configuration from Jira project properties, <strong>not</strong> from environment variables. If not configured, Forge blocks the workflow and posts setup instructions on the ticket.</p>
 </div>
 <p>Set these properties per Jira project via the REST API:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Available repos for this project</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.repos&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;[&quot;org/repo1&quot;, &quot;org/repo2&quot;]&#39;</span>
-<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># Alternatively, configure a repository with additional metadata (like enabling draft PRs) using an object:</span>
-<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.repos&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;[</span>
-<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="s1">    &quot;org/repo1&quot;,</span>
-<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="s1">    {</span>
-<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="s1">      &quot;name&quot;: &quot;org/repo2&quot;,</span>
-<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="s1">      &quot;draft&quot;: true</span>
-<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="s1">    }</span>
-<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="s1">  ]&#39;</span>
-<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>
-<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="c1"># Default repo when no explicit assignment is made</span>
-<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.default_repo&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;&quot;org/repo1&quot;&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Available repos for this project</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.repos&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;[&quot;org/repo1&quot;, &quot;org/repo2&quot;]&#39;</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="c1"># Alternatively, configure a repository with additional metadata (like enabling draft PRs) using an object:</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.repos&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;[</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="s1">    &quot;org/repo1&quot;,</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="s1">    {</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="s1">      &quot;name&quot;: &quot;org/repo2&quot;,</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="s1">      &quot;draft&quot;: true</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="s1">    }</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="s1">  ]&#39;</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a><span class="c1"># Default repo when no explicit assignment is made</span>
+<a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a><span class="w">  </span><span class="s2">&quot;https://your-org.atlassian.net/rest/api/3/project/MYPROJ/properties/forge.default_repo&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a><span class="w">  </span>-u<span class="w"> </span><span class="s2">&quot;you@example.com:YOUR_API_TOKEN&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;&quot;org/repo1&quot;&#39;</span>
 </code></pre></div>
 <h2 id="local-development-overrides">Local Development Overrides<a class="headerlink" href="#local-development-overrides" title="Permanent link">&para;</a></h2>
 <p>Use these to skip the Jira project property requirement during local development:</p>
