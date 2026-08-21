@@ -5,10 +5,10 @@ import logging
 from datetime import UTC, datetime
 
 from forge.integrations.agents import ForgeAgent
-from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.source_control import get_adapter, identity_for
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +32,8 @@ async def _post_qa_response(
     pr_target = _artifact_pr_target(state, artifact_type)
     if pr_target:
         repo_full, pr_number = pr_target
-        owner, repo_name = repo_full.split("/", 1)
-        gh = GitHubClient()
-        try:
-            await gh.create_issue_comment(owner, repo_name, pr_number, body)
-        finally:
-            await gh.close()
+        repo_ref, adapter = get_adapter(repo_full)
+        await adapter.create_comment(repo_ref, identity_for(repo_ref, pr_number), body)
     else:
         await jira.add_comment(ticket_key, body)
 

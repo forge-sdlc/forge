@@ -7,8 +7,10 @@ import logging
 from typing import Any
 
 from forge.integrations.jira.client import JiraClient
+from forge.integrations.source_control.errors import SourceControlError
 from forge.utils.redaction import redact_secrets
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.utils.source_control import get_adapter, identity_for
 
 logger = logging.getLogger(__name__)
 _MODEL_POLICY_ERROR_PREFIX = "Model policy configuration error:"
@@ -101,17 +103,14 @@ async def notify_error(
             and "/" in current_repo
             and pr_number
         ):
-            from forge.integrations.github.client import GitHubClient
-
-            owner, repo = current_repo.split("/", 1)
-            github = GitHubClient()
             try:
+                repo_ref, adapter = get_adapter(current_repo)
+                identity = identity_for(repo_ref, int(pr_number))
                 problem, available = _model_policy_error_parts(error_truncated)
                 fix_command = _model_policy_fix_command(ticket_key, node_name)
-                await github.create_issue_comment(
-                    owner,
-                    repo,
-                    int(pr_number),
+                await adapter.create_comment(
+                    repo_ref,
+                    identity,
                     "## 🚨 Action required: Forge model configuration\n\n"
                     "This stage stopped because its project model selection is invalid. "
                     "**The solution is below.**\n\n"
@@ -125,13 +124,15 @@ async def notify_error(
                     f"Then add the `forge:retry` label to `{ticket_key}`.",
                 )
                 logger.info(f"Posted model policy error to {current_repo}#{pr_number}")
-            except Exception as github_error:
+            except SourceControlError as sc_error:
                 logger.warning(
-                    f"Failed to post model policy error to {current_repo}#{pr_number}: "
-                    f"{github_error}"
+                    f"Failed to post model policy error to {current_repo}#{pr_number}: {sc_error}"
                 )
-            finally:
-                await github.close()
+            except Exception as unexpected_error:
+                logger.warning(
+                    f"Unexpected error posting model policy error to "
+                    f"{current_repo}#{pr_number}: {unexpected_error}"
+                )
 
     except Exception as e:
         # Don't fail the workflow if we can't post a comment

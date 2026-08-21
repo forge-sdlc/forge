@@ -1,15 +1,15 @@
 """Shared publication helpers for PRD and specification proposal PRs."""
 
-import hashlib
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
-from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient, pr_interaction_options
+from forge.integrations.source_control.errors import NotFoundError
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.checkpointer import set_pr_ticket_index
 from forge.workflow.utils.jira_status import post_status_comment
+from forge.workflow.utils.source_control import get_adapter, identity_for
 
 logger = logging.getLogger(__name__)
 
@@ -58,35 +58,34 @@ async def create_proposal_pr(
     proposals_path: str,
 ) -> dict[str, Any]:
     """Publish an artifact branch to a fork and open its upstream PR."""
-    upstream_owner, upstream_repo = proposals_repo.split("/", 1)
     branch = f"forge/{artifact.branch_segment}/{ticket_key.lower()}"
     file_path = "/".join(filter(None, [proposals_path, ticket_key, artifact.file_name]))
 
-    gh = GitHubClient()
+    repo_ref, adapter = get_adapter(proposals_repo)
     jira = JiraClient()
     try:
-        fork = await gh.get_or_create_fork(upstream_owner, upstream_repo)
-        fork_owner = fork["owner"]["login"]
-        fork_repo = fork["name"]
-        upstream = await gh.get_repository(upstream_owner, upstream_repo)
-        default_branch = upstream.get("default_branch") or "main"
-        synced = await gh.sync_fork_with_upstream(fork_owner, fork_repo, branch=default_branch)
-        if not synced:
-            raise RuntimeError(
-                f"Could not synchronize proposal fork {fork_owner}/{fork_repo} "
-                f"(branch {default_branch}) with upstream"
+        default_branch = await adapter.resolve_default_branch(repo_ref)
+        target = await adapter.ensure_write_target(repo_ref)
+        fork_owner = target.fork_owner or ""
+        fork_repo = target.fork_repo or ""
+        fork_ref = (
+            replace(
+                repo_ref,
+                id=f"{fork_owner}/{fork_repo}",
+                namespace=f"{fork_owner}/{fork_repo}",
+                change_request_mode="direct",
             )
+            if fork_owner and fork_repo
+            else repo_ref
+        )
 
-        await gh.create_branch(fork_owner, fork_repo, branch, base=default_branch)
-        existing_file = await gh.get_file_contents(fork_owner, fork_repo, file_path, branch)
-        await gh.create_or_update_file(
-            owner=fork_owner,
-            repo=fork_repo,
-            path=file_path,
-            content=content,
-            message=f"Add {artifact.title_name} for {ticket_key}",
-            branch=branch,
-            sha=existing_file["sha"] if existing_file else None,
+        await adapter.create_branch(fork_ref, branch, default_branch)
+        await adapter.put_file(
+            fork_ref,
+            file_path,
+            content,
+            f"Add {artifact.title_name} for {ticket_key}",
+            branch,
         )
         pr_body = (
             f"**{artifact.title_name} for [{ticket_key}]"
@@ -97,17 +96,16 @@ async def create_proposal_pr(
             "Leave comments on this PR to provide feedback — "
             f"Forge will regenerate the {artifact.title_name} and push updated commits."
         )
-        pr_result = await gh.create_pull_request(
-            owner=upstream_owner,
-            repo=upstream_repo,
+        change_request = await adapter.create_change_request(
+            repo_ref,
+            replace(target, head_ref=branch, base_branch=default_branch),
             title=f"[{ticket_key}] {artifact.title_name}: {summary}",
             body=pr_body,
-            head=f"{fork_owner}:{branch}",
-            base=default_branch,
         )
 
-        pr_url = pr_result.pr["html_url"]
-        pr_number = pr_result.pr["number"]
+        pr_url = change_request.url
+        native_id = change_request.identity.native_id
+        pr_number = int(native_id) if native_id is not None else None
         await set_pr_ticket_index(pr_url, ticket_key)
         await jira.set_workflow_label(ticket_key, artifact.pending_label)
         await post_status_comment(
@@ -121,22 +119,18 @@ async def create_proposal_pr(
         return {
             f"{prefix}_pr_url": pr_url,
             f"{prefix}_pr_number": pr_number,
-            f"{prefix}_pr_repo": proposals_repo,
+            # Canonical namespace, not the raw (possibly repos.yaml-alias)
+            # proposals_repo -- webhook matching (worker._is_prd_pr_event /
+            # _is_spec_pr_event) compares this against event.repo_ref.namespace,
+            # which is always canonical.
+            f"{prefix}_pr_repo": repo_ref.namespace,
             f"{prefix}_pr_fork_owner": fork_owner,
             f"{prefix}_pr_fork_repo": fork_repo,
             f"{prefix}_pr_branch": branch,
             f"{prefix}_pr_file_path": file_path,
         }
     finally:
-        await gh.close()
         await jira.close()
-
-
-def _git_blob_sha(content: str) -> str:
-    """Compute the git blob SHA-1 for a string, matching how Git stores blobs."""
-    content_bytes = content.encode()
-    header = f"blob {len(content_bytes)}\0".encode()
-    return hashlib.sha1(header + content_bytes).hexdigest()
 
 
 async def update_proposal_pr(
@@ -152,58 +146,64 @@ async def update_proposal_pr(
         True if the file was updated, False if the content was unchanged.
     """
     prefix = artifact.state_prefix
-    upstream_owner, upstream_repo = state[f"{prefix}_pr_repo"].split("/", 1)
-    owner = state.get(f"{prefix}_pr_fork_owner") or upstream_owner
-    repo = state.get(f"{prefix}_pr_fork_repo") or upstream_repo
+    upstream_repo = state[f"{prefix}_pr_repo"]
+    fork_owner = state.get(f"{prefix}_pr_fork_owner")
+    fork_repo = state.get(f"{prefix}_pr_fork_repo")
     branch = state[f"{prefix}_pr_branch"]
     pr_number = state[f"{prefix}_pr_number"]
     file_path = state[f"{prefix}_pr_file_path"]
 
-    gh = GitHubClient()
+    repo_ref, adapter = get_adapter(upstream_repo)
+    write_ref = (
+        replace(
+            repo_ref,
+            id=f"{fork_owner}/{fork_repo}",
+            namespace=f"{fork_owner}/{fork_repo}",
+            change_request_mode="direct",
+        )
+        if fork_owner and fork_repo
+        else repo_ref
+    )
+    identity = identity_for(repo_ref, pr_number)
+
     try:
-        file_meta = await gh.get_file_contents(owner, repo, file_path, branch)
-        if not file_meta:
-            logger.warning(
-                "Could not find %s file %s on branch %s",
-                artifact.title_name,
-                file_path,
-                branch,
-            )
-            return False
-
-        if _git_blob_sha(content) == file_meta["sha"]:
-            logger.warning(
-                "Regenerated %s for %s is unchanged — skipping commit",
-                artifact.title_name,
-                ticket_key,
-            )
-            await gh.create_issue_comment(
-                upstream_owner,
-                upstream_repo,
-                pr_number,
-                f"Forge reviewed the feedback but the regenerated "
-                f"{artifact.published_name} was unchanged. The feedback may "
-                f"require manual revision, or it may have already been "
-                f"addressed in a previous revision.",
-            )
-            return False
-
-        await gh.create_or_update_file(
-            owner=owner,
-            repo=repo,
-            path=file_path,
-            content=content,
-            message=(f"Revise {artifact.title_name} for {ticket_key} based on feedback"),
-            branch=branch,
-            sha=file_meta["sha"],
+        existing_content = await adapter.get_file(write_ref, file_path, branch)
+    except NotFoundError:
+        logger.warning(
+            "Could not find %s file %s on branch %s",
+            artifact.title_name,
+            file_path,
+            branch,
         )
-        await gh.create_issue_comment(
-            upstream_owner,
-            upstream_repo,
-            pr_number,
-            f"{artifact.published_name} has been revised based on feedback. "
-            "Please review the updated version.",
+        return False
+
+    if existing_content == content:
+        logger.warning(
+            "Regenerated %s for %s is unchanged — skipping commit",
+            artifact.title_name,
+            ticket_key,
         )
-        return True
-    finally:
-        await gh.close()
+        await adapter.create_comment(
+            repo_ref,
+            identity,
+            f"Forge reviewed the feedback but the regenerated "
+            f"{artifact.published_name} was unchanged. The feedback may "
+            f"require manual revision, or it may have already been "
+            f"addressed in a previous revision.",
+        )
+        return False
+
+    await adapter.put_file(
+        write_ref,
+        file_path,
+        content,
+        f"Revise {artifact.title_name} for {ticket_key} based on feedback",
+        branch,
+    )
+    await adapter.create_comment(
+        repo_ref,
+        identity,
+        f"{artifact.published_name} has been revised based on feedback. "
+        "Please review the updated version.",
+    )
+    return True

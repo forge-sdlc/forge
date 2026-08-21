@@ -44,9 +44,15 @@ async def human_review_gate(state: WorkflowState) -> WorkflowState:
         try:
             pr_number = state.get("current_pr_number")
             if pr_number is not None:
+                pr_url = state.get("current_pr_url")
+                if not pr_url:
+                    pr_urls = state.get("pr_urls", [])
+                    pr_url = pr_urls[-1] if pr_urls else None
+                pr_label = f"Pull request #{pr_number}"
+                if pr_url:
+                    pr_label = f"[{pr_label}]({pr_url})"
                 message = (
-                    f"🚀 Pull request #{pr_number} created and submitted. "
-                    "Waiting for CI checks and human review."
+                    f"🚀 {pr_label} created and submitted. Waiting for CI checks and human review."
                 )
             else:
                 message = (
