@@ -23,6 +23,7 @@ from forge.integrations.source_control.contracts import (
 )
 from forge.integrations.source_control.errors import (
     AuthenticationError,
+    ConflictError,
     RateLimitedError,
     SourceControlError,
     TransientProviderError,
@@ -1004,3 +1005,145 @@ class TestGetCheckArtifacts:
 
         with pytest.raises(SourceControlError, match="non-numeric logs_url"):
             await gitlab_adapter_with_mock_client.get_check_artifacts(gitlab_repo_ref, check)
+
+
+class TestGetFile:
+    @pytest.mark.asyncio
+    async def test_returns_raw_content(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_file_raw = AsyncMock(return_value="print('hi')\n")
+
+        content = await gitlab_adapter_with_mock_client.get_file(
+            gitlab_repo_ref, "src/x.py", "main"
+        )
+
+        mock_gitlab_http_client.get_file_raw.assert_awaited_once_with(
+            "test/repo", "src/x.py", "main"
+        )
+        assert content == "print('hi')\n"
+
+    @pytest.mark.asyncio
+    async def test_raises_not_found_when_missing(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_file_raw = AsyncMock(return_value=None)
+
+        with pytest.raises(SCNotFoundError):
+            await gitlab_adapter_with_mock_client.get_file(gitlab_repo_ref, "missing.py", "main")
+
+
+class TestPutFile:
+    @pytest.mark.asyncio
+    async def test_updates_existing_file_with_last_commit_id(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_file_metadata = AsyncMock(
+            return_value={"last_commit_id": "deadbeef"}
+        )
+        mock_gitlab_http_client.update_file = AsyncMock()
+        mock_gitlab_http_client.create_file = AsyncMock()
+
+        await gitlab_adapter_with_mock_client.put_file(
+            gitlab_repo_ref, "src/x.py", "new content", "update x", "main"
+        )
+
+        mock_gitlab_http_client.update_file.assert_awaited_once_with(
+            "test/repo",
+            "src/x.py",
+            branch="main",
+            content="new content",
+            commit_message="update x",
+            last_commit_id="deadbeef",
+        )
+        mock_gitlab_http_client.create_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_creates_new_file_when_absent(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_file_metadata = AsyncMock(return_value=None)
+        mock_gitlab_http_client.create_file = AsyncMock()
+        mock_gitlab_http_client.update_file = AsyncMock()
+
+        await gitlab_adapter_with_mock_client.put_file(
+            gitlab_repo_ref, "new.py", "content", "add new", "main"
+        )
+
+        mock_gitlab_http_client.create_file.assert_awaited_once_with(
+            "test/repo", "new.py", branch="main", content="content", commit_message="add new"
+        )
+        mock_gitlab_http_client.update_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_stale_commit_id_translates_to_conflict_error(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_file_metadata = AsyncMock(
+            return_value={"last_commit_id": "stale"}
+        )
+        response = httpx.Response(
+            400,
+            json={
+                "message": "You are attempting to update a file that has changed since you started editing it"
+            },
+            request=httpx.Request("PUT", "https://gitlab.com/api/v4/x"),
+        )
+        mock_gitlab_http_client.update_file = AsyncMock(
+            side_effect=httpx.HTTPStatusError("boom", request=response.request, response=response)
+        )
+
+        with pytest.raises(ConflictError):
+            await gitlab_adapter_with_mock_client.put_file(
+                gitlab_repo_ref, "src/x.py", "content", "update", "main"
+            )
+
+    @pytest.mark.asyncio
+    async def test_unrelated_400_propagates_unchanged(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_file_metadata = AsyncMock(return_value={"last_commit_id": "x"})
+        response = httpx.Response(
+            400,
+            json={"message": "Path is invalid"},
+            request=httpx.Request("PUT", "https://gitlab.com/api/v4/x"),
+        )
+        mock_gitlab_http_client.update_file = AsyncMock(
+            side_effect=httpx.HTTPStatusError("boom", request=response.request, response=response)
+        )
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await gitlab_adapter_with_mock_client.put_file(
+                gitlab_repo_ref, "src/x.py", "content", "update", "main"
+            )
+
+
+class TestCreateBranch:
+    @pytest.mark.asyncio
+    async def test_creates_branch(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.create_branch = AsyncMock()
+
+        await gitlab_adapter_with_mock_client.create_branch(gitlab_repo_ref, "feature", "main")
+
+        mock_gitlab_http_client.create_branch.assert_awaited_once_with(
+            "test/repo", "feature", "main"
+        )
+
+    @pytest.mark.asyncio
+    async def test_already_exists_is_swallowed_as_idempotent(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        response = httpx.Response(
+            400,
+            json={"message": "Branch already exists"},
+            request=httpx.Request("POST", "https://gitlab.com/api/v4/x"),
+        )
+        mock_gitlab_http_client.create_branch = AsyncMock(
+            side_effect=httpx.HTTPStatusError("boom", request=response.request, response=response)
+        )
+
+        await gitlab_adapter_with_mock_client.create_branch(
+            gitlab_repo_ref, "feature", "main"
+        )  # must not raise

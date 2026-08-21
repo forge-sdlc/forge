@@ -31,6 +31,7 @@ from forge.integrations.source_control.contracts import (
     WriteTarget,
 )
 from forge.integrations.source_control.errors import (
+    ConflictError,
     NotFoundError,
     ProviderConfigError,
     SourceControlError,
@@ -50,6 +51,22 @@ _CR_STATE_MAP: dict[str, ChangeRequestState] = {
     "merged": ChangeRequestState.MERGED,
     "locked": ChangeRequestState.OPEN,
 }
+
+
+def _looks_like_stale_commit_error(response: httpx.Response) -> bool:
+    try:
+        message = str(response.json().get("message", "")).lower()
+    except Exception:
+        return False
+    return "changed since" in message
+
+
+def _looks_like_branch_exists_error(response: httpx.Response) -> bool:
+    try:
+        message = str(response.json().get("message", "")).lower()
+    except Exception:
+        return False
+    return "already exists" in message
 
 
 def _web_base_url(connection: Connection) -> str:
@@ -564,6 +581,52 @@ class GitLabAdapter:
         if artifact_bytes is None:
             return []
         return [("artifacts.zip", artifact_bytes)]
+
+    @_translate
+    async def get_file(self, repo_ref: RepositoryRef, path: str, ref: str) -> str:
+        client = self._get_client()
+        content = await client.get_file_raw(repo_ref.namespace, path, ref)
+        if content is None:
+            raise NotFoundError(f"File {path!r} not found at ref {ref!r} in {repo_ref.namespace}.")
+        return content
+
+    @_translate
+    async def put_file(
+        self, repo_ref: RepositoryRef, path: str, content: str, message: str, branch: str
+    ) -> None:
+        client = self._get_client()
+        existing = await client.get_file_metadata(repo_ref.namespace, path, branch)
+        try:
+            if existing is not None:
+                await client.update_file(
+                    repo_ref.namespace,
+                    path,
+                    branch=branch,
+                    content=content,
+                    commit_message=message,
+                    last_commit_id=existing.get("last_commit_id"),
+                )
+            else:
+                await client.create_file(
+                    repo_ref.namespace, path, branch=branch, content=content, commit_message=message
+                )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and _looks_like_stale_commit_error(exc.response):
+                raise ConflictError(
+                    f"File {path!r} on {branch!r} in {repo_ref.namespace} was concurrently "
+                    "modified since it was last read; retry with a fresh read."
+                ) from exc
+            raise
+
+    @_translate
+    async def create_branch(self, repo_ref: RepositoryRef, name: str, base: str) -> None:
+        client = self._get_client()
+        try:
+            await client.create_branch(repo_ref.namespace, name, base)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 400 and _looks_like_branch_exists_error(exc.response):
+                return
+            raise
 
     async def close(self) -> None:
         if self._client is not None:

@@ -309,3 +309,111 @@ class TestChecks:
         artifacts = await client.get_job_artifacts("test/repo", 987654)
 
         assert artifacts is None
+
+
+class TestFileOperations:
+    @pytest.mark.asyncio
+    async def test_get_file_raw_returns_text_on_200(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.status_code = 200
+        response.raise_for_status = MagicMock()
+        response.text = "print('hi')\n"
+        client._client.get = AsyncMock(return_value=response)
+
+        content = await client.get_file_raw("test/repo", "src/x.py", "main")
+
+        client._client.get.assert_awaited_once_with(
+            "/projects/test%2Frepo/repository/files/src%2Fx.py/raw", params={"ref": "main"}
+        )
+        assert content == "print('hi')\n"
+
+    @pytest.mark.asyncio
+    async def test_get_file_raw_returns_none_on_404(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.status_code = 404
+        client._client.get = AsyncMock(return_value=response)
+
+        assert await client.get_file_raw("test/repo", "missing.py", "main") is None
+
+    @pytest.mark.asyncio
+    async def test_get_file_metadata_returns_last_commit_id(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.status_code = 200
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"last_commit_id": "deadbeef"}
+        client._client.get = AsyncMock(return_value=response)
+
+        metadata = await client.get_file_metadata("test/repo", "src/x.py", "main")
+
+        assert metadata["last_commit_id"] == "deadbeef"
+
+    @pytest.mark.asyncio
+    async def test_create_file(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        client._client.post = AsyncMock(return_value=response)
+
+        await client.create_file(
+            "test/repo", "new.py", branch="main", content="x = 1", commit_message="add file"
+        )
+
+        client._client.post.assert_awaited_once_with(
+            "/projects/test%2Frepo/repository/files/new.py",
+            json={"branch": "main", "content": "x = 1", "commit_message": "add file"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_update_file_passes_last_commit_id(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        client._client.put = AsyncMock(return_value=response)
+
+        await client.update_file(
+            "test/repo",
+            "existing.py",
+            branch="main",
+            content="x = 2",
+            commit_message="update",
+            last_commit_id="deadbeef",
+        )
+
+        client._client.put.assert_awaited_once_with(
+            "/projects/test%2Frepo/repository/files/existing.py",
+            json={
+                "branch": "main",
+                "content": "x = 2",
+                "commit_message": "update",
+                "last_commit_id": "deadbeef",
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_branch(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        client._client.post = AsyncMock(return_value=response)
+
+        await client.create_branch("test/repo", "feature", "main")
+
+        client._client.post.assert_awaited_once_with(
+            "/projects/test%2Frepo/repository/branches",
+            json={"branch": "feature", "ref": "main"},
+        )

@@ -235,3 +235,67 @@ class GitLabClient:
             return None
         response.raise_for_status()
         return response.content
+
+    async def get_file_raw(self, namespace: str, path: str, ref: str) -> str | None:
+        client = await self._get_client()
+        response = await client.get(
+            f"/projects/{encode_project_id(namespace)}/repository/files/{encode_project_id(path)}/raw",
+            params={"ref": ref},
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.text
+
+    async def get_file_metadata(self, namespace: str, path: str, ref: str) -> dict[str, Any] | None:
+        client = await self._get_client()
+        response = await client.get(
+            f"/projects/{encode_project_id(namespace)}/repository/files/{encode_project_id(path)}",
+            params={"ref": ref},
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
+
+    async def create_file(
+        self, namespace: str, path: str, *, branch: str, content: str, commit_message: str
+    ) -> None:
+        client = await self._get_client()
+        response = await client.post(
+            f"/projects/{encode_project_id(namespace)}/repository/files/{encode_project_id(path)}",
+            json={"branch": branch, "content": content, "commit_message": commit_message},
+        )
+        response.raise_for_status()
+
+    async def update_file(
+        self,
+        namespace: str,
+        path: str,
+        *,
+        branch: str,
+        content: str,
+        commit_message: str,
+        last_commit_id: str | None,
+    ) -> None:
+        client = await self._get_client()
+        payload: dict[str, Any] = {
+            "branch": branch,
+            "content": content,
+            "commit_message": commit_message,
+        }
+        if last_commit_id is not None:
+            payload["last_commit_id"] = last_commit_id
+        response = await client.put(
+            f"/projects/{encode_project_id(namespace)}/repository/files/{encode_project_id(path)}",
+            json=payload,
+        )
+        response.raise_for_status()
+
+    async def create_branch(self, namespace: str, branch: str, ref: str) -> None:
+        client = await self._get_client()
+        response = await client.post(
+            f"/projects/{encode_project_id(namespace)}/repository/branches",
+            json={"branch": branch, "ref": ref},
+        )
+        response.raise_for_status()
