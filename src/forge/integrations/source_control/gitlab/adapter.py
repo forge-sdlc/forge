@@ -22,6 +22,7 @@ from forge.integrations.source_control.contracts import (
     RepositoryRef,
     RepositoryResolver,
     ReviewComment,
+    WriteTarget,
 )
 from forge.integrations.source_control.errors import ProviderConfigError
 from forge.integrations.source_control.http_errors import translate_provider_errors
@@ -54,6 +55,18 @@ def _web_base_url(connection: Connection) -> str:
     if base.endswith("/api/v4"):
         return base[: -len("/api/v4")]
     return base
+
+
+def _require_native_id(identity: ChangeRequestIdentity) -> int:
+    """Coerce identity.native_id to an int, rejecting a missing/None value.
+
+    A None native_id (e.g. from an identity built off a malformed webhook
+    payload) must not silently become MR iid 0 and produce a confusing
+    404 from GitLab -- fail clearly at the adapter boundary instead.
+    """
+    if identity.native_id is None:
+        raise ValueError(f"ChangeRequestIdentity has no native_id: {identity}")
+    return int(identity.native_id)
 
 
 class GitLabAdapter:
@@ -109,6 +122,103 @@ class GitLabAdapter:
         user = await client.get_authenticated_user()
         username = user.get("username", "")
         return Actor(login=username, is_bot="bot" in username.lower())
+
+    @_translate
+    async def ensure_write_target(self, repo_ref: RepositoryRef) -> WriteTarget:
+        web_base = _web_base_url(self._connection)
+
+        if repo_ref.change_request_mode == "direct":
+            return WriteTarget(
+                clone_url=f"{web_base}/{repo_ref.namespace}.git",
+                push_remote_name="origin",
+                head_ref=f"forge/{repo_ref.namespace}",
+                base_branch=repo_ref.default_branch,
+            )
+
+        client = self._get_client()
+        identity = await self.get_authenticated_identity(repo_ref)
+        fork = await client.get_or_create_fork(repo_ref.namespace, fork_owner=identity.login)
+
+        fork_namespace = fork["path_with_namespace"]
+        fork_owner, fork_repo = fork_namespace.rsplit("/", 1)
+        clone_url = fork.get("http_url_to_repo") or f"{web_base}/{fork_namespace}.git"
+        return WriteTarget(
+            clone_url=clone_url,
+            push_remote_name="origin",
+            head_ref=f"forge/{repo_ref.namespace}",
+            base_branch=repo_ref.default_branch,
+            fork_owner=fork_owner,
+            fork_repo=fork_repo,
+        )
+
+    @_translate
+    async def create_change_request(
+        self,
+        repo_ref: RepositoryRef,
+        target: WriteTarget,
+        title: str,
+        body: str,
+        draft: bool = False,
+    ) -> ChangeRequest:
+        client = self._get_client()
+
+        target_project_id = None
+        source_namespace = repo_ref.namespace
+        if target.fork_owner:
+            source_namespace = f"{target.fork_owner}/{target.fork_repo}"
+            upstream = await client.get_project(repo_ref.namespace)
+            target_project_id = upstream["id"]
+
+        mr_title = (
+            f"Draft: {title}" if draft and not title.startswith(("Draft:", "WIP:")) else title
+        )
+        result = await client.create_merge_request(
+            source_namespace,
+            source_branch=target.head_ref,
+            target_branch=target.base_branch,
+            title=mr_title,
+            description=body,
+            target_project_id=target_project_id,
+        )
+        return self._map_change_request(result, repo_ref=repo_ref)
+
+    @_translate
+    async def get_change_request(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+    ) -> ChangeRequest:
+        client = self._get_client()
+        mr = await client.get_merge_request(repo_ref.namespace, _require_native_id(identity))
+        return self._map_change_request(mr, identity=identity)
+
+    @_translate
+    async def update_change_request(
+        self,
+        repo_ref: RepositoryRef,
+        identity: ChangeRequestIdentity,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: ChangeRequestState | None = None,
+    ) -> ChangeRequest:
+        client = self._get_client()
+
+        state_event: str | None = None
+        if state is not None:
+            if state == ChangeRequestState.MERGED:
+                raise ValueError(
+                    "Cannot set change request state to MERGED via update_change_request; "
+                    "GitLab's MR update endpoint only supports 'close' or 'reopen' state_events."
+                )
+            state_event = "close" if state == ChangeRequestState.CLOSED else "reopen"
+
+        mr = await client.update_merge_request(
+            repo_ref.namespace,
+            _require_native_id(identity),
+            title=title,
+            description=body,
+            state_event=state_event,
+        )
+        return self._map_change_request(mr, identity=identity)
 
     async def verify_webhook(self, headers: dict[str, str], _body: bytes) -> bool:
         """GitLab sends its configured secret verbatim in X-Gitlab-Token

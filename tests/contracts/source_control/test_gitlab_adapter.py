@@ -15,6 +15,7 @@ from forge.integrations.source_control.contracts import (
     Provider,
     RepositoryRef,
     ResolvedRepository,
+    WriteTarget,
 )
 from forge.integrations.source_control.errors import (
     AuthenticationError,
@@ -397,3 +398,188 @@ class TestTranslateProviderErrors:
         )
         with pytest.raises(expected_exception):
             await gitlab_adapter_with_mock_client.resolve_default_branch(gitlab_repo_ref)
+
+
+class TestEnsureWriteTarget:
+    @pytest.mark.asyncio
+    async def test_direct_mode_makes_no_api_calls(
+        self, gitlab_adapter_with_mock_client, mock_gitlab_http_client
+    ):
+        direct_ref = RepositoryRef(
+            id="test/repo",
+            provider=Provider.GITLAB,
+            connection="test-gitlab",
+            namespace="test/repo",
+            default_branch="main",
+            change_request_mode="direct",
+        )
+
+        target = await gitlab_adapter_with_mock_client.ensure_write_target(direct_ref)
+
+        assert target.clone_url == "https://gitlab.com/test/repo.git"
+        assert target.push_remote_name == "origin"
+        assert target.base_branch == "main"
+        mock_gitlab_http_client._client.get.assert_not_called()
+        mock_gitlab_http_client._client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_fork_mode_creates_and_returns_fork_target(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_authenticated_user = AsyncMock(
+            return_value={"username": "forge-bot"}
+        )
+        mock_gitlab_http_client.get_or_create_fork = AsyncMock(
+            return_value={
+                "id": 7,
+                "path_with_namespace": "forge-bot/repo",
+                "http_url_to_repo": "https://gitlab.com/forge-bot/repo.git",
+            }
+        )
+
+        target = await gitlab_adapter_with_mock_client.ensure_write_target(gitlab_repo_ref)
+
+        mock_gitlab_http_client.get_or_create_fork.assert_awaited_once_with(
+            "test/repo", fork_owner="forge-bot"
+        )
+        assert target.clone_url == "https://gitlab.com/forge-bot/repo.git"
+        assert target.fork_owner == "forge-bot"
+        assert target.fork_repo == "repo"
+
+
+class TestCreateChangeRequest:
+    @pytest.mark.asyncio
+    async def test_direct_mode_creates_mr_without_target_project_id(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        write_target = WriteTarget(
+            clone_url="https://gitlab.com/test/repo.git",
+            push_remote_name="origin",
+            head_ref="forge/test/repo",
+            base_branch="main",
+        )
+        mock_gitlab_http_client.create_merge_request = AsyncMock(
+            return_value={
+                "iid": 5,
+                "title": "Test MR",
+                "description": "body",
+                "state": "opened",
+                "source_branch": "forge/test/repo",
+                "target_branch": "main",
+                "web_url": "https://gitlab.com/test/repo/-/merge_requests/5",
+                "draft": False,
+            }
+        )
+
+        cr = await gitlab_adapter_with_mock_client.create_change_request(
+            gitlab_repo_ref, write_target, title="Test MR", body="body"
+        )
+
+        mock_gitlab_http_client.create_merge_request.assert_awaited_once_with(
+            "test/repo",
+            source_branch="forge/test/repo",
+            target_branch="main",
+            title="Test MR",
+            description="body",
+            target_project_id=None,
+        )
+        assert cr.identity.native_id == 5
+        assert cr.url == "https://gitlab.com/test/repo/-/merge_requests/5"
+
+    @pytest.mark.asyncio
+    async def test_fork_mode_resolves_upstream_numeric_id_and_uses_fork_as_source(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        write_target = WriteTarget(
+            clone_url="https://gitlab.com/forge-bot/repo.git",
+            push_remote_name="origin",
+            head_ref="forge/test/repo",
+            base_branch="main",
+            fork_owner="forge-bot",
+            fork_repo="repo",
+        )
+        mock_gitlab_http_client.get_project = AsyncMock(return_value={"id": 100})
+        mock_gitlab_http_client.create_merge_request = AsyncMock(
+            return_value={
+                "iid": 6,
+                "title": "T",
+                "description": "",
+                "state": "opened",
+                "source_branch": "forge/test/repo",
+                "target_branch": "main",
+                "web_url": "u",
+                "draft": True,
+            }
+        )
+
+        cr = await gitlab_adapter_with_mock_client.create_change_request(
+            gitlab_repo_ref, write_target, title="T", body="", draft=True
+        )
+
+        mock_gitlab_http_client.get_project.assert_awaited_once_with("test/repo")
+        mock_gitlab_http_client.create_merge_request.assert_awaited_once_with(
+            "forge-bot/repo",
+            source_branch="forge/test/repo",
+            target_branch="main",
+            title="Draft: T",
+            description="",
+            target_project_id=100,
+        )
+        assert cr.draft is True
+
+
+class TestUpdateChangeRequest:
+    @pytest.mark.asyncio
+    async def test_maps_closed_state_to_state_event(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=5
+        )
+        mock_gitlab_http_client.update_merge_request = AsyncMock(
+            return_value={
+                "iid": 5,
+                "title": "T",
+                "description": "",
+                "state": "closed",
+                "source_branch": "f",
+                "target_branch": "main",
+            }
+        )
+
+        cr = await gitlab_adapter_with_mock_client.update_change_request(
+            gitlab_repo_ref, identity, state=ChangeRequestState.CLOSED
+        )
+
+        assert (
+            mock_gitlab_http_client.update_merge_request.await_args.kwargs["state_event"] == "close"
+        )
+        assert cr.state == ChangeRequestState.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_rejects_merged_state(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=5
+        )
+        mock_gitlab_http_client.update_merge_request = AsyncMock()
+
+        with pytest.raises(ValueError, match="MERGED"):
+            await gitlab_adapter_with_mock_client.update_change_request(
+                gitlab_repo_ref, identity, state=ChangeRequestState.MERGED
+            )
+        mock_gitlab_http_client.update_merge_request.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_raises_on_missing_native_id(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=None
+        )
+        mock_gitlab_http_client.get_merge_request = AsyncMock()
+
+        with pytest.raises(ValueError, match="native_id"):
+            await gitlab_adapter_with_mock_client.get_change_request(gitlab_repo_ref, identity)
+        mock_gitlab_http_client.get_merge_request.assert_not_awaited()
