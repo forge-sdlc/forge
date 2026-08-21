@@ -19,6 +19,7 @@ from forge.integrations.source_control.contracts import (
     RepositoryRef,
     ResolvedRepository,
     ReviewState,
+    SourceControlProvider,
     WriteTarget,
 )
 from forge.integrations.source_control.errors import (
@@ -1147,3 +1148,7 @@ class TestCreateBranch:
         await gitlab_adapter_with_mock_client.create_branch(
             gitlab_repo_ref, "feature", "main"
         )  # must not raise
+
+
+def test_gitlab_adapter_satisfies_source_control_provider_protocol(gitlab_adapter_with_mock_client):
+    assert isinstance(gitlab_adapter_with_mock_client, SourceControlProvider)

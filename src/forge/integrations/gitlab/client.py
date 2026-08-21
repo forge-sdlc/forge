@@ -248,15 +248,30 @@ class GitLabClient:
         return response.text
 
     async def get_file_metadata(self, namespace: str, path: str, ref: str) -> dict[str, Any] | None:
+        """Fetch file metadata via HEAD, which GitLab returns as response
+        headers -- avoids downloading the (potentially large) base64-encoded
+        file body that a GET to this same endpoint would include."""
         client = await self._get_client()
-        response = await client.get(
+        response = await client.head(
             f"/projects/{encode_project_id(namespace)}/repository/files/{encode_project_id(path)}",
             params={"ref": ref},
         )
         if response.status_code == 404:
             return None
         response.raise_for_status()
-        return response.json()
+        headers = response.headers
+        return {
+            "file_name": headers.get("X-Gitlab-File-Name"),
+            "file_path": headers.get("X-Gitlab-File-Path"),
+            "size": headers.get("X-Gitlab-Size"),
+            "encoding": headers.get("X-Gitlab-Encoding"),
+            "content_sha256": headers.get("X-Gitlab-Content-Sha256"),
+            "ref": headers.get("X-Gitlab-Ref"),
+            "blob_id": headers.get("X-Gitlab-Blob-Id"),
+            "commit_id": headers.get("X-Gitlab-Commit-Id"),
+            "last_commit_id": headers.get("X-Gitlab-Last-Commit-Id"),
+            "execute_filemode": headers.get("X-Gitlab-Execute-Filemode"),
+        }
 
     async def create_file(
         self, namespace: str, path: str, *, branch: str, content: str, commit_message: str

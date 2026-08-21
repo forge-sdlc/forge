@@ -349,12 +349,27 @@ class TestFileOperations:
         response = MagicMock()
         response.status_code = 200
         response.raise_for_status = MagicMock()
-        response.json.return_value = {"last_commit_id": "deadbeef"}
-        client._client.get = AsyncMock(return_value=response)
+        response.headers = {"X-Gitlab-Last-Commit-Id": "deadbeef"}
+        client._client.head = AsyncMock(return_value=response)
 
         metadata = await client.get_file_metadata("test/repo", "src/x.py", "main")
 
+        client._client.head.assert_awaited_once_with(
+            "/projects/test%2Frepo/repository/files/src%2Fx.py", params={"ref": "main"}
+        )
+        client._client.get.assert_not_called()
         assert metadata["last_commit_id"] == "deadbeef"
+
+    @pytest.mark.asyncio
+    async def test_get_file_metadata_returns_none_on_404(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.status_code = 404
+        client._client.head = AsyncMock(return_value=response)
+
+        assert await client.get_file_metadata("test/repo", "missing.py", "main") is None
 
     @pytest.mark.asyncio
     async def test_create_file(self):
