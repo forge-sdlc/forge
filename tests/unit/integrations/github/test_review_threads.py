@@ -120,3 +120,23 @@ async def test_review_threads_fall_back_to_rest() -> None:
     assert threads[0]["thread_id"] == "rest-77"
     assert threads[0]["comments"][0]["comment_id"] == 77
     http.get.assert_awaited_once_with("/repos/org/repo/pulls/9/comments", params={"per_page": 100})
+
+
+@pytest.mark.asyncio
+async def test_get_reviews_returns_review_submissions() -> None:
+    payload = [
+        {"id": 1, "state": "APPROVED", "body": "LGTM", "user": {"login": "reviewer"}},
+        {"id": 2, "state": "CHANGES_REQUESTED", "body": "", "user": {"login": "other"}},
+    ]
+    response = AsyncMock()
+    response.raise_for_status = lambda: None
+    response.json = lambda: payload
+    http = AsyncMock()
+    http.get.return_value = response
+    github = GitHubClient()
+    github._get_client = AsyncMock(return_value=http)
+
+    reviews = await github.get_reviews("org", "repo", 9)
+
+    assert reviews == payload
+    http.get.assert_awaited_once_with("/repos/org/repo/pulls/9/reviews")
