@@ -1,19 +1,30 @@
 """Tests for GitLab source control adapter."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
 from forge.integrations.gitlab.client import GitLabClient
-from forge.integrations.source_control.contracts import Connection, Provider, RepositoryRef
+from forge.integrations.source_control.contracts import (
+    ChangeRequestState,
+    Connection,
+    EventKind,
+    Provider,
+    RepositoryRef,
+    ResolvedRepository,
+)
 from forge.integrations.source_control.errors import (
     AuthenticationError,
     RateLimitedError,
     TransientProviderError,
 )
 from forge.integrations.source_control.gitlab.adapter import GitLabAdapter
-from tests.contracts.source_control.conformance_suite import assert_repository_operations
+from tests.contracts.source_control.conformance_suite import (
+    assert_repository_operations,
+    assert_webhook_parsing,
+)
 
 
 @pytest.fixture
@@ -87,6 +98,251 @@ class TestGetGitCredentials:
         assert credentials.host == "gitlab.com"
         assert credentials.token == "test-token-123"
         assert credentials.url_user == "oauth2"
+
+
+class MockResolver:
+    def __init__(self, repo_ref, connection):
+        self._repo_ref = repo_ref
+        self._connection = connection
+
+    def resolve(
+        self,
+        identifier,  # noqa: ARG002
+        provider_hint=None,  # noqa: ARG002
+    ):
+        return ResolvedRepository(
+            repo_ref=self._repo_ref, connection=self._connection, adapter=None
+        )
+
+
+@pytest.fixture
+def webhook_secret() -> str:
+    return "test-webhook-secret"
+
+
+class TestVerifyWebhook:
+    @pytest.mark.asyncio
+    async def test_valid_token_verifies(self, gitlab_connection, webhook_secret):
+        adapter = GitLabAdapter(gitlab_connection, credential="tok", webhook_secret=webhook_secret)
+        assert await adapter.verify_webhook({"X-Gitlab-Token": webhook_secret}, b"{}") is True
+
+    @pytest.mark.asyncio
+    async def test_invalid_token_fails(self, gitlab_connection, webhook_secret):
+        adapter = GitLabAdapter(gitlab_connection, credential="tok", webhook_secret=webhook_secret)
+        assert await adapter.verify_webhook({"X-Gitlab-Token": "wrong"}, b"{}") is False
+
+    @pytest.mark.asyncio
+    async def test_fails_closed_when_no_secret_configured(
+        self, gitlab_adapter_with_mock_client, webhook_secret
+    ):
+        assert gitlab_adapter_with_mock_client._webhook_secret is None
+        assert (
+            await gitlab_adapter_with_mock_client.verify_webhook(
+                {"X-Gitlab-Token": webhook_secret}, b"{}"
+            )
+            is False
+        )
+
+
+def _mr_opened_payload(**overrides) -> dict:
+    payload = {
+        "object_kind": "merge_request",
+        "user": {"username": "alice", "name": "Alice"},
+        "project": {"path_with_namespace": "test/repo"},
+        "object_attributes": {
+            "iid": 42,
+            "title": "Test MR",
+            "description": "Test body",
+            "state": "opened",
+            "action": "open",
+            "source_branch": "feature",
+            "target_branch": "main",
+            "url": "https://gitlab.com/test/repo/-/merge_requests/42",
+            "draft": False,
+            "last_commit": {"id": "abc123"},
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
+class TestParseWebhookMergeRequest:
+    @pytest.mark.asyncio
+    async def test_parses_mr_opened(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        body = json.dumps(_mr_opened_payload()).encode()
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        await assert_webhook_parsing(
+            gitlab_adapter_with_mock_client,
+            {"X-Gitlab-Event": "Merge Request Hook"},
+            body,
+            resolver,
+            expected_kind=EventKind.CR_OPENED,
+            expected_repo_namespace="test/repo",
+        )
+
+    @pytest.mark.asyncio
+    async def test_maps_change_request_fields(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        body = json.dumps(_mr_opened_payload()).encode()
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {"X-Gitlab-Event": "Merge Request Hook"}, body, resolver
+        )
+
+        assert event.change_request.identity.native_id == 42
+        assert event.change_request.title == "Test MR"
+        assert event.change_request.body == "Test body"
+        assert event.change_request.state == ChangeRequestState.OPEN
+        assert event.change_request.head_sha == "abc123"
+        assert event.actor.login == "alice"
+        assert event.actor.is_bot is False
+
+    @pytest.mark.asyncio
+    async def test_synthesizes_event_id_from_body(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        """GitLab sends no delivery-id header; parse_webhook must synthesize one."""
+        body = json.dumps(_mr_opened_payload()).encode()
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook({}, body, resolver)
+
+        import hashlib
+
+        assert event.id == hashlib.sha256(body).hexdigest()[:16]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("action", "expected_kind"),
+        [
+            ("reopen", EventKind.CR_UPDATED),
+            ("update", EventKind.CR_UPDATED),
+            ("close", EventKind.CR_CLOSED),
+            ("merge", EventKind.CR_MERGED),
+            ("approved", EventKind.REVIEW_SUBMITTED),
+            ("unapproved", EventKind.REVIEW_SUBMITTED),
+        ],
+    )
+    async def test_maps_action_to_event_kind(
+        self,
+        gitlab_adapter_with_mock_client,
+        gitlab_repo_ref,
+        gitlab_connection,
+        action,
+        expected_kind,
+    ):
+        payload = _mr_opened_payload()
+        payload["object_attributes"]["action"] = action
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.kind == expected_kind
+
+
+class TestParseWebhookNote:
+    @pytest.mark.asyncio
+    async def test_note_on_merge_request_is_comment_created(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        payload = {
+            "object_kind": "note",
+            "user": {"username": "bob"},
+            "project": {"path_with_namespace": "test/repo"},
+            "object_attributes": {
+                "id": 555,
+                "note": "Looks good",
+                "noteable_type": "MergeRequest",
+            },
+        }
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.kind == EventKind.COMMENT_CREATED
+        assert event.comment.id == "555"
+        assert event.comment.body == "Looks good"
+        assert event.comment.author == "bob"
+        assert event.comment.in_reply_to is None
+
+    @pytest.mark.asyncio
+    async def test_note_on_issue_is_unknown(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        payload = {
+            "object_kind": "note",
+            "user": {"username": "bob"},
+            "project": {"path_with_namespace": "test/repo"},
+            "object_attributes": {"id": 1, "note": "x", "noteable_type": "Issue"},
+        }
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.kind == EventKind.UNKNOWN
+
+
+class TestParseWebhookPipeline:
+    @pytest.mark.asyncio
+    async def test_pipeline_sets_check_suite_status_not_check(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        from forge.integrations.source_control.contracts import CheckStatus
+
+        payload = {
+            "object_kind": "pipeline",
+            "user": {"username": "ci-bot"},
+            "project": {"path_with_namespace": "test/repo"},
+            "object_attributes": {"id": 999, "status": "running", "ref": "feature"},
+            "merge_request": {
+                "iid": 42,
+                "source_branch": "feature",
+                "target_branch": "main",
+                "state": "opened",
+            },
+        }
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.kind == EventKind.CHECK_UPDATED
+        assert event.check is None
+        assert event.check_suite_status == CheckStatus.IN_PROGRESS
+        assert event.change_request.identity.native_id == 42
+
+
+class TestParseWebhookPush:
+    @pytest.mark.asyncio
+    async def test_push_reads_top_level_user_fields(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        payload = {
+            "object_kind": "push",
+            "user_username": "carol",
+            "project": {"path_with_namespace": "test/repo"},
+        }
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.kind == EventKind.PUSH
+        assert event.actor.login == "carol"
+        assert event.change_request is None
 
 
 class TestTranslateProviderErrors:

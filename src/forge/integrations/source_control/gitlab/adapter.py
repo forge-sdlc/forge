@@ -1,14 +1,27 @@
 """GitLab implementation of the SourceControlProvider protocol."""
 
+import hashlib
+import hmac
+import json
 import logging
+from datetime import UTC, datetime
 
 from forge.integrations.gitlab.client import GitLabClient
 from forge.integrations.source_control.contracts import (
     Actor,
+    ChangeRequest,
+    ChangeRequestIdentity,
     ChangeRequestState,
+    CheckConclusion,
+    CheckStatus,
     Connection,
+    EventKind,
     GitCredentials,
+    NormalizedEvent,
+    Provider,
     RepositoryRef,
+    RepositoryResolver,
+    ReviewComment,
 )
 from forge.integrations.source_control.errors import ProviderConfigError
 from forge.integrations.source_control.http_errors import translate_provider_errors
@@ -96,6 +109,153 @@ class GitLabAdapter:
         user = await client.get_authenticated_user()
         username = user.get("username", "")
         return Actor(login=username, is_bot="bot" in username.lower())
+
+    async def verify_webhook(self, headers: dict[str, str], _body: bytes) -> bool:
+        """GitLab sends its configured secret verbatim in X-Gitlab-Token
+        (no HMAC signing of the body, unlike GitHub)."""
+        if not self._webhook_secret:
+            logger.warning(
+                "Webhook verification failed: no webhook secret configured for this connection"
+            )
+            return False
+        return hmac.compare_digest(headers.get("X-Gitlab-Token", ""), self._webhook_secret)
+
+    async def parse_webhook(
+        self, _headers: dict[str, str], body: bytes, resolver: RepositoryResolver
+    ) -> NormalizedEvent:
+        event_id = hashlib.sha256(body).hexdigest()[:16]
+        payload = json.loads(body.decode())
+        object_kind = payload.get("object_kind", "")
+
+        repo_namespace = payload.get("project", {}).get("path_with_namespace", "")
+        repo_ref = resolver.resolve(repo_namespace, provider_hint=Provider.GITLAB).repo_ref
+
+        actor = self._extract_actor(payload, object_kind)
+        kind = self._map_event_kind(object_kind, payload)
+
+        change_request = None
+        comment = None
+        check_suite_status = None
+
+        if object_kind == "merge_request":
+            change_request = self._map_change_request(
+                payload["object_attributes"], repo_ref=repo_ref
+            )
+        elif object_kind == "note":
+            attrs = payload.get("object_attributes", {})
+            if attrs.get("noteable_type") == "MergeRequest":
+                comment = self._map_note(attrs, actor.login)
+        elif object_kind == "pipeline":
+            attrs = payload.get("object_attributes", {})
+            check_suite_status, _ = self._map_check_status(attrs.get("status", ""))
+            mr_stub = payload.get("merge_request")
+            if mr_stub is not None:
+                change_request = ChangeRequest(
+                    identity=ChangeRequestIdentity(
+                        connection=repo_ref.connection,
+                        repository_id=repo_ref.id,
+                        native_id=mr_stub.get("iid"),
+                    ),
+                    url="",
+                    title="",
+                    body="",
+                    state=_CR_STATE_MAP.get(mr_stub.get("state", ""), ChangeRequestState.OPEN),
+                    source_branch=mr_stub.get("source_branch", ""),
+                    target_branch=mr_stub.get("target_branch", ""),
+                )
+
+        return NormalizedEvent(
+            id=event_id,
+            kind=kind,
+            repo_ref=repo_ref,
+            actor=actor,
+            received_at=datetime.now(UTC),
+            change_request=change_request,
+            comment=comment,
+            check_suite_status=check_suite_status,
+            raw=payload,
+        )
+
+    def _extract_actor(self, payload: dict, object_kind: str) -> Actor:
+        if object_kind == "push":
+            username = payload.get("user_username", "")
+        else:
+            username = payload.get("user", {}).get("username", "")
+        return Actor(login=username, is_bot="bot" in username.lower())
+
+    def _map_event_kind(self, object_kind: str, payload: dict) -> EventKind:
+        if object_kind == "merge_request":
+            action = payload.get("object_attributes", {}).get("action", "")
+            return {
+                "open": EventKind.CR_OPENED,
+                "reopen": EventKind.CR_UPDATED,
+                "update": EventKind.CR_UPDATED,
+                "close": EventKind.CR_CLOSED,
+                "merge": EventKind.CR_MERGED,
+                "approved": EventKind.REVIEW_SUBMITTED,
+                "unapproved": EventKind.REVIEW_SUBMITTED,
+                "approval": EventKind.REVIEW_SUBMITTED,
+                "unapproval": EventKind.REVIEW_SUBMITTED,
+            }.get(action, EventKind.UNKNOWN)
+        if object_kind == "note":
+            attrs = payload.get("object_attributes", {})
+            return (
+                EventKind.COMMENT_CREATED
+                if attrs.get("noteable_type") == "MergeRequest"
+                else EventKind.UNKNOWN
+            )
+        if object_kind == "pipeline":
+            return EventKind.CHECK_UPDATED
+        if object_kind == "push":
+            return EventKind.PUSH
+        return EventKind.UNKNOWN
+
+    def _map_note(self, attrs: dict, author: str) -> ReviewComment:
+        position = attrs.get("position") or {}
+        return ReviewComment(
+            id=str(attrs.get("id", "")),
+            body=attrs.get("note", "") or "",
+            author=author,
+            path=position.get("new_path"),
+            line=position.get("new_line"),
+        )
+
+    def _map_change_request(
+        self, attrs: dict, *, repo_ref: RepositoryRef | None = None, identity=None
+    ):
+        if identity is None:
+            identity = ChangeRequestIdentity(
+                connection=repo_ref.connection,
+                repository_id=repo_ref.id,
+                native_id=attrs.get("iid"),
+            )
+        return ChangeRequest(
+            identity=identity,
+            url=attrs.get("url", "") or attrs.get("web_url", ""),
+            title=attrs.get("title", "") or "",
+            body=attrs.get("description", "") or "",
+            state=_CR_STATE_MAP.get(attrs.get("state", ""), ChangeRequestState.OPEN),
+            source_branch=attrs.get("source_branch", "") or "",
+            target_branch=attrs.get("target_branch", "") or "",
+            head_sha=(attrs.get("last_commit") or {}).get("id", ""),
+            draft=attrs.get("draft", attrs.get("work_in_progress", False)),
+        )
+
+    def _map_check_status(self, status: str) -> tuple[CheckStatus, CheckConclusion]:
+        table = {
+            "success": (CheckStatus.COMPLETED, CheckConclusion.SUCCESS),
+            "failed": (CheckStatus.COMPLETED, CheckConclusion.FAILURE),
+            "canceled": (CheckStatus.COMPLETED, CheckConclusion.CANCELLED),
+            "skipped": (CheckStatus.COMPLETED, CheckConclusion.SKIPPED),
+            "manual": (CheckStatus.QUEUED, CheckConclusion.NONE),
+            "created": (CheckStatus.QUEUED, CheckConclusion.NONE),
+            "pending": (CheckStatus.QUEUED, CheckConclusion.NONE),
+            "scheduled": (CheckStatus.QUEUED, CheckConclusion.NONE),
+            "preparing": (CheckStatus.QUEUED, CheckConclusion.NONE),
+            "waiting_for_resource": (CheckStatus.QUEUED, CheckConclusion.NONE),
+            "running": (CheckStatus.IN_PROGRESS, CheckConclusion.NONE),
+        }
+        return table.get(status, (CheckStatus.IN_PROGRESS, CheckConclusion.NONE))
 
     async def close(self) -> None:
         if self._client is not None:
