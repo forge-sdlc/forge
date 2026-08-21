@@ -208,6 +208,17 @@ async def receive_github_webhook(
 
     except HTTPException:
         raise
+    except ValueError as e:
+        span.set_attribute("error", True)
+        span.set_attribute("error.type", "validation_error")
+        logger.error(f"Failed to parse GitHub webhook: {e}")
+        record_webhook_failed(
+            source="github", event_type=x_github_event, error_type="validation_error"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid webhook payload",
+        )
     except Exception as e:
         span.set_attribute("error", True)
         span.set_attribute("error.type", "internal_error")
