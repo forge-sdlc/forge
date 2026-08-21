@@ -163,7 +163,7 @@ class GitOperations:
         """
         branch = self.workspace.branch_name
         logger.info(f"Syncing with {remote}/{branch} before implementing changes")
-        self._run_git("fetch", remote)
+        self._run_git("fetch", remote, f"{branch}:refs/remotes/{remote}/{branch}", check=False)
         if not self.remote_branch_exists(branch, remote=remote):
             logger.info(
                 "Remote branch %s/%s does not exist yet; skipping rebase before first push",
@@ -241,6 +241,7 @@ class GitOperations:
         # create it tracking the specified remote.
         result = self._run_git("checkout", branch, check=False)
         if result.returncode != 0:
+            self._run_git("fetch", remote, f"{branch}:refs/remotes/{remote}/{branch}", check=False)
             self._run_git("checkout", "-b", branch, f"{remote}/{branch}")
 
         logger.info(f"Checked out branch {branch}")

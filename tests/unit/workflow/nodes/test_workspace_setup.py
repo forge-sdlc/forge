@@ -478,7 +478,7 @@ class TestWorkspaceSetupForkBootstrap:
         mock_git = create_mock_git_operations()
         mock_guardrails_loader = create_mock_guardrails_loader()
         state = create_initial_feature_state(
-            ticket_key="TEST-DIRECT",
+            ticket_key="TEST-127",
             current_repo="upstream/repo",
         )
 
@@ -596,6 +596,52 @@ class TestPrepareWorkspaceRecovery:
         new_git.clone.assert_called_once()
         new_git.add_fork_remote.assert_called_once_with("forge-bot", "repo")
         new_git.checkout_branch.assert_called_once_with("forge/test-123", remote="fork")
+        assert new_git.workspace_recreated is True
+
+    @pytest.mark.asyncio
+    async def test_sync_failure_recreates_direct_mode_workspace_from_origin(self, tmp_path):
+        """Direct-mode recovery (no fork identity) clones and checks out from origin.
+
+        With no fork_owner/fork_repo, recreation must not build a fork remote
+        from empty owner/repo; it checks the branch out directly from origin,
+        relying on checkout_branch to fetch the ref that a single-branch clone
+        would otherwise miss.
+        """
+        workspace_path = tmp_path / "forge-TEST-127-org-repo"
+        workspace_path.mkdir()
+        stale_file = workspace_path / "stale.txt"
+        stale_file.write_text("dirty")
+
+        state = create_initial_feature_state(
+            ticket_key="TEST-127",
+            current_repo="org/repo",
+            workspace_path=str(workspace_path),
+            fork_owner=None,
+            fork_repo=None,
+            context={"branch_name": "forge/test-direct"},
+        )
+
+        old_git = MagicMock()
+        old_git.pull_rebase.side_effect = RuntimeError("workspace sync failure")
+        new_git = MagicMock()
+        settings = MagicMock(workspace_base_dir=str(tmp_path))
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.get_settings", return_value=settings),
+            patch(
+                "forge.workflow.nodes.workspace_setup.GitOperations",
+                side_effect=[old_git, new_git],
+            ),
+        ):
+            result_path, result_git = await prepare_workspace(state)
+
+        assert result_path == str(workspace_path)
+        assert result_git is new_git
+        assert not stale_file.exists()
+        old_git.pull_rebase.assert_called_once_with(remote="origin")
+        new_git.clone.assert_called_once()
+        new_git.add_fork_remote.assert_not_called()
+        new_git.checkout_branch.assert_called_once_with("forge/test-direct", remote="origin")
         assert new_git.workspace_recreated is True
 
     @pytest.mark.asyncio
