@@ -848,6 +848,33 @@ class TestGetChecks:
         assert checks[0].status == CheckStatus.QUEUED
         assert checks[0].conclusion == CheckConclusion.NONE
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("gitlab_status", "expected_status", "expected_conclusion"),
+        [
+            ("failed", CheckStatus.COMPLETED, CheckConclusion.FAILURE),
+            ("canceled", CheckStatus.COMPLETED, CheckConclusion.CANCELLED),
+            ("skipped", CheckStatus.COMPLETED, CheckConclusion.SKIPPED),
+        ],
+    )
+    async def test_maps_terminal_statuses(
+        self,
+        gitlab_adapter_with_mock_client,
+        gitlab_repo_ref,
+        mock_gitlab_http_client,
+        gitlab_status,
+        expected_status,
+        expected_conclusion,
+    ):
+        mock_gitlab_http_client.get_commit_statuses = AsyncMock(
+            return_value=[{"name": "build", "status": gitlab_status, "target_url": None}]
+        )
+
+        checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
+
+        assert checks[0].status == expected_status
+        assert checks[0].conclusion == expected_conclusion
+
 
 class TestGetCheckLogs:
     @pytest.mark.asyncio
