@@ -8,6 +8,7 @@ import pytest
 
 from forge.integrations.gitlab.client import GitLabClient
 from forge.integrations.source_control.contracts import (
+    ChangeRequestIdentity,
     ChangeRequestState,
     Connection,
     EventKind,
@@ -245,6 +246,33 @@ class TestParseWebhookMergeRequest:
         )
 
         assert event.kind == expected_kind
+
+
+def test_map_change_request_rejects_both_repo_ref_and_identity(
+    gitlab_adapter_with_mock_client: GitLabAdapter,
+    gitlab_repo_ref: RepositoryRef,
+):
+    """_map_change_request's contract is "exactly one of repo_ref or identity" --
+    passing both must raise rather than silently letting identity win."""
+    identity = ChangeRequestIdentity(
+        connection="test-gitlab", repository_id="test/repo", native_id=1
+    )
+
+    with pytest.raises(ValueError, match="not both"):
+        gitlab_adapter_with_mock_client._map_change_request(
+            _mr_opened_payload()["object_attributes"], repo_ref=gitlab_repo_ref, identity=identity
+        )
+
+
+def test_map_change_request_rejects_neither_repo_ref_nor_identity(
+    gitlab_adapter_with_mock_client: GitLabAdapter,
+):
+    """Passing neither repo_ref nor identity must raise rather than blowing up
+    with an opaque AttributeError when the missing repo_ref is dereferenced."""
+    with pytest.raises(ValueError, match="requires either"):
+        gitlab_adapter_with_mock_client._map_change_request(
+            _mr_opened_payload()["object_attributes"]
+        )
 
 
 class TestParseWebhookNote:

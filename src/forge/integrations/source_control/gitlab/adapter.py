@@ -221,9 +221,23 @@ class GitLabAdapter:
         )
 
     def _map_change_request(
-        self, attrs: dict, *, repo_ref: RepositoryRef | None = None, identity=None
-    ):
+        self,
+        attrs: dict,
+        *,
+        repo_ref: RepositoryRef | None = None,
+        identity: ChangeRequestIdentity | None = None,
+    ) -> ChangeRequest:
+        """Map a GitLab merge request attrs dict into a ChangeRequest.
+
+        Exactly one of ``repo_ref`` (to construct a fresh identity from the MR
+        iid) or ``identity`` (to preserve a caller-supplied identity) must be
+        given.
+        """
+        if repo_ref is not None and identity is not None:
+            raise ValueError("_map_change_request accepts repo_ref or identity, not both")
         if identity is None:
+            if repo_ref is None:
+                raise ValueError("_map_change_request requires either repo_ref or identity")
             identity = ChangeRequestIdentity(
                 connection=repo_ref.connection,
                 repository_id=repo_ref.id,
