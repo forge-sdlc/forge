@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from forge import __version__
 from forge.orchestrator.checkpointer import get_redis_client
+from forge.queue.producer import JIRA_STREAM, LEGACY_SOURCE_CONTROL_STREAM, SOURCE_CONTROL_STREAM
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,10 @@ async def health_check() -> Any:
 
         # Get approximate queue depth
         try:
-            jira_len = await redis_client.xlen("forge:events:jira")
-            github_len = await redis_client.xlen("forge:events:github")
-            queue_depth = jira_len + github_len
+            jira_len = await redis_client.xlen(JIRA_STREAM)
+            source_control_len = await redis_client.xlen(SOURCE_CONTROL_STREAM)
+            legacy_len = await redis_client.xlen(LEGACY_SOURCE_CONTROL_STREAM)
+            queue_depth = jira_len + source_control_len + legacy_len
         except Exception:
             pass  # Streams may not exist yet
 

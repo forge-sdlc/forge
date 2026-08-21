@@ -229,10 +229,12 @@ class TestPRNumberExtractionMissing:
         ):
             result = await create_pull_request(state)
 
-        # Verify PR number is None in state
+        # Verify PR number is None in state. With no number known, the record is
+        # keyed by URL (f"{repo}:{url}") — see workflow.pr_state.
         assert result["current_pr_number"] is None
-        assert result["pull_requests"]["owner/repo"]["number"] is None
-        assert result["pull_requests"]["owner/repo"]["url"] == result["current_pr_url"]
+        url_key = f"owner/repo:{result['current_pr_url']}"
+        assert result["pull_requests"][url_key]["number"] is None
+        assert result["pull_requests"][url_key]["url"] == result["current_pr_url"]
 
     @pytest.mark.asyncio
     async def test_workflow_continues_when_pr_number_unavailable(self):
@@ -488,7 +490,7 @@ class TestPRNumberExtractionEdgeCases:
 
         # Verify first PR has correct number
         assert result_1["current_pr_number"] == 100
-        assert result_1["pull_requests"]["owner/repo"]["number"] == 100
+        assert result_1["pull_requests"]["owner/repo:100"]["number"] == 100
 
         # Simulate second PR creation with different number
         mock_github_2 = create_mock_github_client(
@@ -512,5 +514,5 @@ class TestPRNumberExtractionEdgeCases:
 
         # Verify second PR has correct number
         assert result_2["current_pr_number"] == 200
-        assert result_2["pull_requests"]["owner/repo"]["number"] == 100
-        assert result_2["pull_requests"]["owner/other"]["number"] == 200
+        assert result_2["pull_requests"]["owner/repo:100"]["number"] == 100
+        assert result_2["pull_requests"]["owner/other:200"]["number"] == 200
