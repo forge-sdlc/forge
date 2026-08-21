@@ -38,6 +38,8 @@ def base_bug_review_state():
         "context": {"branch_name": "fix/BUG-42"},
         "retry_count": 0,
         "last_error": None,
+        "fork_owner": "forge-bot",
+        "fork_repo": "backend",
     }
 
 
@@ -55,6 +57,8 @@ def base_feature_review_state():
         "context": {"branch_name": "feat/FEAT-10"},
         "retry_count": 0,
         "last_error": None,
+        "fork_owner": "forge-bot",
+        "fork_repo": "backend",
     }
 
 

@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
+from forge.integrations.source_control.contracts import GitCredentials
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
@@ -14,8 +15,9 @@ def _git_ops(tmp_path: Path) -> GitOperations:
         branch_name="forge/test-123",
         ticket_key="TEST-123",
     )
+    credentials = GitCredentials(host="github.com", token="test-token")
     with patch("forge.workspace.git_ops.get_settings", return_value=MagicMock()):
-        return GitOperations(workspace)
+        return GitOperations(workspace, credentials)
 
 
 def test_pull_rebase_skips_missing_remote_branch_before_first_push(tmp_path):

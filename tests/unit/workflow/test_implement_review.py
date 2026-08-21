@@ -7,11 +7,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langgraph.graph import END
 
+from forge.integrations.source_control.contracts import Provider, RepositoryRef
 from forge.models.workflow import TicketType
 from forge.workflow.bug.graph import build_bug_graph
 from forge.workflow.feature.graph import build_feature_graph
 from forge.workflow.task_takeover.graph import build_task_takeover_graph
 from tests.fixtures.workflow_states import make_workflow_state
+
+
+def _repo_ref(repo: str = "org/repo") -> RepositoryRef:
+    return RepositoryRef(
+        id=repo,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=repo,
+        default_branch="main",
+        change_request_mode="fork",
+    )
+
 
 # ── State fields ──────────────────────────────────────────────────────────────
 
@@ -367,9 +380,7 @@ class TestImplementReviewStatusComment:
 
         mock_git = MagicMock()
         mock_git._run_git.return_value = MagicMock(stdout="")
-        mock_github = MagicMock()
-        mock_github.create_issue_comment = AsyncMock()
-        mock_github.close = AsyncMock()
+        mock_adapter = AsyncMock()
         mock_runner = MagicMock()
         mock_runner.run = AsyncMock()
 
@@ -392,20 +403,20 @@ class TestImplementReviewStatusComment:
                 "forge.workflow.nodes.implement_review._fetch_pr_review_comments",
                 new=AsyncMock(return_value="# PR Review Feedback\n"),
             ),
-            patch("forge.workflow.nodes.implement_review.GitHubClient", return_value=mock_github),
+            patch(
+                "forge.workflow.nodes.implement_review.get_adapter",
+                return_value=(_repo_ref(), mock_adapter),
+            ),
             patch(
                 "forge.workflow.nodes.implement_review.ContainerRunner", return_value=mock_runner
             ),
         ):
             result = await implement_review(state)
 
-        mock_github.create_issue_comment.assert_called_once_with(
-            "org",
-            "repo",
-            17,
-            _REVIEW_ADDRESSING_COMMENT,
-        )
-        mock_github.close.assert_called_once()
+        mock_adapter.create_comment.assert_awaited_once()
+        call_args = mock_adapter.create_comment.call_args[0]
+        assert call_args[1].native_id == 17
+        assert call_args[2] == _REVIEW_ADDRESSING_COMMENT
         mock_runner.run.assert_called_once()
         assert result["current_node"] == "human_review_gate"
 
@@ -414,46 +425,47 @@ class TestImplementReviewStatusComment:
         """No PR comment is posted if the workflow has no PR number."""
         from forge.workflow.nodes.implement_review import _post_review_addressing_comment
 
-        mock_github = MagicMock()
-        mock_github.create_issue_comment = AsyncMock()
-
-        with patch("forge.workflow.nodes.implement_review.GitHubClient", return_value=mock_github):
+        with patch("forge.workflow.nodes.implement_review.get_adapter") as mock_get_adapter:
             await _post_review_addressing_comment(
                 ticket_key="TEST-789",
-                owner="org",
-                repo="repo",
+                current_repo="org/repo",
                 pr_number=None,
             )
 
-        mock_github.create_issue_comment.assert_not_called()
+        mock_get_adapter.assert_not_called()
 
 
 class TestThreadAwareReviewHandling:
     @pytest.mark.asyncio
     async def test_processed_threads_are_excluded_from_next_analysis(self):
+        from forge.integrations.source_control.contracts import Review, ReviewComment, ReviewState
         from forge.workflow.nodes.implement_review import _fetch_pr_review_comments
 
-        github = MagicMock()
-        github.get_pull_request_review_threads = AsyncMock(
+        adapter = AsyncMock()
+        adapter.get_review_thread_comments = AsyncMock(
             return_value=[
-                {
-                    "thread_id": "already-accepted",
-                    "path": "a.py",
-                    "line": 1,
-                    "comments": [{"comment_id": 10, "body": "Done", "author": "r"}],
-                },
-                {
-                    "thread_id": "new-thread",
-                    "path": "b.py",
-                    "line": 2,
-                    "comments": [{"comment_id": 20, "body": "New", "author": "r"}],
-                },
+                Review(
+                    id="already-accepted",
+                    state=ReviewState.COMMENTED,
+                    body="",
+                    author="r",
+                    comments=[ReviewComment(id="10", body="Done", author="r", path="a.py", line=1)],
+                ),
+                Review(
+                    id="new-thread",
+                    state=ReviewState.COMMENTED,
+                    body="",
+                    author="r",
+                    comments=[ReviewComment(id="20", body="New", author="r", path="b.py", line=2)],
+                ),
             ]
         )
-        github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.implement_review.GitHubClient", return_value=github):
-            result = await _fetch_pr_review_comments("org", "repo", 7, "", {"already-accepted"})
+        with patch(
+            "forge.workflow.nodes.implement_review.get_adapter",
+            return_value=(_repo_ref(), adapter),
+        ):
+            result = await _fetch_pr_review_comments("org/repo", 7, "", {"already-accepted"})
 
         assert "already-accepted" not in result
         assert "new-thread" in result

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from forge.integrations.source_control.contracts import GitCredentials
 from forge.workspace.git_ops import GitError, GitOperations
 from forge.workspace.manager import Workspace
 
@@ -20,8 +21,9 @@ def _git_ops(tmp_path: Path) -> GitOperations:
         branch_name="forge/test",
         ticket_key="TEST-1",
     )
+    credentials = GitCredentials(host="github.com", token=token)
     with patch("forge.workspace.git_ops.get_settings", return_value=settings):
-        return GitOperations(workspace)
+        return GitOperations(workspace, credentials)
 
 
 def test_clone_failure_redacts_token_from_git_error(tmp_path):
@@ -52,9 +54,7 @@ def test_clone_failure_redacts_token_from_git_error(tmp_path):
 
 def test_git_error_constructor_redacts_tokens():
     token = "gh" + "p_" + "abcdefghijklmnopqrstuvwxyz123456"
-    error = GitError(
-        f"remote: https://x-access-token:{token}@github.com/org/repo.git"
-    )
+    error = GitError(f"remote: https://x-access-token:{token}@github.com/org/repo.git")
 
     assert "ghp_" not in str(error)
     assert "https://[REDACTED]@github.com/org/repo.git" in str(error)

@@ -10,6 +10,9 @@ from forge.integrations.source_control.contracts import (
     ChangeRequest,
     ChangeRequestIdentity,
     ChangeRequestState,
+    CheckConclusion,
+    CheckRun,
+    CheckStatus,
     EventKind,
     NormalizedEvent,
     Provider,
@@ -301,6 +304,54 @@ class TestPostSkipGateFeedback:
 # ── CI evaluator: filtering skipped checks ────────────────────────────────────
 
 
+_STATUS_MAP = {
+    "completed": CheckStatus.COMPLETED,
+    "in_progress": CheckStatus.IN_PROGRESS,
+    "pending": CheckStatus.QUEUED,
+}
+_CONCLUSION_MAP = {
+    "success": CheckConclusion.SUCCESS,
+    "failure": CheckConclusion.FAILURE,
+    "skipped": CheckConclusion.SKIPPED,
+    "neutral": CheckConclusion.NEUTRAL,
+    None: CheckConclusion.NONE,
+}
+
+
+def _check_run(name: str, status: str, conclusion: str | None) -> CheckRun:
+    return CheckRun(
+        name=name,
+        status=_STATUS_MAP[status],
+        conclusion=_CONCLUSION_MAP[conclusion],
+    )
+
+
+def _mock_adapter_with_checks(checks: list[CheckRun], repo="org/repo", pr_number=42):
+    """Patch target for ci_evaluator.get_adapter returning a fixed check list."""
+    adapter = AsyncMock()
+    adapter.get_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(connection="c", repository_id=repo, native_id=pr_number),
+            url=f"https://github.com/{repo}/pull/{pr_number}",
+            title="t",
+            body="",
+            state=ChangeRequestState.OPEN,
+            source_branch="feature",
+            target_branch="main",
+        )
+    )
+    adapter.get_checks = AsyncMock(return_value=checks)
+    repo_ref = RepositoryRef(
+        id=repo,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=repo,
+        default_branch="main",
+        change_request_mode="fork",
+    )
+    return repo_ref, adapter
+
+
 class TestEvaluateCIStatusSkipsChecks:
     @pytest.mark.asyncio
     async def test_skipped_check_does_not_count_as_failure(self):
@@ -309,29 +360,24 @@ class TestEvaluateCIStatusSkipsChecks:
 
         state = make_workflow_state(
             current_node="ci_evaluator",
+            current_repo="org/repo",
+            current_pr_number=42,
             pr_urls=["https://github.com/org/repo/pull/42"],
             ci_skipped_checks=["epoxy"],
         )
 
-        mock_github = MagicMock()
-        mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc"}})
-        mock_github.get_check_runs = AsyncMock(
-            return_value=[
-                {
-                    "name": "Run acceptance tests against OpenStack epoxy",
-                    "status": "completed",
-                    "conclusion": "failure",
-                },
-                {
-                    "name": "Run acceptance tests against OpenStack flamingo",
-                    "status": "completed",
-                    "conclusion": "success",
-                },
+        repo_ref, adapter = _mock_adapter_with_checks(
+            [
+                _check_run("Run acceptance tests against OpenStack epoxy", "completed", "failure"),
+                _check_run(
+                    "Run acceptance tests against OpenStack flamingo", "completed", "success"
+                ),
             ]
         )
-        mock_github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+        with patch(
+            "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(repo_ref, adapter)
+        ):
             result = await evaluate_ci_status(state)
 
         # Epoxy is skipped, flamingo passed — CI should be "passed"
@@ -344,29 +390,24 @@ class TestEvaluateCIStatusSkipsChecks:
 
         state = make_workflow_state(
             current_node="ci_evaluator",
+            current_repo="org/repo",
+            current_pr_number=42,
             pr_urls=["https://github.com/org/repo/pull/42"],
             ci_skipped_checks=["epoxy", "flamingo"],
         )
 
-        mock_github = MagicMock()
-        mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc"}})
-        mock_github.get_check_runs = AsyncMock(
-            return_value=[
-                {
-                    "name": "Run acceptance tests against OpenStack epoxy",
-                    "status": "completed",
-                    "conclusion": "failure",
-                },
-                {
-                    "name": "Run acceptance tests against OpenStack flamingo",
-                    "status": "completed",
-                    "conclusion": "failure",
-                },
+        repo_ref, adapter = _mock_adapter_with_checks(
+            [
+                _check_run("Run acceptance tests against OpenStack epoxy", "completed", "failure"),
+                _check_run(
+                    "Run acceptance tests against OpenStack flamingo", "completed", "failure"
+                ),
             ]
         )
-        mock_github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+        with patch(
+            "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(repo_ref, adapter)
+        ):
             result = await evaluate_ci_status(state)
 
         assert result["ci_status"] == "passed"
@@ -379,25 +420,22 @@ class TestEvaluateCIStatusSkipsChecks:
 
         state = make_workflow_state(
             current_node="ci_evaluator",
+            current_repo="org/repo",
+            current_pr_number=42,
             pr_urls=["https://github.com/org/repo/pull/42"],
             ci_skipped_checks=["epoxy"],
         )
 
-        mock_github = MagicMock()
-        mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc"}})
-        mock_github.get_check_runs = AsyncMock(
-            return_value=[
-                {
-                    "name": "Run acceptance tests against OpenStack epoxy",
-                    "status": "completed",
-                    "conclusion": "failure",
-                },
-                {"name": "unit-tests", "status": "completed", "conclusion": "failure"},
+        repo_ref, adapter = _mock_adapter_with_checks(
+            [
+                _check_run("Run acceptance tests against OpenStack epoxy", "completed", "failure"),
+                _check_run("unit-tests", "completed", "failure"),
             ]
         )
-        mock_github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+        with patch(
+            "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(repo_ref, adapter)
+        ):
             result = await evaluate_ci_status(state)
 
         failed = [c["name"] for c in result.get("ci_failed_checks", [])]
@@ -411,24 +449,21 @@ class TestEvaluateCIStatusSkipsChecks:
 
         state = make_workflow_state(
             current_node="ci_evaluator",
+            current_repo="org/repo",
+            current_pr_number=42,
             pr_urls=["https://github.com/org/repo/pull/42"],
             ci_skipped_checks=["EPOXY"],  # uppercase skip
         )
 
-        mock_github = MagicMock()
-        mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc"}})
-        mock_github.get_check_runs = AsyncMock(
-            return_value=[
-                {
-                    "name": "Run acceptance tests against OpenStack epoxy",
-                    "status": "completed",
-                    "conclusion": "failure",
-                },
+        repo_ref, adapter = _mock_adapter_with_checks(
+            [
+                _check_run("Run acceptance tests against OpenStack epoxy", "completed", "failure"),
             ]
         )
-        mock_github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+        with patch(
+            "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(repo_ref, adapter)
+        ):
             result = await evaluate_ci_status(state)
 
         assert result["ci_status"] == "passed"
@@ -444,29 +479,26 @@ class TestEvaluateCIStatusSkipsChecks:
 
         state = make_workflow_state(
             current_node="ci_evaluator",
+            current_repo="org/repo",
+            current_pr_number=42,
             pr_urls=["https://github.com/org/repo/pull/42"],
             ci_skipped_checks=["e2e-openstack"],
         )
 
-        mock_github = MagicMock()
-        mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc"}})
-        mock_github.get_check_runs = AsyncMock(
-            return_value=[
+        repo_ref, adapter = _mock_adapter_with_checks(
+            [
                 # Openstack e2e Prow checks — skipped by human override
-                {
-                    "name": "ci/prow/e2e-openstack-ovn",
-                    "status": "completed",
-                    "conclusion": "failure",
-                },
+                _check_run("ci/prow/e2e-openstack-ovn", "completed", "failure"),
                 # tide — always pending, explicitly filtered by name
-                {"name": "tide", "status": "pending", "conclusion": None},
+                _check_run("tide", "pending", None),
                 # Real check that passed
-                {"name": "ci/prow/unit", "status": "completed", "conclusion": "success"},
+                _check_run("ci/prow/unit", "completed", "success"),
             ]
         )
-        mock_github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+        with patch(
+            "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(repo_ref, adapter)
+        ):
             result = await evaluate_ci_status(state)
 
         # e2e-openstack skipped, tide ignored, unit passed → CI passes
@@ -480,26 +512,23 @@ class TestEvaluateCIStatusSkipsChecks:
 
         state = make_workflow_state(
             current_node="ci_evaluator",
+            current_repo="org/repo",
+            current_pr_number=42,
             pr_urls=["https://github.com/org/repo/pull/42"],
             ci_skipped_checks=["e2e-openstack"],
         )
 
-        mock_github = MagicMock()
-        mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc"}})
-        mock_github.get_check_runs = AsyncMock(
-            return_value=[
-                {
-                    "name": "ci/prow/e2e-openstack-ovn",
-                    "status": "completed",
-                    "conclusion": "failure",
-                },
+        repo_ref, adapter = _mock_adapter_with_checks(
+            [
+                _check_run("ci/prow/e2e-openstack-ovn", "completed", "failure"),
                 # golint still running — real check, must block
-                {"name": "ci/prow/golint", "status": "in_progress", "conclusion": None},
+                _check_run("ci/prow/golint", "in_progress", None),
             ]
         )
-        mock_github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+        with patch(
+            "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(repo_ref, adapter)
+        ):
             result = await evaluate_ci_status(state)
 
         # golint not done → still pending, don't declare passed yet
@@ -512,20 +541,21 @@ class TestEvaluateCIStatusSkipsChecks:
 
         state = make_workflow_state(
             current_node="ci_evaluator",
+            current_repo="org/repo",
+            current_pr_number=42,
             pr_urls=["https://github.com/org/repo/pull/42"],
             ci_skipped_checks=[],
         )
 
-        mock_github = MagicMock()
-        mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc"}})
-        mock_github.get_check_runs = AsyncMock(
-            return_value=[
-                {"name": "unit-tests", "status": "completed", "conclusion": "failure"},
+        repo_ref, adapter = _mock_adapter_with_checks(
+            [
+                _check_run("unit-tests", "completed", "failure"),
             ]
         )
-        mock_github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+        with patch(
+            "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(repo_ref, adapter)
+        ):
             result = await evaluate_ci_status(state)
 
         assert result["ci_status"] == "fixing"

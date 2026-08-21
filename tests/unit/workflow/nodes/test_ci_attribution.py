@@ -4,8 +4,51 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from forge.integrations.source_control.contracts import (
+    ChangeRequest,
+    ChangeRequestIdentity,
+    ChangeRequestState,
+    CheckConclusion,
+    CheckRun,
+    CheckStatus,
+    Provider,
+    RepositoryRef,
+)
+
+
+def _repo_ref(repo: str = "org/repo") -> RepositoryRef:
+    return RepositoryRef(
+        id=repo,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=repo,
+        default_branch="main",
+        change_request_mode="fork",
+    )
+
+
+def _mock_adapter(checks, pr_number=1, repo="org/repo"):
+    """Patch target for ci_evaluator.get_adapter returning the given checks."""
+    adapter = AsyncMock()
+    adapter.get_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(connection="c", repository_id=repo, native_id=pr_number),
+            url=f"https://github.com/{repo}/pull/{pr_number}",
+            title="t",
+            body="",
+            state=ChangeRequestState.OPEN,
+            source_branch="feature",
+            target_branch="main",
+        )
+    )
+    adapter.get_checks = AsyncMock(return_value=checks)
+    return adapter
+
+
 BASE_STATE = {
     "ticket_key": "TEST-1",
+    "current_repo": "org/repo",
+    "current_pr_number": 1,
     "pr_urls": ["https://github.com/org/repo/pull/1"],
     "ci_fix_attempt": 0,
     "ci_fix_max_attempts": 5,
@@ -28,16 +71,12 @@ ATTEMPT_BASE_STATE = {
 
 
 @pytest.mark.asyncio
-@patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
-async def test_evaluate_ci_status_clears_pending_ci_event_on_pending(MockGitHub):
+@patch("forge.workflow.nodes.ci_evaluator.get_adapter")
+async def test_evaluate_ci_status_clears_pending_ci_event_on_pending(mock_get_adapter):
     """evaluate_ci_status returns pending_ci_event=False when CI is still running."""
     from forge.workflow.nodes.ci_evaluator import evaluate_ci_status
 
-    mock_github = AsyncMock()
-    MockGitHub.return_value = mock_github
-    mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc123"}})
-    mock_github.get_check_runs = AsyncMock(return_value=[])  # No checks yet = pending
-    mock_github.close = AsyncMock()
+    mock_get_adapter.return_value = (_repo_ref(), _mock_adapter([]))  # No checks yet = pending
 
     state = {**BASE_STATE, "pending_ci_event": True}
     result = await evaluate_ci_status(state)
@@ -47,19 +86,24 @@ async def test_evaluate_ci_status_clears_pending_ci_event_on_pending(MockGitHub)
 
 
 @pytest.mark.asyncio
-@patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
+@patch("forge.workflow.nodes.ci_evaluator.get_adapter")
 @patch("forge.workflow.nodes.ci_evaluator.JiraClient")
-async def test_evaluate_ci_status_clears_pending_ci_event_on_passed(MockJira, MockGitHub):
+async def test_evaluate_ci_status_clears_pending_ci_event_on_passed(MockJira, mock_get_adapter):
     """evaluate_ci_status returns pending_ci_event=False when all CI passes."""
     from forge.workflow.nodes.ci_evaluator import evaluate_ci_status
 
-    mock_github = AsyncMock()
-    MockGitHub.return_value = mock_github
-    mock_github.get_pull_request = AsyncMock(return_value={"head": {"sha": "abc123"}})
-    mock_github.get_check_runs = AsyncMock(
-        return_value=[{"name": "unit-tests", "status": "completed", "conclusion": "success"}]
+    mock_get_adapter.return_value = (
+        _repo_ref(),
+        _mock_adapter(
+            [
+                CheckRun(
+                    name="unit-tests",
+                    status=CheckStatus.COMPLETED,
+                    conclusion=CheckConclusion.SUCCESS,
+                )
+            ]
+        ),
     )
-    mock_github.close = AsyncMock()
 
     mock_jira = AsyncMock()
     MockJira.return_value = mock_jira
@@ -73,13 +117,41 @@ async def test_evaluate_ci_status_clears_pending_ci_event_on_passed(MockJira, Mo
 
 
 @pytest.mark.asyncio
+@patch("forge.workflow.nodes.ci_evaluator.get_adapter")
+async def test_evaluate_ci_status_finds_url_keyed_pr_when_number_unknown(mock_get_adapter):
+    """A PR saved before its number was known is stored under a URL key
+    (see pr_state.py). evaluate_ci_status must locate it via that fallback
+    instead of failing with "Active pull request state is inconsistent"."""
+    from forge.workflow.nodes.ci_evaluator import evaluate_ci_status
+
+    mock_get_adapter.return_value = (_repo_ref(), _mock_adapter([]))  # No checks yet = pending
+
+    pr_url = "https://github.com/org/repo/pull/1"
+    state = {
+        **BASE_STATE,
+        "current_repo": "org/repo",
+        "current_pr_url": pr_url,
+        "current_pr_number": None,
+        "pull_requests": {
+            f"org/repo:{pr_url}": {"url": pr_url, "number": None, "repo": "org/repo"}
+        },
+        "pending_ci_event": True,
+    }
+
+    result = await evaluate_ci_status(state)
+
+    assert result.get("ci_status") == "pending"
+    assert result.get("last_error") is None
+
+
+@pytest.mark.asyncio
 @patch("forge.workflow.nodes.ci_evaluator.ContainerRunner")
 @patch("forge.workflow.nodes.ci_evaluator.prepare_workspace")
 @patch("forge.workflow.nodes.ci_evaluator.JiraClient")
-@patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
+@patch("forge.workflow.nodes.ci_evaluator.get_adapter")
 @patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
 async def test_attribution_external_skips_fix(
-    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
+    _mock_fetch, mock_get_adapter, MockJira, mock_prep, MockRunner, tmp_path
 ):
     """Phase 0 verdict attributable=false → external_failure, no fix attempt increment."""
     from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
@@ -105,8 +177,7 @@ async def test_attribution_external_skips_fix(
     MockJira.return_value = mock_jira
     mock_jira.close = AsyncMock()
 
-    mock_github = AsyncMock()
-    MockGitHub.return_value = mock_github
+    mock_get_adapter.return_value = (_repo_ref(), AsyncMock())
 
     state = {**ATTEMPT_BASE_STATE, "workspace_path": str(tmp_path)}
     result = await attempt_ci_fix(state)
@@ -135,10 +206,10 @@ def test_attribution_prompt_compares_full_pr_against_default_branch():
 @patch("forge.workflow.nodes.ci_evaluator.ContainerRunner")
 @patch("forge.workflow.nodes.ci_evaluator.prepare_workspace")
 @patch("forge.workflow.nodes.ci_evaluator.JiraClient")
-@patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
+@patch("forge.workflow.nodes.ci_evaluator.get_adapter")
 @patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
 async def test_attribution_attributable_proceeds_to_fix(
-    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
+    _mock_fetch, mock_get_adapter, MockJira, mock_prep, MockRunner, tmp_path
 ):
     """Phase 0 verdict attributable=true → proceeds to fix, increments attempt."""
     from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
@@ -162,8 +233,7 @@ async def test_attribution_attributable_proceeds_to_fix(
     MockJira.return_value = mock_jira
     mock_jira.close = AsyncMock()
 
-    mock_github = AsyncMock()
-    MockGitHub.return_value = mock_github
+    mock_get_adapter.return_value = (_repo_ref(), AsyncMock())
 
     state = {**ATTEMPT_BASE_STATE, "workspace_path": str(tmp_path)}
     result = await attempt_ci_fix(state)
@@ -177,10 +247,10 @@ async def test_attribution_attributable_proceeds_to_fix(
 @patch("forge.workflow.nodes.ci_evaluator.ContainerRunner")
 @patch("forge.workflow.nodes.ci_evaluator.prepare_workspace")
 @patch("forge.workflow.nodes.ci_evaluator.JiraClient")
-@patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
+@patch("forge.workflow.nodes.ci_evaluator.get_adapter")
 @patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
 async def test_attribution_missing_file_proceeds_as_attributable(
-    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
+    _mock_fetch, mock_get_adapter, MockJira, mock_prep, MockRunner, tmp_path
 ):
     """Missing ci-attribution.json is treated as attributable (fail-safe)."""
     from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
@@ -196,8 +266,7 @@ async def test_attribution_missing_file_proceeds_as_attributable(
     mock_jira = AsyncMock()
     MockJira.return_value = mock_jira
     mock_jira.close = AsyncMock()
-    mock_github = AsyncMock()
-    MockGitHub.return_value = mock_github
+    mock_get_adapter.return_value = (_repo_ref(), AsyncMock())
 
     state = {**ATTEMPT_BASE_STATE, "workspace_path": str(tmp_path)}
     result = await attempt_ci_fix(state)
@@ -211,10 +280,10 @@ async def test_attribution_missing_file_proceeds_as_attributable(
 @patch("forge.workflow.nodes.ci_evaluator.ContainerRunner")
 @patch("forge.workflow.nodes.ci_evaluator.prepare_workspace")
 @patch("forge.workflow.nodes.ci_evaluator.JiraClient")
-@patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
+@patch("forge.workflow.nodes.ci_evaluator.get_adapter")
 @patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
 async def test_attribution_does_not_reuse_stale_external_verdict(
-    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, tmp_path
+    _mock_fetch, mock_get_adapter, MockJira, mock_prep, MockRunner, tmp_path
 ):
     """A missing fresh verdict must not reuse an external verdict from an earlier CI cycle."""
     from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
@@ -233,8 +302,7 @@ async def test_attribution_does_not_reuse_stale_external_verdict(
     mock_jira = AsyncMock()
     MockJira.return_value = mock_jira
     mock_jira.close = AsyncMock()
-    mock_github = AsyncMock()
-    MockGitHub.return_value = mock_github
+    mock_get_adapter.return_value = (_repo_ref(), AsyncMock())
 
     result = await attempt_ci_fix({**ATTEMPT_BASE_STATE, "workspace_path": str(tmp_path)})
 
