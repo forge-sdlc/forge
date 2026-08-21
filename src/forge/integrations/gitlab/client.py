@@ -204,3 +204,27 @@ class GitLabClient:
         )
         response.raise_for_status()
         return response.json()
+
+    async def get_commit_statuses(self, namespace: str, ref: str) -> list[dict[str, Any]]:
+        client = await self._get_client()
+        response = await client.get(
+            f"/projects/{encode_project_id(namespace)}/repository/commits/{ref}/statuses"
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_job_trace(self, namespace: str, job_id: int) -> str:
+        client = await self._get_client()
+        response = await client.get(f"/projects/{encode_project_id(namespace)}/jobs/{job_id}/trace")
+        response.raise_for_status()
+        return response.text
+
+    async def get_job_artifacts(self, namespace: str, job_id: int) -> bytes | None:
+        client = await self._get_client()
+        response = await client.get(
+            f"/projects/{encode_project_id(namespace)}/jobs/{job_id}/artifacts"
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.content

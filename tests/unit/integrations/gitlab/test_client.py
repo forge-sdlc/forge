@@ -214,3 +214,65 @@ class TestNotesAndDiscussions:
             "/projects/test%2Frepo/merge_requests/42/approvals"
         )
         assert result["approved_by"][0]["user"]["username"] == "alice"
+
+
+class TestChecks:
+    @pytest.mark.asyncio
+    async def test_get_commit_statuses(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = [{"name": "build", "status": "success"}]
+        client._client.get = AsyncMock(return_value=response)
+
+        result = await client.get_commit_statuses("test/repo", "abc123")
+
+        client._client.get.assert_awaited_once_with(
+            "/projects/test%2Frepo/repository/commits/abc123/statuses"
+        )
+        assert result[0]["name"] == "build"
+
+    @pytest.mark.asyncio
+    async def test_get_job_trace_returns_raw_text(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.text = "line1\nline2\n"
+        client._client.get = AsyncMock(return_value=response)
+
+        logs = await client.get_job_trace("test/repo", 987654)
+
+        client._client.get.assert_awaited_once_with("/projects/test%2Frepo/jobs/987654/trace")
+        assert logs == "line1\nline2\n"
+
+    @pytest.mark.asyncio
+    async def test_get_job_artifacts_returns_bytes(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.status_code = 200
+        response.raise_for_status = MagicMock()
+        response.content = b"PK\x03\x04zipbytes"
+        client._client.get = AsyncMock(return_value=response)
+
+        artifacts = await client.get_job_artifacts("test/repo", 987654)
+
+        assert artifacts == b"PK\x03\x04zipbytes"
+
+    @pytest.mark.asyncio
+    async def test_get_job_artifacts_returns_none_on_404(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.status_code = 404
+        client._client.get = AsyncMock(return_value=response)
+
+        artifacts = await client.get_job_artifacts("test/repo", 987654)
+
+        assert artifacts is None

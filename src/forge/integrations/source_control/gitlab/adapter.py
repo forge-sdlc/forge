@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 from datetime import UTC, datetime
 
 from forge.integrations.gitlab.client import GitLabClient
@@ -13,6 +14,7 @@ from forge.integrations.source_control.contracts import (
     ChangeRequestIdentity,
     ChangeRequestState,
     CheckConclusion,
+    CheckRun,
     CheckStatus,
     Connection,
     EventKind,
@@ -26,7 +28,11 @@ from forge.integrations.source_control.contracts import (
     ReviewState,
     WriteTarget,
 )
-from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
+from forge.integrations.source_control.errors import (
+    NotFoundError,
+    ProviderConfigError,
+    SourceControlError,
+)
 from forge.integrations.source_control.http_errors import translate_provider_errors
 
 logger = logging.getLogger(__name__)
@@ -491,6 +497,58 @@ class GitLabAdapter:
         if discussion is None:
             return []
         return [self._map_note_response(n) for n in discussion.get("notes", [])]
+
+    @_translate
+    async def get_checks(self, repo_ref: RepositoryRef, ref: str) -> list[CheckRun]:
+        client = self._get_client()
+        entries = await client.get_commit_statuses(repo_ref.namespace, ref)
+        return [self._map_commit_status(entry) for entry in entries]
+
+    def _map_commit_status(self, entry: dict) -> CheckRun:
+        status, conclusion = self._map_check_status(entry.get("status", ""))
+        target_url = entry.get("target_url") or ""
+        job_id = self._parse_job_id(target_url)
+        return CheckRun(
+            name=entry.get("name", ""),
+            status=status,
+            conclusion=conclusion,
+            url=target_url,
+            logs_url=str(job_id) if job_id is not None else None,
+        )
+
+    @staticmethod
+    def _parse_job_id(target_url: str) -> int | None:
+        match = re.search(r"/-/(?:jobs|builds)/(\d+)", target_url)
+        return int(match.group(1)) if match else None
+
+    @_translate
+    async def get_check_logs(self, repo_ref: RepositoryRef, check: CheckRun) -> str:
+        if not check.logs_url:
+            raise NotFoundError(
+                f"No logs available for check {check.name!r}: it is not backed by "
+                "a GitLab CI job (e.g. an external CI integration's commit status)."
+            )
+        try:
+            job_id = int(check.logs_url)
+        except ValueError as exc:
+            raise SourceControlError(
+                f"Check {check.name!r} has a non-numeric logs_url {check.logs_url!r}; "
+                "expected a GitLab CI job id."
+            ) from exc
+        client = self._get_client()
+        return await client.get_job_trace(repo_ref.namespace, job_id)
+
+    @_translate
+    async def get_check_artifacts(
+        self, repo_ref: RepositoryRef, check: CheckRun
+    ) -> list[tuple[str, bytes]]:
+        if not check.logs_url:
+            return []
+        client = self._get_client()
+        artifact_bytes = await client.get_job_artifacts(repo_ref.namespace, int(check.logs_url))
+        if artifact_bytes is None:
+            return []
+        return [("artifacts.zip", artifact_bytes)]
 
     async def close(self) -> None:
         if self._client is not None:

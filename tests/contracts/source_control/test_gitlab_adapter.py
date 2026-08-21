@@ -10,6 +10,9 @@ from forge.integrations.gitlab.client import GitLabClient
 from forge.integrations.source_control.contracts import (
     ChangeRequestIdentity,
     ChangeRequestState,
+    CheckConclusion,
+    CheckRun,
+    CheckStatus,
     Connection,
     EventKind,
     Provider,
@@ -21,6 +24,7 @@ from forge.integrations.source_control.contracts import (
 from forge.integrations.source_control.errors import (
     AuthenticationError,
     RateLimitedError,
+    SourceControlError,
     TransientProviderError,
 )
 from forge.integrations.source_control.errors import (
@@ -789,3 +793,147 @@ class TestGetReviewCommentsForSubmission:
         )
 
         assert comments == []
+
+
+class TestGetChecks:
+    @pytest.mark.asyncio
+    async def test_maps_status_and_parses_job_id_from_target_url(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_commit_statuses = AsyncMock(
+            return_value=[
+                {
+                    "name": "build",
+                    "status": "success",
+                    "target_url": "https://gitlab.com/test/repo/-/jobs/987654",
+                }
+            ]
+        )
+
+        checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
+
+        mock_gitlab_http_client.get_commit_statuses.assert_awaited_once_with("test/repo", "abc123")
+        assert checks[0].status == CheckStatus.COMPLETED
+        assert checks[0].conclusion == CheckConclusion.SUCCESS
+        assert checks[0].logs_url == "987654"
+
+    @pytest.mark.asyncio
+    async def test_external_ci_target_url_has_no_logs_url(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_commit_statuses = AsyncMock(
+            return_value=[
+                {
+                    "name": "jenkins",
+                    "status": "success",
+                    "target_url": "https://ci.example.com/build/1",
+                }
+            ]
+        )
+
+        checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
+
+        assert checks[0].logs_url is None
+
+    @pytest.mark.asyncio
+    async def test_manual_status_maps_to_queued_none(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_commit_statuses = AsyncMock(
+            return_value=[{"name": "deploy", "status": "manual", "target_url": None}]
+        )
+
+        checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
+
+        assert checks[0].status == CheckStatus.QUEUED
+        assert checks[0].conclusion == CheckConclusion.NONE
+
+
+class TestGetCheckLogs:
+    @pytest.mark.asyncio
+    async def test_fetches_trace_directly_by_job_id(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_job_trace = AsyncMock(return_value="log output")
+        check = CheckRun(
+            name="build",
+            status=CheckStatus.COMPLETED,
+            conclusion=CheckConclusion.SUCCESS,
+            logs_url="987654",
+        )
+
+        logs = await gitlab_adapter_with_mock_client.get_check_logs(gitlab_repo_ref, check)
+
+        mock_gitlab_http_client.get_job_trace.assert_awaited_once_with("test/repo", 987654)
+        assert logs == "log output"
+
+    @pytest.mark.asyncio
+    async def test_raises_not_found_when_no_logs_url(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_job_trace = AsyncMock()
+        check = CheckRun(
+            name="jenkins",
+            status=CheckStatus.COMPLETED,
+            conclusion=CheckConclusion.SUCCESS,
+            logs_url=None,
+        )
+
+        with pytest.raises(SCNotFoundError, match="No logs available"):
+            await gitlab_adapter_with_mock_client.get_check_logs(gitlab_repo_ref, check)
+        mock_gitlab_http_client.get_job_trace.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_raises_source_control_error_for_non_numeric_logs_url(
+        self,
+        gitlab_adapter_with_mock_client,
+        gitlab_repo_ref,
+        mock_gitlab_http_client,  # noqa: ARG002
+    ):
+        check = CheckRun(
+            name="build",
+            status=CheckStatus.COMPLETED,
+            conclusion=CheckConclusion.SUCCESS,
+            logs_url="not-a-number",
+        )
+
+        with pytest.raises(SourceControlError, match="non-numeric logs_url"):
+            await gitlab_adapter_with_mock_client.get_check_logs(gitlab_repo_ref, check)
+
+
+class TestGetCheckArtifacts:
+    @pytest.mark.asyncio
+    async def test_returns_single_zip_entry(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_job_artifacts = AsyncMock(return_value=b"zipbytes")
+        check = CheckRun(
+            name="build",
+            status=CheckStatus.COMPLETED,
+            conclusion=CheckConclusion.SUCCESS,
+            logs_url="987654",
+        )
+
+        artifacts = await gitlab_adapter_with_mock_client.get_check_artifacts(
+            gitlab_repo_ref, check
+        )
+
+        assert artifacts == [("artifacts.zip", b"zipbytes")]
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_when_no_logs_url(
+        self,
+        gitlab_adapter_with_mock_client,
+        gitlab_repo_ref,
+        mock_gitlab_http_client,  # noqa: ARG002
+    ):
+        check = CheckRun(
+            name="jenkins",
+            status=CheckStatus.COMPLETED,
+            conclusion=CheckConclusion.SUCCESS,
+            logs_url=None,
+        )
+
+        assert (
+            await gitlab_adapter_with_mock_client.get_check_artifacts(gitlab_repo_ref, check) == []
+        )
