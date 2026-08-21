@@ -192,6 +192,11 @@ def resolve_env_value(name: str, settings: Settings) -> str | None:
 def _parse_connections(raw: dict[str, Any], settings: Settings) -> dict[str, Connection]:
     connections: dict[str, Connection] = {}
     for name, entry in raw.items():
+        if name == IMPLICIT_GITHUB_CONNECTION_NAME:
+            raise ProviderConfigError(
+                f"connection '{name}' collides with the reserved implicit connection name "
+                f"'{IMPLICIT_GITHUB_CONNECTION_NAME}'; choose a different name"
+            )
         if not isinstance(entry, dict):
             raise ProviderConfigError(f"connection '{name}' must be a mapping")
         if "provider" not in entry:
@@ -212,6 +217,12 @@ def _parse_connections(raw: dict[str, Any], settings: Settings) -> dict[str, Con
                 "which is not set"
             )
 
+        # webhook_secret_env is intentionally optional here: a connection used
+        # only for API operations (git push, PR creation) with no inbound
+        # webhook has no secret to configure. A connection that *does* receive
+        # webhooks but omits it fails closed at request time instead of at
+        # startup -- GitHubAdapter.verify_webhook rejects every delivery when
+        # no secret is configured, logging a warning each time.
         allowed_namespaces = entry.get("allowed_namespaces")
         if allowed_namespaces is not None and (
             not isinstance(allowed_namespaces, list)

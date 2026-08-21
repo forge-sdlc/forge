@@ -17,7 +17,7 @@ from forge.integrations.source_control.contracts import (
     RepositoryRef,
     ResolvedRepository,
 )
-from forge.integrations.source_control.errors import NotFoundError
+from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
 from forge.main import app
 from tests.fixtures.github_payloads import (
     WEBHOOK_CHECK_RUN_COMPLETED_FAILURE,
@@ -619,6 +619,52 @@ class TestWebhookRouteNormalizedEventCutover:
                     headers={
                         "X-GitHub-Event": "pull_request",
                         "X-GitHub-Delivery": "delivery-3",
+                        "X-Hub-Signature-256": self._sign(body, secret),
+                    },
+                )
+
+        assert response.status_code == 202
+        assert response.json()["status"] == "ignored"
+
+    @pytest.mark.asyncio
+    async def test_misconfigured_connection_acks_and_drops(self, monkeypatch):
+        """adapter.parse_webhook's internal resolver.resolve() call can raise
+        ProviderConfigError (distinct from NotFoundError) when a repo resolves
+        to a connection that isn't usable (e.g. no credential configured).
+        This must also ack (202) and drop, not fall through to a 500 that
+        GitHub would treat as retryable."""
+        payload = {
+            "action": "opened",
+            "pull_request": {
+                "number": 1,
+                "html_url": "x",
+                "title": "t",
+                "body": "",
+                "state": "open",
+                "draft": False,
+                "head": {"ref": "a"},
+                "base": {"ref": "main"},
+            },
+            "repository": {"full_name": "misconfigured/repo"},
+            "sender": {"login": "x", "type": "User"},
+        }
+        body = json.dumps(payload).encode()
+        secret = "test-secret"
+        monkeypatch.setenv("GITHUB_WEBHOOK_SECRET", secret)
+
+        with patch(
+            "forge.integrations.source_control.registry.Registry.resolve",
+            side_effect=ProviderConfigError("credential not set"),
+        ):
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                response = await client.post(
+                    "/api/v1/webhooks/github",
+                    content=body,
+                    headers={
+                        "X-GitHub-Event": "pull_request",
+                        "X-GitHub-Delivery": "delivery-3b",
                         "X-Hub-Signature-256": self._sign(body, secret),
                     },
                 )

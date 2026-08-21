@@ -139,4 +139,6 @@ async def test_get_reviews_returns_review_submissions() -> None:
     reviews = await github.get_reviews("org", "repo", 9)
 
     assert reviews == payload
-    http.get.assert_awaited_once_with("/repos/org/repo/pulls/9/reviews")
+    http.get.assert_awaited_once_with(
+        "/repos/org/repo/pulls/9/reviews", params={"per_page": 100}
+    )

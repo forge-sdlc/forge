@@ -244,6 +244,22 @@ async def test_attribution_attributable_proceeds_to_fix(
 
 
 @pytest.mark.asyncio
+async def test_attempt_ci_fix_with_no_failed_checks_reverifies_instead_of_asserting_pass():
+    """attempt_ci_fix should only ever be routed to with ci_failed_checks
+    populated. If it's unexpectedly empty (e.g. a concurrent/stale state
+    update cleared it), the node must re-verify live CI via ci_evaluator
+    rather than asserting ci_status=passed without checking."""
+    from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
+
+    state = {**ATTEMPT_BASE_STATE, "ci_failed_checks": []}
+    result = await attempt_ci_fix(state)
+
+    assert result["current_node"] == "ci_evaluator"
+    assert result.get("ci_status") != "passed"
+    assert result.get("pending_ci_event", True) is False
+
+
+@pytest.mark.asyncio
 @patch("forge.workflow.nodes.ci_evaluator.ContainerRunner")
 @patch("forge.workflow.nodes.ci_evaluator.prepare_workspace")
 @patch("forge.workflow.nodes.ci_evaluator.JiraClient")

@@ -332,3 +332,63 @@ def test_url_only_pr_rejects_different_pr_in_same_repo() -> None:
     )
 
     assert not event_targets_pull_request(state, event)
+
+
+# ── Legacy bare-repo key fallback ───────────────────────────────────────────
+# Workflows checkpointed mid-CI/mid-review before per-PR keying shipped have
+# their record stored under `repo` alone rather than `repo:number`/`repo:url`.
+
+
+def _legacy_state() -> dict:
+    return {
+        "current_repo": None,
+        "current_pr_number": None,
+        "current_pr_url": None,
+        "pull_requests": {
+            "acme/legacy": {
+                "repo": "acme/legacy",
+                "number": 99,
+                "url": "https://github.com/acme/legacy/pull/99",
+                "ci_status": "pending",
+                "merged": False,
+                "lifecycle_node": "ci_evaluator",
+            },
+        },
+    }
+
+
+def test_event_targets_pull_request_matches_legacy_bare_repo_key() -> None:
+    state = _legacy_state()
+    event = _event(
+        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
+    )
+
+    assert event_targets_pull_request(state, event)
+
+
+def test_activate_pull_request_for_event_hydrates_from_legacy_bare_repo_key() -> None:
+    state = _legacy_state()
+    event = _event(
+        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
+    )
+
+    activated = activate_pull_request_for_event(state, event)
+
+    assert activated["current_repo"] == "acme/legacy"
+    assert activated["current_pr_number"] == 99
+    assert activated["ci_status"] == "pending"
+
+
+def test_save_migrates_legacy_bare_repo_key_to_numbered_key() -> None:
+    state = _legacy_state()
+    event = _event(
+        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
+    )
+    activated = activate_pull_request_for_event(state, event)
+    activated["ci_status"] = "passed"
+
+    saved = save_active_pull_request(activated)
+
+    assert "acme/legacy" not in saved["pull_requests"]
+    assert saved["pull_requests"]["acme/legacy:99"]["ci_status"] == "passed"
+    assert saved["pull_requests"]["acme/legacy:99"]["lifecycle_node"] == "ci_evaluator"

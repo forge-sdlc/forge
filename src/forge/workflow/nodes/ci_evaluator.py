@@ -276,11 +276,18 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     failed_checks = state.get("ci_failed_checks", [])
 
     if not failed_checks:
+        # Defensive: attempt_ci_fix is only routed to when ci_failed_checks is
+        # non-empty. If it arrived here empty anyway (e.g. a concurrent/stale
+        # state update cleared it before this node ran), re-verify against
+        # live CI rather than asserting the checks passed.
+        logger.warning(
+            f"attempt_ci_fix entered with no ci_failed_checks for {ticket_key} "
+            "— re-verifying CI status instead of assuming pass"
+        )
         return update_state_timestamp(
             {
                 **state,
-                "ci_status": "passed",
-                "current_node": "human_review_gate",
+                "current_node": "ci_evaluator",
                 "pending_ci_event": False,
             }
         )

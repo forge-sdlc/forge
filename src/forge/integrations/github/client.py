@@ -202,7 +202,10 @@ class GitHubClient:
             List of review submission dicts.
         """
         client = await self._get_client()
-        response = await client.get(f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews")
+        response = await client.get(
+            f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews",
+            params={"per_page": 100},
+        )
         response.raise_for_status()
         return response.json()
 

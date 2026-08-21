@@ -39,6 +39,19 @@ class TestRouteHumanReview:
         }
         assert route_human_review(state) == "ci_evaluator"
 
+    def test_pr_merged_takes_priority_over_pending_ci_event(self):
+        """A merge takes priority even when pending_ci_event is also set —
+        route_human_review must not send an already-merged PR through
+        ci_evaluator just because a stale/racing CI event is pending."""
+        from forge.workflow.nodes.human_review import route_human_review
+
+        state = {
+            **BASE_STATE,
+            "pending_ci_event": True,
+            "pr_merged": True,
+        }
+        assert route_human_review(state) == "complete_tasks"
+
     def test_no_ci_event_paused_returns_end(self):
         """With no pending CI event, paused=True returns END."""
         from forge.workflow.nodes.human_review import route_human_review

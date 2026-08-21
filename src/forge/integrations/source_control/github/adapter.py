@@ -124,13 +124,21 @@ def _translate_provider_errors(func):
                 raise AuthenticationError(f"GitHub rejected the request: {exc}") from exc
             if status == 429:
                 retry_after = exc.response.headers.get("Retry-After")
+                try:
+                    parsed_retry_after = float(retry_after) if retry_after else None
+                except ValueError:
+                    parsed_retry_after = None
                 raise RateLimitedError(
                     f"GitHub rate-limited the request: {exc}",
-                    retry_after=float(retry_after) if retry_after else None,
+                    retry_after=parsed_retry_after,
                 ) from exc
             if status >= 500:
                 raise TransientProviderError(f"GitHub returned {status}: {exc}") from exc
             raise
+        except httpx.TransportError as exc:
+            # Covers httpx.TimeoutException, ConnectError, and other network-level
+            # failures -- all subclasses of TransportError.
+            raise TransientProviderError(f"GitHub request failed: {exc}") from exc
 
     return wrapper
 
@@ -272,6 +280,10 @@ class GitHubAdapter:
             change_request = self._map_change_request(pr_payload, repo_ref=repo_ref)
         elif issue_pr_stub is not None:
             issue = payload["issue"]
+            # The `issue` payload on an issue_comment event has no `merged` field,
+            # so a comment on an already-merged PR is reported as CLOSED rather
+            # than MERGED here. Callers that need to distinguish the two must
+            # fetch the PR directly.
             change_request = ChangeRequest(
                 identity=ChangeRequestIdentity(
                     connection=repo_ref.connection,
@@ -320,6 +332,8 @@ class GitHubAdapter:
         if event_type == "check_run" and "check_run" in payload:
             check = self._map_check_run(payload["check_run"])
 
+        check_suite_status = self._extract_check_suite_status(payload, event_type)
+
         return NormalizedEvent(
             id=event_id,
             kind=kind,
@@ -330,8 +344,25 @@ class GitHubAdapter:
             comment=comment,
             review=review,
             check=check,
+            check_suite_status=check_suite_status,
             raw=payload,
         )
+
+    def _extract_check_suite_status(self, payload: dict, event_type: str) -> CheckStatus | None:
+        """Status of the check_suite a check_run/check_suite webhook belongs to.
+
+        check_suite events carry the status on the suite itself; check_run
+        events carry it on the run's nested check_suite. Used by worker.py to
+        gate CI-cycle completeness without reading the raw GitHub payload
+        directly.
+        """
+        if event_type == "check_suite":
+            raw_status = payload.get("check_suite", {}).get("status")
+        elif event_type == "check_run":
+            raw_status = payload.get("check_run", {}).get("check_suite", {}).get("status")
+        else:
+            raw_status = None
+        return _CHECK_STATUS_MAP.get(raw_status) if raw_status else None
 
     def _map_event_kind(self, event_type: str, payload: dict) -> EventKind:
         """Map GitHub event type to normalized EventKind."""
@@ -351,10 +382,14 @@ class GitHubAdapter:
             return EventKind.CHECK_UPDATED
 
         if event_type in ("issue_comment", "pull_request_review_comment"):
-            return EventKind.COMMENT_CREATED
+            if action == "created":
+                return EventKind.COMMENT_CREATED
+            return EventKind.UNKNOWN
 
         if event_type == "pull_request_review":
-            return EventKind.REVIEW_SUBMITTED
+            if action == "submitted":
+                return EventKind.REVIEW_SUBMITTED
+            return EventKind.UNKNOWN
 
         if event_type == "push":
             return EventKind.PUSH
@@ -383,6 +418,18 @@ class GitHubAdapter:
             )
         else:
             pull_requests = []
+        if len(pull_requests) > 1:
+            # Multiple open PRs can share a head branch/SHA (stacked PRs,
+            # re-targeted base branch). We have no reliable way to disambiguate
+            # here, so the first entry is used and the rest are silently
+            # ignored -- log so a misattributed CI status is traceable.
+            logger.warning(
+                "check event lists %d pull_requests; using the first (#%s) "
+                "and ignoring the rest: %s",
+                len(pull_requests),
+                pull_requests[0].get("number"),
+                [pr.get("number") for pr in pull_requests[1:]],
+            )
         return pull_requests[0] if pull_requests else None
 
     @_translate_provider_errors
@@ -591,7 +638,7 @@ class GitHubAdapter:
         *,
         repo_ref: RepositoryRef | None = None,
         identity: ChangeRequestIdentity | None = None,
-        created: bool = True,
+        created: bool = False,
     ) -> ChangeRequest:
         """Map a GitHub PR dict into a ChangeRequest.
 

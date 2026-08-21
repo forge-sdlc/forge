@@ -188,6 +188,10 @@ class NormalizedEvent:
     comment: ReviewComment | None = None
     review: Review | None = None
     check: CheckRun | None = None
+    # Status of the check *suite* a CHECK_UPDATED event belongs to, independent
+    # of `check` (which is only populated for individual check_run events, not
+    # check_suite events). None when the event has no associated suite status.
+    check_suite_status: CheckStatus | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 

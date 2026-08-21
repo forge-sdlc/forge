@@ -35,7 +35,12 @@ async def human_review_gate(state: WorkflowState) -> WorkflowState:
     if state.get("pr_merged"):
         logger.info(f"PR already merged for {ticket_key}, skipping pause at human_review_gate")
         return update_state_timestamp(
-            {**state, "current_node": "human_review_gate", "is_paused": False}
+            {
+                **state,
+                "current_node": "human_review_gate",
+                "is_paused": False,
+                "pending_ci_event": False,
+            }
         )
 
     updates: dict[str, Any] = {}
@@ -87,6 +92,12 @@ def route_human_review(state: WorkflowState) -> str:
     Returns:
         Next node name or END.
     """
+    # Check if merged — takes priority over a stale pending_ci_event so an
+    # already-merged PR doesn't get routed back through ci_evaluator.
+    if state.get("pr_merged"):
+        logger.info(f"PR merged for {state['ticket_key']}")
+        return "complete_tasks"
+
     # CI webhook arrived while paused at this gate — route through CI cycle
     if state.get("pending_ci_event"):
         logger.info(f"CI event pending for {state['ticket_key']}, routing to ci_evaluator")
@@ -96,11 +107,6 @@ def route_human_review(state: WorkflowState) -> str:
     if state.get("revision_requested") and state.get("feedback_comment"):
         logger.info(f"Changes requested for {state['ticket_key']}")
         return "implement_review"
-
-    # Check if merged
-    if state.get("pr_merged"):
-        logger.info(f"PR merged for {state['ticket_key']}")
-        return "complete_tasks"
 
     # Still waiting for review - END and wait for webhook
     if state.get("is_paused"):

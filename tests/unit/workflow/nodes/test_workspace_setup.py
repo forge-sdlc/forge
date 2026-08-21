@@ -474,7 +474,7 @@ class TestWorkspaceSetupForkBootstrap:
             )
         )
         mock_jira = create_mock_jira_client()
-        mock_manager, _ = create_mock_workspace_manager()
+        mock_manager, mock_workspace = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
         mock_guardrails_loader = create_mock_guardrails_loader()
         state = create_initial_feature_state(
@@ -495,7 +495,7 @@ class TestWorkspaceSetupForkBootstrap:
 
         mock_git.add_fork_remote.assert_not_called()
         mock_git.remote_branch_exists.assert_called_once_with(
-            mock_git.remote_branch_exists.call_args.args[0], remote="origin"
+            mock_workspace.branch_name, remote="origin"
         )
         mock_git.push_to_fork.assert_not_called()
         mock_git.push.assert_called_once_with(force=False, check_conflicts=False)

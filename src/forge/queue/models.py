@@ -151,9 +151,13 @@ def normalized_event_to_dict(event: NormalizedEvent) -> dict[str, Any]:
                 "conclusion": event.check.conclusion.value,
                 "url": event.check.url,
                 "logs_url": event.check.logs_url,
+                "output": event.check.output,
             }
             if event.check
             else None
+        ),
+        "check_suite_status": (
+            event.check_suite_status.value if event.check_suite_status else None
         ),
         "raw": event.raw,
     }
@@ -241,7 +245,10 @@ def normalized_event_from_dict(data: dict[str, Any]) -> NormalizedEvent:
             conclusion=CheckConclusion(ck["conclusion"]),
             url=ck.get("url"),
             logs_url=ck.get("logs_url"),
+            output=ck.get("output", {}),
         )
+
+    check_suite_status_value = data.get("check_suite_status")
 
     return NormalizedEvent(
         id=data["id"],
@@ -253,5 +260,8 @@ def normalized_event_from_dict(data: dict[str, Any]) -> NormalizedEvent:
         comment=comment,
         review=review,
         check=check,
+        check_suite_status=(
+            CheckStatus(check_suite_status_value) if check_suite_status_value else None
+        ),
         raw=data.get("raw", {}),
     )

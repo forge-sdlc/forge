@@ -11,6 +11,7 @@ from forge.integrations.source_control.contracts import (
     ChangeRequest,
     ChangeRequestIdentity,
     ChangeRequestState,
+    CheckStatus,
     EventKind,
     NormalizedEvent,
     Provider,
@@ -1277,6 +1278,7 @@ class TestCiWebhookSignalAtCiEvaluator:
         state = self._ci_state("ci_evaluator")
         event = _make_normalized_event(
             kind=EventKind.CHECK_UPDATED,
+            check_suite_status=CheckStatus.IN_PROGRESS,
             raw={
                 "check_suite": {"status": "in_progress", "conclusion": None},
                 "repository": {"full_name": "forge-sdlc/forge"},
@@ -1689,6 +1691,53 @@ class TestCiWebhookAtHumanReviewGate:
 
         assert result.get("is_paused") is False
         assert result.get("pending_ci_event", False) is False  # not set for ci_evaluator
+
+    @pytest.mark.asyncio
+    @patch("forge.orchestrator.worker.post_status_comment", new_callable=AsyncMock)
+    async def test_review_arriving_during_in_flight_ci_cycle_is_not_dropped(
+        self, _mock_post_comment
+    ):
+        """A PR review submitted while a CI webhook is still being evaluated at
+        human_review_gate must not be silently discarded — it should unpause and
+        record revision_requested/feedback_comment, and pending_ci_event must stay
+        set so the in-flight CI cycle still runs to completion."""
+        mock_adapter = AsyncMock()
+        mock_adapter.get_review_thread_comments.return_value = []
+
+        worker = OrchestratorWorker(consumer_name="test-worker")
+        # State as left by the CI webhook that arrived first: unpaused, but still
+        # parked at human_review_gate with pending_ci_event set.
+        state = {
+            "ticket_key": "TEST-123",
+            "current_node": "human_review_gate",
+            "is_paused": False,
+            "pending_ci_event": True,
+            "context": {},
+        }
+        event = _make_normalized_event(
+            kind=EventKind.REVIEW_SUBMITTED,
+            repo_ref=_sc_repo_ref("owner/repo"),
+            change_request=_sc_change_request("owner/repo", 42),
+            review=Review(
+                id="", state=ReviewState.CHANGES_REQUESTED, body="Needs changes", author=""
+            ),
+        )
+        message = QueueMessage(
+            message_id="msg-124",
+            event_id="evt-124",
+            source=EventSource.SOURCE_CONTROL,
+            event_type="review_submitted",
+            ticket_key="TEST-123",
+            payload={},
+            normalized_event=normalized_event_to_dict(event),
+        )
+
+        with _patch_adapter(_sc_repo_ref("owner/repo"), mock_adapter):
+            result = await worker._handle_resume_event(message, state)
+
+        assert result["revision_requested"] is True
+        assert result["feedback_comment"] == "Needs changes"
+        assert result["pending_ci_event"] is True
 
 
 class TestHandleResumeEventReviewGates:
@@ -2257,8 +2306,7 @@ class TestHandleResumeEventReviewGates:
 
         result = await worker._handle_resume_event(message, state)
 
-        assert result.get("revision_requested") is not True
-        assert result.get("feedback_comment") is None
+        assert result is state
 
     def test_review_response_gate_not_in_fresh_invoke_nodes(self):
         """review_response_gate must NOT use fresh-invoke — the gate re-pauses,
@@ -2768,10 +2816,11 @@ class TestCiWebhookDetectionTypedFields:
         """A CHECK_UPDATED event whose suite is still in_progress must not unpause.
 
         The suite-completion nuance from the original truth table is preserved by
-        reading the raw check_suite status (which survives the queue hop).
+        reading the normalized check_suite_status field (which survives the queue hop).
         """
         event = _make_normalized_event(
             kind=EventKind.CHECK_UPDATED,
+            check_suite_status=CheckStatus.IN_PROGRESS,
             raw={"check_suite": {"status": "in_progress"}},
         )
         message = QueueMessage(

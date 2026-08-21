@@ -7,6 +7,9 @@ from forge.integrations.source_control.contracts import (
     ChangeRequest,
     ChangeRequestIdentity,
     ChangeRequestState,
+    CheckConclusion,
+    CheckRun,
+    CheckStatus,
     EventKind,
     NormalizedEvent,
     Provider,
@@ -143,3 +146,22 @@ def test_normalized_event_round_trips_populated_review():
     restored = normalized_event_from_dict(data)
 
     assert restored.review == event.review
+
+
+def test_normalized_event_round_trips_check_output():
+    event = _sample_event()
+    event.kind = EventKind.CHECK_UPDATED
+    event.check = CheckRun(
+        name="build",
+        status=CheckStatus.COMPLETED,
+        conclusion=CheckConclusion.FAILURE,
+        url="https://github.com/test/repo/runs/1",
+        logs_url="https://github.com/test/repo/runs/1/logs",
+        output={"title": "Build failed", "summary": "2 tests failed", "text": "details"},
+    )
+
+    data = normalized_event_to_dict(event)
+    restored = normalized_event_from_dict(data)
+
+    assert restored.check == event.check
+    assert restored.check.output == event.check.output

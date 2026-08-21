@@ -22,6 +22,7 @@ from forge.integrations.github.comment_signature import is_self_comment
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
     ChangeRequestState,
+    CheckStatus,
     EventKind,
     NormalizedEvent,
     RepositoryRef,
@@ -694,11 +695,8 @@ class OrchestratorWorker:
             current_node == "ci_evaluator" or (targets_implementation_pr and is_check_event)
         ):
             if is_check_event:
-                raw = event_obj.raw
-                suite_status = raw.get("check_suite", {}).get("status") or raw.get(
-                    "check_run", {}
-                ).get("check_suite", {}).get("status")
-                if suite_status and suite_status != "completed":
+                suite_status = event_obj.check_suite_status
+                if suite_status and suite_status != CheckStatus.COMPLETED:
                     logger.info(
                         f"Ignoring {message.event_type} for {message.ticket_key}: "
                         f"check_suite not yet completed (status={suite_status!r})"
@@ -1530,7 +1528,10 @@ class OrchestratorWorker:
             and event_obj.kind == EventKind.REVIEW_SUBMITTED
             and event_obj.review is not None
             and (current_node in _REVIEW_GATES or targets_implementation_pr)
-            and current_state.get("is_paused", True)
+            and (
+                current_state.get("is_paused", True)
+                or current_state.get("pending_ci_event")
+            )
         ):
             review = event_obj.review
             sender_login = review.author

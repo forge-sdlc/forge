@@ -25,8 +25,10 @@ from forge.integrations.source_control.contracts import (
     WriteTarget,
 )
 from forge.integrations.source_control.errors import (
+    AuthenticationError,
     ConflictError,
     NotFoundError,
+    RateLimitedError,
     SourceControlError,
     TransientProviderError,
 )
@@ -292,6 +294,119 @@ class TestResolveDefaultBranch:
         branch = await github_adapter_with_mock_client.resolve_default_branch(github_repo_ref)
 
         assert branch == "main"
+
+
+class TestTranslateProviderErrors:
+    """Direct coverage for the `_translate_provider_errors` boundary decorator
+    applied to every adapter method that calls the GitHub API."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("status_code", "expected_exception"),
+        [
+            (401, AuthenticationError),
+            (403, AuthenticationError),
+            (429, RateLimitedError),
+            (500, TransientProviderError),
+            (503, TransientProviderError),
+        ],
+    )
+    async def test_status_code_maps_to_neutral_exception(
+        self,
+        github_adapter_with_mock_client: GitHubAdapter,
+        github_repo_ref: RepositoryRef,
+        mock_github_http_client: GitHubClient,
+        status_code: int,
+        expected_exception: type[Exception],
+    ):
+        response = httpx.Response(
+            status_code,
+            headers={"Retry-After": "30"} if status_code == 429 else {},
+            request=httpx.Request("GET", "https://api.github.com/repos/test/repo"),
+        )
+        mock_github_http_client.get_repository = AsyncMock(
+            side_effect=httpx.HTTPStatusError("boom", request=response.request, response=response)
+        )
+
+        with pytest.raises(expected_exception):
+            await github_adapter_with_mock_client.resolve_default_branch(github_repo_ref)
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_parses_retry_after(
+        self,
+        github_adapter_with_mock_client: GitHubAdapter,
+        github_repo_ref: RepositoryRef,
+        mock_github_http_client: GitHubClient,
+    ):
+        response = httpx.Response(
+            429,
+            headers={"Retry-After": "30"},
+            request=httpx.Request("GET", "https://api.github.com/repos/test/repo"),
+        )
+        mock_github_http_client.get_repository = AsyncMock(
+            side_effect=httpx.HTTPStatusError("boom", request=response.request, response=response)
+        )
+
+        with pytest.raises(RateLimitedError) as exc_info:
+            await github_adapter_with_mock_client.resolve_default_branch(github_repo_ref)
+
+        assert exc_info.value.retry_after == 30.0
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_with_non_numeric_retry_after_falls_back_to_none(
+        self,
+        github_adapter_with_mock_client: GitHubAdapter,
+        github_repo_ref: RepositoryRef,
+        mock_github_http_client: GitHubClient,
+    ):
+        """An HTTP-date Retry-After value (valid per RFC 7231) must not crash
+        the error-translation path with an unhandled ValueError."""
+        response = httpx.Response(
+            429,
+            headers={"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"},
+            request=httpx.Request("GET", "https://api.github.com/repos/test/repo"),
+        )
+        mock_github_http_client.get_repository = AsyncMock(
+            side_effect=httpx.HTTPStatusError("boom", request=response.request, response=response)
+        )
+
+        with pytest.raises(RateLimitedError) as exc_info:
+            await github_adapter_with_mock_client.resolve_default_branch(github_repo_ref)
+
+        assert exc_info.value.retry_after is None
+
+    @pytest.mark.asyncio
+    async def test_network_failure_maps_to_transient_provider_error(
+        self,
+        github_adapter_with_mock_client: GitHubAdapter,
+        github_repo_ref: RepositoryRef,
+        mock_github_http_client: GitHubClient,
+    ):
+        mock_github_http_client.get_repository = AsyncMock(
+            side_effect=httpx.ConnectTimeout("connection timed out")
+        )
+
+        with pytest.raises(TransientProviderError):
+            await github_adapter_with_mock_client.resolve_default_branch(github_repo_ref)
+
+    @pytest.mark.asyncio
+    async def test_not_found_status_propagates_unchanged(
+        self,
+        github_adapter_with_mock_client: GitHubAdapter,
+        github_repo_ref: RepositoryRef,
+        mock_github_http_client: GitHubClient,
+    ):
+        """404 has no generic neutral mapping and must be left for callers to
+        handle themselves rather than being swallowed or re-mapped."""
+        response = httpx.Response(
+            404, request=httpx.Request("GET", "https://api.github.com/repos/test/repo")
+        )
+        mock_github_http_client.get_repository = AsyncMock(
+            side_effect=httpx.HTTPStatusError("boom", request=response.request, response=response)
+        )
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await github_adapter_with_mock_client.resolve_default_branch(github_repo_ref)
 
 
 class TestGetAuthenticatedIdentity:
