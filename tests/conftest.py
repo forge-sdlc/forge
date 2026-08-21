@@ -7,6 +7,9 @@ os.environ.setdefault("JIRA_BASE_URL", "https://test.atlassian.net")
 os.environ.setdefault("JIRA_API_TOKEN", "test-token")
 os.environ.setdefault("JIRA_USER_EMAIL", "test@example.com")
 os.environ.setdefault("GITHUB_TOKEN", "test-github-token")
+os.environ.setdefault("LLM_BACKEND", "anthropic")
+os.environ.setdefault("LLM_MODEL", "claude-3-5-sonnet-20241022")
+os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
 from collections.abc import AsyncGenerator, Generator
 from pathlib import Path

@@ -29,6 +29,7 @@ class ReviewState(StrEnum):
     CHANGES_REQUESTED = "changes_requested"
     COMMENTED = "commented"
     PENDING = "pending"
+    DISMISSED = "dismissed"
 
 
 class CheckStatus(StrEnum):
@@ -55,6 +56,7 @@ class EventKind(StrEnum):
     COMMENT_CREATED = "comment_created"
     REVIEW_SUBMITTED = "review_submitted"
     PUSH = "push"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True)
@@ -100,7 +102,12 @@ class ChangeRequest:
     state: ChangeRequestState
     source_branch: str
     target_branch: str
+    head_sha: str = ""
     draft: bool = False
+    # Whether create_change_request just created this change request, as opposed
+    # to returning a pre-existing one for the same head/base pair. Meaningless
+    # (and always True) for get/update_change_request results.
+    created: bool = True
 
 
 @dataclass
@@ -130,14 +137,44 @@ class CheckRun:
     conclusion: CheckConclusion
     url: str | None = None
     logs_url: str | None = None
+    output: dict[str, str] = field(default_factory=dict)  # title/summary/text
+
+
+@dataclass(frozen=True)
+class GitCredentials:
+    """Everything local `git` (clone/fetch/push over HTTPS) needs to talk to
+    a connection's host, independent of that connection's API surface.
+
+    Returned by ``SourceControlProvider.get_git_credentials`` -- a cheap,
+    side-effect-free derivation from the adapter's already-resolved
+    Connection/credential, safe to call from any code path (including one
+    reconstructing a workspace from persisted state, not a fresh API call).
+    """
+
+    host: str  # bare host, e.g. "github.com" or "ghe.example.com" -- no scheme
+    # repr=False: keep the raw token out of the dataclass's default repr, so
+    # an unhandled exception's traceback or a stray `logger.debug(credentials)`
+    # doesn't print it -- this module deliberately avoids a pydantic/SecretStr
+    # dependency (see the module docstring), so a repr guard is the
+    # lightweight equivalent.
+    token: str = field(repr=False)
+    # CA bundle for a connection's self-signed TLS certificate (GitHub
+    # Enterprise Server). None for the common case (public GitHub or a CA
+    # trusted by the default store).
+    ca_path: str | None = None
 
 
 @dataclass
 class WriteTarget:
     clone_url: str
     push_remote_name: str
-    head_ref: str
+    head_ref: str  # the source branch to open the change request from
     base_branch: str
+    # Fork identity, populated only for change_request_mode == "fork"; None for
+    # "direct". Callers that push via local git need these to add the fork remote
+    # and build the provider-native cross-fork head ref.
+    fork_owner: str | None = None
+    fork_repo: str | None = None
 
 
 @dataclass
@@ -165,6 +202,20 @@ class SourceControlProvider(Protocol):
     ) -> NormalizedEvent: ...
 
     async def resolve_default_branch(self, repo_ref: RepositoryRef) -> str: ...
+
+    async def get_git_credentials(self, repo_ref: RepositoryRef) -> GitCredentials:
+        """Host/token/CA for local `git` operations against this connection.
+
+        Side-effect-free (no API call) -- a pure derivation from the
+        adapter's already-resolved Connection/credential. Declared async
+        (despite never awaiting) to match the rest of this protocol: a sync
+        method here is a footgun against AsyncMock-based test doubles, which
+        silently hand back an unawaited coroutine instead of raising. Safe to
+        call from any code path, including one reconstructing GitOperations
+        from persisted workflow state rather than a fresh repo_ref
+        resolution.
+        """
+        ...
 
     async def ensure_write_target(self, repo_ref: RepositoryRef) -> WriteTarget: ...
 
@@ -205,11 +256,34 @@ class SourceControlProvider(Protocol):
 
     async def get_review_threads(
         self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
-    ) -> list[Review]: ...
+    ) -> list[Review]:
+        """Submission-level review verdicts (approve/request-changes/comment); comments empty."""
+        ...
+
+    async def get_review_thread_comments(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+    ) -> list[Review]:
+        """Unresolved inline diff-comment threads; one Review per thread, comments populated."""
+        ...
+
+    async def get_review_comments_for_submission(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity, review_id: str
+    ) -> list[ReviewComment]:
+        """Inline comments from one specific review submission.
+
+        Scoped to a single review, unlike get_review_thread_comments (every
+        unresolved thread regardless of which review raised it) -- avoids
+        pulling in stale comments from prior review rounds on the same PR.
+        """
+        ...
 
     async def get_checks(self, repo_ref: RepositoryRef, ref: str) -> list[CheckRun]: ...
 
     async def get_check_logs(self, repo_ref: RepositoryRef, check: CheckRun) -> str: ...
+
+    async def get_check_artifacts(
+        self, repo_ref: RepositoryRef, check: CheckRun
+    ) -> list[tuple[str, bytes]]: ...
 
     async def get_file(self, repo_ref: RepositoryRef, path: str, ref: str) -> str: ...
 
@@ -225,6 +299,15 @@ class SourceControlProvider(Protocol):
     async def create_branch(self, repo_ref: RepositoryRef, name: str, base: str) -> None: ...
 
     async def get_authenticated_identity(self, repo_ref: RepositoryRef) -> Actor: ...
+
+    async def close(self) -> None:
+        """Release this adapter's underlying HTTP client/connection pool.
+
+        Called once by Registry.aclose() at process shutdown for every
+        adapter it has cached -- not per-operation. A no-op if the adapter
+        never lazily constructed a client (i.e. was never actually used).
+        """
+        ...
 
 
 @dataclass(frozen=True)
