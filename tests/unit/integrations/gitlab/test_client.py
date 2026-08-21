@@ -254,6 +254,27 @@ class TestChecks:
         assert result[0]["name"] == "build"
 
     @pytest.mark.asyncio
+    async def test_get_commit_statuses_encodes_multi_segment_ref(self):
+        """ci_evaluator.py falls back to change_request.source_branch when
+        head_sha is unavailable, and this codebase's own branches are
+        multi-segment (forge/<namespace>, per ensure_write_target). An
+        unencoded ref with a `/` produces a malformed path GitLab 404s on."""
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = []
+        client._client.get = AsyncMock(return_value=response)
+
+        await client.get_commit_statuses("test/repo", "forge/acme/widgets")
+
+        client._client.get.assert_awaited_once_with(
+            "/projects/test%2Frepo/repository/commits/forge%2Facme%2Fwidgets/statuses",
+            params={"page": 1, "per_page": 100},
+        )
+
+    @pytest.mark.asyncio
     async def test_get_commit_statuses_paginates_until_short_page(self):
         client = GitLabClient(credential="tok")
         client._client = AsyncMock(spec=httpx.AsyncClient)

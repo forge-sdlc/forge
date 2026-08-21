@@ -225,7 +225,10 @@ class GitLabClient:
     async def get_commit_statuses(self, namespace: str, ref: str) -> list[dict[str, Any]]:
         client = await self._get_client()
         per_page = 100
-        path = f"/projects/{encode_project_id(namespace)}/repository/commits/{ref}/statuses"
+        path = (
+            f"/projects/{encode_project_id(namespace)}/repository/commits/"
+            f"{encode_project_id(ref)}/statuses"
+        )
         results: list[dict[str, Any]] = []
         page = 1
         while True:

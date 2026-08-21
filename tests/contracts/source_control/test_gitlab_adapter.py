@@ -1017,6 +1017,39 @@ class TestGetReviewCommentsForSubmission:
         assert comments[0].body == "x"
 
     @pytest.mark.asyncio
+    async def test_resolved_note_maps_resolved_true(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        """_map_note_response must surface GitLab's `resolved` field rather
+        than leaving ReviewComment.resolved at its dataclass default (False)
+        for every note, resolved or not."""
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.get_discussions = AsyncMock(
+            return_value=[
+                {
+                    "id": "disc-1",
+                    "notes": [
+                        {
+                            "id": 1,
+                            "body": "fixed now",
+                            "author": {"username": "bob"},
+                            "resolved": True,
+                        }
+                    ],
+                }
+            ]
+        )
+
+        comments = await gitlab_adapter_with_mock_client.get_review_comments_for_submission(
+            gitlab_repo_ref, identity, review_id="disc-1"
+        )
+
+        assert len(comments) == 1
+        assert comments[0].resolved is True
+
+    @pytest.mark.asyncio
     async def test_unmatched_id_returns_empty_list_not_error(
         self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
     ):

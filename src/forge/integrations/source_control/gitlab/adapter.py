@@ -501,6 +501,7 @@ class GitLabAdapter:
             author=(note.get("author") or {}).get("username", ""),
             path=note.get("position", {}).get("new_path") if note.get("position") else None,
             line=note.get("position", {}).get("new_line") if note.get("position") else None,
+            resolved=note.get("resolved", False),
             in_reply_to=in_reply_to,
         )
 
