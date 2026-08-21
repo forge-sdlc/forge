@@ -168,3 +168,39 @@ class GitLabClient:
         )
         response.raise_for_status()
         return response.json()
+
+    async def create_note(self, namespace: str, iid: int, body: str) -> dict[str, Any]:
+        client = await self._get_client()
+        response = await client.post(
+            f"/projects/{encode_project_id(namespace)}/merge_requests/{iid}/notes",
+            json={"body": body},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_discussions(self, namespace: str, iid: int) -> list[dict[str, Any]]:
+        client = await self._get_client()
+        response = await client.get(
+            f"/projects/{encode_project_id(namespace)}/merge_requests/{iid}/discussions"
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def reply_to_discussion(
+        self, namespace: str, iid: int, discussion_id: str, body: str
+    ) -> dict[str, Any]:
+        client = await self._get_client()
+        response = await client.post(
+            f"/projects/{encode_project_id(namespace)}/merge_requests/{iid}/discussions/{discussion_id}/notes",
+            json={"body": body},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def get_approvals(self, namespace: str, iid: int) -> dict[str, Any]:
+        client = await self._get_client()
+        response = await client.get(
+            f"/projects/{encode_project_id(namespace)}/merge_requests/{iid}/approvals"
+        )
+        response.raise_for_status()
+        return response.json()

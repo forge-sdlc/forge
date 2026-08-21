@@ -21,10 +21,12 @@ from forge.integrations.source_control.contracts import (
     Provider,
     RepositoryRef,
     RepositoryResolver,
+    Review,
     ReviewComment,
+    ReviewState,
     WriteTarget,
 )
-from forge.integrations.source_control.errors import ProviderConfigError
+from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
 from forge.integrations.source_control.http_errors import translate_provider_errors
 
 logger = logging.getLogger(__name__)
@@ -380,6 +382,115 @@ class GitLabAdapter:
             "running": (CheckStatus.IN_PROGRESS, CheckConclusion.NONE),
         }
         return table.get(status, (CheckStatus.IN_PROGRESS, CheckConclusion.NONE))
+
+    @_translate
+    async def create_comment(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity, body: str
+    ) -> ReviewComment:
+        client = self._get_client()
+        note = await client.create_note(repo_ref.namespace, _require_native_id(identity), body)
+        return self._map_note_response(note)
+
+    @_translate
+    async def reply_to_comment(
+        self,
+        repo_ref: RepositoryRef,
+        identity: ChangeRequestIdentity,
+        comment_id: str,
+        body: str,
+    ) -> ReviewComment:
+        client = self._get_client()
+        iid = _require_native_id(identity)
+        discussions = await client.get_discussions(repo_ref.namespace, iid)
+        discussion_id = next(
+            (
+                d["id"]
+                for d in discussions
+                if any(str(n.get("id")) == comment_id for n in d.get("notes", []))
+            ),
+            None,
+        )
+        if discussion_id is None:
+            raise NotFoundError(
+                f"No discussion on MR !{iid} of {repo_ref.namespace} contains note {comment_id!r}."
+            )
+        note = await client.reply_to_discussion(repo_ref.namespace, iid, discussion_id, body)
+        return self._map_note_response(note, in_reply_to=comment_id)
+
+    def _map_note_response(self, note: dict, *, in_reply_to: str | None = None) -> ReviewComment:
+        return ReviewComment(
+            id=str(note.get("id", "")),
+            body=note.get("body", "") or "",
+            author=(note.get("author") or {}).get("username", ""),
+            path=note.get("position", {}).get("new_path") if note.get("position") else None,
+            line=note.get("position", {}).get("new_line") if note.get("position") else None,
+            in_reply_to=in_reply_to,
+        )
+
+    @_translate
+    async def get_review_threads(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+    ) -> list[Review]:
+        """GitLab has no submission-level "review" object: this maps the
+        Approvals API, so only APPROVED entries are ever returned (or an
+        empty list) -- there is no GitLab analog to CHANGES_REQUESTED,
+        COMMENTED, PENDING, or DISMISSED at this level."""
+        client = self._get_client()
+        approvals = await client.get_approvals(repo_ref.namespace, _require_native_id(identity))
+        return [
+            Review(
+                id=str(entry["user"]["id"]),
+                state=ReviewState.APPROVED,
+                body="",
+                author=entry["user"].get("username", ""),
+                comments=[],
+            )
+            for entry in approvals.get("approved_by", [])
+        ]
+
+    @_translate
+    async def get_review_thread_comments(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+    ) -> list[Review]:
+        client = self._get_client()
+        discussions = await client.get_discussions(repo_ref.namespace, _require_native_id(identity))
+        reviews: list[Review] = []
+        for discussion in discussions:
+            notes = discussion.get("notes", [])
+            first = notes[0] if notes else {}
+            if (
+                first.get("type") != "DiffNote"
+                or not first.get("resolvable")
+                or first.get("resolved")
+            ):
+                continue
+            comments = [self._map_note_response(n) for n in notes]
+            reviews.append(
+                Review(
+                    id=str(discussion.get("id", "")),
+                    state=ReviewState.COMMENTED,
+                    body="",
+                    author=comments[0].author if comments else "",
+                    comments=comments,
+                )
+            )
+        return reviews
+
+    @_translate
+    async def get_review_comments_for_submission(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity, review_id: str
+    ) -> list[ReviewComment]:
+        """GitLab has no grouping of comments by review submission; review_id
+        is treated as a discussion id (the id space get_review_thread_comments
+        returns). An id with no matching discussion returns [] rather than
+        raising, since a caller may legitimately pass an approval id from
+        get_review_threads, which is a different id space."""
+        client = self._get_client()
+        discussions = await client.get_discussions(repo_ref.namespace, _require_native_id(identity))
+        discussion = next((d for d in discussions if str(d.get("id")) == review_id), None)
+        if discussion is None:
+            return []
+        return [self._map_note_response(n) for n in discussion.get("notes", [])]
 
     async def close(self) -> None:
         if self._client is not None:

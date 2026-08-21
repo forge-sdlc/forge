@@ -145,3 +145,72 @@ class TestCreateMergeRequest:
             },
         )
         assert result["iid"] == 5
+
+
+class TestNotesAndDiscussions:
+    @pytest.mark.asyncio
+    async def test_create_note(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"id": 1, "body": "hi"}
+        client._client.post = AsyncMock(return_value=response)
+
+        result = await client.create_note("test/repo", 42, "hi")
+
+        client._client.post.assert_awaited_once_with(
+            "/projects/test%2Frepo/merge_requests/42/notes", json={"body": "hi"}
+        )
+        assert result["id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_get_discussions(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = [{"id": "abc"}]
+        client._client.get = AsyncMock(return_value=response)
+
+        result = await client.get_discussions("test/repo", 42)
+
+        client._client.get.assert_awaited_once_with(
+            "/projects/test%2Frepo/merge_requests/42/discussions"
+        )
+        assert result == [{"id": "abc"}]
+
+    @pytest.mark.asyncio
+    async def test_reply_to_discussion(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"id": 2, "body": "reply"}
+        client._client.post = AsyncMock(return_value=response)
+
+        await client.reply_to_discussion("test/repo", 42, "abc", "reply")
+
+        client._client.post.assert_awaited_once_with(
+            "/projects/test%2Frepo/merge_requests/42/discussions/abc/notes", json={"body": "reply"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_approvals(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"approved_by": [{"user": {"id": 1, "username": "alice"}}]}
+        client._client.get = AsyncMock(return_value=response)
+
+        result = await client.get_approvals("test/repo", 42)
+
+        client._client.get.assert_awaited_once_with(
+            "/projects/test%2Frepo/merge_requests/42/approvals"
+        )
+        assert result["approved_by"][0]["user"]["username"] == "alice"

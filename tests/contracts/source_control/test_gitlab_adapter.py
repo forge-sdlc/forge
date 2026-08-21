@@ -15,12 +15,16 @@ from forge.integrations.source_control.contracts import (
     Provider,
     RepositoryRef,
     ResolvedRepository,
+    ReviewState,
     WriteTarget,
 )
 from forge.integrations.source_control.errors import (
     AuthenticationError,
     RateLimitedError,
     TransientProviderError,
+)
+from forge.integrations.source_control.errors import (
+    NotFoundError as SCNotFoundError,
 )
 from forge.integrations.source_control.gitlab.adapter import GitLabAdapter
 from tests.contracts.source_control.conformance_suite import (
@@ -583,3 +587,205 @@ class TestUpdateChangeRequest:
         with pytest.raises(ValueError, match="native_id"):
             await gitlab_adapter_with_mock_client.get_change_request(gitlab_repo_ref, identity)
         mock_gitlab_http_client.get_merge_request.assert_not_awaited()
+
+
+class TestCreateComment:
+    @pytest.mark.asyncio
+    async def test_creates_note_and_maps_result(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.create_note = AsyncMock(
+            return_value={"id": 1, "body": "hi", "author": {"username": "forge-bot"}}
+        )
+
+        comment = await gitlab_adapter_with_mock_client.create_comment(
+            gitlab_repo_ref, identity, "hi"
+        )
+
+        mock_gitlab_http_client.create_note.assert_awaited_once_with("test/repo", 42, "hi")
+        assert comment.body == "hi"
+        assert comment.author == "forge-bot"
+
+
+class TestReplyToComment:
+    @pytest.mark.asyncio
+    async def test_finds_discussion_containing_note_and_replies(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.get_discussions = AsyncMock(
+            return_value=[
+                {"id": "disc-1", "notes": [{"id": 10}]},
+                {"id": "disc-2", "notes": [{"id": 20}, {"id": 21}]},
+            ]
+        )
+        mock_gitlab_http_client.reply_to_discussion = AsyncMock(
+            return_value={"id": 22, "body": "reply", "author": {"username": "forge-bot"}}
+        )
+
+        comment = await gitlab_adapter_with_mock_client.reply_to_comment(
+            gitlab_repo_ref, identity, comment_id="20", body="reply"
+        )
+
+        mock_gitlab_http_client.reply_to_discussion.assert_awaited_once_with(
+            "test/repo", 42, "disc-2", "reply"
+        )
+        assert comment.in_reply_to == "20"
+
+    @pytest.mark.asyncio
+    async def test_raises_not_found_when_no_discussion_contains_the_note(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.get_discussions = AsyncMock(
+            return_value=[{"id": "disc-1", "notes": [{"id": 10}]}]
+        )
+        mock_gitlab_http_client.reply_to_discussion = AsyncMock()
+
+        with pytest.raises(SCNotFoundError):
+            await gitlab_adapter_with_mock_client.reply_to_comment(
+                gitlab_repo_ref, identity, comment_id="999", body="x"
+            )
+        mock_gitlab_http_client.reply_to_discussion.assert_not_awaited()
+
+
+class TestGetReviewThreads:
+    @pytest.mark.asyncio
+    async def test_maps_approvals_to_approved_reviews(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.get_approvals = AsyncMock(
+            return_value={"approved_by": [{"user": {"id": 1, "username": "alice"}}]}
+        )
+
+        reviews = await gitlab_adapter_with_mock_client.get_review_threads(
+            gitlab_repo_ref, identity
+        )
+
+        assert len(reviews) == 1
+        assert reviews[0].state == ReviewState.APPROVED
+        assert reviews[0].author == "alice"
+        assert reviews[0].comments == []
+
+    @pytest.mark.asyncio
+    async def test_no_approvals_returns_empty_list(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.get_approvals = AsyncMock(return_value={"approved_by": []})
+
+        reviews = await gitlab_adapter_with_mock_client.get_review_threads(
+            gitlab_repo_ref, identity
+        )
+
+        assert reviews == []
+
+
+class TestGetReviewThreadComments:
+    @pytest.mark.asyncio
+    async def test_filters_to_unresolved_diff_notes(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.get_discussions = AsyncMock(
+            return_value=[
+                {
+                    "id": "disc-1",
+                    "notes": [
+                        {
+                            "id": 1,
+                            "body": "fix this",
+                            "author": {"username": "bob"},
+                            "type": "DiffNote",
+                            "resolvable": True,
+                            "resolved": False,
+                            "position": {"new_path": "src/x.py", "new_line": 10},
+                        }
+                    ],
+                },
+                {
+                    "id": "disc-2",
+                    "notes": [
+                        {
+                            "id": 2,
+                            "body": "done",
+                            "author": {"username": "carol"},
+                            "type": "DiffNote",
+                            "resolvable": True,
+                            "resolved": True,
+                        }
+                    ],
+                },
+                {
+                    "id": "disc-3",
+                    "notes": [
+                        {
+                            "id": 3,
+                            "body": "general comment",
+                            "author": {"username": "dave"},
+                            "type": None,
+                        }
+                    ],
+                },
+            ]
+        )
+
+        reviews = await gitlab_adapter_with_mock_client.get_review_thread_comments(
+            gitlab_repo_ref, identity
+        )
+
+        assert [r.id for r in reviews] == ["disc-1"]
+        assert reviews[0].comments[0].body == "fix this"
+        assert reviews[0].comments[0].path == "src/x.py"
+        assert reviews[0].comments[0].line == 10
+
+
+class TestGetReviewCommentsForSubmission:
+    @pytest.mark.asyncio
+    async def test_returns_matching_discussion_notes(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.get_discussions = AsyncMock(
+            return_value=[
+                {"id": "disc-1", "notes": [{"id": 1, "body": "x", "author": {"username": "bob"}}]}
+            ]
+        )
+
+        comments = await gitlab_adapter_with_mock_client.get_review_comments_for_submission(
+            gitlab_repo_ref, identity, review_id="disc-1"
+        )
+
+        assert len(comments) == 1
+        assert comments[0].body == "x"
+
+    @pytest.mark.asyncio
+    async def test_unmatched_id_returns_empty_list_not_error(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        mock_gitlab_http_client.get_discussions = AsyncMock(return_value=[])
+
+        comments = await gitlab_adapter_with_mock_client.get_review_comments_for_submission(
+            gitlab_repo_ref, identity, review_id="does-not-exist"
+        )
+
+        assert comments == []
