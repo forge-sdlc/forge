@@ -41,6 +41,15 @@ def _mr_opened_payload() -> dict:
     }
 
 
+def _push_payload(ref: str = "refs/heads/forge/AISOS-42") -> dict:
+    return {
+        "object_kind": "push",
+        "user_username": "alice",
+        "project": {"path_with_namespace": "acme/widgets"},
+        "ref": ref,
+    }
+
+
 def _resolved_gitlab_connection() -> ResolvedRepository:
     """A resolvable repos.yaml-shaped connection for acme/widgets, with its
     webhook secret sourced from ACME_GITLAB_WEBHOOK_SECRET (set via
@@ -124,6 +133,47 @@ class TestGitLabWebhook:
         assert len(published) == 1
         assert published[0].kind == EventKind.CR_OPENED
         assert published[0].repo_ref.namespace == "acme/widgets"
+
+    def test_push_event_extracts_ticket_key_from_ref(self, client, monkeypatch):
+        """A push event has no change_request (GitLabAdapter.parse_webhook
+        doesn't populate one for push events), so the ticket key must come
+        from the raw payload's top-level `ref` -- mirroring the GitHub
+        route's raw.get("ref", "") fallback exactly."""
+        monkeypatch.setenv("ACME_GITLAB_WEBHOOK_SECRET", "correct-secret")
+        resolved = _resolved_gitlab_connection()
+
+        published: list[NormalizedEvent] = []
+
+        async def fake_publish_event(
+            _self: object, event: NormalizedEvent, _ticket_key: str
+        ) -> str:
+            published.append(event)
+            return "1-0"
+
+        with (
+            patch(
+                "forge.integrations.source_control.registry.Registry.resolve",
+                return_value=resolved,
+            ),
+            patch("forge.queue.producer.QueueProducer.publish_event", fake_publish_event),
+        ):
+            response = client.post(
+                "/api/v1/webhooks/gitlab",
+                json=_push_payload("refs/heads/forge/AISOS-42"),
+                headers={
+                    "X-Gitlab-Event": "Push Hook",
+                    "X-Gitlab-Token": "correct-secret",
+                },
+            )
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "queued"
+        assert body["ticket_key"] == "AISOS-42"
+
+        assert len(published) == 1
+        assert published[0].kind == EventKind.PUSH
+        assert published[0].change_request is None
 
     def test_unmanaged_repository_is_rejected_not_acked(self, client):
         """No connection is configured for this namespace and GitLab has no
