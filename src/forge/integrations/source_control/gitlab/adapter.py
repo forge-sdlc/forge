@@ -7,6 +7,8 @@ import logging
 import re
 from datetime import UTC, datetime
 
+import httpx
+
 from forge.integrations.gitlab.client import GitLabClient
 from forge.integrations.source_control.contracts import (
     Actor,
@@ -521,6 +523,16 @@ class GitLabAdapter:
         match = re.search(r"/-/(?:jobs|builds)/(\d+)", target_url)
         return int(match.group(1)) if match else None
 
+    @staticmethod
+    def _require_numeric_logs_url(check: CheckRun) -> int:
+        try:
+            return int(check.logs_url)
+        except ValueError as exc:
+            raise SourceControlError(
+                f"Check {check.name!r} has a non-numeric logs_url {check.logs_url!r}; "
+                "expected a GitLab CI job id."
+            ) from exc
+
     @_translate
     async def get_check_logs(self, repo_ref: RepositoryRef, check: CheckRun) -> str:
         if not check.logs_url:
@@ -528,15 +540,17 @@ class GitLabAdapter:
                 f"No logs available for check {check.name!r}: it is not backed by "
                 "a GitLab CI job (e.g. an external CI integration's commit status)."
             )
-        try:
-            job_id = int(check.logs_url)
-        except ValueError as exc:
-            raise SourceControlError(
-                f"Check {check.name!r} has a non-numeric logs_url {check.logs_url!r}; "
-                "expected a GitLab CI job id."
-            ) from exc
+        job_id = self._require_numeric_logs_url(check)
         client = self._get_client()
-        return await client.get_job_trace(repo_ref.namespace, job_id)
+        try:
+            return await client.get_job_trace(repo_ref.namespace, job_id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise NotFoundError(
+                    f"No trace found for check {check.name!r} (job {job_id}); it may have "
+                    "expired or been deleted under GitLab's job log retention policy."
+                ) from exc
+            raise
 
     @_translate
     async def get_check_artifacts(
@@ -544,8 +558,9 @@ class GitLabAdapter:
     ) -> list[tuple[str, bytes]]:
         if not check.logs_url:
             return []
+        job_id = self._require_numeric_logs_url(check)
         client = self._get_client()
-        artifact_bytes = await client.get_job_artifacts(repo_ref.namespace, int(check.logs_url))
+        artifact_bytes = await client.get_job_artifacts(repo_ref.namespace, job_id)
         if artifact_bytes is None:
             return []
         return [("artifacts.zip", artifact_bytes)]

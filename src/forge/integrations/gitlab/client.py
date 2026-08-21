@@ -207,11 +207,18 @@ class GitLabClient:
 
     async def get_commit_statuses(self, namespace: str, ref: str) -> list[dict[str, Any]]:
         client = await self._get_client()
-        response = await client.get(
-            f"/projects/{encode_project_id(namespace)}/repository/commits/{ref}/statuses"
-        )
-        response.raise_for_status()
-        return response.json()
+        per_page = 100
+        path = f"/projects/{encode_project_id(namespace)}/repository/commits/{ref}/statuses"
+        results: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            response = await client.get(path, params={"page": page, "per_page": per_page})
+            response.raise_for_status()
+            page_results = response.json()
+            results.extend(page_results)
+            if len(page_results) < per_page:
+                return results
+            page += 1
 
     async def get_job_trace(self, namespace: str, job_id: int) -> str:
         client = await self._get_client()

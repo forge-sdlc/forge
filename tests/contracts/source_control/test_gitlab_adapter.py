@@ -927,6 +927,29 @@ class TestGetCheckLogs:
         with pytest.raises(SourceControlError, match="non-numeric logs_url"):
             await gitlab_adapter_with_mock_client.get_check_logs(gitlab_repo_ref, check)
 
+    @pytest.mark.asyncio
+    async def test_raises_not_found_when_trace_returns_404(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        response = httpx.Response(
+            404,
+            request=httpx.Request(
+                "GET", "https://gitlab.com/api/v4/projects/test%2Frepo/jobs/987654/trace"
+            ),
+        )
+        mock_gitlab_http_client.get_job_trace = AsyncMock(
+            side_effect=httpx.HTTPStatusError("boom", request=response.request, response=response)
+        )
+        check = CheckRun(
+            name="build",
+            status=CheckStatus.COMPLETED,
+            conclusion=CheckConclusion.SUCCESS,
+            logs_url="987654",
+        )
+
+        with pytest.raises(SCNotFoundError):
+            await gitlab_adapter_with_mock_client.get_check_logs(gitlab_repo_ref, check)
+
 
 class TestGetCheckArtifacts:
     @pytest.mark.asyncio
@@ -964,3 +987,20 @@ class TestGetCheckArtifacts:
         assert (
             await gitlab_adapter_with_mock_client.get_check_artifacts(gitlab_repo_ref, check) == []
         )
+
+    @pytest.mark.asyncio
+    async def test_raises_source_control_error_for_non_numeric_logs_url(
+        self,
+        gitlab_adapter_with_mock_client,
+        gitlab_repo_ref,
+        mock_gitlab_http_client,  # noqa: ARG002
+    ):
+        check = CheckRun(
+            name="build",
+            status=CheckStatus.COMPLETED,
+            conclusion=CheckConclusion.SUCCESS,
+            logs_url="not-a-number",
+        )
+
+        with pytest.raises(SourceControlError, match="non-numeric logs_url"):
+            await gitlab_adapter_with_mock_client.get_check_artifacts(gitlab_repo_ref, check)

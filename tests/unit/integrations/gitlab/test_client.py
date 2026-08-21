@@ -230,9 +230,42 @@ class TestChecks:
         result = await client.get_commit_statuses("test/repo", "abc123")
 
         client._client.get.assert_awaited_once_with(
-            "/projects/test%2Frepo/repository/commits/abc123/statuses"
+            "/projects/test%2Frepo/repository/commits/abc123/statuses",
+            params={"page": 1, "per_page": 100},
         )
         assert result[0]["name"] == "build"
+
+    @pytest.mark.asyncio
+    async def test_get_commit_statuses_paginates_until_short_page(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+
+        page1_items = [{"name": f"job{i}", "status": "success"} for i in range(100)]
+        page2_items = [{"name": "job100", "status": "success"}]
+
+        page1_response = MagicMock()
+        page1_response.raise_for_status = MagicMock()
+        page1_response.json.return_value = page1_items
+
+        page2_response = MagicMock()
+        page2_response.raise_for_status = MagicMock()
+        page2_response.json.return_value = page2_items
+
+        client._client.get = AsyncMock(side_effect=[page1_response, page2_response])
+
+        result = await client.get_commit_statuses("test/repo", "abc123")
+
+        assert result == page1_items + page2_items
+        assert client._client.get.await_count == 2
+        client._client.get.assert_any_await(
+            "/projects/test%2Frepo/repository/commits/abc123/statuses",
+            params={"page": 1, "per_page": 100},
+        )
+        client._client.get.assert_any_await(
+            "/projects/test%2Frepo/repository/commits/abc123/statuses",
+            params={"page": 2, "per_page": 100},
+        )
 
     @pytest.mark.asyncio
     async def test_get_job_trace_returns_raw_text(self):
