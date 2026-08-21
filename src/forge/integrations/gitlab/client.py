@@ -138,6 +138,23 @@ class GitLabClient:
         response.raise_for_status()
         return response.json()
 
+    async def get_merge_requests(
+        self, namespace: str, *, source_branch: str, state: str = "opened"
+    ) -> list[dict[str, Any]]:
+        """List merge requests for a project, filtered by source branch.
+
+        ``namespace`` is scoped to the project a merge request belongs to,
+        which in GitLab's data model is always the *target* project of the
+        MR -- for a fork-mode MR, this is the upstream project, not the fork.
+        """
+        client = await self._get_client()
+        response = await client.get(
+            f"/projects/{encode_project_id(namespace)}/merge_requests",
+            params={"source_branch": source_branch, "state": state},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def get_merge_request(self, namespace: str, iid: int) -> dict[str, Any]:
         client = await self._get_client()
         response = await client.get(

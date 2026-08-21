@@ -258,6 +258,55 @@ class TestParseWebhookMergeRequest:
 
         assert event.kind == expected_kind
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("action", "expected_state"),
+        [
+            ("approved", ReviewState.APPROVED),
+            ("approval", ReviewState.APPROVED),
+            ("unapproved", ReviewState.DISMISSED),
+            ("unapproval", ReviewState.DISMISSED),
+        ],
+    )
+    async def test_approval_actions_populate_review(
+        self,
+        gitlab_adapter_with_mock_client,
+        gitlab_repo_ref,
+        gitlab_connection,
+        action,
+        expected_state,
+    ):
+        """worker.py's human-review-gate approval path and the PRD/spec
+        proposal review paths require event.review to be populated to unpause;
+        approving/unapproving a GitLab MR must not be a no-op for those gates."""
+        payload = _mr_opened_payload()
+        payload["object_attributes"]["action"] = action
+        payload["user"] = {"username": "reviewer-bob"}
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.review is not None
+        assert event.review.state == expected_state
+        assert event.review.author == "reviewer-bob"
+        assert event.review.comments == []
+
+    @pytest.mark.asyncio
+    async def test_non_approval_actions_leave_review_none(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        payload = _mr_opened_payload()
+        payload["object_attributes"]["action"] = "update"
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.review is None
+
 
 def test_map_change_request_rejects_both_repo_ref_and_identity(
     gitlab_adapter_with_mock_client: GitLabAdapter,
@@ -312,6 +361,76 @@ class TestParseWebhookNote:
         assert event.comment.body == "Looks good"
         assert event.comment.author == "bob"
         assert event.comment.in_reply_to is None
+
+    @pytest.mark.asyncio
+    async def test_note_on_merge_request_populates_change_request(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        """A note-webhook payload carries a top-level `merge_request` object;
+        without change_request populated from it, `_extract_ticket_key` in the
+        gitlab route has nothing to fall back to (note events have no
+        top-level `ref`) and worker.py drops the event before it reaches
+        any workflow gate."""
+        payload = {
+            "object_kind": "note",
+            "user": {"username": "bob"},
+            "project": {"path_with_namespace": "test/repo"},
+            "object_attributes": {
+                "id": 555,
+                "note": "!skip-gate flaky-test",
+                "noteable_type": "MergeRequest",
+            },
+            "merge_request": {
+                "iid": 42,
+                "title": "AISOS-1: Test MR",
+                "description": "Test body",
+                "state": "opened",
+                "source_branch": "forge/AISOS-1",
+                "target_branch": "main",
+                "url": "https://gitlab.com/test/repo/-/merge_requests/42",
+                "last_commit": {"id": "def456"},
+                "draft": False,
+            },
+        }
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.change_request is not None
+        assert event.change_request.identity.native_id == 42
+        assert event.change_request.title == "AISOS-1: Test MR"
+        assert event.change_request.source_branch == "forge/AISOS-1"
+        assert event.change_request.target_branch == "main"
+        assert event.change_request.state == ChangeRequestState.OPEN
+        assert event.change_request.head_sha == "def456"
+
+    @pytest.mark.asyncio
+    async def test_note_on_merge_request_without_mr_object_leaves_change_request_none(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, gitlab_connection
+    ):
+        """Not every note payload is guaranteed to carry `merge_request` (e.g.
+        a malformed or unusual payload); parse_webhook must degrade gracefully
+        rather than raising."""
+        payload = {
+            "object_kind": "note",
+            "user": {"username": "bob"},
+            "project": {"path_with_namespace": "test/repo"},
+            "object_attributes": {
+                "id": 555,
+                "note": "Looks good",
+                "noteable_type": "MergeRequest",
+            },
+        }
+        resolver = MockResolver(gitlab_repo_ref, gitlab_connection)
+
+        event = await gitlab_adapter_with_mock_client.parse_webhook(
+            {}, json.dumps(payload).encode(), resolver
+        )
+
+        assert event.change_request is None
+        assert event.comment is not None
 
     @pytest.mark.asyncio
     async def test_note_on_issue_is_unknown(
@@ -536,6 +655,122 @@ class TestCreateChangeRequest:
             target_project_id=100,
         )
         assert cr.draft is True
+
+    @pytest.mark.asyncio
+    async def test_409_conflict_returns_existing_mr_uncreated(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        """GitLab returns 409 (not GitHub's 422) when an open MR already
+        exists for the source branch. This must not leak a raw
+        httpx.HTTPStatusError past the adapter boundary -- the existing MR is
+        looked up and returned with created=False, mirroring GitHub's
+        create_pull_request behavior."""
+        write_target = WriteTarget(
+            clone_url="https://gitlab.com/test/repo.git",
+            push_remote_name="origin",
+            head_ref="forge/test/repo",
+            base_branch="main",
+        )
+        conflict_response = httpx.Response(
+            409,
+            json={
+                "message": ["Another open merge request already exists for this source branch: !7"]
+            },
+            request=httpx.Request(
+                "POST", "https://gitlab.com/api/v4/projects/test%2Frepo/merge_requests"
+            ),
+        )
+        mock_gitlab_http_client.create_merge_request = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "409 conflict", request=conflict_response.request, response=conflict_response
+            )
+        )
+        mock_gitlab_http_client.get_merge_requests = AsyncMock(
+            return_value=[
+                {
+                    "iid": 7,
+                    "title": "Existing MR",
+                    "description": "already open",
+                    "state": "opened",
+                    "source_branch": "forge/test/repo",
+                    "target_branch": "main",
+                    "web_url": "https://gitlab.com/test/repo/-/merge_requests/7",
+                    "draft": False,
+                }
+            ]
+        )
+
+        cr = await gitlab_adapter_with_mock_client.create_change_request(
+            gitlab_repo_ref, write_target, title="Test MR", body="body"
+        )
+
+        mock_gitlab_http_client.get_merge_requests.assert_awaited_once_with(
+            "test/repo", source_branch="forge/test/repo"
+        )
+        assert cr.identity.native_id == 7
+        assert cr.created is False
+        assert cr.url == "https://gitlab.com/test/repo/-/merge_requests/7"
+
+    @pytest.mark.asyncio
+    async def test_409_conflict_with_no_matching_mr_raises_conflict_error(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        """If GitLab reports the conflict but the lookup finds nothing (e.g. a
+        race where the MR was closed between the 409 and the lookup), this
+        must still not leak a raw httpx type -- fall back to ConflictError."""
+        write_target = WriteTarget(
+            clone_url="https://gitlab.com/test/repo.git",
+            push_remote_name="origin",
+            head_ref="forge/test/repo",
+            base_branch="main",
+        )
+        conflict_response = httpx.Response(
+            409,
+            json={"message": ["Another open merge request already exists"]},
+            request=httpx.Request(
+                "POST", "https://gitlab.com/api/v4/projects/test%2Frepo/merge_requests"
+            ),
+        )
+        mock_gitlab_http_client.create_merge_request = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "409 conflict", request=conflict_response.request, response=conflict_response
+            )
+        )
+        mock_gitlab_http_client.get_merge_requests = AsyncMock(return_value=[])
+
+        with pytest.raises(ConflictError, match="already exists"):
+            await gitlab_adapter_with_mock_client.create_change_request(
+                gitlab_repo_ref, write_target, title="Test MR", body="body"
+            )
+
+    @pytest.mark.asyncio
+    async def test_non_409_http_error_propagates_through_translate(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        """A non-409 HTTPStatusError must still reach @_translate's neutral
+        mapping, not get swallowed by the 409-specific handling."""
+        write_target = WriteTarget(
+            clone_url="https://gitlab.com/test/repo.git",
+            push_remote_name="origin",
+            head_ref="forge/test/repo",
+            base_branch="main",
+        )
+        error_response = httpx.Response(
+            500,
+            request=httpx.Request(
+                "POST", "https://gitlab.com/api/v4/projects/test%2Frepo/merge_requests"
+            ),
+        )
+        mock_gitlab_http_client.create_merge_request = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "server error", request=error_response.request, response=error_response
+            )
+        )
+
+        with pytest.raises(TransientProviderError):
+            await gitlab_adapter_with_mock_client.create_change_request(
+                gitlab_repo_ref, write_target, title="Test MR", body="body"
+            )
 
 
 class TestUpdateChangeRequest:

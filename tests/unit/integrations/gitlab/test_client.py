@@ -146,6 +146,24 @@ class TestCreateMergeRequest:
         )
         assert result["iid"] == 5
 
+    @pytest.mark.asyncio
+    async def test_get_merge_requests_filters_by_source_branch_and_state(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = [{"iid": 7, "source_branch": "feature"}]
+        client._client.get = AsyncMock(return_value=response)
+
+        result = await client.get_merge_requests("test/repo", source_branch="feature")
+
+        client._client.get.assert_awaited_once_with(
+            "/projects/test%2Frepo/merge_requests",
+            params={"source_branch": "feature", "state": "opened"},
+        )
+        assert result == [{"iid": 7, "source_branch": "feature"}]
+
 
 class TestNotesAndDiscussions:
     @pytest.mark.asyncio

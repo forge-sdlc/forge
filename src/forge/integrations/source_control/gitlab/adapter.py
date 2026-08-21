@@ -187,6 +187,17 @@ class GitLabAdapter:
         body: str,
         draft: bool = False,
     ) -> ChangeRequest:
+        """Create a merge request (or reuse an existing one for the same source branch).
+
+        Unlike GitHub (which 422s), GitLab returns 409 Conflict when an open MR
+        already exists for the source branch. On 409, the existing MR is looked
+        up (scoped to repo_ref.namespace, which is always the target/upstream
+        project regardless of fork/direct mode) and returned with created=False,
+        mirroring GitHub's create_pull_request/_map_change_request(...,
+        created=False) behavior. If GitLab reports the conflict but no matching
+        open MR can be found, the 409 is translated into ConflictError rather
+        than left as a raw httpx type.
+        """
         client = self._get_client()
 
         target_project_id = None
@@ -199,14 +210,32 @@ class GitLabAdapter:
         mr_title = (
             f"Draft: {title}" if draft and not title.startswith(("Draft:", "WIP:")) else title
         )
-        result = await client.create_merge_request(
-            source_namespace,
-            source_branch=target.head_ref,
-            target_branch=target.base_branch,
-            title=mr_title,
-            description=body,
-            target_project_id=target_project_id,
-        )
+        try:
+            result = await client.create_merge_request(
+                source_namespace,
+                source_branch=target.head_ref,
+                target_branch=target.base_branch,
+                title=mr_title,
+                description=body,
+                target_project_id=target_project_id,
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 409:
+                raise
+            existing = await client.get_merge_requests(
+                repo_ref.namespace, source_branch=target.head_ref
+            )
+            if existing:
+                logger.info(
+                    f"MR already exists for {target.head_ref} -> {target.base_branch}: "
+                    f"!{existing[0].get('iid')} in {repo_ref.namespace}"
+                )
+                return self._map_change_request(existing[0], repo_ref=repo_ref, created=False)
+            raise ConflictError(
+                f"GitLab reports a merge request already exists for source branch "
+                f"{target.head_ref!r} in {repo_ref.namespace}, but it could not be located "
+                "via the merge requests list endpoint."
+            ) from exc
         return self._map_change_request(result, repo_ref=repo_ref)
 
     @_translate
@@ -272,34 +301,26 @@ class GitLabAdapter:
 
         change_request = None
         comment = None
+        review = None
         check_suite_status = None
 
         if object_kind == "merge_request":
-            change_request = self._map_change_request(
-                payload["object_attributes"], repo_ref=repo_ref
-            )
+            attrs = payload.get("object_attributes", {})
+            change_request = self._map_change_request(attrs, repo_ref=repo_ref)
+            review = self._map_approval_review(attrs, payload)
         elif object_kind == "note":
             attrs = payload.get("object_attributes", {})
             if attrs.get("noteable_type") == "MergeRequest":
                 comment = self._map_note(attrs, actor.login)
+                mr = payload.get("merge_request")
+                if mr is not None:
+                    change_request = self._map_change_request(mr, repo_ref=repo_ref)
         elif object_kind == "pipeline":
             attrs = payload.get("object_attributes", {})
             check_suite_status, _ = self._map_check_status(attrs.get("status", ""))
             mr_stub = payload.get("merge_request")
             if mr_stub is not None:
-                change_request = ChangeRequest(
-                    identity=ChangeRequestIdentity(
-                        connection=repo_ref.connection,
-                        repository_id=repo_ref.id,
-                        native_id=mr_stub.get("iid"),
-                    ),
-                    url="",
-                    title="",
-                    body="",
-                    state=_CR_STATE_MAP.get(mr_stub.get("state", ""), ChangeRequestState.OPEN),
-                    source_branch=mr_stub.get("source_branch", ""),
-                    target_branch=mr_stub.get("target_branch", ""),
-                )
+                change_request = self._map_change_request(mr_stub, repo_ref=repo_ref)
 
         return NormalizedEvent(
             id=event_id,
@@ -309,8 +330,37 @@ class GitLabAdapter:
             received_at=datetime.now(UTC),
             change_request=change_request,
             comment=comment,
+            review=review,
             check_suite_status=check_suite_status,
             raw=payload,
+        )
+
+    _APPROVAL_REVIEW_STATE: dict[str, ReviewState] = {
+        "approved": ReviewState.APPROVED,
+        "approval": ReviewState.APPROVED,
+        # GitLab has no formal "un-approve" review state; the withdrawal of an
+        # approval is the closest neutral-model equivalent to DISMISSED.
+        "unapproved": ReviewState.DISMISSED,
+        "unapproval": ReviewState.DISMISSED,
+    }
+
+    def _map_approval_review(self, attrs: dict, payload: dict) -> Review | None:
+        """Map an MR approval/unapproval action to a Review.
+
+        GitLab's approvals are the only submission-level verdict it has (see
+        get_review_threads), so this is the only case parse_webhook populates
+        `review` for a merge_request event.
+        """
+        action = attrs.get("action", "")
+        state = self._APPROVAL_REVIEW_STATE.get(action)
+        if state is None:
+            return None
+        return Review(
+            id=f"{attrs.get('iid', '')}-{action}",
+            state=state,
+            body="",
+            author=payload.get("user", {}).get("username", ""),
+            comments=[],
         )
 
     def _extract_actor(self, payload: dict, object_kind: str) -> Actor:
@@ -363,6 +413,7 @@ class GitLabAdapter:
         *,
         repo_ref: RepositoryRef | None = None,
         identity: ChangeRequestIdentity | None = None,
+        created: bool = True,
     ) -> ChangeRequest:
         """Map a GitLab merge request attrs dict into a ChangeRequest.
 
@@ -390,6 +441,7 @@ class GitLabAdapter:
             target_branch=attrs.get("target_branch", "") or "",
             head_sha=(attrs.get("last_commit") or {}).get("id", ""),
             draft=attrs.get("draft", attrs.get("work_in_progress", False)),
+            created=created,
         )
 
     def _map_check_status(self, status: str) -> tuple[CheckStatus, CheckConclusion]:
@@ -541,12 +593,12 @@ class GitLabAdapter:
         return int(match.group(1)) if match else None
 
     @staticmethod
-    def _require_numeric_logs_url(check: CheckRun) -> int:
+    def _require_numeric_logs_url(name: str, logs_url: str) -> int:
         try:
-            return int(check.logs_url)
+            return int(logs_url)
         except ValueError as exc:
             raise SourceControlError(
-                f"Check {check.name!r} has a non-numeric logs_url {check.logs_url!r}; "
+                f"Check {name!r} has a non-numeric logs_url {logs_url!r}; "
                 "expected a GitLab CI job id."
             ) from exc
 
@@ -557,7 +609,7 @@ class GitLabAdapter:
                 f"No logs available for check {check.name!r}: it is not backed by "
                 "a GitLab CI job (e.g. an external CI integration's commit status)."
             )
-        job_id = self._require_numeric_logs_url(check)
+        job_id = self._require_numeric_logs_url(check.name, check.logs_url)
         client = self._get_client()
         try:
             return await client.get_job_trace(repo_ref.namespace, job_id)
@@ -575,7 +627,7 @@ class GitLabAdapter:
     ) -> list[tuple[str, bytes]]:
         if not check.logs_url:
             return []
-        job_id = self._require_numeric_logs_url(check)
+        job_id = self._require_numeric_logs_url(check.name, check.logs_url)
         client = self._get_client()
         artifact_bytes = await client.get_job_artifacts(repo_ref.namespace, job_id)
         if artifact_bytes is None:

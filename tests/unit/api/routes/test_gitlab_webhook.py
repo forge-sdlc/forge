@@ -50,6 +50,42 @@ def _push_payload(ref: str = "refs/heads/forge/AISOS-42") -> dict:
     }
 
 
+def _note_on_mr_payload() -> dict:
+    """A note-webhook payload with the top-level `merge_request` object GitLab
+    always includes for notes on a merge request."""
+    return {
+        "object_kind": "note",
+        "user": {"username": "alice"},
+        "project": {"path_with_namespace": "acme/widgets"},
+        "object_attributes": {
+            "id": 555,
+            "note": "/forge skip-gate flaky-test",
+            "noteable_type": "MergeRequest",
+        },
+        "merge_request": {
+            "iid": 1,
+            "title": "AISOS-1: Test MR",
+            "description": "",
+            "state": "opened",
+            "source_branch": "forge/AISOS-1",
+            "target_branch": "main",
+            "url": "https://gitlab.com/acme/widgets/-/merge_requests/1",
+        },
+    }
+
+
+def _pipeline_without_mr_payload(ref: str = "forge/AISOS-77") -> dict:
+    """A pipeline-webhook payload for a plain-branch pipeline with no MR
+    attached -- the branch lives at object_attributes.ref, not a top-level
+    `ref` (unlike push events)."""
+    return {
+        "object_kind": "pipeline",
+        "user": {"username": "ci-bot"},
+        "project": {"path_with_namespace": "acme/widgets"},
+        "object_attributes": {"id": 999, "status": "running", "ref": ref},
+    }
+
+
 def _resolved_gitlab_connection() -> ResolvedRepository:
     """A resolvable repos.yaml-shaped connection for acme/widgets, with its
     webhook secret sourced from ACME_GITLAB_WEBHOOK_SECRET (set via
@@ -173,6 +209,92 @@ class TestGitLabWebhook:
 
         assert len(published) == 1
         assert published[0].kind == EventKind.PUSH
+        assert published[0].change_request is None
+
+    def test_mr_comment_extracts_ticket_key_from_merge_request_object(self, client, monkeypatch):
+        """An MR-note webhook payload has no top-level `ref` to fall back to;
+        without GitLabAdapter.parse_webhook populating change_request from the
+        payload's top-level `merge_request` object, _extract_ticket_key
+        returns "" and worker.py drops the event before any workflow gate
+        (including /forge skip-gate, /forge rebase, and the PRD/spec
+        proposal-PR comment gates) ever sees it."""
+        monkeypatch.setenv("ACME_GITLAB_WEBHOOK_SECRET", "correct-secret")
+        resolved = _resolved_gitlab_connection()
+
+        published: list[NormalizedEvent] = []
+
+        async def fake_publish_event(
+            _self: object, event: NormalizedEvent, _ticket_key: str
+        ) -> str:
+            published.append(event)
+            return "1-0"
+
+        with (
+            patch(
+                "forge.integrations.source_control.registry.Registry.resolve",
+                return_value=resolved,
+            ),
+            patch("forge.queue.producer.QueueProducer.publish_event", fake_publish_event),
+        ):
+            response = client.post(
+                "/api/v1/webhooks/gitlab",
+                json=_note_on_mr_payload(),
+                headers={
+                    "X-Gitlab-Event": "Note Hook",
+                    "X-Gitlab-Token": "correct-secret",
+                },
+            )
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "queued"
+        assert body["ticket_key"] == "AISOS-1"
+        assert body["ticket_key"] != ""
+
+        assert len(published) == 1
+        assert published[0].kind == EventKind.COMMENT_CREATED
+        assert published[0].change_request is not None
+        assert published[0].change_request.identity.native_id == 1
+
+    def test_pipeline_without_mr_extracts_ticket_key_from_object_attributes_ref(
+        self, client, monkeypatch
+    ):
+        """A plain-branch pipeline (no MR attached) carries its branch at
+        object_attributes.ref, not a top-level `ref` -- the push-event
+        fallback alone would miss it."""
+        monkeypatch.setenv("ACME_GITLAB_WEBHOOK_SECRET", "correct-secret")
+        resolved = _resolved_gitlab_connection()
+
+        published: list[NormalizedEvent] = []
+
+        async def fake_publish_event(
+            _self: object, event: NormalizedEvent, _ticket_key: str
+        ) -> str:
+            published.append(event)
+            return "1-0"
+
+        with (
+            patch(
+                "forge.integrations.source_control.registry.Registry.resolve",
+                return_value=resolved,
+            ),
+            patch("forge.queue.producer.QueueProducer.publish_event", fake_publish_event),
+        ):
+            response = client.post(
+                "/api/v1/webhooks/gitlab",
+                json=_pipeline_without_mr_payload("forge/AISOS-77"),
+                headers={
+                    "X-Gitlab-Event": "Pipeline Hook",
+                    "X-Gitlab-Token": "correct-secret",
+                },
+            )
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "queued"
+        assert body["ticket_key"] == "AISOS-77"
+
+        assert len(published) == 1
         assert published[0].change_request is None
 
     def test_unmanaged_repository_is_rejected_not_acked(self, client):

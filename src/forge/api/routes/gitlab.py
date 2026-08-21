@@ -34,15 +34,21 @@ def _extract_ticket_key(event: NormalizedEvent) -> str:
     the raw payload's `ref` for push events -- GitLab's push webhook payload
     carries a top-level `ref` (e.g. "refs/heads/forge/AISOS-123"), directly
     analogous to GitHub's, and GitLabAdapter.parse_webhook doesn't populate
-    change_request for push events)."""
+    change_request for push events -- and to `object_attributes.ref` for
+    pipeline events on a plain branch with no MR attached, which carry the
+    branch there instead of at the top level)."""
     if event.change_request is not None:
         for text in (event.change_request.title, event.change_request.source_branch):
             match = TICKET_PATTERN.search(text or "")
             if match:
                 return match.group(1).upper()
-    match = TICKET_PATTERN.search(str(event.raw.get("ref", "")))
-    if match:
-        return match.group(1).upper()
+    for text in (
+        event.raw.get("ref", ""),
+        event.raw.get("object_attributes", {}).get("ref", ""),
+    ):
+        match = TICKET_PATTERN.search(str(text))
+        if match:
+            return match.group(1).upper()
     return ""
 
 
