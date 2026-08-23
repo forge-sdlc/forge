@@ -16,6 +16,7 @@ from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.references import fetch_and_inject_references
+from forge.workspace.handoff import capture_handoff
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
     ticket_key = state["ticket_key"]
     current_repo = state.get("current_repo", "")
     current_task = state.get("current_task_key") or ticket_key
+    container_started = False
     recorded_workspace = state.get("workspace_path")
     local_workspace_survived = bool(recorded_workspace and Path(recorded_workspace).exists())
 
@@ -128,6 +130,7 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
         runner = ContainerRunner(settings)
 
         # Run task execution inside the container
+        container_started = True
         result = await runner.run(
             workspace_path=Path(workspace_path),
             task_summary=f"Execute task takeover changes for {current_task}",
@@ -142,6 +145,8 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
 
         # Collect review exhaustion data (if auto-review ran and exhausted)
         state = merge_review_exhaustion(state, result, current_task, "task_takeover_execution")
+        state = capture_handoff(workspace_path, current_repo, current_task, state)
+        container_started = False
 
         # Initialize GitOperations on the host to stage and commit
         committed = False
@@ -217,6 +222,8 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
 
     except Exception as e:
         logger.error(f"execute_task_changes failed for {ticket_key}: {e}")
+        if container_started:
+            state = capture_handoff(workspace_path, current_repo, current_task, state)
         return cast(
             TaskTakeoverState,
             update_state_timestamp(

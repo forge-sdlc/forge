@@ -194,6 +194,80 @@ class TestTaskTakeoverExecutionNode:
         mock_git.commit.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_container_result_captures_handoff(self, tmp_path) -> None:
+        """A completed runner checkpoints its task-takeover handoff."""
+        state = _make_state(workspace_path=str(tmp_path))
+        state["handoffs"] = {}
+        mock_jira = _make_mock_jira()
+        mock_runner = _make_mock_runner()
+        mock_git = _make_mock_git()
+
+        async def run_with_handoff(**_kwargs):
+            forge_dir = tmp_path / ".forge"
+            forge_dir.mkdir()
+            (forge_dir / "handoff.md").write_text("Task takeover implementation complete")
+            return await mock_runner.run()
+
+        runner = MagicMock(run=run_with_handoff)
+        with (
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.ContainerRunner",
+                return_value=runner,
+            ),
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
+                return_value=(str(tmp_path), mock_git),
+            ),
+            patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
+        ):
+            result = await execute_task_changes(state)
+
+        handoff = result["handoffs"]["acme/backend"]
+        assert handoff["content"] == "Task takeover implementation complete"
+        assert handoff["task_key"] == "TASK-123"
+
+    @pytest.mark.asyncio
+    async def test_runner_exception_captures_partial_handoff(self, tmp_path) -> None:
+        """A runner exception preserves a handoff flushed before failure."""
+        state = _make_state(workspace_path=str(tmp_path))
+        state["handoffs"] = {}
+        mock_jira = _make_mock_jira()
+        mock_git = _make_mock_git()
+
+        async def fail_after_handoff(**_kwargs):
+            forge_dir = tmp_path / ".forge"
+            forge_dir.mkdir()
+            (forge_dir / "handoff.md").write_text("Partial takeover work before timeout")
+            raise TimeoutError("runner timed out")
+
+        runner = MagicMock(run=fail_after_handoff)
+        with (
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.JiraClient",
+                return_value=mock_jira,
+            ),
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.ContainerRunner",
+                return_value=runner,
+            ),
+            patch(
+                "forge.workflow.nodes.task_takeover_execution.prepare_workspace",
+                return_value=(str(tmp_path), mock_git),
+            ),
+            patch("forge.workflow.nodes.task_takeover_execution.get_settings"),
+        ):
+            result = await execute_task_changes(state)
+
+        assert result["last_error"] == "runner timed out"
+        handoff = result["handoffs"]["acme/backend"]
+        assert handoff["content"] == "Partial takeover work before timeout"
+        assert handoff["task_key"] == "TASK-123"
+
+    @pytest.mark.asyncio
     async def test_missing_workspace_path(self) -> None:
         """Test graceful error handling when workspace_path is not set up."""
         state = _make_state(workspace_path=None)
