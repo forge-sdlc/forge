@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 import io
 import ipaddress
@@ -7,6 +8,7 @@ import logging
 import os
 import re
 import socket
+import tempfile
 import time
 import urllib.parse
 import uuid
@@ -24,6 +26,7 @@ from forge.skills.utils import extract_project_key
 logger = logging.getLogger(__name__)
 
 _CACHE_LOCK: asyncio.Lock | None = None
+_CACHE_ROOT: str | None = None
 
 
 def _get_cache_lock() -> asyncio.Lock:
@@ -379,11 +382,17 @@ def html_to_markdown(html_content: str) -> str:
 
 
 def get_cache_dir(run_id: str) -> str:
-    try:
-        uid = os.getuid()
-        prefix = f"/tmp/forge_references_cache_{uid}"
-    except (AttributeError, OSError):
-        prefix = "/tmp/forge_references_cache"
+    global _CACHE_ROOT
+
+    if _CACHE_ROOT is None:
+        try:
+            uid = os.getuid()
+            prefix = f"forge_references_cache_{uid}_"
+        except (AttributeError, OSError):
+            prefix = "forge_references_cache_"
+        _CACHE_ROOT = tempfile.mkdtemp(prefix=prefix)
+        os.chmod(_CACHE_ROOT, 0o700)
+
     safe_run_id = run_id
     if (
         not isinstance(run_id, str)
@@ -391,7 +400,7 @@ def get_cache_dir(run_id: str) -> str:
         or run_id in {".", ".."}
     ):
         safe_run_id = hashlib.sha256(str(run_id).encode("utf-8")).hexdigest()
-    return os.path.join(prefix, safe_run_id)
+    return os.path.join(_CACHE_ROOT, safe_run_id)
 
 
 def get_cache_filepath(run_id: str, norm_url: str) -> str:
@@ -410,7 +419,9 @@ async def read_from_cache(run_id: str, norm_url: str) -> tuple[str, str] | None:
             return None
 
         async with _get_cache_lock():
-            with open(filepath, encoding="utf-8") as f:
+            open_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(filepath, open_flags)
+            with os.fdopen(fd, encoding="utf-8") as f:
                 data = json.load(f)
             return data["content_type"], data["body_text"]
     except Exception as e:
@@ -449,7 +460,8 @@ def enforce_cache_folder_size(
 
 async def write_to_cache(run_id: str, norm_url: str, content_type: str, body_text: str) -> None:
     cache_dir = get_cache_dir(run_id)
-    os.makedirs(cache_dir, exist_ok=True)
+    os.makedirs(cache_dir, mode=0o700, exist_ok=True)
+    os.chmod(cache_dir, 0o700)
 
     filepath = get_cache_filepath(run_id, norm_url)
     payload = {
@@ -463,13 +475,18 @@ async def write_to_cache(run_id: str, norm_url: str, content_type: str, body_tex
 
     async with _get_cache_lock():
         enforce_cache_folder_size(cache_dir, new_file_size)
+        temp_filepath = None
         try:
-            temp_filepath = filepath + ".tmp"
-            with open(temp_filepath, "w", encoding="utf-8") as f:
+            fd, temp_filepath = tempfile.mkstemp(prefix=".cache-", dir=cache_dir)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(payload_str)
             os.replace(temp_filepath, filepath)
         except Exception as e:
             logger.warning(f"Failed to write to cache for {norm_url}: {e}")
+        finally:
+            if temp_filepath is not None:
+                with contextlib.suppress(FileNotFoundError):
+                    os.unlink(temp_filepath)
 
 
 def extract_references_from_comment(body: str) -> list[dict[str, str]]:
@@ -517,17 +534,19 @@ def format_and_truncate_aggregate_references(
         if len(body) > 10000:
             body = body[:10000] + "\n... [TRUNCATED - Reference exceeded character limit]"
 
-        ref_block = f"### Reference: {url}\n"
+        ref_prefix = f"### Reference: {url}\n"
         if desc:
-            ref_block += f"Description: {desc}\n"
-        ref_block += (
-            f"Content:\n<untrusted-reference-content>{body}</untrusted-reference-content>\n\n"
-        )
+            ref_prefix += f"Description: {desc}\n"
+        ref_prefix += "Content:\n<untrusted-reference-content>"
+        ref_suffix = "</untrusted-reference-content>\n\n"
+        ref_block = ref_prefix + body + ref_suffix
 
         if len(current_text) + len(ref_block) > max_aggregate:
-            allowed_chars = max_aggregate - len(current_text) - len(suffix)
-            if allowed_chars > 0:
-                current_text += ref_block[:allowed_chars] + suffix
+            allowed_body_chars = (
+                max_aggregate - len(current_text) - len(ref_prefix) - len(ref_suffix) - len(suffix)
+            )
+            if allowed_body_chars >= 0:
+                current_text += ref_prefix + body[:allowed_body_chars] + ref_suffix + suffix
             else:
                 current_text = current_text[: max_aggregate - len(suffix)] + suffix
             break

@@ -167,6 +167,9 @@ def test_aggregate_truncation() -> None:
     formatted = format_and_truncate_aggregate_references(ref_data)
     assert "[TRUNCATED - Aggregate limit exceeded]" in formatted
     assert len(formatted) <= 30000
+    assert formatted.count("<untrusted-reference-content>") == formatted.count(
+        "</untrusted-reference-content>"
+    )
 
 
 @pytest.mark.asyncio
@@ -222,6 +225,31 @@ async def test_cache_isolation_and_eviction() -> None:
             # file1 should be deleted.
             assert not os.path.exists(get_cache_filepath(run_id_A, "https://example.com/file1"))
             assert os.path.exists(get_cache_filepath(run_id_A, "https://example.com/file2"))
+
+
+@pytest.mark.asyncio
+async def test_cache_write_does_not_follow_symlinks() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cache_dir = os.path.join(tmpdir, "cache")
+        os.makedirs(cache_dir)
+        victim = os.path.join(tmpdir, "victim")
+        with open(victim, "w", encoding="utf-8") as f:
+            f.write("do not overwrite")
+
+        with patch("forge.workflow.utils.references.get_cache_dir", return_value=cache_dir):
+            filepath = get_cache_filepath("run", "https://example.com")
+            os.symlink(victim, filepath)
+
+            assert await read_from_cache("run", "https://example.com") is None
+            await write_to_cache("run", "https://example.com", "text/plain", "cached")
+
+            with open(victim, encoding="utf-8") as f:
+                assert f.read() == "do not overwrite"
+            assert not os.path.islink(filepath)
+            assert await read_from_cache("run", "https://example.com") == (
+                "text/plain",
+                "cached",
+            )
 
 
 @pytest.mark.asyncio
@@ -459,12 +487,18 @@ def test_normalize_url_scheme_validation() -> None:
 def test_get_cache_dir_uid() -> None:
     from forge.workflow.utils.references import get_cache_dir
 
-    with patch("os.getuid", return_value=1234):
+    with (
+        patch("forge.workflow.utils.references._CACHE_ROOT", None),
+        patch("os.getuid", return_value=1234),
+    ):
         cache_dir = get_cache_dir("test-run")
         assert "forge_references_cache_1234" in cache_dir
         assert cache_dir.endswith("test-run")
 
-    with patch("os.getuid", side_effect=AttributeError):
+    with (
+        patch("forge.workflow.utils.references._CACHE_ROOT", None),
+        patch("os.getuid", side_effect=AttributeError),
+    ):
         cache_dir = get_cache_dir("test-run")
         assert "forge_references_cache" in cache_dir
         assert "1234" not in cache_dir
