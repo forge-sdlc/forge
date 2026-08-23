@@ -125,6 +125,34 @@ class Settings(BaseSettings):
             "Unset (default) uses a per-run system temp directory."
         ),
     )
+    output_protected_paths: str = Field(
+        default="",
+        description="Comma-separated path patterns agents may not publish",
+    )
+    output_max_file_bytes: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional maximum size of one added or modified file",
+    )
+    output_max_total_bytes: int | None = Field(
+        default=None,
+        ge=1,
+        description="Optional maximum total size of added or modified agent output",
+    )
+    output_base_ref: str = Field(
+        default="",
+        description=(
+            "Trusted upstream ref used as the output-validation base. "
+            "Unset uses origin/HEAD."
+        ),
+    )
+
+    @property
+    def protected_output_paths(self) -> tuple[str, ...]:
+        """Return normalized configured protected path patterns."""
+        return tuple(
+            value.strip() for value in self.output_protected_paths.split(",") if value.strip()
+        )
 
     # PRD Approval Configuration (global fallbacks — per-project config via
     # Jira project property forge.prd_proposals_repo takes precedence)
