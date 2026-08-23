@@ -515,7 +515,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         state = capture_handoff(
             workspace_path,
             state.get("current_repo", ""),
-            f"{ticket_key}-ci-fix-{attempt}",
+            f"{ticket_key}-ci-fix-{ci_fix_attempt}",
             state,
         )
         fix_started = False
@@ -535,7 +535,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             state = capture_handoff(
                 workspace_path,
                 state.get("current_repo", ""),
-                f"{ticket_key}-ci-fix-{attempt}",
+                f"{ticket_key}-ci-fix-{ci_fix_attempt}",
                 state,
             )
         return {

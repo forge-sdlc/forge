@@ -1,6 +1,6 @@
 """Tests for CI attribution and evaluate_ci_status pending_ci_event clearing."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -241,6 +241,54 @@ async def test_attribution_does_not_reuse_stale_external_verdict(
     assert result.get("ci_status") != "external_failure"
     assert result["ci_fix_attempt"] == 1
     assert not attribution_file.exists()
+
+
+@pytest.mark.asyncio
+@patch("forge.workflow.nodes.ci_evaluator.GitOperations")
+@patch("forge.workflow.nodes.ci_evaluator.ContainerRunner")
+@patch("forge.workflow.nodes.ci_evaluator.prepare_workspace")
+@patch("forge.workflow.nodes.ci_evaluator.JiraClient")
+@patch("forge.workflow.nodes.ci_evaluator.GitHubClient")
+@patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock)
+async def test_completed_ci_fix_captures_attempt_handoff(
+    _mock_fetch, MockGitHub, MockJira, mock_prep, MockRunner, MockGitOperations, tmp_path
+):
+    """A completed CI fix checkpoints its handoff with the current attempt number."""
+    from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
+
+    forge_dir = tmp_path / ".forge"
+    forge_dir.mkdir()
+    mock_prep.return_value = (str(tmp_path), None)
+
+    run_count = 0
+
+    async def run_phase(**_kwargs):
+        nonlocal run_count
+        run_count += 1
+        if run_count == 1:
+            (forge_dir / "ci-attribution.json").write_text('{"attributable": true}')
+        elif run_count == 2:
+            (forge_dir / "fix-plan.md").write_text("apply the fix")
+        else:
+            (forge_dir / "handoff.md").write_text("CI fix completed")
+        return MagicMock(success=True)
+
+    MockRunner.return_value.run = AsyncMock(side_effect=run_phase)
+    MockJira.return_value = AsyncMock()
+    MockGitHub.return_value = AsyncMock()
+
+    mock_git = MagicMock()
+    mock_git.has_uncommitted_changes.return_value = False
+    mock_git._run_git.return_value.stdout = ""
+    MockGitOperations.return_value = mock_git
+
+    result = await attempt_ci_fix({**ATTEMPT_BASE_STATE, "workspace_path": str(tmp_path)})
+
+    assert result["current_node"] == "human_review_gate"
+    assert result["last_error"] is None
+    handoff = result["handoffs"]["org/repo"]
+    assert handoff["content"] == "CI fix completed"
+    assert handoff["task_key"] == "TEST-1-ci-fix-1"
 
 
 def test_wait_for_ci_gate_does_not_exist():
