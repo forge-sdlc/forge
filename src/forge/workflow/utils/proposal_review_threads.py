@@ -116,7 +116,7 @@ async def reply_to_proposal_decisions(
         if not str(decision.get("response", "")).strip():
             decision["response"] = default_response
     await reply_to_review_decisions(
-        repo_full_name=repo_full_name,
+        current_repo=repo_full_name,
         pr_number=pr_number,
         decisions=decisions,
         dispositions=dispositions,

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from forge.integrations.source_control.contracts import Provider, RepositoryRef
 from forge.models.workflow import TicketType
 from forge.workflow.feature.state import create_initial_feature_state
 from forge.workflow.nodes.qa_handler import (
@@ -20,7 +21,9 @@ class TestExtractQuestionText:
 
     def test_strips_question_mark_prefix(self):
         """extract_question_text removes leading ? prefix."""
-        assert extract_question_text("?What is this feature about?") == "What is this feature about?"
+        assert (
+            extract_question_text("?What is this feature about?") == "What is this feature about?"
+        )
 
     def test_strips_question_mark_prefix_with_whitespace(self):
         """extract_question_text handles ? with leading/trailing whitespace."""
@@ -434,12 +437,18 @@ class TestAnswerQuestion:
 
     @pytest.mark.asyncio
     async def test_posts_answer_to_github_pr_in_pr_mode(self):
-        """When prd_pr_number exists, Q&A answer goes to GitHub PR."""
+        """When prd_pr_number exists, Q&A answer goes to GitHub PR via the adapter."""
         mock_jira = create_mock_jira_client()
         mock_agent = create_mock_forge_agent()
-        mock_gh = MagicMock()
-        mock_gh.create_issue_comment = AsyncMock()
-        mock_gh.close = AsyncMock()
+        adapter = AsyncMock()
+        repo_ref = RepositoryRef(
+            id="org/proposals",
+            provider=Provider.GITHUB,
+            connection="c",
+            namespace="org/proposals",
+            default_branch="main",
+            change_request_mode="fork",
+        )
 
         state = create_initial_feature_state(
             ticket_key="TEST-123",
@@ -455,25 +464,31 @@ class TestAnswerQuestion:
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
-            patch("forge.workflow.nodes.qa_handler.GitHubClient", return_value=mock_gh),
+            patch("forge.workflow.nodes.qa_handler.get_adapter", return_value=(repo_ref, adapter)),
         ):
             await answer_question(state)
 
-        mock_gh.create_issue_comment.assert_called_once()
-        call_args = mock_gh.create_issue_comment.call_args[0]
-        assert call_args[0] == "org"
-        assert call_args[1] == "proposals"
-        assert call_args[2] == 7
+        adapter.create_comment.assert_awaited_once()
+        call_args = adapter.create_comment.call_args[0]
+        assert call_args[0] is repo_ref
+        assert call_args[1].repository_id == "org/proposals"
+        assert call_args[1].native_id == 7
         mock_jira.add_comment.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_posts_spec_answer_to_github_pr_in_pr_mode(self):
-        """When spec_pr_number exists, spec Q&A answer goes to GitHub PR."""
+        """When spec_pr_number exists, spec Q&A answer goes to GitHub PR via the adapter."""
         mock_jira = create_mock_jira_client()
         mock_agent = create_mock_forge_agent()
-        mock_gh = MagicMock()
-        mock_gh.create_issue_comment = AsyncMock()
-        mock_gh.close = AsyncMock()
+        adapter = AsyncMock()
+        repo_ref = RepositoryRef(
+            id="org/proposals",
+            provider=Provider.GITHUB,
+            connection="c",
+            namespace="org/proposals",
+            default_branch="main",
+            change_request_mode="fork",
+        )
 
         state = create_initial_feature_state(
             ticket_key="TEST-123",
@@ -489,15 +504,15 @@ class TestAnswerQuestion:
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
-            patch("forge.workflow.nodes.qa_handler.GitHubClient", return_value=mock_gh),
+            patch("forge.workflow.nodes.qa_handler.get_adapter", return_value=(repo_ref, adapter)),
         ):
             await answer_question(state)
 
-        mock_gh.create_issue_comment.assert_called_once()
-        call_args = mock_gh.create_issue_comment.call_args[0]
-        assert call_args[0] == "org"
-        assert call_args[1] == "proposals"
-        assert call_args[2] == 12
+        adapter.create_comment.assert_awaited_once()
+        call_args = adapter.create_comment.call_args[0]
+        assert call_args[0] is repo_ref
+        assert call_args[1].repository_id == "org/proposals"
+        assert call_args[1].native_id == 12
         mock_jira.add_comment.assert_not_called()
 
     @pytest.mark.asyncio
@@ -597,7 +612,6 @@ class TestGetArtifactContentBugGates:
         assert "A stale cache causes the failure." in content
         assert "Option 1: Invalidate eagerly" in content
         assert "Option 2: Version cache entries" in content
-
 
 
 class TestAnswerQuestionBugGates:

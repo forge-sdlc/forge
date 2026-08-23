@@ -8,6 +8,7 @@ from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
+from forge.workflow.utils.source_control import get_adapter
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
@@ -66,13 +67,15 @@ async def update_documentation(state: WorkflowState) -> WorkflowState:
 
         state = merge_review_exhaustion(state, result, ticket_key, "update_docs")
 
+        repo_ref, adapter = get_adapter(current_repo)
         git = GitOperations(
             Workspace(
                 path=Path(workspace_path),
                 repo_name=current_repo,
                 branch_name=branch_name,
                 ticket_key=ticket_key,
-            )
+            ),
+            await adapter.get_git_credentials(repo_ref),
         )
 
         if git.has_uncommitted_changes():

@@ -71,6 +71,27 @@ connections:
         load_registry(config_path=config, settings=mock_settings)
 
 
+def test_rejects_explicit_connection_named_like_the_implicit_github_connection(
+    tmp_path, mock_settings, monkeypatch
+):
+    """An explicit connection named 'github-default' would collide in the
+    adapter cache with the implicit zero-config GitHub connection, silently
+    mixing up which credential/host a resolution uses."""
+    monkeypatch.setenv("SOME_TOKEN", "secret")
+    config = _write_config(
+        tmp_path,
+        """
+connections:
+  github-default:
+    provider: github
+    credential_env: SOME_TOKEN
+""",
+    )
+
+    with pytest.raises(ProviderConfigError, match="reserved implicit connection name"):
+        load_registry(config_path=config, settings=mock_settings)
+
+
 def test_rejects_repository_with_unknown_connection(tmp_path, mock_settings, monkeypatch):
     monkeypatch.setenv("ACME_GITLAB_TOKEN", "secret")
     config = _write_config(

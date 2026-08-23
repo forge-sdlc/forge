@@ -1,24 +1,212 @@
 """Tests for PRD PR event handling in the worker."""
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from forge.integrations.source_control.contracts import (
+    Actor,
+    ChangeRequest,
+    ChangeRequestIdentity,
+    ChangeRequestState,
+    EventKind,
+    NormalizedEvent,
+    Provider,
+    RepositoryRef,
+    Review,
+    ReviewComment,
+    ReviewState,
+)
 from forge.models.events import EventSource
 from forge.orchestrator.worker import OrchestratorWorker
-from forge.queue.models import QueueMessage
+from forge.queue.models import QueueMessage, normalized_event_to_dict
 from forge.workflow.utils.automated_review_triage import AutomatedReviewDecision
+from forge.workflow.utils.source_control import identity_for
+
+
+def _repo_ref_for(namespace: str) -> RepositoryRef:
+    return RepositoryRef(
+        id=namespace,
+        provider=Provider.GITHUB,
+        connection="default-github",
+        namespace=namespace,
+        default_branch="main",
+        change_request_mode="fork",
+    )
+
+
+def _patch_adapter(repo_ref: RepositoryRef, adapter):
+    """Patch worker.get_adapter to resolve to the given (repo_ref, adapter) pair."""
+    return patch("forge.orchestrator.worker.get_adapter", return_value=(repo_ref, adapter))
+
+
+_REVIEW_STATES = {
+    "approved": ReviewState.APPROVED,
+    "changes_requested": ReviewState.CHANGES_REQUESTED,
+    "commented": ReviewState.COMMENTED,
+    "pending": ReviewState.PENDING,
+}
+
+
+def _normalized_from_payload(event_type: str, payload: dict) -> NormalizedEvent:
+    """Build the NormalizedEvent a GitHub webhook payload would produce.
+
+    Mirrors GitHubAdapter.parse_webhook for the event types exercised here so the
+    typed detection in _handle_resume_event runs against realistic data while the
+    raw payload is still carried for the triage blocks that read it.
+    """
+    base_type = event_type.split(":", 1)[0]
+    repo_full = payload.get("repository", {}).get("full_name", "")
+    sender = payload.get("sender", {})
+    sender_login = sender.get("login", "")
+    actor = Actor(
+        login=sender_login,
+        is_bot=sender.get("type") == "Bot" or "[bot]" in sender_login,
+    )
+    repo_ref = RepositoryRef(
+        id=repo_full,
+        provider=Provider.GITHUB,
+        connection="default-github",
+        namespace=repo_full,
+        default_branch="main",
+        change_request_mode="fork",
+    )
+
+    change_request = None
+    pr = payload.get("pull_request")
+    issue = payload.get("issue")
+    if pr is not None:
+        if pr.get("merged", False):
+            state = ChangeRequestState.MERGED
+        elif pr.get("state") == "closed":
+            state = ChangeRequestState.CLOSED
+        else:
+            state = ChangeRequestState.OPEN
+        change_request = ChangeRequest(
+            identity=ChangeRequestIdentity(
+                connection="default-github",
+                repository_id=repo_full,
+                native_id=pr.get("number"),
+            ),
+            url=pr.get("html_url", ""),
+            title=pr.get("title", ""),
+            body=pr.get("body", "") or "",
+            state=state,
+            source_branch="",
+            target_branch="",
+            draft=False,
+        )
+    elif issue is not None:
+        change_request = ChangeRequest(
+            identity=ChangeRequestIdentity(
+                connection="default-github",
+                repository_id=repo_full,
+                native_id=issue.get("number"),
+            ),
+            url=issue.get("html_url", ""),
+            title=issue.get("title", ""),
+            body=issue.get("body", "") or "",
+            state=ChangeRequestState.OPEN,
+            source_branch="",
+            target_branch="",
+            draft=False,
+        )
+
+    comment = None
+    review = None
+    if base_type in ("issue_comment", "pull_request_review_comment"):
+        kind = EventKind.COMMENT_CREATED
+        raw_comment = payload.get("comment", {})
+        in_reply = raw_comment.get("in_reply_to_id")
+        comment = ReviewComment(
+            id=str(raw_comment.get("id", "")),
+            body=raw_comment.get("body", "") or "",
+            author=(raw_comment.get("user") or {}).get("login", ""),
+            path=raw_comment.get("path"),
+            line=raw_comment.get("line"),
+            in_reply_to=str(in_reply) if in_reply is not None else None,
+        )
+    elif base_type == "pull_request_review":
+        kind = EventKind.REVIEW_SUBMITTED
+        raw_review = payload.get("review", {})
+        review = Review(
+            id=str(raw_review.get("id", "")),
+            state=_REVIEW_STATES.get(
+                (raw_review.get("state") or "").lower(), ReviewState.COMMENTED
+            ),
+            body=raw_review.get("body", "") or "",
+            author=(raw_review.get("user") or {}).get("login", ""),
+            comments=[],
+        )
+    elif base_type == "pull_request":
+        if change_request is not None and change_request.state == ChangeRequestState.MERGED:
+            kind = EventKind.CR_MERGED
+        elif change_request is not None and change_request.state == ChangeRequestState.CLOSED:
+            kind = EventKind.CR_CLOSED
+        else:
+            kind = EventKind.CR_UPDATED
+    else:
+        kind = EventKind.CR_UPDATED
+
+    return NormalizedEvent(
+        id="evt-1",
+        kind=kind,
+        repo_ref=repo_ref,
+        actor=actor,
+        received_at=datetime(2026, 1, 1, tzinfo=UTC),
+        change_request=change_request,
+        comment=comment,
+        review=review,
+        raw=payload,
+    )
 
 
 def _make_message(event_type: str, payload: dict, ticket_key: str = "TEST-123") -> QueueMessage:
     return QueueMessage(
         message_id="msg-1",
         event_id="evt-1",
-        source=EventSource.GITHUB,
+        source=EventSource.SOURCE_CONTROL,
         event_type=event_type,
         ticket_key=ticket_key,
         payload=payload,
+        normalized_event=normalized_event_to_dict(_normalized_from_payload(event_type, payload)),
     )
+
+
+def _make_normalized_event(**overrides) -> NormalizedEvent:
+    """A canned NormalizedEvent (repo acme/payments, PR 42) for typed-field tests."""
+    repo_ref = RepositoryRef(
+        id="acme/payments",
+        provider=Provider.GITHUB,
+        connection="default-github",
+        namespace="acme/payments",
+        default_branch="main",
+        change_request_mode="fork",
+    )
+    change_request = ChangeRequest(
+        identity=ChangeRequestIdentity(
+            connection="default-github", repository_id="acme/payments", native_id=42
+        ),
+        url="https://github.com/acme/payments/pull/42",
+        title="t",
+        body="",
+        state=ChangeRequestState.OPEN,
+        source_branch="feature",
+        target_branch="main",
+        draft=False,
+    )
+    defaults = {
+        "id": "delivery-1",
+        "kind": EventKind.CR_OPENED,
+        "repo_ref": repo_ref,
+        "actor": Actor(login="octocat", is_bot=False),
+        "received_at": datetime(2026, 1, 1, tzinfo=UTC),
+        "change_request": change_request,
+        "raw": {},
+    }
+    defaults.update(overrides)
+    return NormalizedEvent(**defaults)
 
 
 def _prd_gate_state(**overrides) -> dict:
@@ -48,6 +236,7 @@ def worker():
         w = OrchestratorWorker.__new__(OrchestratorWorker)
         w._post_terminal_error_comment = AsyncMock()
         w._post_resume_ack_comment = AsyncMock()
+        w._forge_github_logins = {}
         return w
 
 
@@ -182,18 +371,19 @@ class TestHandlePrdPrReview:
         )
         state = _prd_gate_state()
 
-        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
-            mock_gh = MagicMock()
-            mock_gh.get_pull_request_review_threads = AsyncMock(return_value=[])
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
+        repo_ref = _repo_ref_for("org/proposals")
+        mock_adapter = AsyncMock()
+        mock_adapter.get_review_thread_comments.return_value = []
 
+        with _patch_adapter(repo_ref, mock_adapter):
             result = await worker._handle_resume_event(msg, state)
 
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
         assert "more detail" in result["feedback_comment"]
-        mock_gh.get_pull_request_review_threads.assert_called_once_with("org", "proposals", 7)
+        mock_adapter.get_review_thread_comments.assert_called_once_with(
+            repo_ref, identity_for(repo_ref, 7)
+        )
 
     @pytest.mark.asyncio
     async def test_approved_review_is_ignored(self, worker):
@@ -224,18 +414,28 @@ class TestHandlePrdPrReview:
             },
         )
         threads = [
-            {
-                "thread_id": "accept-thread",
-                "path": "prd.md",
-                "line": 10,
-                "comments": [{"comment_id": 10, "body": "Clarify authorization."}],
-            },
-            {
-                "thread_id": "reply-thread",
-                "path": "prd.md",
-                "line": 20,
-                "comments": [{"comment_id": 20, "body": "Rename the product."}],
-            },
+            Review(
+                id="accept-thread",
+                state=ReviewState.COMMENTED,
+                body="",
+                author="",
+                comments=[
+                    ReviewComment(
+                        id="10", path="prd.md", line=10, body="Clarify authorization.", author=""
+                    )
+                ],
+            ),
+            Review(
+                id="reply-thread",
+                state=ReviewState.COMMENTED,
+                body="",
+                author="",
+                comments=[
+                    ReviewComment(
+                        id="20", path="prd.md", line=20, body="Rename the product.", author=""
+                    )
+                ],
+            ),
         ]
         decisions = [
             {
@@ -257,8 +457,11 @@ class TestHandlePrdPrReview:
         ]
         state = _prd_gate_state(prd_content="# Current PRD")
 
+        mock_adapter = AsyncMock()
+        mock_adapter.get_review_thread_comments.return_value = threads
+
         with (
-            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
                 "forge.orchestrator.worker.triage_proposal_review_threads",
                 new=AsyncMock(return_value=decisions),
@@ -268,10 +471,6 @@ class TestHandlePrdPrReview:
                 new=AsyncMock(),
             ) as reply_decisions,
         ):
-            mock_gh = MagicMock()
-            mock_gh.get_pull_request_review_threads = AsyncMock(return_value=threads)
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
             result = await worker._handle_resume_event(msg, state)
 
         assert result["revision_requested"] is True
@@ -300,12 +499,9 @@ class TestHandlePrdPrComment:
             automated_review_revision_pending=True,
         )
 
-        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
-
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
+        with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
             result = await worker._handle_resume_event(msg, state)
 
         assert result["is_paused"] is False
@@ -330,12 +526,9 @@ class TestHandlePrdPrComment:
         )
         state = _prd_gate_state()
 
-        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
-
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
+        with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
             result = await worker._handle_resume_event(msg, state)
 
         # Should remain paused -- self-comment ignored
@@ -358,15 +551,12 @@ class TestHandlePrdPrComment:
         state = _prd_gate_state()
         settings = MagicMock(forge_bot_comment_prefix="my-signature")
 
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with (
-            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
         ):
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
-
             result = await worker._handle_resume_event(msg, state)
 
         # Should remain paused -- self-comment with signature ignored
@@ -389,15 +579,12 @@ class TestHandlePrdPrComment:
         state = _prd_gate_state()
         settings = MagicMock(forge_bot_comment_prefix="my-signature")
 
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with (
-            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
         ):
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
-
             result = await worker._handle_resume_event(msg, state)
 
         # Should be processed and no longer paused
@@ -419,12 +606,9 @@ class TestHandlePrdPrComment:
         )
         state = _prd_gate_state()
 
-        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
-
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
+        with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
             result = await worker._handle_resume_event(msg, state)
 
         assert result["is_paused"] is False
@@ -441,6 +625,8 @@ class TestHandlePrdPrComment:
                 "comment": {
                     "id": 12,
                     "in_reply_to_id": 11,
+                    "path": "prd.md",
+                    "line": 20,
                     "body": "Please make this change after all.",
                 },
                 "sender": {"login": "reviewer"},
@@ -466,11 +652,9 @@ class TestHandlePrdPrComment:
             ]
         )
 
-        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
+        with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
             result = await worker._handle_resume_event(msg, state)
 
         assert result["revision_requested"] is True
@@ -489,6 +673,8 @@ class TestHandlePrdPrComment:
                 "comment": {
                     "id": 31,
                     "in_reply_to_id": 999,
+                    "path": "prd.md",
+                    "line": 5,
                     "body": "This target is not in workflow state.",
                 },
                 "sender": {"login": "reviewer"},
@@ -573,8 +759,10 @@ class TestHandlePrdPrComment:
         )
         state = _prd_gate_state(prd_content="# Current PRD")
 
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with (
-            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
                 "forge.orchestrator.worker.triage_automated_review",
                 new=AsyncMock(
@@ -584,10 +772,6 @@ class TestHandlePrdPrComment:
                 ),
             ) as triage,
         ):
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
             result = await worker._handle_resume_event(msg, state)
 
         assert result == state
@@ -606,8 +790,10 @@ class TestHandlePrdPrComment:
         )
         state = _prd_gate_state(prd_content="# Current PRD")
 
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with (
-            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
                 "forge.orchestrator.worker.triage_automated_review",
                 new=AsyncMock(
@@ -619,10 +805,6 @@ class TestHandlePrdPrComment:
                 ),
             ),
         ):
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
             result = await worker._handle_resume_event(msg, state)
 
         assert result["revision_requested"] is True
@@ -644,8 +826,10 @@ class TestHandlePrdPrComment:
         )
         state = _prd_gate_state(prd_content="# Current PRD")
 
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with (
-            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
                 "forge.orchestrator.worker.triage_automated_review",
                 new=AsyncMock(
@@ -655,10 +839,6 @@ class TestHandlePrdPrComment:
                 ),
             ),
         ):
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
             result = await worker._handle_resume_event(msg, state)
 
         assert result["revision_requested"] is True
@@ -679,8 +859,10 @@ class TestHandlePrdPrComment:
         )
         state = _prd_gate_state(automated_review_revision_count=3)
 
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with (
-            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
                 "forge.orchestrator.worker.triage_automated_review",
                 new=AsyncMock(
@@ -690,10 +872,6 @@ class TestHandlePrdPrComment:
                 ),
             ),
         ):
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
             result = await worker._handle_resume_event(msg, state)
 
         assert result == state
@@ -771,12 +949,9 @@ class TestInformationalCommentIgnored:
         )
         state = _prd_gate_state()
 
-        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
-
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
+        with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
             result = await worker._handle_resume_event(msg, state)
 
         assert result.get("is_paused", True) is True
@@ -799,12 +974,9 @@ class TestInformationalCommentIgnored:
         )
         state = _prd_gate_state()
 
-        with patch("forge.orchestrator.worker.GitHubClient") as MockGH:
-            mock_gh = MagicMock()
-            mock_gh.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
-
+        mock_adapter = AsyncMock()
+        mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
+        with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
             result = await worker._handle_resume_event(msg, state)
 
         assert result.get("is_paused", True) is True
@@ -825,29 +997,224 @@ class TestHumanReviewSkipsTriage:
             },
         )
         threads = [
-            {
-                "thread_id": "thread-1",
-                "path": "prd.md",
-                "line": 10,
-                "comments": [{"comment_id": 100, "body": "Fix this section."}],
-            },
+            Review(
+                id="thread-1",
+                state=ReviewState.COMMENTED,
+                body="",
+                author="",
+                comments=[
+                    ReviewComment(
+                        id="100", path="prd.md", line=10, body="Fix this section.", author=""
+                    )
+                ],
+            ),
         ]
         state = _prd_gate_state(prd_content="# Current PRD")
 
+        mock_adapter = AsyncMock()
+        mock_adapter.get_review_thread_comments.return_value = threads
+
         with (
-            patch("forge.orchestrator.worker.GitHubClient") as MockGH,
+            _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
                 "forge.orchestrator.worker.triage_proposal_review_threads",
                 new=AsyncMock(),
             ) as triage,
         ):
-            mock_gh = MagicMock()
-            mock_gh.get_pull_request_review_threads = AsyncMock(return_value=threads)
-            mock_gh.close = AsyncMock()
-            MockGH.return_value = mock_gh
-
             result = await worker._handle_resume_event(msg, state)
 
         assert result["revision_requested"] is True
         assert "Fix this section" in result["feedback_comment"]
         triage.assert_not_awaited()
+
+
+class TestPrdPrReviewTypedFields:
+    """Brief Step 1: the PRD-PR review/merge branches read typed event fields."""
+
+    @pytest.mark.asyncio
+    async def test_review_with_changes_requested_sets_feedback(self, worker):
+        event = _make_normalized_event(kind=EventKind.REVIEW_SUBMITTED)
+        event.review = Review(
+            id="1",
+            state=ReviewState.CHANGES_REQUESTED,
+            body="please fix X",
+            author="reviewer1",
+        )
+        message = QueueMessage(
+            message_id="1",
+            event_id="e1",
+            source=EventSource.SOURCE_CONTROL,
+            event_type="review_submitted",
+            ticket_key="PROJ-1",
+            payload={},
+            normalized_event=normalized_event_to_dict(event),
+        )
+        current_state = {
+            "current_node": "prd_approval_gate",
+            "is_paused": True,
+            "prd_pr_number": 42,
+            "prd_pr_repo": "acme/payments",
+        }
+
+        mock_adapter = AsyncMock()
+        mock_adapter.get_review_thread_comments.return_value = []
+        with _patch_adapter(_repo_ref_for("acme/payments"), mock_adapter):
+            updated = await worker._handle_resume_event(message, current_state)
+
+        assert updated["revision_requested"] is True
+        assert "please fix X" in updated["feedback_comment"]
+
+    @pytest.mark.asyncio
+    async def test_pr_merged_sets_approved(self, worker):
+        event = _make_normalized_event(kind=EventKind.CR_MERGED)
+        event.change_request.state = ChangeRequestState.MERGED
+        message = QueueMessage(
+            message_id="1",
+            event_id="e1",
+            source=EventSource.SOURCE_CONTROL,
+            event_type="cr_merged",
+            ticket_key="PROJ-1",
+            payload={},
+            normalized_event=normalized_event_to_dict(event),
+        )
+        current_state = {
+            "current_node": "prd_approval_gate",
+            "is_paused": True,
+            "prd_pr_number": 42,
+            "prd_pr_repo": "acme/payments",
+        }
+
+        with patch("forge.orchestrator.worker.JiraClient") as MockJira:
+            MockJira.return_value.set_workflow_label = AsyncMock()
+            MockJira.return_value.close = AsyncMock()
+            updated = await worker._handle_resume_event(message, current_state)
+
+        assert updated["is_paused"] is False
+
+
+class TestProposalReplyTypedFields:
+    """The inline proposal-reply block reads typed ReviewComment fields.
+
+    An inline pull_request_review_comment is distinguished from an issue comment
+    by comment.path being set; sender identity comes from actor.login.
+    """
+
+    def _reply_message(self, comment: ReviewComment, actor_login: str = "reviewer") -> QueueMessage:
+        event = _make_normalized_event(kind=EventKind.COMMENT_CREATED)
+        event.actor = Actor(login=actor_login, is_bot="[bot]" in actor_login)
+        event.comment = comment
+        return QueueMessage(
+            message_id="1",
+            event_id="e1",
+            source=EventSource.SOURCE_CONTROL,
+            event_type="comment_created",
+            ticket_key="PROJ-1",
+            payload={},
+            normalized_event=normalized_event_to_dict(event),
+        )
+
+    def _state(self, **overrides) -> dict:
+        base = {
+            "current_node": "prd_approval_gate",
+            "is_paused": True,
+            "prd_pr_number": 42,
+            "prd_pr_repo": "acme/payments",
+        }
+        base.update(overrides)
+        return base
+
+    @pytest.mark.asyncio
+    async def test_reply_matching_stored_decision_updates_and_unpauses(self, worker):
+        message = self._reply_message(
+            ReviewComment(
+                id="12",
+                body="Please make this change after all.",
+                author="reviewer",
+                path="prd.md",
+                line=20,
+                in_reply_to="11",
+            )
+        )
+        state = self._state(
+            proposal_review_decisions=[
+                {
+                    "thread_id": "thread-a",
+                    "comment_id": 10,
+                    "forge_reply_id": 11,
+                    "disposition": "reply",
+                    "feedback": "",
+                    "response": "This conflicts with the API.",
+                },
+                {
+                    "thread_id": "thread-b",
+                    "comment_id": 20,
+                    "disposition": "reply",
+                    "feedback": "",
+                    "response": "Out of scope.",
+                },
+            ]
+        )
+
+        with patch.object(
+            worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
+        ):
+            result = await worker._handle_resume_event(message, state)
+
+        assert result["is_paused"] is False
+        assert result["revision_requested"] is True
+        assert result["feedback_comment"] == "Please make this change after all."
+        assert result["proposal_review_decisions"][0]["disposition"] == "accept"
+        assert result["proposal_review_decisions"][0]["comment_id"] == 12
+        assert result["proposal_review_decisions"][1] == state["proposal_review_decisions"][1]
+
+    @pytest.mark.asyncio
+    async def test_standalone_reply_builds_thread_and_sets_rejection(self, worker):
+        # A human (non-bot) inline comment with no in_reply_to builds a fresh
+        # proposal_review_threads entry and requests a revision; the bot-only
+        # triage blocks are skipped for a human sender.
+        message = self._reply_message(
+            ReviewComment(
+                id="30",
+                body="Clarify the authorization behavior.",
+                author="reviewer",
+                path="prd.md",
+                line=12,
+            ),
+            actor_login="reviewer",
+        )
+        state = self._state(prd_content="# Current PRD")
+
+        with patch.object(
+            worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
+        ):
+            result = await worker._handle_resume_event(message, state)
+
+        assert result["is_paused"] is False
+        assert result["revision_requested"] is True
+        assert result["feedback_comment"] == "Clarify the authorization behavior."
+
+    @pytest.mark.asyncio
+    async def test_self_reply_is_ignored(self, worker):
+        message = self._reply_message(
+            ReviewComment(
+                id="99",
+                body="Addressed in the latest revision.",
+                author="forge-bot",
+                path="prd.md",
+                line=3,
+                in_reply_to="11",
+            ),
+            actor_login="forge-bot",
+        )
+        state = self._state(
+            proposal_review_decisions=[
+                {"thread_id": "thread-a", "comment_id": 10, "forge_reply_id": 11}
+            ]
+        )
+
+        with patch.object(
+            worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
+        ):
+            result = await worker._handle_resume_event(message, state)
+
+        assert result == state

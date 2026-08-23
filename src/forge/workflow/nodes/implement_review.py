@@ -8,7 +8,6 @@ from typing import Any
 from langgraph.graph import END
 
 from forge.config import get_settings
-from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
@@ -21,6 +20,7 @@ from forge.workflow.utils.review_decisions import (
     merge_review_decisions,
     reply_to_review_decisions,
 )
+from forge.workflow.utils.source_control import get_adapter, identity_for
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +61,7 @@ def route_review_response(state: WorkflowState) -> str:
 
 
 async def _fetch_pr_review_comments(
-    owner: str,
-    repo: str,
+    current_repo: str,
     pr_number: int,
     review_body: str,
     processed_thread_ids: set[str] | None = None,
@@ -73,43 +72,34 @@ async def _fetch_pr_review_comments(
     analysis agent has the full picture.
 
     Args:
-        owner: Repository owner.
-        repo: Repository name.
+        current_repo: Repository identifier (owner/repo or repos.yaml id).
         pr_number: PR number.
         review_body: The review summary body from the webhook.
 
     Returns:
         Formatted markdown string of all review feedback.
     """
-    github = GitHubClient()
     try:
-        threads = await github.get_pull_request_review_threads(owner, repo, pr_number)
+        repo_ref, adapter = get_adapter(current_repo)
+        identity = identity_for(repo_ref, pr_number)
+        reviews = await adapter.get_review_thread_comments(repo_ref, identity)
     except Exception as e:
         logger.warning(f"Could not fetch inline review comments: {e}")
-        try:
-            comments = await github.get_pull_request_review_comments(owner, repo, pr_number)
-            threads = [
-                {
-                    "thread_id": comment.get("thread_id") or f"comment-{comment.get('id')}",
-                    "path": comment.get("path", ""),
-                    "line": comment.get("line")
-                    or comment.get("original_line")
-                    or comment.get("position"),
-                    "comments": [
-                        {
-                            "comment_id": comment.get("comment_id") or comment.get("id"),
-                            "body": comment.get("body", ""),
-                            "author": (comment.get("user") or {}).get("login", ""),
-                        }
-                    ],
-                }
-                for comment in comments
-            ]
-        except Exception as fallback_error:
-            logger.warning("REST review comment fallback failed: %s", fallback_error)
-            threads = []
-    finally:
-        await github.close()
+        reviews = []
+
+    processed_thread_ids = processed_thread_ids or set()
+    threads: list[dict[str, Any]] = [
+        {
+            "thread_id": review.id,
+            "path": review.comments[0].path if review.comments else "",
+            "line": review.comments[0].line if review.comments else None,
+            "comments": [
+                {"comment_id": c.id, "body": c.body, "author": c.author} for c in review.comments
+            ],
+        }
+        for review in reviews
+        if review.id not in processed_thread_ids
+    ]
 
     lines = ["# PR Review Feedback\n"]
 
@@ -118,8 +108,6 @@ async def _fetch_pr_review_comments(
         lines.append(review_body.strip())
         lines.append("\n")
 
-    processed_thread_ids = processed_thread_ids or set()
-    threads = [thread for thread in threads if thread["thread_id"] not in processed_thread_ids]
     if threads:
         lines.append("## Unresolved Review Threads\n")
         for thread in threads:
@@ -160,11 +148,11 @@ def _load_review_decisions(workspace_path: str) -> list[dict[str, Any]]:
 
 
 async def _reply_to_review_threads(
-    *, owner: str, repo: str, pr_number: int | None, decisions: list[dict[str, Any]]
+    *, current_repo: str, pr_number: int | None, decisions: list[dict[str, Any]]
 ) -> None:
     """Post decision responses in their originating GitHub review threads."""
     await reply_to_review_decisions(
-        repo_full_name=f"{owner}/{repo}",
+        current_repo=current_repo,
         pr_number=pr_number,
         decisions=decisions,
     )
@@ -203,7 +191,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
 
     try:
         try:
-            workspace_path, git = prepare_workspace(state)
+            workspace_path, git = await prepare_workspace(state)
             state = {**state, "workspace_path": workspace_path}
         except ValueError as e:
             return update_state_timestamp(
@@ -216,17 +204,14 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             )
 
         # ── Phase 0: Fetch all PR review comments from GitHub ─────────────────
-        _owner, _, _repo = current_repo.partition("/")
         await _post_review_addressing_comment(
             ticket_key=ticket_key,
-            owner=_owner,
-            repo=_repo,
+            current_repo=current_repo,
             pr_number=pr_number,
         )
 
         review_comments_text = await _fetch_pr_review_comments(
-            owner=_owner,
-            repo=_repo,
+            current_repo=current_repo,
             pr_number=pr_number or 0,
             review_body=feedback_comment,
             processed_thread_ids={
@@ -276,8 +261,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             item for item in decisions if item["disposition"] in ("contest", "clarify")
         ]
         await _reply_to_review_threads(
-            owner=_owner,
-            repo=_repo,
+            current_repo=current_repo,
             pr_number=pr_number,
             decisions=response_decisions,
         )
@@ -292,8 +276,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
                 await _post_review_objection(
                     state=state,
                     objections=objections_text,
-                    owner=_owner,
-                    repo=_repo,
+                    current_repo=current_repo,
                     pr_number=pr_number,
                 )
                 contested_comments = [{"text": objections_text}]
@@ -361,8 +344,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             await sync_pr_description(
                 state,
                 git,
-                owner=_owner,
-                repo=_repo,
+                current_repo=current_repo,
                 pr_number=pr_number,
                 attempt=0,
             )
@@ -378,8 +360,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             if not decision.get("response"):
                 decision["response"] = accepted_response
         await _reply_to_review_threads(
-            owner=_owner,
-            repo=_repo,
+            current_repo=current_repo,
             pr_number=pr_number,
             decisions=accepted_decisions,
         )
@@ -415,8 +396,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
 
 async def _post_review_addressing_comment(
     ticket_key: str,
-    owner: str,
-    repo: str,
+    current_repo: str,
     pr_number: int | None,
 ) -> None:
     """Post a non-triggering PR status update when review work starts."""
@@ -425,11 +405,9 @@ async def _post_review_addressing_comment(
         return
 
     try:
-        github = GitHubClient()
-        try:
-            await github.create_issue_comment(owner, repo, pr_number, _REVIEW_ADDRESSING_COMMENT)
-        finally:
-            await github.close()
+        repo_ref, adapter = get_adapter(current_repo)
+        identity = identity_for(repo_ref, pr_number)
+        await adapter.create_comment(repo_ref, identity, _REVIEW_ADDRESSING_COMMENT)
     except Exception as e:
         logger.warning(f"Failed to post review addressing PR status for {ticket_key}: {e}")
 
@@ -437,14 +415,12 @@ async def _post_review_addressing_comment(
 async def _post_review_objection(
     state: Any,
     objections: str,
-    owner: str,
-    repo: str,
+    current_repo: str,
     pr_number: int | None,
 ) -> None:
     """Post the agent's review objections to the PR and Jira."""
     ticket_key = state.get("ticket_key", "")
     try:
-        github = GitHubClient()
         jira = JiraClient()
         try:
             comment = (
@@ -453,7 +429,9 @@ async def _post_review_objection(
                 f"*Please confirm whether to proceed as requested or withdraw.*"
             )
             if pr_number:
-                await github.create_issue_comment(owner, repo, pr_number, comment)
+                repo_ref, adapter = get_adapter(current_repo)
+                identity = identity_for(repo_ref, pr_number)
+                await adapter.create_comment(repo_ref, identity, comment)
             await post_status_comment(
                 jira,
                 ticket_key,
@@ -461,7 +439,6 @@ async def _post_review_objection(
                 f"Objection posted on PR #{pr_number}. Awaiting confirmation.",
             )
         finally:
-            await github.close()
             await jira.close()
     except Exception as e:
         logger.warning(f"Failed to post review objection: {e}")

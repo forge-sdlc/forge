@@ -1,5 +1,7 @@
 """Tests for Registry.resolve() and adapter factory registration."""
 
+from unittest.mock import AsyncMock
+
 import pytest
 from pydantic import SecretStr
 
@@ -122,6 +124,42 @@ def test_resolve_adapter_is_none_when_no_factory_registered(tmp_path, mock_setti
     resolved = registry.resolve("acme/payments")
 
     assert resolved.adapter is None
+
+
+def test_resolve_caches_one_adapter_per_connection(tmp_path, mock_settings):
+    """Repeated resolve() calls against the same connection must reuse the
+    same adapter instance (and its underlying HTTP client), not construct a
+    fresh one -- constructing on every call leaks a connection pool per call."""
+    registry = load_registry(config_path=tmp_path / "missing.yaml", settings=mock_settings)
+    factory_calls: list[object] = []
+    register_adapter_factory(
+        Provider.GITHUB, lambda connection: factory_calls.append(connection) or object()
+    )
+
+    first = registry.resolve("acme/payments").adapter
+    second = registry.resolve("acme/payments").adapter
+
+    assert first is second
+    assert len(factory_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_aclose_closes_every_cached_adapter(tmp_path, mock_settings):
+    registry = load_registry(config_path=tmp_path / "missing.yaml", settings=mock_settings)
+    adapter = AsyncMock()
+    register_adapter_factory(Provider.GITHUB, lambda _connection: adapter)
+    registry.resolve("acme/payments")
+
+    await registry.aclose()
+
+    adapter.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_aclose_is_a_noop_when_nothing_was_ever_resolved(tmp_path, mock_settings):
+    registry = load_registry(config_path=tmp_path / "missing.yaml", settings=mock_settings)
+
+    await registry.aclose()  # must not raise
 
 
 def test_get_registry_is_cached():

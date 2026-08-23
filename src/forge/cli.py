@@ -6,6 +6,7 @@ import logging
 import sys
 from typing import Any
 
+import forge.integrations.source_control.github  # noqa: F401  (registers GitHub adapter factory)
 from forge.config import get_settings
 
 

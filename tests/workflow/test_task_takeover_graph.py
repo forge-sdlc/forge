@@ -94,9 +94,10 @@ class TestPathTransitions:
             ("qualitative_review", "run_qualitative_review"),
             ("create_pr", "create_pr"),
             ("teardown_workspace", "teardown_workspace"),
-            # Removed lifecycle nodes safely restart at triage rather than
-            # resolving to a node that no longer exists.
-            ("wait_for_ci_gate", "triage_check"),
+            # wait_for_ci_gate was merged into human_review_gate; a
+            # compatibility alias resumes checkpoints parked there instead of
+            # restarting the whole workflow from triage.
+            ("wait_for_ci_gate", "human_review_gate"),
             ("ci_evaluator", "ci_evaluator"),
             ("attempt_ci_fix", "ci_evaluator"),
             ("human_review_gate", "human_review_gate"),

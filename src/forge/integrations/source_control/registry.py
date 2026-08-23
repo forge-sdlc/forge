@@ -6,6 +6,7 @@ connection, and — once a provider has registered one — its
 adapter.
 """
 
+import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
+from pydantic import SecretStr
 
 from forge.config import Settings, get_settings
 from forge.integrations.source_control.contracts import (
@@ -24,6 +26,8 @@ from forge.integrations.source_control.contracts import (
     SourceControlProvider,
 )
 from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
+
+logger = logging.getLogger(__name__)
 
 IMPLICIT_GITHUB_CONNECTION_NAME = "github-default"
 
@@ -87,6 +91,13 @@ class Registry:
         self._namespace_index: dict[tuple[Provider, str], RepositoryRef] = {
             (repo.provider, repo.namespace): repo for repo in repositories.values()
         }
+        # One adapter instance per connection for this Registry's lifetime
+        # (itself a process-wide singleton via get_registry()), so repeated
+        # resolve() calls against the same connection reuse its underlying
+        # HTTP client/connection pool instead of leaking a new one each time.
+        # Keyed by connection name, which is unique across both explicit
+        # repos.yaml connections and the implicit per-provider defaults.
+        self._adapter_cache: dict[str, SourceControlProvider] = {}
 
     def get_connection(self, name: str) -> Connection | None:
         return self._connections.get(name)
@@ -139,14 +150,53 @@ class Registry:
     def _build_resolved(
         self, repo_ref: RepositoryRef, connection: Connection
     ) -> ResolvedRepository:
-        factory = _ADAPTER_FACTORIES.get(connection.provider)
-        adapter = factory(connection) if factory else None
+        adapter = self._adapter_cache.get(connection.name)
+        if adapter is None:
+            factory = _ADAPTER_FACTORIES.get(connection.provider)
+            if factory is not None:
+                adapter = factory(connection)
+                self._adapter_cache[connection.name] = adapter
         return ResolvedRepository(repo_ref=repo_ref, connection=connection, adapter=adapter)
 
+    async def aclose(self) -> None:
+        """Close every adapter this Registry has cached.
 
-def _parse_connections(raw: dict[str, Any]) -> dict[str, Connection]:
+        Call once at process shutdown (FastAPI lifespan, worker shutdown) --
+        not per-request. Safe to call even if some/all adapters were never
+        actually used (their close() is a no-op in that case).
+        """
+        for adapter in self._adapter_cache.values():
+            await adapter.close()
+
+
+def resolve_env_value(name: str, settings: Settings) -> str | None:
+    """Look up a named env var, preferring the matching Settings field.
+
+    A field Settings models (e.g. GITHUB_TOKEN -> settings.github_token) must
+    be read through Settings rather than os.environ: BaseSettings loads .env
+    values directly without ever exporting them into the process environment
+    (see _build_implicit_connections). Names Settings doesn't model fall back
+    to os.environ, since repos.yaml connections can reference credentials
+    (e.g. for a provider without a dedicated Settings field) Settings never
+    claimed ownership of.
+    """
+    field_name = name.lower()
+    if field_name in type(settings).model_fields:
+        value = getattr(settings, field_name)
+        if isinstance(value, SecretStr):
+            return value.get_secret_value() or None
+        return str(value) if value else None
+    return os.environ.get(name)
+
+
+def _parse_connections(raw: dict[str, Any], settings: Settings) -> dict[str, Connection]:
     connections: dict[str, Connection] = {}
     for name, entry in raw.items():
+        if name == IMPLICIT_GITHUB_CONNECTION_NAME:
+            raise ProviderConfigError(
+                f"connection '{name}' collides with the reserved implicit connection name "
+                f"'{IMPLICIT_GITHUB_CONNECTION_NAME}'; choose a different name"
+            )
         if not isinstance(entry, dict):
             raise ProviderConfigError(f"connection '{name}' must be a mapping")
         if "provider" not in entry:
@@ -161,12 +211,18 @@ def _parse_connections(raw: dict[str, Any]) -> dict[str, Connection]:
         credential_env = entry.get("credential_env")
         if not credential_env:
             raise ProviderConfigError(f"connection '{name}' is missing 'credential_env'")
-        if not os.environ.get(credential_env):
+        if not resolve_env_value(credential_env, settings):
             raise ProviderConfigError(
                 f"connection '{name}' references credential_env '{credential_env}', "
                 "which is not set"
             )
 
+        # webhook_secret_env is intentionally optional here: a connection used
+        # only for API operations (git push, PR creation) with no inbound
+        # webhook has no secret to configure. A connection that *does* receive
+        # webhooks but omits it fails closed at request time instead of at
+        # startup -- GitHubAdapter.verify_webhook rejects every delivery when
+        # no secret is configured, logging a warning each time.
         allowed_namespaces = entry.get("allowed_namespaces")
         if allowed_namespaces is not None and (
             not isinstance(allowed_namespaces, list)
@@ -287,9 +343,15 @@ def load_registry(
     if not isinstance(repositories_raw, dict):
         raise ProviderConfigError(f"{path}: 'repositories' must be a mapping")
 
-    connections = _parse_connections(connections_raw)
+    connections = _parse_connections(connections_raw, settings)
     repositories = _parse_repositories(repositories_raw, connections)
     implicit_connections = _build_implicit_connections(settings)
+    logger.info(
+        "Loaded source-control registry from %s: %d connection(s), %d repositor(y/ies)",
+        path,
+        len(connections),
+        len(repositories),
+    )
     return Registry(
         connections=connections,
         repositories=repositories,
@@ -299,5 +361,9 @@ def load_registry(
 
 @lru_cache
 def get_registry() -> Registry:
-    """Get the cached, process-wide registry loaded from settings.forge_repos_config_path."""
+    """Get the cached, process-wide registry loaded from settings.forge_repos_config_path.
+
+    Cached for the life of the process: repos.yaml edits require a restart to
+    take effect (see CLAUDE.md).
+    """
     return load_registry()

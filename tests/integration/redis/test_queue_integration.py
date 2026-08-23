@@ -13,7 +13,7 @@ import pytest
 from forge.models.events import EventSource
 from forge.queue.consumer import CONSUMER_GROUP, QueueConsumer
 from forge.queue.models import QueueMessage
-from forge.queue.producer import GITHUB_STREAM, JIRA_STREAM, QueueProducer
+from forge.queue.producer import JIRA_STREAM, SOURCE_CONTROL_STREAM, QueueProducer
 from forge.queue.retry import RETRY_QUEUE_KEY, RetryEntry, RetryQueue
 
 
@@ -42,19 +42,19 @@ class TestQueueProducer:
         assert stream_len == 1
 
     async def test_publish_github_event(self, redis_client):
-        """Publish a GitHub event to the queue."""
+        """Publish a source-control event to the queue."""
         producer = QueueProducer(redis_client=redis_client)
 
         await producer.publish(
             event_id="gh-event-456",
-            source=EventSource.GITHUB,
+            source=EventSource.SOURCE_CONTROL,
             event_type="check_run:completed",
             ticket_key="TEST-456",
             payload={"check_run": {"conclusion": "success"}},
         )
 
-        # Verify message was published to GitHub stream
-        stream_len = await redis_client.xlen(GITHUB_STREAM)
+        # Verify message was published to source-control stream
+        stream_len = await redis_client.xlen(SOURCE_CONTROL_STREAM)
         assert stream_len == 1
 
     async def test_publish_multiple_events(self, redis_client):
@@ -356,13 +356,13 @@ class TestQueueMessageSerialization:
 
         await producer.publish(
             event_id="empty-test",
-            source=EventSource.GITHUB,
+            source=EventSource.SOURCE_CONTROL,
             event_type="ping",
             ticket_key="",
             payload={},
         )
 
-        messages = await redis_client.xrange(GITHUB_STREAM, "-", "+")
+        messages = await redis_client.xrange(SOURCE_CONTROL_STREAM, "-", "+")
         message_id, data = messages[0]
         message = QueueMessage.from_redis(message_id, data)
 

@@ -5,37 +5,74 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from forge.integrations.source_control.contracts import (
+    ChangeRequest,
+    ChangeRequestIdentity,
+    ChangeRequestState,
+    Provider,
+    RepositoryRef,
+    WriteTarget,
+)
 from forge.workflow.feature.state import create_initial_feature_state
 from forge.workflow.nodes.pr_creation import create_pull_request
-from forge.integrations.github.client import PullRequestCreationResult
 
 
-def create_mock_github_client(
+def _repo_ref(identifier: str) -> RepositoryRef:
+    return RepositoryRef(
+        id=identifier,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=identifier,
+        default_branch="main",
+        change_request_mode="fork",
+    )
+
+
+def create_mock_adapter(
     pr_number=123, pr_url="https://github.com/owner/repo/pull/123", is_new_pr=True
 ):
-    """Create a mock GitHubClient with configurable PR data."""
-    mock = MagicMock()
-    mock.close = AsyncMock()
-    mock.get_or_create_fork = AsyncMock(
-        return_value={
-            "owner": {"login": "fork-owner"},
-            "name": "repo",
-        }
+    """Create a mock SourceControlProvider adapter with configurable PR data."""
+    adapter = AsyncMock()
+    adapter.ensure_write_target = AsyncMock(
+        return_value=WriteTarget(
+            clone_url="",
+            push_remote_name="origin",
+            head_ref="",
+            base_branch="main",
+            fork_owner="fork-owner",
+            fork_repo="repo",
+        )
     )
-    mock.sync_fork_with_upstream = AsyncMock()
-    mock.create_issue_comment = AsyncMock()
-
-    # PR creation response - can be configured for different scenarios
-    pr_data = {
-        "html_url": pr_url,
-    }
-    if pr_number is not None:
-        pr_data["number"] = pr_number
-
-    mock.create_pull_request = AsyncMock(
-        return_value=PullRequestCreationResult(pr=pr_data, created=is_new_pr)
+    adapter.create_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(
+                connection="c", repository_id="owner/repo", native_id=pr_number
+            ),
+            url=pr_url,
+            title="t",
+            body="b",
+            state=ChangeRequestState.OPEN,
+            source_branch="f",
+            target_branch="main",
+            created=is_new_pr,
+        )
     )
-    return mock
+    adapter.get_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(
+                connection="c", repository_id="owner/repo", native_id=pr_number
+            ),
+            url=pr_url,
+            title="t",
+            body="",
+            state=ChangeRequestState.OPEN,
+            source_branch="f",
+            target_branch="main",
+        )
+    )
+    adapter.update_change_request = AsyncMock()
+    adapter.create_comment = AsyncMock()
+    return adapter
 
 
 def create_mock_jira_client():
@@ -91,13 +128,20 @@ def mock_external_pr_creation_side_effects():
         yield
 
 
+def _patch_adapter(adapter):
+    return patch(
+        "forge.workflow.nodes.pr_creation.get_adapter",
+        return_value=(_repo_ref("owner/repo"), adapter),
+    )
+
+
 class TestPRInformationalComment:
     """Test cases for the informational PR command comment on PR creation."""
 
     @pytest.mark.asyncio
     async def test_posts_comment_on_new_pr(self):
         """Should post an informational comment when a new PR is created."""
-        mock_github = create_mock_github_client(
+        mock_adapter = create_mock_adapter(
             pr_number=456, pr_url="https://github.com/owner/repo/pull/456", is_new_pr=True
         )
         mock_jira = create_mock_jira_client()
@@ -112,7 +156,7 @@ class TestPRInformationalComment:
         state["context"] = {"branch_name": "feat/test-branch"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -126,19 +170,17 @@ class TestPRInformationalComment:
             await create_pull_request(state)
 
         # Verify comment was posted
-        mock_github.create_issue_comment.assert_called_once()
-        call_args = mock_github.create_issue_comment.call_args
-        assert call_args[1]["owner"] == "owner"
-        assert call_args[1]["repo"] == "repo"
-        assert call_args[1]["issue_number"] == 456
-        assert "/forge rebase" in call_args[1]["body"]
-        assert "/forge skip-gate" in call_args[1]["body"]
-        assert "/forge unskip-gate" in call_args[1]["body"]
+        mock_adapter.create_comment.assert_awaited_once()
+        call_args = mock_adapter.create_comment.call_args[0]
+        assert call_args[1].native_id == 456
+        assert "/forge rebase" in call_args[2]
+        assert "/forge skip-gate" in call_args[2]
+        assert "/forge unskip-gate" in call_args[2]
 
     @pytest.mark.asyncio
     async def test_does_not_post_comment_on_existing_pr(self):
         """Should NOT post an informational comment when an existing PR is returned."""
-        mock_github = create_mock_github_client(
+        mock_adapter = create_mock_adapter(
             pr_number=456, pr_url="https://github.com/owner/repo/pull/456", is_new_pr=False
         )
         mock_jira = create_mock_jira_client()
@@ -153,7 +195,7 @@ class TestPRInformationalComment:
         state["context"] = {"branch_name": "feat/test-branch"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -167,16 +209,16 @@ class TestPRInformationalComment:
             await create_pull_request(state)
 
         # Verify comment was NOT posted
-        mock_github.create_issue_comment.assert_not_called()
+        mock_adapter.create_comment.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_comment_failure_ignored(self):
         """Should successfully finish PR creation even if posting comment fails."""
-        mock_github = create_mock_github_client(
+        mock_adapter = create_mock_adapter(
             pr_number=456, pr_url="https://github.com/owner/repo/pull/456", is_new_pr=True
         )
         # Make the comment creation raise an exception
-        mock_github.create_issue_comment.side_effect = Exception("GitHub API Error")
+        mock_adapter.create_comment.side_effect = Exception("GitHub API Error")
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -189,7 +231,7 @@ class TestPRInformationalComment:
         state["context"] = {"branch_name": "feat/test-branch"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(

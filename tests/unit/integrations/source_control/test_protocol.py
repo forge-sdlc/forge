@@ -21,6 +21,9 @@ class _CompleteFakeProvider:
     async def resolve_default_branch(self, _repo_ref: object) -> object:
         raise NotImplementedError
 
+    async def get_git_credentials(self, _repo_ref: object) -> object:
+        raise NotImplementedError
+
     async def ensure_write_target(self, _repo_ref: object) -> object:
         raise NotImplementedError
 
@@ -54,10 +57,21 @@ class _CompleteFakeProvider:
     async def get_review_threads(self, _repo_ref: object, _identity: object) -> object:
         raise NotImplementedError
 
+    async def get_review_thread_comments(self, _repo_ref: object, _identity: object) -> object:
+        raise NotImplementedError
+
+    async def get_review_comments_for_submission(
+        self, _repo_ref: object, _identity: object, _review_id: object
+    ) -> object:
+        raise NotImplementedError
+
     async def get_checks(self, _repo_ref: object, _ref: object) -> object:
         raise NotImplementedError
 
     async def get_check_logs(self, _repo_ref: object, _check: object) -> object:
+        raise NotImplementedError
+
+    async def get_check_artifacts(self, _repo_ref: object, _check: object) -> object:
         raise NotImplementedError
 
     async def get_file(self, _repo_ref: object, _path: object, _ref: object) -> object:
@@ -73,6 +87,9 @@ class _CompleteFakeProvider:
 
     async def get_authenticated_identity(self, _repo_ref: object) -> object:
         raise NotImplementedError
+
+    async def close(self) -> None:
+        pass
 
 
 class _IncompleteFakeProvider:

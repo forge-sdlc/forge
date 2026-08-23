@@ -6,7 +6,7 @@ import json
 from unittest.mock import patch
 
 from forge.queue.models import QueueMessage
-from forge.queue.producer import GITHUB_STREAM, JIRA_STREAM, QueueProducer
+from forge.queue.producer import JIRA_STREAM, SOURCE_CONTROL_STREAM, QueueProducer
 from tests.fixtures.github_payloads import WEBHOOK_CHECK_RUN_COMPLETED_SUCCESS
 from tests.fixtures.jira_payloads import WEBHOOK_ISSUE_CREATED
 
@@ -110,7 +110,7 @@ async def test_github_delivery_is_authenticated_queued_and_deduplicated(
     assert duplicate.status_code == 202
     assert duplicate.json()["status"] == "duplicate"
 
-    messages = await _stream_messages(redis_client, GITHUB_STREAM)
+    messages = await _stream_messages(redis_client, SOURCE_CONTROL_STREAM)
     assert len(messages) == 1
     assert messages[0].event_id == "github-delivery-1"
-    assert messages[0].source.value == "github"
+    assert messages[0].source.value == "source_control"

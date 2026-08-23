@@ -29,6 +29,8 @@ def _make_state(
         "plan_content": plan_content,
         "implemented_tasks": implemented_tasks or [],
         "context": {"branch_name": "forge/TASK-123", "guardrails": ""},
+        "fork_owner": "forge-bot",
+        "fork_repo": "backend",
     }
 
 
@@ -117,8 +119,9 @@ class TestTaskTakeoverExecutionNode:
         assert "Approved Implementation Plan" in kwargs["task_description"]
         assert "inject at least one new or modified test file" in kwargs["task_description"]
         assert "Current repository: `acme/backend`" in kwargs["task_description"]
-        assert "Do not search for, create, or modify files assigned to other repositories" in (
-            kwargs["task_description"]
+        assert (
+            "Do not search for, create, or modify files assigned to other repositories"
+            in (kwargs["task_description"])
         )
         assert "config" not in kwargs
 

@@ -1,38 +1,78 @@
 """Unit tests for draft PR creation behavior and repository metadata configuration."""
 
 from pathlib import Path
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from forge.integrations.github.client import GitHubClient, PullRequestCreationResult
+from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient, MissingProjectConfig
+from forge.integrations.source_control.contracts import (
+    ChangeRequest,
+    ChangeRequestIdentity,
+    ChangeRequestState,
+    Provider,
+    RepositoryRef,
+    WriteTarget,
+)
 from forge.workflow.feature.state import create_initial_feature_state
 from forge.workflow.nodes.pr_creation import create_pull_request
 
 
-def create_mock_github_client(pr_number=123, pr_url="https://github.com/owner/repo/pull/123"):
-    """Create a mock GitHubClient with configurable PR data."""
-    mock = MagicMock()
-    mock.close = AsyncMock()
-    mock.get_or_create_fork = AsyncMock(
-        return_value={
-            "owner": {"login": "fork-owner"},
-            "name": "repo",
-        }
+def _repo_ref(identifier: str) -> RepositoryRef:
+    return RepositoryRef(
+        id=identifier,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=identifier,
+        default_branch="main",
+        change_request_mode="fork",
     )
-    mock.sync_fork_with_upstream = AsyncMock()
 
-    pr_data = {
-        "html_url": pr_url,
-    }
-    if pr_number is not None:
-        pr_data["number"] = pr_number
 
-    mock.create_pull_request = AsyncMock(
-        return_value=PullRequestCreationResult(pr=pr_data, created=True)
+def create_mock_adapter(pr_number=123, pr_url="https://github.com/owner/repo/pull/123"):
+    """Create a mock SourceControlProvider adapter with configurable PR data."""
+    adapter = AsyncMock()
+    adapter.ensure_write_target = AsyncMock(
+        return_value=WriteTarget(
+            clone_url="",
+            push_remote_name="origin",
+            head_ref="",
+            base_branch="main",
+            fork_owner="fork-owner",
+            fork_repo="repo",
+        )
     )
-    return mock
+    adapter.create_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(
+                connection="c", repository_id="owner/repo", native_id=pr_number
+            ),
+            url=pr_url,
+            title="t",
+            body="b",
+            state=ChangeRequestState.OPEN,
+            source_branch="f",
+            target_branch="main",
+            created=True,
+        )
+    )
+    adapter.get_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(
+                connection="c", repository_id="owner/repo", native_id=pr_number
+            ),
+            url=pr_url,
+            title="t",
+            body="",
+            state=ChangeRequestState.OPEN,
+            source_branch="f",
+            target_branch="main",
+        )
+    )
+    adapter.update_change_request = AsyncMock()
+    adapter.create_comment = AsyncMock()
+    return adapter
 
 
 def create_mock_jira_client():
@@ -244,8 +284,8 @@ class TestPRCreationNodeDraft:
 
     @pytest.mark.asyncio
     async def test_create_pr_node_invokes_github_with_draft_true(self):
-        """Workflow node should invoke GitHubClient with draft=True if repository configured as draft."""
-        mock_github = create_mock_github_client(pr_number=101)
+        """Workflow node should invoke the adapter with draft=True if repository configured as draft."""
+        mock_adapter = create_mock_adapter(pr_number=101)
         mock_jira = create_mock_jira_client()
         mock_jira.is_repo_draft = AsyncMock(return_value=True)
         mock_git = create_mock_git_operations()
@@ -259,7 +299,10 @@ class TestPRCreationNodeDraft:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            patch(
+                "forge.workflow.nodes.pr_creation.get_adapter",
+                return_value=(_repo_ref("owner/repo"), mock_adapter),
+            ),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -281,21 +324,19 @@ class TestPRCreationNodeDraft:
         # Verify is_repo_draft was resolved
         mock_jira.is_repo_draft.assert_called_once_with("FEAT", "owner/repo")
 
-        # Verify create_pull_request was called with draft=True
-        mock_github.create_pull_request.assert_called_once_with(
-            owner="owner",
-            repo="repo",
-            title="[FEAT-123] Test feature",
-            body=ANY,
-            head="fork-owner:feat/test",
-            base="main",
-            draft=True,
-        )
+        # Verify create_change_request was called with draft=True and the fork head
+        mock_adapter.create_change_request.assert_called_once()
+        _, kwargs = mock_adapter.create_change_request.call_args
+        assert kwargs["title"] == "[FEAT-123] Test feature"
+        assert kwargs["target"].head_ref == "feat/test"
+        assert kwargs["target"].base_branch == "main"
+        assert kwargs["target"].fork_owner == "fork-owner"
+        assert kwargs["draft"] is True
 
     @pytest.mark.asyncio
     async def test_create_pr_node_invokes_github_with_draft_false(self):
-        """Workflow node should invoke GitHubClient with draft=False if repository is not configured as draft."""
-        mock_github = create_mock_github_client(pr_number=102)
+        """Workflow node should invoke the adapter with draft=False if repository is not configured as draft."""
+        mock_adapter = create_mock_adapter(pr_number=102)
         mock_jira = create_mock_jira_client()
         mock_jira.is_repo_draft = AsyncMock(return_value=False)
         mock_git = create_mock_git_operations()
@@ -309,7 +350,10 @@ class TestPRCreationNodeDraft:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            patch(
+                "forge.workflow.nodes.pr_creation.get_adapter",
+                return_value=(_repo_ref("owner/repo"), mock_adapter),
+            ),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -331,13 +375,10 @@ class TestPRCreationNodeDraft:
         # Verify is_repo_draft was resolved
         mock_jira.is_repo_draft.assert_called_once_with("FEAT", "owner/repo")
 
-        # Verify create_pull_request was called with draft=False
-        mock_github.create_pull_request.assert_called_once_with(
-            owner="owner",
-            repo="repo",
-            title="[FEAT-123] Test feature",
-            body=ANY,
-            head="fork-owner:feat/test",
-            base="main",
-            draft=False,
-        )
+        # Verify create_change_request was called with draft=False
+        mock_adapter.create_change_request.assert_called_once()
+        _, kwargs = mock_adapter.create_change_request.call_args
+        assert kwargs["title"] == "[FEAT-123] Test feature"
+        assert kwargs["target"].head_ref == "feat/test"
+        assert kwargs["target"].base_branch == "main"
+        assert kwargs["draft"] is False
