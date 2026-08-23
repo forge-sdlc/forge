@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -140,5 +140,30 @@ async def test_get_reviews_returns_review_submissions() -> None:
 
     assert reviews == payload
     http.get.assert_awaited_once_with(
-        "/repos/org/repo/pulls/9/reviews", params={"per_page": 100}
+        "/repos/org/repo/pulls/9/reviews", params={"per_page": 100, "page": 1}
     )
+
+
+@pytest.mark.asyncio
+async def test_get_reviews_fetches_all_pages() -> None:
+    first_page = [{"id": review_id} for review_id in range(100)]
+    second_page = [{"id": 100}]
+
+    first_response = AsyncMock()
+    first_response.raise_for_status = lambda: None
+    first_response.json = lambda: first_page
+    second_response = AsyncMock()
+    second_response.raise_for_status = lambda: None
+    second_response.json = lambda: second_page
+    http = AsyncMock()
+    http.get.side_effect = [first_response, second_response]
+    github = GitHubClient()
+    github._get_client = AsyncMock(return_value=http)
+
+    reviews = await github.get_reviews("org", "repo", 9)
+
+    assert reviews == first_page + second_page
+    assert http.get.await_args_list == [
+        call("/repos/org/repo/pulls/9/reviews", params={"per_page": 100, "page": 1}),
+        call("/repos/org/repo/pulls/9/reviews", params={"per_page": 100, "page": 2}),
+    ]

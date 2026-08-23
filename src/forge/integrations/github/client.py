@@ -202,12 +202,19 @@ class GitHubClient:
             List of review submission dicts.
         """
         client = await self._get_client()
-        response = await client.get(
-            f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews",
-            params={"per_page": 100},
-        )
-        response.raise_for_status()
-        return response.json()
+        reviews: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            response = await client.get(
+                f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews",
+                params={"per_page": 100, "page": page},
+            )
+            response.raise_for_status()
+            batch: list[dict[str, Any]] = response.json()
+            reviews.extend(batch)
+            if len(batch) < 100:
+                return reviews
+            page += 1
 
     async def create_review_comment(
         self,
