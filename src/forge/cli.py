@@ -799,11 +799,9 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             print("[OK] forge.model_default deleted")
 
         # forge.references property processing
+        # --ref-description and its deprecated alias --description share the same
+        # argparse dest, so both land in args.ref_description.
         ref_desc = getattr(args, "ref_description", None)
-        ref_desc_arg_name = "--ref-description"
-        if ref_desc is None:
-            ref_desc = getattr(args, "description", None)
-            ref_desc_arg_name = "--description"
 
         add_reference = getattr(args, "add_reference", None)
         remove_reference = getattr(args, "remove_reference", None)
@@ -811,7 +809,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
 
         if ref_desc and (not add_reference or len(ref_desc) != len(add_reference)):
             print(
-                f"Error: {ref_desc_arg_name} requires matching number of --add-reference items.",
+                "Error: --ref-description requires matching number of --add-reference items.",
                 file=sys.stderr,
             )
             return 1

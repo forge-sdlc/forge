@@ -25,6 +25,9 @@ from forge.skills.utils import extract_project_key
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of distinct references fetched per workflow run.
+MAX_REFERENCES = 10
+
 _CACHE_LOCK: asyncio.Lock | None = None
 _CACHE_ROOT: str | None = None
 
@@ -556,6 +559,132 @@ def format_and_truncate_aggregate_references(
     return current_text
 
 
+def _comment_sort_key(c: Any) -> datetime:
+    """Sort key placing comments oldest-first, using a naive UTC datetime."""
+    created = getattr(c, "created", None)
+    if created is None and isinstance(c, dict):
+        created = c.get("created")
+
+    parsed_dt = None
+    if isinstance(created, datetime):
+        parsed_dt = created
+    elif isinstance(created, str):
+        try:
+            cleaned = created
+            if len(created) > 4 and created[-5] in ("+", "-") and ":" not in created[-3:]:
+                cleaned = created[:-2] + ":" + created[-2:]
+            parsed_dt = datetime.fromisoformat(cleaned)
+        except ValueError:
+            pass
+
+    if parsed_dt is not None:
+        if parsed_dt.tzinfo is not None:
+            parsed_dt = parsed_dt.astimezone(UTC).replace(tzinfo=None)
+        return parsed_dt
+
+    return datetime.min
+
+
+async def _gather_standing_references(jira: JiraClient, project_key: str) -> list[dict[str, Any]]:
+    """Fetch and validate the project-level standing references."""
+    try:
+        standing_refs = await jira.get_project_references(project_key)
+    except Exception as e:
+        logger.warning(f"Failed to fetch project standing references for {project_key}: {e}")
+        return []
+
+    if not isinstance(standing_refs, list):
+        logger.warning(
+            f"forge.references for project {project_key} is malformed: {standing_refs!r}"
+        )
+        return []
+
+    # Filter malformed entries
+    return [ref for ref in standing_refs if isinstance(ref, dict) and "url" in ref]
+
+
+async def _gather_ticket_references(jira: JiraClient, ticket_key: str) -> list[dict[str, Any]]:
+    """Fetch ticket comments (oldest-first) and extract inline references from them."""
+    try:
+        comments = await jira.get_comments(ticket_key)
+    except Exception as e:
+        logger.warning(f"Failed to fetch comments for {ticket_key}: {e}")
+        return []
+
+    if not isinstance(comments, list):
+        logger.warning(f"get_comments returned non-list: {comments!r}")
+        return []
+
+    comments.sort(key=_comment_sort_key)
+
+    ticket_refs: list[dict[str, Any]] = []
+    for comment in comments:
+        body = getattr(comment, "body", None)
+        if body is None and isinstance(comment, dict):
+            body = comment.get("body")
+        if isinstance(body, str):
+            ticket_refs.extend(extract_references_from_comment(body))
+    return ticket_refs
+
+
+def _deduplicate_references(
+    standing_refs: list[dict[str, Any]], ticket_refs: list[dict[str, Any]]
+) -> tuple[list[str], dict[str, dict[str, Any]]]:
+    """Normalize and de-duplicate references, preserving first-seen order.
+
+    Returns the ordered list of normalized URLs and a map from normalized URL to
+    the latest reference object seen for it (ticket refs override standing refs).
+    """
+    unique_norm_urls: list[str] = []
+    latest_ref_by_norm: dict[str, dict[str, Any]] = {}
+
+    def _add(refs: list[dict[str, Any]], kind: str) -> None:
+        for ref in refs:
+            try:
+                norm = normalize_url(ref["url"])
+                if norm not in latest_ref_by_norm:
+                    unique_norm_urls.append(norm)
+                latest_ref_by_norm[norm] = ref
+            except Exception as e:
+                logger.warning(f"Failed to normalize {kind} reference URL {ref.get('url')}: {e}")
+
+    _add(standing_refs, "standing")
+    _add(ticket_refs, "comment")
+    return unique_norm_urls, latest_ref_by_norm
+
+
+async def _fetch_reference_content(
+    run_id: str, norm: str, ref_obj: dict[str, Any]
+) -> dict[str, Any]:
+    """Fetch (or read from cache) the content for a single normalized reference URL."""
+    original_url = ref_obj["url"]
+    desc = ref_obj.get("description", "")
+
+    cached = await read_from_cache(run_id, norm)
+    if cached is not None:
+        content_type, body_text = cached
+    else:
+        pinned_ips: dict[str, str] = {}
+        backend = PinnedAsyncNetworkBackend(pinned_ips)
+        try:
+            content_type, body_text = await fetch_reference_url(original_url, pinned_ips, backend)
+            if "text/html" in content_type:
+                body_text = html_to_markdown(body_text)
+
+            await write_to_cache(run_id, norm, content_type, body_text)
+        except Exception as e:
+            logger.warning(f"Failed to fetch reference URL {original_url}: {e}")
+            content_type = "text/plain"
+            body_text = f"[WARNING: Failed to fetch reference URL: {original_url}. Error: {e}]"
+
+    return {
+        "url": original_url,
+        "description": desc,
+        "body_text": body_text,
+        "content_type": content_type,
+    }
+
+
 async def fetch_and_inject_references(state: Any, jira: JiraClient, base_text: str) -> str:
     """Gather project-level and ticket-level references, fetch contents securely, and append context."""
     if base_text is None:
@@ -575,126 +704,24 @@ async def fetch_and_inject_references(state: Any, jira: JiraClient, base_text: s
     context = state.get("context") or {}
     run_id = context.get("run_id") or str(uuid.uuid4())
 
-    # 1. Fetch project-level standing references
-    try:
-        standing_refs = await jira.get_project_references(project_key)
-    except Exception as e:
-        logger.warning(f"Failed to fetch project standing references for {project_key}: {e}")
-        standing_refs = []
+    standing_refs = await _gather_standing_references(jira, project_key)
+    ticket_refs = await _gather_ticket_references(jira, ticket_key)
 
-    if not isinstance(standing_refs, list):
+    unique_norm_urls, latest_ref_by_norm = _deduplicate_references(standing_refs, ticket_refs)
+
+    # Process up to MAX_REFERENCES resources; warn rather than silently drop the rest.
+    selected_norms = unique_norm_urls[:MAX_REFERENCES]
+    if len(unique_norm_urls) > MAX_REFERENCES:
         logger.warning(
-            f"forge.references for project {project_key} is malformed: {standing_refs!r}"
+            f"Reference limit exceeded for {ticket_key}: {len(unique_norm_urls)} references "
+            f"found, processing the first {MAX_REFERENCES}; "
+            f"skipping {len(unique_norm_urls) - MAX_REFERENCES}."
         )
-        standing_refs = []
 
-    # Filter malformed entries
-    standing_refs = [ref for ref in standing_refs if isinstance(ref, dict) and "url" in ref]
-
-    # 2. Fetch ticket comments
-    try:
-        comments = await jira.get_comments(ticket_key)
-    except Exception as e:
-        logger.warning(f"Failed to fetch comments for {ticket_key}: {e}")
-        comments = []
-
-    if not isinstance(comments, list):
-        logger.warning(f"get_comments returned non-list: {comments!r}")
-        comments = []
-
-    def _comment_sort_key(c: Any) -> datetime:
-        created = getattr(c, "created", None)
-        if created is None and isinstance(c, dict):
-            created = c.get("created")
-
-        parsed_dt = None
-        if isinstance(created, datetime):
-            parsed_dt = created
-        elif isinstance(created, str):
-            try:
-                cleaned = created
-                if len(created) > 4 and created[-5] in ("+", "-") and ":" not in created[-3:]:
-                    cleaned = created[:-2] + ":" + created[-2:]
-                parsed_dt = datetime.fromisoformat(cleaned)
-            except ValueError:
-                pass
-
-        if parsed_dt is not None:
-            if parsed_dt.tzinfo is not None:
-                parsed_dt = parsed_dt.astimezone(UTC).replace(tzinfo=None)
-            return parsed_dt
-
-        return datetime.min
-
-    comments.sort(key=_comment_sort_key)
-
-    ticket_refs = []
-    for comment in comments:
-        body = getattr(comment, "body", None)
-        if body is None and isinstance(comment, dict):
-            body = comment.get("body")
-        if isinstance(body, str):
-            extracted = extract_references_from_comment(body)
-            ticket_refs.extend(extracted)
-
-    # 3. Deduplicate & order references
-    unique_norm_urls = []
-    latest_ref_by_norm = {}
-
-    for ref in standing_refs:
-        try:
-            norm = normalize_url(ref["url"])
-            if norm not in latest_ref_by_norm:
-                unique_norm_urls.append(norm)
-            latest_ref_by_norm[norm] = ref
-        except Exception as e:
-            logger.warning(f"Failed to normalize standing reference URL {ref.get('url')}: {e}")
-
-    for ref in ticket_refs:
-        try:
-            norm = normalize_url(ref["url"])
-            if norm not in latest_ref_by_norm:
-                unique_norm_urls.append(norm)
-            latest_ref_by_norm[norm] = ref
-        except Exception as e:
-            logger.warning(f"Failed to normalize comment reference URL {ref.get('url')}: {e}")
-
-    # Process up to 10 reference resources
-    selected_norms = unique_norm_urls[:10]
-
-    references_data = []
-    for norm in selected_norms:
-        ref_obj = latest_ref_by_norm[norm]
-        original_url = ref_obj["url"]
-        desc = ref_obj.get("description", "")
-
-        cached = await read_from_cache(run_id, norm)
-        if cached is not None:
-            content_type, body_text = cached
-        else:
-            pinned_ips: dict[str, str] = {}
-            backend = PinnedAsyncNetworkBackend(pinned_ips)
-            try:
-                content_type, body_text = await fetch_reference_url(
-                    original_url, pinned_ips, backend
-                )
-                if "text/html" in content_type:
-                    body_text = html_to_markdown(body_text)
-
-                await write_to_cache(run_id, norm, content_type, body_text)
-            except Exception as e:
-                logger.warning(f"Failed to fetch reference URL {original_url}: {e}")
-                content_type = "text/plain"
-                body_text = f"[WARNING: Failed to fetch reference URL: {original_url}. Error: {e}]"
-
-        references_data.append(
-            {
-                "url": original_url,
-                "description": desc,
-                "body_text": body_text,
-                "content_type": content_type,
-            }
-        )
+    references_data = [
+        await _fetch_reference_content(run_id, norm, latest_ref_by_norm[norm])
+        for norm in selected_norms
+    ]
 
     if not references_data:
         return base_text

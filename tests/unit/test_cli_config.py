@@ -725,7 +725,7 @@ class TestCLIConfigErrorHandling:
 class TestCLIReferencesConfig:
     @pytest.mark.asyncio
     async def test_cmd_project_setup_add_references(self, capsys) -> None:
-        """Adding references via --add-reference and --description writes correctly to Jira."""
+        """Adding references via --add-reference and --ref-description writes correctly to Jira."""
         with patch("forge.integrations.jira.client.JiraClient") as mock_jira_cls:
             mock_jira = MagicMock()
             mock_jira.get_project_references = AsyncMock(return_value=[])
@@ -744,7 +744,7 @@ class TestCLIReferencesConfig:
                 remove_skill = None
                 list_skills = False
                 add_reference = ["https://example.com/ref1", "https://example.com/ref2"]
-                description = ["Desc 1", "Desc 2"]
+                ref_description = ["Desc 1", "Desc 2"]
                 remove_reference = None
                 list_references = True
 
@@ -781,14 +781,14 @@ class TestCLIReferencesConfig:
             remove_skill = None
             list_skills = False
             add_reference = None
-            description = ["Desc 1"]
+            ref_description = ["Desc 1"]
             remove_reference = None
             list_references = False
 
         code = await cmd_project_setup(Args1())
         assert code == 1
         out, err = capsys.readouterr()
-        assert "Error: --description requires matching number of --add-reference items." in err
+        assert "Error: --ref-description requires matching number of --add-reference items." in err
 
         # Scenario 2: mismatched lengths
         class Args2:
@@ -802,14 +802,14 @@ class TestCLIReferencesConfig:
             remove_skill = None
             list_skills = False
             add_reference = ["https://example.com/ref1"]
-            description = ["Desc 1", "Desc 2"]
+            ref_description = ["Desc 1", "Desc 2"]
             remove_reference = None
             list_references = False
 
         code = await cmd_project_setup(Args2())
         assert code == 1
         out, err = capsys.readouterr()
-        assert "Error: --description requires matching number of --add-reference items." in err
+        assert "Error: --ref-description requires matching number of --add-reference items." in err
 
     @pytest.mark.asyncio
     async def test_cmd_project_setup_remove_references(self, capsys) -> None:
@@ -837,7 +837,7 @@ class TestCLIReferencesConfig:
                 remove_skill = None
                 list_skills = False
                 add_reference = None
-                description = None
+                ref_description = None
                 remove_reference = ["https://example.com/ref1"]
                 list_references = True
 
