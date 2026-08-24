@@ -1,3 +1,4 @@
+import shutil
 import stat
 from pathlib import Path
 from types import SimpleNamespace
@@ -128,6 +129,37 @@ def test_skill_initialization_preserves_default_and_project_layout(tmp_path: Pat
     assert (skills_root / "aisos" / "project" / "SKILL.md").read_text() == "project"
 
 
+def test_skill_initialization_prunes_deleted_committed_skills(tmp_path: Path) -> None:
+    source = tmp_path / "skills"
+    removed = source / "default" / "removed"
+    removed.mkdir(parents=True)
+    (removed / "SKILL.md").write_text("unsafe")
+    root = tmp_path / "agent"
+    root.mkdir()
+
+    skills_root = initialize_agent_skills(root, source)
+    assert (skills_root / "default" / "removed" / "SKILL.md").is_file()
+
+    shutil.rmtree(removed)
+    initialize_agent_skills(root, source)
+
+    assert not (skills_root / "default" / "removed").exists()
+
+
+def test_skill_initialization_preserves_runtime_installed_skills(tmp_path: Path) -> None:
+    source = tmp_path / "skills"
+    (source / "default" / "common").mkdir(parents=True)
+    (source / "default" / "common" / "SKILL.md").write_text("default")
+    root = tmp_path / "agent"
+    runtime_skill = root / "skills" / "aisos" / "runtime"
+    runtime_skill.mkdir(parents=True)
+    (runtime_skill / "SKILL.md").write_text("runtime")
+
+    initialize_agent_skills(root, source)
+
+    assert (runtime_skill / "SKILL.md").read_text() == "runtime"
+
+
 def test_operational_env_drops_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PATH", "/bin")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "secret")
@@ -171,6 +203,16 @@ async def test_mcp_tools_cannot_reenable_prohibited_builtin_by_name() -> None:
     agent._load_mcp_config = lambda: {"local": {}}
 
     with pytest.raises(ValueError, match="collide.*local:execute"):
+        await agent._load_mcp_tools()
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_cannot_shadow_safe_builtin_by_name() -> None:
+    agent = ForgeAgent.__new__(ForgeAgent)
+    agent.settings = SimpleNamespace(agent_mcp_allowed_tools="local:read_file")
+    agent._load_mcp_config = lambda: {"local": {}}
+
+    with pytest.raises(ValueError, match="collide.*local:read_file"):
         await agent._load_mcp_tools()
 
 

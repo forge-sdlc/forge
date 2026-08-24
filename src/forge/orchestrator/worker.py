@@ -1248,8 +1248,10 @@ class OrchestratorWorker:
             project_root,
             self.settings.workspace_base_dir or "",
         )
-        initialize_agent_skills(agent_root, project_root / self.settings.skills_dir)
-        logger.info("Host agent skills initialized at %s", agent_root / "skills")
+        committed_skills = initialize_agent_skills(
+            agent_root, project_root / self.settings.skills_dir
+        )
+        logger.info("Host agent skills initialized at %s", committed_skills)
 
         # Start Prometheus metrics HTTP server
         if self.settings.worker_metrics_enabled:

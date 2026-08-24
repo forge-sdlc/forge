@@ -39,6 +39,7 @@ from forge.config import Settings, get_settings
 from forge.integrations.agents.structured_outputs import ArtifactDocument, EpicDecomposition
 from forge.integrations.agents.security import (
     PROHIBITED_BUILTIN_TOOLS,
+    SAFE_BUILTIN_TOOLS,
     HostToolAllowlistMiddleware,
     operational_subprocess_env,
     parse_host_tools,
@@ -289,8 +290,12 @@ class ForgeAgent:
         Resolves per-project skill overrides under settings.skills_dir, with
         fallback to skills/default/ for any skill not overridden by the project.
         """
-        skills_dir = self._get_root_dir() / "skills"
-        paths = resolve_skill_paths(ticket_key or "", skills_dir)
+        root_dir = self._get_root_dir()
+        paths = resolve_skill_paths(
+            ticket_key or "",
+            root_dir / "committed-skills",
+            skills_install_dir=root_dir / "skills",
+        )
         logger.debug(f"Using skill paths: {paths}")
         return paths
 
@@ -409,7 +414,8 @@ class ForgeAgent:
         collisions = {
             identifier
             for identifier in allowed
-            if identifier.rpartition(":")[2] in PROHIBITED_BUILTIN_TOOLS
+            if identifier.rpartition(":")[2]
+            in SAFE_BUILTIN_TOOLS | PROHIBITED_BUILTIN_TOOLS
         }
         if collisions:
             names = ", ".join(sorted(collisions))

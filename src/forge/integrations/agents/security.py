@@ -108,7 +108,14 @@ def _assert_safe_tree(source: Path) -> Path:
 def initialize_agent_skills(agent_root: Path, source_root: Path) -> Path:
     """Seed the isolated runtime skill tree from committed skill directories."""
     safe_source = _assert_safe_tree(source_root)
-    skills_root = agent_root / "skills"
+    skills_root = agent_root / "committed-skills"
+    # Keep repository-owned skills separate from runtime-fetched skills. This
+    # allows an exact rebuild to remove files or whole skills deleted upstream
+    # without destroying packages installed at runtime under agent_root/skills.
+    if skills_root.exists():
+        if skills_root.is_symlink() or not skills_root.is_dir():
+            raise ValueError(f"Committed skill destination must be a real directory: {skills_root}")
+        shutil.rmtree(skills_root)
     skills_root.mkdir(parents=True, exist_ok=True)
     for source in sorted(safe_source.iterdir()):
         if source.is_dir():

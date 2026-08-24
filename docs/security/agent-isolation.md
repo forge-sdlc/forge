@@ -47,11 +47,12 @@ install -d -m 0700 -o forge -g forge /var/lib/forge/agent
 Never mount source, task workspaces, environment files, container-engine sockets, or
 credentials beneath `AGENT_ROOT_DIR`.
 
-At startup Forge copies committed skills into `AGENT_ROOT_DIR/skills`, preserving the
-existing `default/` and `<project-key>/` layout. The trusted skill installer writes
-runtime-fetched project skills directly into the corresponding project directory.
-Host agents only receive virtual, read-only access to this runtime tree. Skill trees
-with symlinks or paths escaping their source are rejected.
+At startup Forge rebuilds committed skills in `AGENT_ROOT_DIR/committed-skills`,
+preserving the existing `default/` and `<project-key>/` layout. Rebuilding removes
+skills deleted from the deployed source. The trusted skill installer writes
+runtime-fetched project skills under `AGENT_ROOT_DIR/skills`; these remain separate
+from the committed tree. Host agents receive virtual, read-only access to both trees.
+Skill trees with symlinks or paths escaping their source are rejected.
 
 ### Built-in tools
 
@@ -81,8 +82,10 @@ AGENT_MCP_ALLOWED_TOOLS=github:get_issue,atlassian:get_issue
 
 Avoid write-capable MCP tools for host agents. Exact allowlisting replaces the old
 name heuristic: Forge does not infer safety from names such as `get`, `list`, or
-`read`. MCP identifiers whose tool name is `write_file`, `edit_file`, or `execute`
-are rejected because those names collide with prohibited host built-ins.
+`read`. MCP identifiers whose bare tool name matches any host built-in are rejected.
+This prevents an MCP implementation from shadowing either a read-only filesystem
+tool (`ls`, `read_file`, `glob`, or `grep`) or a prohibited tool (`write_file`,
+`edit_file`, or `execute`).
 
 Local stdio MCP servers receive only operational environment values plus values
 explicitly declared in that server's `env` configuration. Put only the credential

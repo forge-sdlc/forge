@@ -283,7 +283,10 @@ def test_get_skill_paths_returns_default_without_ticket_key():
         mock_resolver.return_value = ["skills/default/"]
         result = agent._get_skill_paths(None)
 
-    mock_resolver.assert_called_once_with("", Path(".forge/agent").resolve() / "skills")
+    root = Path(".forge/agent").resolve()
+    mock_resolver.assert_called_once_with(
+        "", root / "committed-skills", skills_install_dir=root / "skills"
+    )
     assert result == ["skills/default/"]
 
 
