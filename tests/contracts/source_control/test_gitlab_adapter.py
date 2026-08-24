@@ -1039,6 +1039,23 @@ class TestGetReviewThreads:
         with pytest.raises(TransientProviderError):
             await gitlab_adapter_with_mock_client.get_review_threads(gitlab_repo_ref, identity)
 
+    @pytest.mark.asyncio
+    async def test_raises_on_missing_native_id_even_after_approvals_confirmed_unsupported(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        """The _approvals_supported=False short-circuit must not bypass
+        native_id validation -- a malformed identity should still raise,
+        not silently return [] once the capability cache is warmed."""
+        gitlab_adapter_with_mock_client._approvals_supported = False
+        mock_gitlab_http_client.get_approvals = AsyncMock()
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=None
+        )
+
+        with pytest.raises(ValueError, match="native_id"):
+            await gitlab_adapter_with_mock_client.get_review_threads(gitlab_repo_ref, identity)
+        mock_gitlab_http_client.get_approvals.assert_not_awaited()
+
 
 class TestGetReviewThreadComments:
     @pytest.mark.asyncio

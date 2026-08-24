@@ -523,11 +523,11 @@ class GitLabAdapter:
         connection (self-managed instances without it, e.g. below
         Premium/Ultimate) rather than raising -- see _approvals_supported.
         """
+        iid = _require_native_id(identity)
         if self._approvals_supported is False:
             return []
 
         client = self._get_client()
-        iid = _require_native_id(identity)
         try:
             approvals = await client.get_approvals(repo_ref.namespace, iid)
         except httpx.HTTPStatusError as exc:
