@@ -297,6 +297,40 @@ class TestGitLabWebhook:
         assert len(published) == 1
         assert published[0].change_request is None
 
+    def test_ignored_event_returns_delivery_uuid_for_correlation(self, client, monkeypatch):
+        """When parse_webhook drops the event as unmanaged, the response still
+        carries GitLab's delivery UUID so the discarded event can be correlated
+        in logs rather than returning an empty event_id."""
+        from forge.integrations.source_control.errors import NotFoundError
+
+        monkeypatch.setenv("ACME_GITLAB_WEBHOOK_SECRET", "correct-secret")
+        resolved = _resolved_gitlab_connection()
+
+        with (
+            patch(
+                "forge.integrations.source_control.registry.Registry.resolve",
+                return_value=resolved,
+            ),
+            patch(
+                "forge.integrations.source_control.gitlab.adapter.GitLabAdapter.parse_webhook",
+                side_effect=NotFoundError("unmanaged"),
+            ),
+        ):
+            response = client.post(
+                "/api/v1/webhooks/gitlab",
+                json=_mr_opened_payload(),
+                headers={
+                    "X-Gitlab-Event": "Merge Request Hook",
+                    "X-Gitlab-Token": "correct-secret",
+                    "X-Gitlab-Event-UUID": "delivery-abc-123",
+                },
+            )
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "ignored"
+        assert body["event_id"] == "delivery-abc-123"
+
     def test_unmanaged_repository_is_rejected_not_acked(self, client):
         """No connection is configured for this namespace and GitLab has no
         implicit default (unlike GitHub, which acks-and-drops unmanaged repos

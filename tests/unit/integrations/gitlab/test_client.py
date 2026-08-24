@@ -70,6 +70,66 @@ async def test_close_closes_the_http_client():
     mock_aclose.assert_awaited_once()
 
 
+class TestGetFork:
+    @pytest.mark.asyncio
+    async def test_matches_fork_by_owning_namespace_not_upstream_path(self):
+        """GitLab appends a suffix (e.g. repo1) when a same-named project already
+        exists under the fork owner, so the fork is found by its namespace, not
+        by assuming it kept the upstream project's path."""
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = [
+            {"id": 1, "path": "repo1", "namespace": {"full_path": "someone-else"}},
+            {"id": 2, "path": "repo1", "namespace": {"full_path": "forge-bot"}},
+        ]
+        client._client.get = AsyncMock(return_value=response)
+
+        fork = await client.get_fork("upstream/repo", "forge-bot")
+
+        client._client.get.assert_awaited_once_with(
+            "/projects/upstream%2Frepo/forks", params={"page": 1, "per_page": 100}
+        )
+        assert fork["id"] == 2
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_fork_under_owner(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = [
+            {"id": 1, "path": "repo", "namespace": {"full_path": "someone-else"}},
+        ]
+        client._client.get = AsyncMock(return_value=response)
+
+        assert await client.get_fork("upstream/repo", "forge-bot") is None
+
+    @pytest.mark.asyncio
+    async def test_paginates_until_short_page(self):
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+
+        page1 = MagicMock()
+        page1.raise_for_status = MagicMock()
+        page1.json.return_value = [
+            {"id": i, "namespace": {"full_path": "someone-else"}} for i in range(100)
+        ]
+        page2 = MagicMock()
+        page2.raise_for_status = MagicMock()
+        page2.json.return_value = [{"id": 999, "namespace": {"full_path": "forge-bot"}}]
+        client._client.get = AsyncMock(side_effect=[page1, page2])
+
+        fork = await client.get_fork("upstream/repo", "forge-bot")
+
+        assert fork["id"] == 999
+        assert client._client.get.await_count == 2
+
+
 class TestGetOrCreateFork:
     @pytest.mark.asyncio
     async def test_returns_existing_fork_without_creating(self):

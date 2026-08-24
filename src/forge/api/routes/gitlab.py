@@ -2,7 +2,6 @@
 
 import json
 import logging
-import re
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
@@ -16,6 +15,7 @@ from forge.integrations.source_control.contracts import NormalizedEvent, Provide
 from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
 from forge.integrations.source_control.gitlab.adapter import GitLabAdapter
 from forge.integrations.source_control.registry import get_registry, resolve_env_value
+from forge.integrations.source_control.ticket_keys import extract_ticket_key
 from forge.observability.config import get_tracer
 from forge.observability.context import get_correlation_id
 from forge.queue.producer import QueueProducer
@@ -25,31 +25,24 @@ tracer = get_tracer("forge.api.gitlab")
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["gitlab"])
 
-TICKET_PATTERN = re.compile(r"([A-Z][A-Z0-9]+-\d+)", re.IGNORECASE)
-
 
 def _extract_ticket_key(event: NormalizedEvent) -> str:
-    """Extract a Jira ticket key from a NormalizedEvent (mirrors the GitHub
-    route's helper: prefer the change request's title/branch, falling back to
-    the raw payload's `ref` for push events -- GitLab's push webhook payload
-    carries a top-level `ref` (e.g. "refs/heads/forge/AISOS-123"), directly
-    analogous to GitHub's, and GitLabAdapter.parse_webhook doesn't populate
-    change_request for push events -- and to `object_attributes.ref` for
-    pipeline events on a plain branch with no MR attached, which carry the
-    branch there instead of at the top level)."""
-    if event.change_request is not None:
-        for text in (event.change_request.title, event.change_request.source_branch):
-            match = TICKET_PATTERN.search(text or "")
-            if match:
-                return match.group(1).upper()
-    for text in (
-        event.raw.get("ref", ""),
-        event.raw.get("object_attributes", {}).get("ref", ""),
-    ):
-        match = TICKET_PATTERN.search(str(text))
-        if match:
-            return match.group(1).upper()
-    return ""
+    """Extract a Jira ticket key from a NormalizedEvent.
+
+    Falls back to the raw payload's `ref` for push events -- GitLab's push
+    webhook payload carries a top-level `ref` (e.g. "refs/heads/forge/AISOS-123"),
+    directly analogous to GitHub's, and GitLabAdapter.parse_webhook doesn't
+    populate change_request for push events -- and to `object_attributes.ref`
+    for pipeline events on a plain branch with no MR attached, which carry the
+    branch there instead of at the top level.
+    """
+    return extract_ticket_key(
+        event,
+        fallback_branch_sources=(
+            event.raw.get("ref", ""),
+            event.raw.get("object_attributes", {}).get("ref", ""),
+        ),
+    )
 
 
 @router.post(
@@ -64,6 +57,7 @@ async def receive_gitlab_webhook(
     request: Request,
     x_gitlab_event: str = Header(default=""),
     x_gitlab_token: str = Header(default=""),
+    x_gitlab_event_uuid: str = Header(default=""),
 ) -> dict[str, str]:
     """Receive and queue GitLab webhook events.
 
@@ -122,8 +116,11 @@ async def receive_gitlab_webhook(
         except (NotFoundError, ProviderConfigError):
             span.set_attribute("forge.skipped", True)
             span.set_attribute("forge.skip_reason", "unmanaged_repository")
+            span.set_attribute("forge.event_id", x_gitlab_event_uuid)
             record_webhook_received(source="gitlab", event_type=x_gitlab_event)
-            return {"status": "ignored", "event_id": ""}
+            # Return GitLab's delivery UUID (the identifier shown in its webhook
+            # delivery log) so a discarded event stays correlatable.
+            return {"status": "ignored", "event_id": x_gitlab_event_uuid}
 
         ticket_key = _extract_ticket_key(event)
         span.set_attribute("forge.ticket_key", ticket_key)

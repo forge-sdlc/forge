@@ -3,7 +3,6 @@
 import hashlib
 import json
 import logging
-import re
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
@@ -18,6 +17,7 @@ from forge.integrations.source_control.contracts import Connection, NormalizedEv
 from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
 from forge.integrations.source_control.github.adapter import GitHubAdapter
 from forge.integrations.source_control.registry import get_registry, resolve_env_value
+from forge.integrations.source_control.ticket_keys import extract_ticket_key
 from forge.observability.config import get_tracer
 from forge.observability.context import get_correlation_id
 from forge.queue.producer import QueueProducer
@@ -35,34 +35,24 @@ tracer = get_tracer("forge.api.github")
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["github"])
 
-TICKET_PATTERN = re.compile(r"([A-Z][A-Z0-9]+-\d+)", re.IGNORECASE)
-
 
 def _extract_ticket_key(event: NormalizedEvent) -> str:
     """Extract a Jira ticket key from a NormalizedEvent.
 
-    Prefers the change request's title/branch when one is present (PR, review,
-    and check events carrying a pull_requests stub). Falls back to whatever
-    branch name the raw payload carries when there is no change request:
-    a push event's ref, or a check_suite/check_run event that fired before
-    GitHub attached a pull_requests stub to it (both still carry head_branch).
+    Falls back to whatever branch name the raw payload carries when there is no
+    change request: a push event's ref, or a check_suite/check_run event that
+    fired before GitHub attached a pull_requests stub to it (both still carry
+    head_branch).
     """
-    if event.change_request is not None:
-        for text in (event.change_request.title, event.change_request.source_branch):
-            match = TICKET_PATTERN.search(text or "")
-            if match:
-                return match.group(1).upper()
     raw = event.raw
-    branch_sources = (
-        raw.get("ref", ""),
-        raw.get("check_suite", {}).get("head_branch", ""),
-        raw.get("check_run", {}).get("check_suite", {}).get("head_branch", ""),
+    return extract_ticket_key(
+        event,
+        fallback_branch_sources=(
+            raw.get("ref", ""),
+            raw.get("check_suite", {}).get("head_branch", ""),
+            raw.get("check_run", {}).get("check_suite", {}).get("head_branch", ""),
+        ),
     )
-    for text in branch_sources:
-        match = TICKET_PATTERN.search(str(text))
-        if match:
-            return match.group(1).upper()
-    return ""
 
 
 @router.post(

@@ -79,13 +79,14 @@ async def _fetch_pr_review_comments(
     Returns:
         Formatted markdown string of all review feedback.
     """
-    try:
-        repo_ref, adapter = get_adapter(current_repo)
-        identity = identity_for(repo_ref, pr_number)
-        reviews = await adapter.get_review_thread_comments(repo_ref, identity)
-    except Exception as e:
-        logger.warning(f"Could not fetch inline review comments: {e}")
-        reviews = []
+    repo_ref, adapter = get_adapter(current_repo)
+    identity = identity_for(repo_ref, pr_number)
+    # Do not swallow a fetch failure and proceed with zero thread context: a
+    # transient API error would make the analysis agent act as if the reviewer
+    # left only a summary and silently drop every inline comment. Let it
+    # propagate so implement_review's handler retries the node instead. A clean
+    # fetch that finds no unresolved threads returns [] (not an exception).
+    reviews = await adapter.get_review_thread_comments(repo_ref, identity)
 
     processed_thread_ids = processed_thread_ids or set()
     threads: list[dict[str, Any]] = [

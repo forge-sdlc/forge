@@ -471,6 +471,25 @@ class TestThreadAwareReviewHandling:
         assert "new-thread" in result
 
     @pytest.mark.asyncio
+    async def test_fetch_failure_propagates_instead_of_dropping_threads(self):
+        """A transient fetch failure must not be swallowed into empty context:
+        it should propagate so implement_review retries rather than acting as if
+        the reviewer left only a summary."""
+        from forge.workflow.nodes.implement_review import _fetch_pr_review_comments
+
+        adapter = AsyncMock()
+        adapter.get_review_thread_comments = AsyncMock(side_effect=RuntimeError("503"))
+
+        with (
+            patch(
+                "forge.workflow.nodes.implement_review.get_adapter",
+                return_value=(_repo_ref(), adapter),
+            ),
+            pytest.raises(RuntimeError, match="503"),
+        ):
+            await _fetch_pr_review_comments("org/repo", 7, "summary body")
+
+    @pytest.mark.asyncio
     async def test_legacy_objections_file_still_pauses_for_response(self, tmp_path):
         from forge.workflow.nodes.implement_review import implement_review
 

@@ -66,15 +66,31 @@ class GitLabClient:
         return response.json()
 
     async def get_fork(self, namespace: str, fork_owner: str) -> dict[str, Any] | None:
-        project_path = namespace.rsplit("/", 1)[-1]
+        """Return ``fork_owner``'s fork of ``namespace``, or None if none exists.
+
+        Looks the fork up through the upstream project's fork list and matches
+        on the owning namespace rather than assuming the fork kept the upstream
+        project's path. GitLab appends a numeric suffix (e.g. ``repo1``) when a
+        same-named project already exists under ``fork_owner`` at fork time, so
+        a path-based lookup would 404 and make get_or_create_fork create a
+        duplicate fork.
+        """
         client = await self._get_client()
-        response = await client.get(
-            f"/projects/{encode_project_id(f'{fork_owner}/{project_path}')}"
-        )
-        if response.status_code == 404:
-            return None
-        response.raise_for_status()
-        return response.json()
+        per_page = 100
+        page = 1
+        while True:
+            response = await client.get(
+                f"/projects/{encode_project_id(namespace)}/forks",
+                params={"page": page, "per_page": per_page},
+            )
+            response.raise_for_status()
+            forks = response.json()
+            for fork in forks:
+                if fork.get("namespace", {}).get("full_path") == fork_owner:
+                    return fork
+            if len(forks) < per_page:
+                return None
+            page += 1
 
     async def create_fork(self, namespace: str) -> dict[str, Any]:
         client = await self._get_client()
