@@ -241,7 +241,7 @@ class GitLabAdapter:
                 f"{target.head_ref!r} in {repo_ref.namespace}, but it could not be located "
                 "via the merge requests list endpoint."
             ) from exc
-        return self._map_change_request(result, repo_ref=repo_ref)
+        return self._map_change_request(result, repo_ref=repo_ref, created=True)
 
     @_translate
     async def get_change_request(
@@ -418,7 +418,7 @@ class GitLabAdapter:
         *,
         repo_ref: RepositoryRef | None = None,
         identity: ChangeRequestIdentity | None = None,
-        created: bool = True,
+        created: bool = False,
     ) -> ChangeRequest:
         """Map a GitLab merge request attrs dict into a ChangeRequest.
 
