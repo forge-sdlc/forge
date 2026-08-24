@@ -3,7 +3,7 @@
 import os
 import tomllib
 
-import yaml
+import yaml  # type: ignore
 
 from forge import __version__
 from forge.observability.config import configure_tracing
