@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "forge"
-version = "0.1.0"
+version = "1.0.0"
 description = "AI-Integrated SDLC Orchestrator"
 readme = "README.md"
 license = "MIT"

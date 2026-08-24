@@ -729,7 +729,7 @@ To print the currently installed Forge package version, run:
 uv run forge version
 ```
 
-This will print the package version in the format `Forge v<version>` (e.g., `Forge v0.1.0`) and exit with a success status code.
+This will print the package version in the format `Forge v<version>` (e.g., `Forge v1.0.0`) and exit with a success status code.
 
 ### Worker logs
 
