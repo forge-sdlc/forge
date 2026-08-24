@@ -933,6 +933,112 @@ class TestGetReviewThreads:
 
         assert reviews == []
 
+    @pytest.mark.asyncio
+    async def test_degrades_to_empty_list_on_confirmed_404_and_caches(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        approvals_response = httpx.Response(
+            404,
+            request=httpx.Request(
+                "GET",
+                "https://gitlab.com/api/v4/projects/test%2Frepo/merge_requests/42/approvals",
+            ),
+        )
+        mock_gitlab_http_client.get_approvals = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "not found", request=approvals_response.request, response=approvals_response
+            )
+        )
+        mock_gitlab_http_client.get_merge_request = AsyncMock(return_value={"iid": 42})
+
+        reviews = await gitlab_adapter_with_mock_client.get_review_threads(
+            gitlab_repo_ref, identity
+        )
+        assert reviews == []
+        mock_gitlab_http_client.get_merge_request.assert_awaited_once_with("test/repo", 42)
+
+        mock_gitlab_http_client.get_approvals.reset_mock()
+        reviews_again = await gitlab_adapter_with_mock_client.get_review_threads(
+            gitlab_repo_ref, identity
+        )
+        assert reviews_again == []
+        mock_gitlab_http_client.get_approvals.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_missing_mr_404_still_raises_and_does_not_poison_other_mrs(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity_missing = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=1
+        )
+        identity_real = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=2
+        )
+
+        approvals_response = httpx.Response(
+            404,
+            request=httpx.Request(
+                "GET",
+                "https://gitlab.com/api/v4/projects/test%2Frepo/merge_requests/1/approvals",
+            ),
+        )
+        mr_response = httpx.Response(
+            404,
+            request=httpx.Request(
+                "GET", "https://gitlab.com/api/v4/projects/test%2Frepo/merge_requests/1"
+            ),
+        )
+        mock_gitlab_http_client.get_approvals = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "not found", request=approvals_response.request, response=approvals_response
+            )
+        )
+        mock_gitlab_http_client.get_merge_request = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "not found", request=mr_response.request, response=mr_response
+            )
+        )
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await gitlab_adapter_with_mock_client.get_review_threads(
+                gitlab_repo_ref, identity_missing
+            )
+
+        mock_gitlab_http_client.get_approvals = AsyncMock(
+            return_value={"approved_by": [{"user": {"id": 9, "username": "bob"}}]}
+        )
+        reviews = await gitlab_adapter_with_mock_client.get_review_threads(
+            gitlab_repo_ref, identity_real
+        )
+        assert len(reviews) == 1
+        assert reviews[0].author == "bob"
+
+    @pytest.mark.asyncio
+    async def test_non_404_error_on_approvals_still_raises(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=42
+        )
+        error_response = httpx.Response(
+            500,
+            request=httpx.Request(
+                "GET",
+                "https://gitlab.com/api/v4/projects/test%2Frepo/merge_requests/42/approvals",
+            ),
+        )
+        mock_gitlab_http_client.get_approvals = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "server error", request=error_response.request, response=error_response
+            )
+        )
+
+        with pytest.raises(TransientProviderError):
+            await gitlab_adapter_with_mock_client.get_review_threads(gitlab_repo_ref, identity)
+
 
 class TestGetReviewThreadComments:
     @pytest.mark.asyncio

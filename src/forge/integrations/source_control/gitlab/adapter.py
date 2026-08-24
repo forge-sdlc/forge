@@ -110,6 +110,11 @@ class GitLabAdapter:
         self._credential = credential
         self._webhook_secret = webhook_secret
         self._client: GitLabClient | None = client
+        # Three-valued: unknown (None) / known-supported (True) /
+        # known-unsupported (False). Cached per adapter instance, which
+        # Registry reuses across every project/MR resolved through this
+        # connection -- see Registry._adapter_cache.
+        self._approvals_supported: bool | None = None
 
     def _get_client(self) -> GitLabClient:
         if self._client is None:
@@ -512,9 +517,40 @@ class GitLabAdapter:
         """GitLab has no submission-level "review" object: this maps the
         Approvals API, so only APPROVED entries are ever returned (or an
         empty list) -- there is no GitLab analog to CHANGES_REQUESTED,
-        COMMENTED, PENDING, or DISMISSED at this level."""
+        COMMENTED, PENDING, or DISMISSED at this level.
+
+        Degrades to [] once the Approvals API is confirmed absent on this
+        connection (self-managed instances without it, e.g. below
+        Premium/Ultimate) rather than raising -- see _approvals_supported.
+        """
+        if self._approvals_supported is False:
+            return []
+
         client = self._get_client()
-        approvals = await client.get_approvals(repo_ref.namespace, _require_native_id(identity))
+        iid = _require_native_id(identity)
+        try:
+            approvals = await client.get_approvals(repo_ref.namespace, iid)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise
+            try:
+                await client.get_merge_request(repo_ref.namespace, iid)
+            except httpx.HTTPStatusError as confirm_exc:
+                if confirm_exc.response.status_code == 404:
+                    # The MR itself doesn't exist -- an ordinary not-found,
+                    # not a capability gap. Leave _approvals_supported
+                    # untouched and re-raise the original 404.
+                    raise exc from confirm_exc
+                raise
+            self._approvals_supported = False
+            logger.info(
+                "GitLab connection %r has no Approvals API support; "
+                "get_review_threads will return [] for it going forward.",
+                self._connection.name,
+            )
+            return []
+
+        self._approvals_supported = True
         return [
             Review(
                 id=str(entry["user"]["id"]),
