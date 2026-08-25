@@ -17,6 +17,7 @@ from typing import Any
 
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.middleware.filesystem import FilesystemPermission
 from langchain_anthropic import ChatAnthropic
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -31,6 +32,14 @@ except ImportError:
     HAS_MCP = False
 
 from forge.config import Settings, get_settings
+from forge.integrations.agents.security import (
+    PROHIBITED_BUILTIN_TOOLS,
+    SAFE_BUILTIN_TOOLS,
+    HostToolAllowlistMiddleware,
+    operational_subprocess_env,
+    parse_host_tools,
+    validate_agent_root,
+)
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
 from forge.integrations.langfuse.fields import resolve_trace_fields
 from forge.model_policy import resolve_model_target_for_project
@@ -56,7 +65,7 @@ except ImportError:
     HAS_ANTHROPIC_VERTEX = False
 
 # Project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+PROJECT_ROOT = Path(os.environ.get("FORGE_PROJECT_ROOT", Path.cwd())).resolve()
 
 # Default MCP servers config file locations (checked in order)
 MCP_CONFIG_PATHS = [
@@ -269,9 +278,11 @@ class ForgeAgent:
         Resolves per-project skill overrides under settings.skills_dir, with
         fallback to skills/default/ for any skill not overridden by the project.
         """
-        skills_dir = PROJECT_ROOT / self.settings.skills_dir.rstrip("/")
+        root_dir = self._get_root_dir()
         paths = resolve_skill_paths(
-            ticket_key or "", skills_dir, skills_install_dir=self.settings.skills_install_dir
+            ticket_key or "",
+            root_dir / "committed-skills",
+            skills_install_dir=root_dir / "skills",
         )
         logger.debug(f"Using skill paths: {paths}")
         return paths
@@ -286,12 +297,7 @@ class ForgeAgent:
             logger.debug("Agent tools disabled via config")
             return []
 
-        allowed = self.settings.agent_allowed_tools.strip()
-        if allowed == "*":
-            logger.debug("All agent tools allowed")
-            return None  # None means all tools
-
-        tools = [t.strip() for t in allowed.split(",") if t.strip()]
+        tools = sorted(parse_host_tools(self.settings.agent_allowed_tools))
         logger.debug(f"Allowed agent tools: {tools}")
         return tools
 
@@ -301,35 +307,11 @@ class ForgeAgent:
         Returns:
             Path to root directory.
         """
-        if self.settings.agent_working_directory:
-            return Path(self.settings.agent_working_directory)
-        return PROJECT_ROOT
-
-    # Write operation patterns to filter out in read-only mode
-    WRITE_TOOL_PATTERNS = (
-        # Prefixes
-        "create",
-        "add",
-        "update",
-        "delete",
-        "remove",
-        "push",
-        "merge",
-        "fork",
-        "assign",
-        "edit",
-        "transition",
-        "close",
-        "reopen",
-        "comment",
-        "reply",
-        "approve",
-        "reject",
-        "request",
-        "run",
-    )
-    # Suffixes that indicate write operations
-    WRITE_TOOL_SUFFIXES = ("_write",)
+        return validate_agent_root(
+            Path(self.settings.agent_root_dir),
+            PROJECT_ROOT,
+            getattr(self.settings, "workspace_base_dir", ""),
+        )
 
     def _wrap_tool_with_error_handling(self, tool: Any) -> Any:
         """Wrap a tool to catch errors and return them as messages.
@@ -391,7 +373,7 @@ class ForgeAgent:
             logger.warning(f"Could not wrap tool {tool_name} - no func or coroutine found")
             return tool
 
-    async def _load_mcp_tools(self) -> list[Any]:
+    async def _load_mcp_tools(self, *, discovery: bool = False) -> list[Any]:
         """Load tools from configured MCP servers.
 
         Returns:
@@ -412,12 +394,30 @@ class ForgeAgent:
         # Load each server independently so a single failing server does not
         # prevent tools from the other servers from loading.
         all_tools: list[Any] = []
+        allowed = {
+            item.strip()
+            for item in self.settings.agent_mcp_allowed_tools.split(",")
+            if item.strip()
+        }
+        collisions = {
+            identifier
+            for identifier in allowed
+            if identifier.rpartition(":")[2] in SAFE_BUILTIN_TOOLS | PROHIBITED_BUILTIN_TOOLS
+        }
+        if collisions:
+            names = ", ".join(sorted(collisions))
+            raise ValueError(f"MCP tool names collide with prohibited host tools: {names}")
         for server_name, server_config in mcp_config.items():
             try:
                 client = MultiServerMCPClient({server_name: server_config})
                 server_tools = await client.get_tools()
                 logger.info(f"Loaded {len(server_tools)} tools from MCP server '{server_name}'")
-                all_tools.extend(server_tools)
+                for tool in server_tools:
+                    exact_name = f"{server_name}:{tool.name}"
+                    if discovery:
+                        all_tools.append((exact_name, tool))
+                    elif exact_name in allowed:
+                        all_tools.append(tool)
             except Exception as e:
                 logger.warning(
                     f"Failed to load MCP tools from server '{server_name}' "
@@ -430,54 +430,18 @@ class ForgeAgent:
 
         logger.info(f"Loaded {len(all_tools)} tools from MCP servers")
 
-        # Filter to read-only tools if configured
-        if self.settings.agent_mcp_read_only:
-            all_tools = self._filter_read_only_tools(all_tools)
-
         # Wrap tools with error handling to prevent crashes
+        if discovery:
+            return all_tools
         all_tools = [self._wrap_tool_with_error_handling(t) for t in all_tools]
         logger.debug(f"Wrapped {len(all_tools)} MCP tools with error handling")
 
         return all_tools
 
-    def _filter_read_only_tools(self, tools: list[Any]) -> list[Any]:
-        """Filter tools to only read-only operations.
-
-        Args:
-            tools: List of MCP tools.
-
-        Returns:
-            Filtered list with write operations removed.
-        """
-        read_only_tools = []
-        excluded_count = 0
-
-        for tool in tools:
-            name = tool.name if hasattr(tool, "name") else str(tool)
-            name_lower = name.lower()
-
-            # Check if tool name matches write patterns
-            is_write_tool = (
-                # Starts with or contains write prefix
-                any(
-                    name_lower.startswith(prefix) or f"_{prefix}" in name_lower
-                    for prefix in self.WRITE_TOOL_PATTERNS
-                )
-                # Or ends with write suffix
-                or any(name_lower.endswith(suffix) for suffix in self.WRITE_TOOL_SUFFIXES)
-            )
-
-            if is_write_tool:
-                excluded_count += 1
-                logger.debug(f"Excluding write tool: {name}")
-            else:
-                read_only_tools.append(tool)
-
-        logger.info(
-            f"MCP read-only mode: kept {len(read_only_tools)} tools, "
-            f"excluded {excluded_count} write tools"
-        )
-        return read_only_tools
+    async def discover_mcp_tools(self) -> list[str]:
+        """List exact MCP tool identifiers without granting agent access."""
+        discovered = await self._load_mcp_tools(discovery=True)
+        return sorted(name for name, _tool in discovered)
 
     async def _create_agent_async(
         self,
@@ -498,12 +462,15 @@ class ForgeAgent:
         """
         root_dir = self._get_root_dir()
         skill_paths = self._get_skill_paths(ticket_key)
+        builtin_tools = parse_host_tools(
+            self.settings.agent_allowed_tools, enabled=self.settings.agent_enable_tools
+        )
 
         # Log configuration for visibility
         logger.info(f"Agent config: root_dir={root_dir}, skills={skill_paths}")
 
         # Create filesystem backend
-        backend = FilesystemBackend(root_dir=str(root_dir))
+        backend = FilesystemBackend(root_dir=str(root_dir), virtual_mode=True)
 
         # Create the model (supports both direct API and Vertex AI)
         model = self._create_model(model_target=model_target)
@@ -513,8 +480,7 @@ class ForgeAgent:
         if not include_tools:
             logger.info("Agent tools: disabled (include_tools=False)")
         elif mcp_tools:
-            mode = "read-only" if self.settings.agent_mcp_read_only else "full access"
-            logger.info(f"Agent tools: {len(mcp_tools)} MCP tools ({mode})")
+            logger.info("Agent tools: %d exactly allowlisted MCP tools", len(mcp_tools))
         else:
             logger.info("Agent tools: none (no MCP tools loaded)")
 
@@ -528,6 +494,10 @@ class ForgeAgent:
             system_prompt=system_prompt,
             checkpointer=self._checkpointer,
             tools=mcp_tools if mcp_tools else None,
+            middleware=[
+                HostToolAllowlistMiddleware(set(builtin_tools) | {tool.name for tool in mcp_tools})
+            ],
+            permissions=[FilesystemPermission(operations=["write"], paths=["/**"], mode="deny")],
         )
 
         return agent
@@ -922,7 +892,7 @@ class ForgeAgent:
         if enabled_setting == "*":
             # All servers enabled
             logger.info(f"MCP enabled with all servers: {list(all_servers.keys())}")
-            return all_servers
+            return self._sanitize_mcp_subprocesses(all_servers)
 
         # Filter to only enabled servers
         enabled_list = [s.strip() for s in enabled_setting.split(",") if s.strip()]
@@ -931,7 +901,18 @@ class ForgeAgent:
         }
 
         logger.info(f"MCP enabled with servers: {list(filtered_servers.keys())}")
-        return filtered_servers
+        return self._sanitize_mcp_subprocesses(filtered_servers)
+
+    @staticmethod
+    def _sanitize_mcp_subprocesses(servers: dict[str, Any]) -> dict[str, Any]:
+        """Prevent local MCP commands from inheriting Forge's process environment."""
+        sanitized: dict[str, Any] = {}
+        for name, original in servers.items():
+            config = dict(original)
+            if config.get("transport") == "stdio" or "command" in config:
+                config["env"] = operational_subprocess_env(config.get("env", {}))
+            sanitized[name] = config
+        return sanitized
 
     def _parse_mcp_config(self, config_path: Path) -> dict[str, Any]:
         """Parse MCP config file and expand environment variables.
@@ -1326,7 +1307,7 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
                 "ticket_key": context.get("ticket_key", ""),
             },
             trace_context=_forward_trace_fields(context),
-            # Q&A gets read-only MCP tools for lookups (filtered by agent_mcp_read_only)
+            # Q&A gets only the exactly allowlisted MCP tools for lookups.
         )
 
         logger.info(f"Generated answer ({len(result)} chars)")

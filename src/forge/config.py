@@ -388,8 +388,8 @@ class Settings(BaseSettings):
         description="Enable agent tools (Read, Glob, Grep, WebSearch)",
     )
     agent_allowed_tools: str = Field(
-        default="*",
-        description="Allowed agent tools: '*' for all, or comma-separated list",
+        default="ls,read_file,glob,grep",
+        description="Exact allowlist of safe host agent built-in tools",
     )
     agent_enable_mcp: bool = Field(
         default=True,
@@ -399,9 +399,9 @@ class Settings(BaseSettings):
         default="*",
         description="MCP servers to enable: '*' for all from config, or comma-separated list",
     )
-    agent_mcp_read_only: bool = Field(
-        default=True,
-        description="Restrict MCP tools to read-only operations (no create/update/delete)",
+    agent_mcp_allowed_tools: str = Field(
+        default="",
+        description="Exact MCP tool allowlist using server:tool names (empty denies all)",
     )
     agent_mcp_config_path: str = Field(
         default="",
@@ -410,6 +410,10 @@ class Settings(BaseSettings):
     agent_working_directory: str = Field(
         default="",
         description="Working directory for agent file operations (empty = current dir)",
+    )
+    agent_root_dir: str = Field(
+        default=".forge/agent",
+        description="Isolated root exposed to host agents",
     )
     skills_dir: str = Field(
         default="skills/",
@@ -422,8 +426,13 @@ class Settings(BaseSettings):
 
     @property
     def skills_install_dir(self) -> Path:
-        """Directory for runtime-fetched skill packages."""
-        return Path(self.skills_dir).resolve()
+        """Isolated runtime directory for installed skill packages."""
+        return Path(self.agent_root_dir).resolve() / "skills"
+
+    @property
+    def committed_skills_dir(self) -> Path:
+        """Isolated snapshot of committed default and project skills."""
+        return Path(self.agent_root_dir).resolve() / "committed-skills"
 
     container_langchain_verbose: bool = Field(
         default=False,

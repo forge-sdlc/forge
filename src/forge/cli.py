@@ -1395,6 +1395,16 @@ async def cmd_version(_args: argparse.Namespace) -> int:
     return 0
 
 
+async def cmd_mcp_tools(_args: argparse.Namespace) -> int:
+    """Discover configured MCP tools without enabling them for an agent."""
+    from forge.integrations.agents.agent import ForgeAgent
+
+    tools = await ForgeAgent().discover_mcp_tools()
+    for tool in tools:
+        print(tool)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -1520,6 +1530,11 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser(
         "version",
         help="Print the installed Forge package version",
+    )
+
+    subparsers.add_parser(
+        "mcp-tools",
+        help="Discover exact MCP server:tool names without enabling them",
     )
 
     # test-skill subparser group
@@ -1917,6 +1932,7 @@ Examples:
         "logs": cmd_logs,
         "smoke-test": cmd_smoke_test,
         "version": cmd_version,
+        "mcp-tools": cmd_mcp_tools,
         "project-setup": cmd_project_setup,
         "get-config": cmd_get_config,
     }

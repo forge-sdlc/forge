@@ -104,6 +104,9 @@ def install_skill_mapping(
     installed: list[str] = []
 
     for target_name, source_subdir in mapping.items():
+        target_path = Path(target_name)
+        if target_name in {"", ".", ".."} or target_path.name != target_name:
+            raise ValueError(f"Unsafe skill target name: {target_name!r}")
         skill_source = source_dir / source_subdir
 
         if not skill_source.exists() or not skill_source.is_dir():
@@ -113,6 +116,11 @@ def install_skill_mapping(
                 skill_source,
             )
             continue
+
+        try:
+            skill_source.resolve(strict=True).relative_to(source_dir.resolve(strict=True))
+        except ValueError as exc:
+            raise ValueError(f"Skill source escapes cloned repository: {source_subdir!r}") from exc
 
         skill_marker = skill_source / _SKILL_MARKER
         if not skill_marker.exists():
@@ -139,6 +147,16 @@ def install_skill_mapping(
 
 def _copy_dir(src: Path, dest: Path) -> None:
     """Copy *src* to *dest*, removing *dest* first if it already exists."""
+    resolved_source = src.resolve(strict=True)
+    if src.is_symlink():
+        raise ValueError(f"Skill source must not be a symlink: {src}")
+    for entry in src.rglob("*"):
+        if entry.is_symlink():
+            raise ValueError(f"Symlinks are not allowed in skills: {entry}")
+        try:
+            entry.resolve(strict=True).relative_to(resolved_source)
+        except ValueError as exc:
+            raise ValueError(f"Skill path escapes its source: {entry}") from exc
     if dest.exists():
         shutil.rmtree(dest)
     shutil.copytree(src, dest)

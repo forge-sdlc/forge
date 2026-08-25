@@ -25,6 +25,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=INFO
+      - AGENT_ROOT_DIR=/var/lib/forge/agent
     env_file:
       - .env
     depends_on:

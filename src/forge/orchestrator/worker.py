@@ -18,6 +18,7 @@ from forge.api.routes.metrics import (
     record_workflow_started,
 )
 from forge.config import get_settings
+from forge.integrations.agents.security import initialize_agent_skills, validate_agent_root
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.github.comment_signature import is_self_comment, resolve_bot_login
 from forge.integrations.jira.client import JiraClient
@@ -2178,6 +2179,17 @@ class OrchestratorWorker:
         from forge.utils.logging import log_startup_banner
 
         log_startup_banner("Queue Worker")
+
+        project_root = Path(os.environ.get("FORGE_PROJECT_ROOT", Path.cwd())).resolve()
+        agent_root = validate_agent_root(
+            Path(self.settings.agent_root_dir),
+            project_root,
+            self.settings.workspace_base_dir or "",
+        )
+        committed_skills = initialize_agent_skills(
+            agent_root, project_root / self.settings.skills_dir
+        )
+        logger.info("Host agent skills initialized at %s", committed_skills)
 
         # Start Prometheus metrics HTTP server
         if self.settings.worker_metrics_enabled:
