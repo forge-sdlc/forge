@@ -449,6 +449,11 @@ class Settings(BaseSettings):
         """Isolated runtime directory for installed skill packages."""
         return Path(self.agent_root_dir).resolve() / "skills"
 
+    @property
+    def committed_skills_dir(self) -> Path:
+        """Isolated snapshot of committed default and project skills."""
+        return Path(self.agent_root_dir).resolve() / "committed-skills"
+
     container_langchain_verbose: bool = Field(
         default=False,
         description="Enable LangChain verbose/debug logging in container",

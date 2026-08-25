@@ -414,8 +414,7 @@ class ForgeAgent:
         collisions = {
             identifier
             for identifier in allowed
-            if identifier.rpartition(":")[2]
-            in SAFE_BUILTIN_TOOLS | PROHIBITED_BUILTIN_TOOLS
+            if identifier.rpartition(":")[2] in SAFE_BUILTIN_TOOLS | PROHIBITED_BUILTIN_TOOLS
         }
         if collisions:
             names = ", ".join(sorted(collisions))
