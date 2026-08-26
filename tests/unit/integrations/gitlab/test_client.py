@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from forge.integrations.gitlab.client import GitLabClient
+from forge.integrations.source_control.errors import SourceControlError, TransientProviderError
 
 
 def test_default_base_url_is_gitlab_com():
@@ -173,6 +174,64 @@ class TestGetOrCreateFork:
         assert fork["import_status"] == "finished"
         assert sleeps == [2, 2]
 
+    @pytest.mark.asyncio
+    async def test_raises_when_existing_fork_import_failed(self):
+        client = GitLabClient(credential="tok")
+        client.get_fork = AsyncMock(
+            return_value={
+                "id": 7,
+                "path_with_namespace": "forge-bot/repo",
+                "import_status": "failed",
+            }
+        )
+        client.create_fork = AsyncMock()
+
+        with pytest.raises(SourceControlError, match="failed"):
+            await client.get_or_create_fork("upstream/repo", fork_owner="forge-bot")
+        client.create_fork.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_raises_when_newly_created_fork_import_fails(self, monkeypatch):
+        client = GitLabClient(credential="tok")
+        client.get_fork = AsyncMock(return_value=None)
+        client.create_fork = AsyncMock(return_value={"id": 9, "import_status": "scheduled"})
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"id": 9, "import_status": "failed"}
+        client._client.get = AsyncMock(return_value=response)
+        monkeypatch.setattr(
+            "forge.integrations.gitlab.client.asyncio.sleep",
+            AsyncMock(),
+        )
+
+        with pytest.raises(SourceControlError, match="failed to import"):
+            await client.get_or_create_fork("upstream/repo", fork_owner="forge-bot")
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_when_import_never_finishes(self, monkeypatch):
+        client = GitLabClient(credential="tok")
+        client.get_fork = AsyncMock(return_value=None)
+        client.create_fork = AsyncMock(return_value={"id": 9, "import_status": "scheduled"})
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+
+        response = MagicMock()
+        response.raise_for_status = MagicMock()
+        response.json.return_value = {"id": 9, "import_status": "started"}
+        client._client.get = AsyncMock(return_value=response)
+        monkeypatch.setattr(
+            "forge.integrations.gitlab.client.asyncio.sleep",
+            AsyncMock(),
+        )
+
+        with pytest.raises(TransientProviderError, match="not ready"):
+            await client.get_or_create_fork(
+                "upstream/repo", fork_owner="forge-bot", max_wait_seconds=2
+            )
+
 
 class TestCreateMergeRequest:
     @pytest.mark.asyncio
@@ -256,9 +315,33 @@ class TestNotesAndDiscussions:
         result = await client.get_discussions("test/repo", 42)
 
         client._client.get.assert_awaited_once_with(
-            "/projects/test%2Frepo/merge_requests/42/discussions"
+            "/projects/test%2Frepo/merge_requests/42/discussions",
+            params={"page": 1, "per_page": 100},
         )
         assert result == [{"id": "abc"}]
+
+    @pytest.mark.asyncio
+    async def test_get_discussions_paginates_past_the_first_page(self):
+        """GitLab returns at most 100 discussions per page; without pagination
+        replying to a comment or reading review threads beyond the first page
+        would silently miss them (or 404 on reply)."""
+        client = GitLabClient(credential="tok")
+        client._client = AsyncMock(spec=httpx.AsyncClient)
+        client._client.is_closed = False
+
+        page1 = MagicMock()
+        page1.raise_for_status = MagicMock()
+        page1.json.return_value = [{"id": f"d{i}"} for i in range(100)]
+        page2 = MagicMock()
+        page2.raise_for_status = MagicMock()
+        page2.json.return_value = [{"id": "d100"}]
+        client._client.get = AsyncMock(side_effect=[page1, page2])
+
+        result = await client.get_discussions("test/repo", 42)
+
+        assert len(result) == 101
+        assert result[-1] == {"id": "d100"}
+        assert client._client.get.await_count == 2
 
     @pytest.mark.asyncio
     async def test_reply_to_discussion(self):

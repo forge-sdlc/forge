@@ -115,6 +115,15 @@ class GitLabAdapter:
         # Registry reuses across every project/MR resolved through this
         # connection -- see Registry._adapter_cache.
         self._approvals_supported: bool | None = None
+        # Fork-mode MRs run their pipeline in the source (fork) project, not
+        # repo_ref.namespace (always the upstream/target project). These
+        # caches -- populated whenever an MR's attrs are seen (see
+        # _cache_source_project) -- let get_checks/get_check_logs/
+        # get_check_artifacts query the project that actually has the
+        # commit statuses/job instead of the upstream, which would never
+        # see them.
+        self._source_project_by_ref: dict[str, str] = {}
+        self._project_by_job_id: dict[int, str] = {}
 
     def _get_client(self) -> GitLabClient:
         if self._client is None:
@@ -436,6 +445,7 @@ class GitLabAdapter:
                 repository_id=repo_ref.id,
                 native_id=attrs.get("iid"),
             )
+        self._cache_source_project(attrs)
         return ChangeRequest(
             identity=identity,
             url=attrs.get("url", "") or attrs.get("web_url", ""),
@@ -448,6 +458,27 @@ class GitLabAdapter:
             draft=attrs.get("draft", attrs.get("work_in_progress", False)),
             created=created,
         )
+
+    def _cache_source_project(self, attrs: dict) -> None:
+        """Remember the project a fork-mode MR's commits actually live in.
+
+        GitLab scopes commit statuses/jobs to the project that ran the
+        pipeline -- for a fork-mode MR that's the source (fork) project,
+        never repo_ref.namespace (always the upstream/target project; see
+        get_merge_requests). Keyed by whatever ref callers look checks up
+        by: the head commit sha, and the source branch name as a fallback.
+        """
+        source_project_id = attrs.get("source_project_id")
+        target_project_id = attrs.get("target_project_id")
+        if source_project_id is None or source_project_id == target_project_id:
+            return
+        project_ref = str(source_project_id)
+        head_sha = (attrs.get("last_commit") or {}).get("id", "")
+        if head_sha:
+            self._source_project_by_ref[head_sha] = project_ref
+        source_branch = attrs.get("source_branch", "") or ""
+        if source_branch:
+            self._source_project_by_ref[source_branch] = project_ref
 
     def _map_check_status(self, status: str) -> tuple[CheckStatus, CheckConclusion]:
         table = {
@@ -609,13 +640,16 @@ class GitLabAdapter:
     @_translate
     async def get_checks(self, repo_ref: RepositoryRef, ref: str) -> list[CheckRun]:
         client = self._get_client()
-        entries = await client.get_commit_statuses(repo_ref.namespace, ref)
-        return [self._map_commit_status(entry) for entry in entries]
+        project_ref = self._source_project_by_ref.get(ref, repo_ref.namespace)
+        entries = await client.get_commit_statuses(project_ref, ref)
+        return [self._map_commit_status(entry, project_ref) for entry in entries]
 
-    def _map_commit_status(self, entry: dict) -> CheckRun:
+    def _map_commit_status(self, entry: dict, project_ref: str) -> CheckRun:
         status, conclusion = self._map_check_status(entry.get("status", ""))
         target_url = entry.get("target_url") or ""
         job_id = self._parse_job_id(target_url)
+        if job_id is not None:
+            self._project_by_job_id[job_id] = project_ref
         return CheckRun(
             name=entry.get("name", ""),
             status=status,
@@ -647,9 +681,10 @@ class GitLabAdapter:
                 "a GitLab CI job (e.g. an external CI integration's commit status)."
             )
         job_id = self._require_numeric_logs_url(check.name, check.logs_url)
+        project_ref = self._project_by_job_id.get(job_id, repo_ref.namespace)
         client = self._get_client()
         try:
-            return await client.get_job_trace(repo_ref.namespace, job_id)
+            return await client.get_job_trace(project_ref, job_id)
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 404:
                 raise NotFoundError(
@@ -665,8 +700,9 @@ class GitLabAdapter:
         if not check.logs_url:
             return []
         job_id = self._require_numeric_logs_url(check.name, check.logs_url)
+        project_ref = self._project_by_job_id.get(job_id, repo_ref.namespace)
         client = self._get_client()
-        artifact_bytes = await client.get_job_artifacts(repo_ref.namespace, job_id)
+        artifact_bytes = await client.get_job_artifacts(project_ref, job_id)
         if artifact_bytes is None:
             return []
         return [("artifacts.zip", artifact_bytes)]

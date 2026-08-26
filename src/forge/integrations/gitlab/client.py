@@ -1,13 +1,12 @@
 """GitLab REST API v4 client for merge request and repository operations."""
 
 import asyncio
-import logging
 from typing import Any
 from urllib.parse import quote
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from forge.integrations.source_control.errors import SourceControlError, TransientProviderError
 
 _DEFAULT_API_BASE_URL = "https://gitlab.com/api/v4"
 
@@ -107,6 +106,11 @@ class GitLabClient:
     ) -> dict[str, Any]:
         existing = await self.get_fork(namespace, fork_owner)
         if existing is not None:
+            if existing.get("import_status") == "failed":
+                raise SourceControlError(
+                    f"Fork {existing.get('path_with_namespace', fork_owner)} of {namespace} "
+                    "exists but its import failed; remove it in GitLab and retry."
+                )
             return existing
 
         fork = await self.create_fork(namespace)
@@ -117,11 +121,15 @@ class GitLabClient:
         client = await self._get_client()
         elapsed = 0
         while fork.get("import_status", "finished") not in (None, "finished"):
-            if elapsed >= max_wait_seconds:
-                logger.warning(
-                    "Fork %s not ready after %ss, proceeding anyway", fork_id, max_wait_seconds
+            if fork.get("import_status") == "failed":
+                raise SourceControlError(
+                    f"GitLab reported that fork {fork_id} of {namespace} failed to import."
                 )
-                return fork
+            if elapsed >= max_wait_seconds:
+                raise TransientProviderError(
+                    f"Fork {fork_id} of {namespace} was not ready after {max_wait_seconds}s "
+                    "(import still in progress)."
+                )
             await asyncio.sleep(2)
             elapsed += 2
             response = await client.get(f"/projects/{fork_id}")
@@ -213,11 +221,18 @@ class GitLabClient:
 
     async def get_discussions(self, namespace: str, iid: int) -> list[dict[str, Any]]:
         client = await self._get_client()
-        response = await client.get(
-            f"/projects/{encode_project_id(namespace)}/merge_requests/{iid}/discussions"
-        )
-        response.raise_for_status()
-        return response.json()
+        per_page = 100
+        path = f"/projects/{encode_project_id(namespace)}/merge_requests/{iid}/discussions"
+        results: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            response = await client.get(path, params={"page": page, "per_page": per_page})
+            response.raise_for_status()
+            page_results = response.json()
+            results.extend(page_results)
+            if len(page_results) < per_page:
+                return results
+            page += 1
 
     async def reply_to_discussion(
         self, namespace: str, iid: int, discussion_id: str, body: str

@@ -1268,6 +1268,82 @@ class TestGetChecks:
         assert checks[0].status == expected_status
         assert checks[0].conclusion == expected_conclusion
 
+    @pytest.mark.asyncio
+    async def test_fork_mode_queries_source_project_not_upstream(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        """A fork-mode MR runs its pipeline in the source (fork) project, not
+        repo_ref.namespace (the upstream/target project) -- querying the
+        upstream for a fork commit's statuses returns nothing and CI
+        evaluation never progresses. get_change_request must have primed the
+        source-project cache (via _map_change_request) before get_checks is
+        called, mirroring how ci_evaluator always calls them in sequence."""
+        mock_gitlab_http_client.get_merge_request = AsyncMock(
+            return_value={
+                "iid": 5,
+                "title": "T",
+                "description": "",
+                "state": "opened",
+                "source_branch": "forge/test/repo",
+                "target_branch": "main",
+                "web_url": "u",
+                "source_project_id": 200,
+                "target_project_id": 100,
+                "last_commit": {"id": "abc123"},
+            }
+        )
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=5
+        )
+        await gitlab_adapter_with_mock_client.get_change_request(gitlab_repo_ref, identity)
+
+        mock_gitlab_http_client.get_commit_statuses = AsyncMock(
+            return_value=[
+                {
+                    "name": "build",
+                    "status": "success",
+                    "target_url": "https://gitlab.com/forge-bot/repo/-/jobs/987654",
+                }
+            ]
+        )
+
+        checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
+
+        mock_gitlab_http_client.get_commit_statuses.assert_awaited_once_with("200", "abc123")
+        assert checks[0].logs_url == "987654"
+
+    @pytest.mark.asyncio
+    async def test_same_project_mr_queries_upstream(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        """Direct-mode (non-fork) MRs have matching source/target project ids
+        -- must keep querying repo_ref.namespace, not start using the numeric
+        project id for every MR."""
+        mock_gitlab_http_client.get_merge_request = AsyncMock(
+            return_value={
+                "iid": 5,
+                "title": "T",
+                "description": "",
+                "state": "opened",
+                "source_branch": "forge/test/repo",
+                "target_branch": "main",
+                "web_url": "u",
+                "source_project_id": 100,
+                "target_project_id": 100,
+                "last_commit": {"id": "def456"},
+            }
+        )
+        identity = ChangeRequestIdentity(
+            connection="test-gitlab", repository_id="test/repo", native_id=5
+        )
+        await gitlab_adapter_with_mock_client.get_change_request(gitlab_repo_ref, identity)
+
+        mock_gitlab_http_client.get_commit_statuses = AsyncMock(return_value=[])
+
+        await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "def456")
+
+        mock_gitlab_http_client.get_commit_statuses.assert_awaited_once_with("test/repo", "def456")
+
 
 class TestGetCheckLogs:
     @pytest.mark.asyncio
@@ -1343,6 +1419,32 @@ class TestGetCheckLogs:
         with pytest.raises(SCNotFoundError):
             await gitlab_adapter_with_mock_client.get_check_logs(gitlab_repo_ref, check)
 
+    @pytest.mark.asyncio
+    async def test_fork_mode_fetches_trace_from_source_project(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        """The job id in logs_url only exists in the fork project that ran
+        it -- get_checks must have recorded which project each job id came
+        from (see get_checks) so get_check_logs queries that project rather
+        than the upstream, where the job doesn't exist."""
+        mock_gitlab_http_client.get_commit_statuses = AsyncMock(
+            return_value=[
+                {
+                    "name": "build",
+                    "status": "success",
+                    "target_url": "https://gitlab.com/forge-bot/repo/-/jobs/987654",
+                }
+            ]
+        )
+        gitlab_adapter_with_mock_client._source_project_by_ref["abc123"] = "200"
+        checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
+        mock_gitlab_http_client.get_job_trace = AsyncMock(return_value="log output")
+
+        logs = await gitlab_adapter_with_mock_client.get_check_logs(gitlab_repo_ref, checks[0])
+
+        mock_gitlab_http_client.get_job_trace.assert_awaited_once_with("200", 987654)
+        assert logs == "log output"
+
 
 class TestGetCheckArtifacts:
     @pytest.mark.asyncio
@@ -1397,6 +1499,30 @@ class TestGetCheckArtifacts:
 
         with pytest.raises(SourceControlError, match="non-numeric logs_url"):
             await gitlab_adapter_with_mock_client.get_check_artifacts(gitlab_repo_ref, check)
+
+    @pytest.mark.asyncio
+    async def test_fork_mode_fetches_artifacts_from_source_project(
+        self, gitlab_adapter_with_mock_client, gitlab_repo_ref, mock_gitlab_http_client
+    ):
+        mock_gitlab_http_client.get_commit_statuses = AsyncMock(
+            return_value=[
+                {
+                    "name": "build",
+                    "status": "success",
+                    "target_url": "https://gitlab.com/forge-bot/repo/-/jobs/987654",
+                }
+            ]
+        )
+        gitlab_adapter_with_mock_client._source_project_by_ref["abc123"] = "200"
+        checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
+        mock_gitlab_http_client.get_job_artifacts = AsyncMock(return_value=b"zipbytes")
+
+        artifacts = await gitlab_adapter_with_mock_client.get_check_artifacts(
+            gitlab_repo_ref, checks[0]
+        )
+
+        mock_gitlab_http_client.get_job_artifacts.assert_awaited_once_with("200", 987654)
+        assert artifacts == [("artifacts.zip", b"zipbytes")]
 
 
 class TestGetFile:
