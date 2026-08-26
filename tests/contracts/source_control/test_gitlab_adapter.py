@@ -308,31 +308,79 @@ class TestParseWebhookMergeRequest:
         assert event.review is None
 
 
-def test_map_change_request_rejects_both_repo_ref_and_identity(
+def test_map_change_request_with_identity_preserves_identity(
     gitlab_adapter_with_mock_client: GitLabAdapter,
     gitlab_repo_ref: RepositoryRef,
 ):
-    """_map_change_request's contract is "exactly one of repo_ref or identity" --
-    passing both must raise rather than silently letting identity win."""
+    """repo_ref is always required (it namespaces the fork-project cache --
+    see test_source_project_cache_is_namespaced_per_repo), but when identity
+    is also given it wins for the returned ChangeRequest's identity rather
+    than being rebuilt from repo_ref + the MR iid."""
     identity = ChangeRequestIdentity(
         connection="test-gitlab", repository_id="test/repo", native_id=1
     )
 
-    with pytest.raises(ValueError, match="not both"):
-        gitlab_adapter_with_mock_client._map_change_request(
-            _mr_opened_payload()["object_attributes"], repo_ref=gitlab_repo_ref, identity=identity
-        )
+    change_request = gitlab_adapter_with_mock_client._map_change_request(
+        _mr_opened_payload()["object_attributes"], repo_ref=gitlab_repo_ref, identity=identity
+    )
+
+    assert change_request.identity == identity
 
 
-def test_map_change_request_rejects_neither_repo_ref_nor_identity(
+def test_map_change_request_requires_repo_ref(
     gitlab_adapter_with_mock_client: GitLabAdapter,
 ):
-    """Passing neither repo_ref nor identity must raise rather than blowing up
-    with an opaque AttributeError when the missing repo_ref is dereferenced."""
-    with pytest.raises(ValueError, match="requires either"):
-        gitlab_adapter_with_mock_client._map_change_request(
+    """repo_ref is a required keyword-only argument -- omitting it must raise
+    a clear TypeError rather than blowing up later with an opaque
+    AttributeError when it's dereferenced for cache namespacing."""
+    with pytest.raises(TypeError):
+        gitlab_adapter_with_mock_client._map_change_request(  # type: ignore[call-arg]
             _mr_opened_payload()["object_attributes"]
         )
+
+
+def test_source_project_cache_is_namespaced_per_repo(
+    gitlab_adapter_with_mock_client: GitLabAdapter,
+):
+    """GitLabAdapter instances are cached per-connection and reused across
+    every repo on that connection (see Registry._adapter_cache). Two repos
+    on the same connection whose MRs happen to share a source branch name
+    must not clobber each other's fork-project cache entry."""
+    repo_a = RepositoryRef(
+        id="a/repo",
+        provider=Provider.GITLAB,
+        connection="test-gitlab",
+        namespace="a/repo",
+        default_branch="main",
+        change_request_mode="fork",
+    )
+    repo_b = RepositoryRef(
+        id="b/repo",
+        provider=Provider.GITLAB,
+        connection="test-gitlab",
+        namespace="b/repo",
+        default_branch="main",
+        change_request_mode="fork",
+    )
+    attrs = {
+        "iid": 1,
+        "source_branch": "shared-branch-name",
+        "source_project_id": 200,
+        "target_project_id": 100,
+        "last_commit": {"id": "shared-sha"},
+    }
+
+    gitlab_adapter_with_mock_client._map_change_request(attrs, repo_ref=repo_a)
+    gitlab_adapter_with_mock_client._map_change_request(
+        {**attrs, "source_project_id": 300}, repo_ref=repo_b
+    )
+
+    assert gitlab_adapter_with_mock_client._source_project_by_ref[
+        ("a/repo", "shared-branch-name")
+    ] == "200"
+    assert gitlab_adapter_with_mock_client._source_project_by_ref[
+        ("b/repo", "shared-branch-name")
+    ] == "300"
 
 
 class TestParseWebhookNote:
@@ -1436,7 +1484,9 @@ class TestGetCheckLogs:
                 }
             ]
         )
-        gitlab_adapter_with_mock_client._source_project_by_ref["abc123"] = "200"
+        gitlab_adapter_with_mock_client._source_project_by_ref[
+            (gitlab_repo_ref.namespace, "abc123")
+        ] = "200"
         checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
         mock_gitlab_http_client.get_job_trace = AsyncMock(return_value="log output")
 
@@ -1513,7 +1563,9 @@ class TestGetCheckArtifacts:
                 }
             ]
         )
-        gitlab_adapter_with_mock_client._source_project_by_ref["abc123"] = "200"
+        gitlab_adapter_with_mock_client._source_project_by_ref[
+            (gitlab_repo_ref.namespace, "abc123")
+        ] = "200"
         checks = await gitlab_adapter_with_mock_client.get_checks(gitlab_repo_ref, "abc123")
         mock_gitlab_http_client.get_job_artifacts = AsyncMock(return_value=b"zipbytes")
 

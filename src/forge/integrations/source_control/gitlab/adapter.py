@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import re
+from collections import OrderedDict
 from datetime import UTC, datetime
 
 import httpx
@@ -44,6 +45,9 @@ _translate = translate_provider_errors("GitLab")
 
 _DEFAULT_API_BASE_URL = "https://gitlab.com/api/v4"
 _DEFAULT_WEB_BASE_URL = "https://gitlab.com"
+
+_MAX_FORK_PROJECT_CACHE_ENTRIES = 1000
+
 
 _CR_STATE_MAP: dict[str, ChangeRequestState] = {
     "opened": ChangeRequestState.OPEN,
@@ -121,9 +125,22 @@ class GitLabAdapter:
         # _cache_source_project) -- let get_checks/get_check_logs/
         # get_check_artifacts query the project that actually has the
         # commit statuses/job instead of the upstream, which would never
-        # see them.
-        self._source_project_by_ref: dict[str, str] = {}
-        self._project_by_job_id: dict[int, str] = {}
+        # see them. This adapter instance is shared across every
+        # repo/MR on the connection (see Registry._adapter_cache), so
+        # _source_project_by_ref is keyed by (repo_ref.namespace, ref) to
+        # avoid two repos with a same-named branch clobbering each
+        # other's entry, and both caches are bounded LRUs (evicted via
+        # _cache_put) since they are otherwise never evicted for the
+        # life of a long-running worker process.
+        self._source_project_by_ref: OrderedDict[tuple[str, str], str] = OrderedDict()
+        self._project_by_job_id: OrderedDict[int, str] = OrderedDict()
+
+    @staticmethod
+    def _cache_put(cache: OrderedDict, key, value, *, max_size: int = _MAX_FORK_PROJECT_CACHE_ENTRIES) -> None:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > max_size:
+            cache.popitem(last=False)
 
     def _get_client(self) -> GitLabClient:
         if self._client is None:
@@ -258,7 +275,7 @@ class GitLabAdapter:
     ) -> ChangeRequest:
         client = self._get_client()
         mr = await client.get_merge_request(repo_ref.namespace, _require_native_id(identity))
-        return self._map_change_request(mr, identity=identity)
+        return self._map_change_request(mr, repo_ref=repo_ref, identity=identity)
 
     @_translate
     async def update_change_request(
@@ -288,7 +305,7 @@ class GitLabAdapter:
             description=body,
             state_event=state_event,
         )
-        return self._map_change_request(mr, identity=identity)
+        return self._map_change_request(mr, repo_ref=repo_ref, identity=identity)
 
     async def verify_webhook(self, headers: dict[str, str], _body: bytes) -> bool:
         """GitLab sends its configured secret verbatim in X-Gitlab-Token
@@ -425,27 +442,23 @@ class GitLabAdapter:
         self,
         attrs: dict,
         *,
-        repo_ref: RepositoryRef | None = None,
+        repo_ref: RepositoryRef,
         identity: ChangeRequestIdentity | None = None,
         created: bool = False,
     ) -> ChangeRequest:
         """Map a GitLab merge request attrs dict into a ChangeRequest.
 
-        Exactly one of ``repo_ref`` (to construct a fresh identity from the MR
-        iid) or ``identity`` (to preserve a caller-supplied identity) must be
-        given.
+        ``repo_ref`` is always required, both to namespace the fork-project
+        cache (see _cache_source_project) and, when ``identity`` is not
+        given, to construct a fresh identity from the MR iid.
         """
-        if repo_ref is not None and identity is not None:
-            raise ValueError("_map_change_request accepts repo_ref or identity, not both")
         if identity is None:
-            if repo_ref is None:
-                raise ValueError("_map_change_request requires either repo_ref or identity")
             identity = ChangeRequestIdentity(
                 connection=repo_ref.connection,
                 repository_id=repo_ref.id,
                 native_id=attrs.get("iid"),
             )
-        self._cache_source_project(attrs)
+        self._cache_source_project(repo_ref, attrs)
         return ChangeRequest(
             identity=identity,
             url=attrs.get("url", "") or attrs.get("web_url", ""),
@@ -459,26 +472,32 @@ class GitLabAdapter:
             created=created,
         )
 
-    def _cache_source_project(self, attrs: dict) -> None:
+    def _cache_source_project(self, repo_ref: RepositoryRef, attrs: dict) -> None:
         """Remember the project a fork-mode MR's commits actually live in.
 
         GitLab scopes commit statuses/jobs to the project that ran the
         pipeline -- for a fork-mode MR that's the source (fork) project,
         never repo_ref.namespace (always the upstream/target project; see
-        get_merge_requests). Keyed by whatever ref callers look checks up
-        by: the head commit sha, and the source branch name as a fallback.
+        get_merge_requests). Keyed by (repo_ref.namespace, ref) -- this
+        adapter instance is shared across every repo on the connection
+        (see Registry._adapter_cache), so the namespace must be part of
+        the key or two repos with a same-named branch (or a shared
+        fallback ref like "main") would clobber each other's entry.
+        Looked up by whatever ref callers use: the head commit sha, and
+        the source branch name as a fallback.
         """
         source_project_id = attrs.get("source_project_id")
         target_project_id = attrs.get("target_project_id")
         if source_project_id is None or source_project_id == target_project_id:
             return
         project_ref = str(source_project_id)
+        namespace = repo_ref.namespace
         head_sha = (attrs.get("last_commit") or {}).get("id", "")
         if head_sha:
-            self._source_project_by_ref[head_sha] = project_ref
+            self._cache_put(self._source_project_by_ref, (namespace, head_sha), project_ref)
         source_branch = attrs.get("source_branch", "") or ""
         if source_branch:
-            self._source_project_by_ref[source_branch] = project_ref
+            self._cache_put(self._source_project_by_ref, (namespace, source_branch), project_ref)
 
     def _map_check_status(self, status: str) -> tuple[CheckStatus, CheckConclusion]:
         table = {
@@ -640,7 +659,7 @@ class GitLabAdapter:
     @_translate
     async def get_checks(self, repo_ref: RepositoryRef, ref: str) -> list[CheckRun]:
         client = self._get_client()
-        project_ref = self._source_project_by_ref.get(ref, repo_ref.namespace)
+        project_ref = self._source_project_by_ref.get((repo_ref.namespace, ref), repo_ref.namespace)
         entries = await client.get_commit_statuses(project_ref, ref)
         return [self._map_commit_status(entry, project_ref) for entry in entries]
 
@@ -649,7 +668,7 @@ class GitLabAdapter:
         target_url = entry.get("target_url") or ""
         job_id = self._parse_job_id(target_url)
         if job_id is not None:
-            self._project_by_job_id[job_id] = project_ref
+            self._cache_put(self._project_by_job_id, job_id, project_ref)
         return CheckRun(
             name=entry.get("name", ""),
             status=status,
