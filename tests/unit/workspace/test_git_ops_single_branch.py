@@ -86,6 +86,8 @@ def test_checkout_branch_fetches_branch_created_after_single_branch_clone(tmp_pa
     repo_path = tmp_path / "repo"
     git = _git_ops(repo_path, branch="forge/aisos-2420")
     git.clone(repo_url=str(remote))
+    _run(repo_path, "config", "user.name", "Test")
+    _run(repo_path, "config", "user.email", "test@example.com")
 
     # The feature branch appears on origin only after the single-branch clone,
     # so its origin/<branch> tracking ref does not exist locally yet.
@@ -107,6 +109,8 @@ def test_pull_rebase_direct_mode_rebases_after_single_branch_clone(tmp_path):
     repo_path = tmp_path / "repo"
     git = _git_ops(repo_path, branch="forge/aisos-2420")
     git.clone(repo_url=str(remote))
+    _run(repo_path, "config", "user.name", "Test")
+    _run(repo_path, "config", "user.email", "test@example.com")
 
     # Local feature branch with an unpushed commit.
     _run(repo_path, "checkout", "-b", "forge/aisos-2420")

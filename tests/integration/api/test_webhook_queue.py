@@ -106,7 +106,7 @@ async def test_github_delivery_is_authenticated_queued_and_deduplicated(
         )
 
     assert accepted.status_code == 202
-    assert accepted.json()["status"] == "accepted"
+    assert accepted.json()["status"] == "queued"
     assert duplicate.status_code == 202
     assert duplicate.json()["status"] == "duplicate"
 

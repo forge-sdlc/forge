@@ -201,7 +201,7 @@ class TestCIFixAttemptStatusComments:
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
-                with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+                with patch("forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(MagicMock(), mock_github)):
                     with patch("forge.workflow.nodes.ci_evaluator.prepare_workspace") as mock_prepare:
                         mock_prepare.return_value = (Path("/tmp/test-workspace"), None)
                         with patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", AsyncMock()):
@@ -251,7 +251,7 @@ class TestCIFixAttemptStatusComments:
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
-                with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+                with patch("forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(MagicMock(), mock_github)):
                     with patch("forge.workflow.nodes.ci_evaluator.prepare_workspace") as mock_prepare:
                         mock_prepare.return_value = (Path("/tmp/test-workspace"), None)
                         with patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", AsyncMock()):
@@ -301,7 +301,7 @@ class TestCIFixAttemptStatusComments:
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
-                with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+                with patch("forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(MagicMock(), mock_github)):
                     with patch("forge.workflow.nodes.ci_evaluator.prepare_workspace") as mock_prepare:
                         mock_prepare.return_value = (Path("/tmp/test-workspace"), None)
                         with patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", AsyncMock()):
@@ -484,7 +484,7 @@ class TestErrorHandling:
 
         with patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=mock_jira):
             with patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=mock_runner):
-                with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=mock_github):
+                with patch("forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(MagicMock(), mock_github)):
                     with patch("forge.workflow.nodes.ci_evaluator.prepare_workspace") as mock_prepare:
                         mock_prepare.return_value = (Path("/tmp/test-workspace"), None)
                         with patch("forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", AsyncMock()):
