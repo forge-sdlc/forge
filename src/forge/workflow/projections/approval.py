@@ -22,6 +22,9 @@ def project_approval(
     *,
     item_count: int | None = None,
 ) -> StationRequest[ApprovalInput]:
+    context = state.get("context") if isinstance(state.get("context"), Mapping) else {}
+    current_task = state.get("current_task_key") or context.get("rejected_task_key")
+    current_epic = state.get("current_epic_key") or context.get("rejected_epic_key")
     return StationRequest[ApprovalInput](
         workflow=project_workflow_identity(state),
         invocation=project_invocation_identity(state, f"{CONTRACT_NAME}:{stage}"),
@@ -37,6 +40,7 @@ def project_approval(
             revision_requested=bool(state.get("revision_requested")),
             feedback=state.get("feedback_comment"),
             item_count=item_count,
-            current_item=state.get("current_epic_key") or state.get("current_task_key"),
+            current_item=current_task or current_epic,
+            revision_scope=("task" if current_task else "epic" if current_epic else "all"),
         ),
     )

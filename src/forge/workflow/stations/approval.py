@@ -28,6 +28,7 @@ class ApprovalInput(DomainModel):
     feedback: str | None = None
     item_count: int | None = None
     current_item: str | None = None
+    revision_scope: str | None = None
 
 
 class ApprovalOutput(DomainModel):
@@ -57,7 +58,7 @@ def run_approval_station(
         scope = None
     elif value.revision_requested and (value.feedback or value.current_item):
         disposition = ApprovalDisposition.REVISION
-        scope = "item" if value.current_item else "all"
+        scope = value.revision_scope or ("item" if value.current_item else "all")
         reason = f"Human requested {scope} revision"
         status = StationOutcomeStatus.SUCCEEDED
     elif value.paused:

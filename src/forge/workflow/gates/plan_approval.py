@@ -74,11 +74,9 @@ def route_plan_approval(state: WorkflowState) -> str:
 
     # Check if revision requested
     if disposition is ApprovalDisposition.REVISION:
-        if outcome.output.revision_scope == "item":
+        if outcome.output.revision_scope in {"item", "epic"}:
             # Single Epic update
-            logger.info(
-                "Single Epic revision requested for %s", state.get("current_epic_key")
-            )
+            logger.info("Single Epic revision requested for %s", state.get("current_epic_key"))
             record_revision_requested("plan")
             return "update_single_epic"
         else:
