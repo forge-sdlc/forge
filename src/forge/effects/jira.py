@@ -22,6 +22,9 @@ JIRA_LABELS_REMOVE_OPERATION = "jira.labels.remove"
 JIRA_ARCHIVE_OPERATION = "jira.issue.archive"
 JIRA_PROJECT_PROPERTY_SET_OPERATION = "jira.project_property.set"
 JIRA_PROJECT_PROPERTY_DELETE_OPERATION = "jira.project_property.delete"
+JIRA_TASK_CREATE_OPERATION = "jira.task.create"
+JIRA_EPIC_CREATE_OPERATION = "jira.epic.create"
+JIRA_ISSUE_LINK_CREATE_OPERATION = "jira.issue_link.create"
 
 
 class JiraCommentExecutor:
@@ -134,6 +137,55 @@ class JiraMutationExecutor:
                 )
             elif self.operation == JIRA_PROJECT_PROPERTY_DELETE_OPERATION:
                 await jira.delete_project_property(issue_key, str(command.payload["property_key"]))
+            elif self.operation in {JIRA_TASK_CREATE_OPERATION, JIRA_EPIC_CREATE_OPERATION}:
+                marker = _creation_marker(command.idempotency_key)
+                existing = await jira.search_issues(
+                    f'project = "{command.payload["project_key"]}" AND labels = "{marker}"',
+                    fields=["summary", "labels"],
+                    max_results=2,
+                )
+                if len(existing) > 1:
+                    raise RuntimeError(
+                        f"Creation marker {marker} resolves to multiple Jira issues"
+                    )
+                if existing:
+                    provider_reference = existing[0].key
+                else:
+                    labels = [str(label) for label in command.payload.get("labels", [])]
+                    labels.append(marker)
+                    if self.operation == JIRA_TASK_CREATE_OPERATION:
+                        provider_reference = await jira.create_task(
+                            str(command.payload["project_key"]),
+                            str(command.payload["summary"]),
+                            str(command.payload["description"]),
+                            parent_key=_optional_string(command.payload.get("parent_key")),
+                            labels=labels,
+                        )
+                    else:
+                        provider_reference = await jira.create_epic(
+                            str(command.payload["project_key"]),
+                            str(command.payload["summary"]),
+                            str(command.payload["description"]),
+                            str(command.payload["parent_key"]),
+                            labels=labels,
+                        )
+            elif self.operation == JIRA_ISSUE_LINK_CREATE_OPERATION:
+                inward_key = str(command.payload["inward_key"])
+                outward_key = str(command.payload["outward_key"])
+                link_type = str(command.payload["link_type"])
+                links = await jira.get_issue_links(inward_key)
+                exists = any(
+                    str(link.get("type", "")).lower() == link_type.lower()
+                    and {
+                        str(link.get("inward_key") or ""),
+                        str(link.get("outward_key") or ""),
+                    }
+                    == {inward_key, outward_key}
+                    for link in links
+                )
+                if not exists:
+                    await jira.create_issue_link(link_type, inward_key, outward_key)
+                provider_reference = f"{inward_key}:{link_type}:{outward_key}"
             else:  # pragma: no cover - registry construction prevents this
                 raise ValueError(f"Unsupported Jira effect operation: {self.operation}")
             return EffectResult(
@@ -161,5 +213,18 @@ def register_jira_executors(registry: EffectExecutorRegistry) -> None:
         JIRA_ARCHIVE_OPERATION,
         JIRA_PROJECT_PROPERTY_SET_OPERATION,
         JIRA_PROJECT_PROPERTY_DELETE_OPERATION,
+        JIRA_TASK_CREATE_OPERATION,
+        JIRA_EPIC_CREATE_OPERATION,
+        JIRA_ISSUE_LINK_CREATE_OPERATION,
     ):
         registry.register(JiraMutationExecutor(operation))
+
+
+def _creation_marker(idempotency_key: str) -> str:
+    """Return a Jira-label-safe recovery marker for create crash windows."""
+    digest = idempotency_key.rsplit(":", 1)[-1]
+    return f"forge-effect-{digest[:40]}"
+
+
+def _optional_string(value: object) -> str | None:
+    return str(value) if value is not None else None

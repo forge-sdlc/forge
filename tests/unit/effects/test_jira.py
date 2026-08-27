@@ -9,8 +9,10 @@ from forge.effects.jira import (
     JIRA_COMMENT_OPERATION,
     JIRA_CUSTOM_FIELD_OPERATION,
     JIRA_DESCRIPTION_OPERATION,
+    JIRA_ISSUE_LINK_CREATE_OPERATION,
     JIRA_LABEL_OPERATION,
     JIRA_LABELS_ADD_OPERATION,
+    JIRA_TASK_CREATE_OPERATION,
     JIRA_TRANSITION_OPERATION,
     JiraCommentExecutor,
     JiraMutationExecutor,
@@ -157,3 +159,57 @@ async def test_add_labels_only_writes_missing_values() -> None:
     await JiraMutationExecutor(JIRA_LABELS_ADD_OPERATION, lambda: jira).execute(command)
 
     jira.add_labels.assert_awaited_once_with("FORGE-1", ["new"])
+
+
+@pytest.mark.asyncio
+async def test_task_create_recovers_by_creation_marker() -> None:
+    jira = MagicMock()
+    jira.search_issues = AsyncMock(return_value=[SimpleNamespace(key="FORGE-9")])
+    jira.create_task = AsyncMock()
+    jira.close = AsyncMock()
+    command = _command().model_copy(
+        update={
+            "operation": JIRA_TASK_CREATE_OPERATION,
+            "payload": {
+                "project_key": "FORGE",
+                "summary": "Implement it",
+                "description": "Details",
+                "labels": ["team-a"],
+            },
+        }
+    )
+
+    result = await JiraMutationExecutor(JIRA_TASK_CREATE_OPERATION, lambda: jira).execute(command)
+
+    jira.create_task.assert_not_awaited()
+    assert "forge-effect-stable-key" in jira.search_issues.await_args.args[0]
+    assert result.provider_reference == "FORGE-9"
+
+
+@pytest.mark.asyncio
+async def test_issue_link_recovers_when_relationship_already_exists() -> None:
+    jira = MagicMock()
+    jira.get_issue_links = AsyncMock(
+        return_value=[
+            {"type": "related", "inward_key": "FORGE-9", "outward_key": "FORGE-1"}
+        ]
+    )
+    jira.create_issue_link = AsyncMock()
+    jira.close = AsyncMock()
+    command = _command().model_copy(
+        update={
+            "operation": JIRA_ISSUE_LINK_CREATE_OPERATION,
+            "payload": {
+                "link_type": "Related",
+                "inward_key": "FORGE-9",
+                "outward_key": "FORGE-1",
+            },
+        }
+    )
+
+    result = await JiraMutationExecutor(
+        JIRA_ISSUE_LINK_CREATE_OPERATION, lambda: jira
+    ).execute(command)
+
+    jira.create_issue_link.assert_not_awaited()
+    assert result.provider_reference == "FORGE-9:Related:FORGE-1"
