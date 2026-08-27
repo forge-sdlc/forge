@@ -86,12 +86,42 @@ def test_every_supported_golden_path_uses_the_versioned_definition_compiler() ->
         )
 
 
-def test_builtin_agent_steps_declare_the_jira_effects_they_emit() -> None:
+def test_every_builtin_step_can_emit_audited_status_and_error_comments() -> None:
     definitions = {item.metadata.name: item for item in builtin_definitions()}
 
-    assert "jira.comment" in definitions["bug"].spec.steps["analyze_bug"].allowed_effects
-    task_plan_effects = definitions["task_takeover"].spec.steps["generate_plan"].allowed_effects
-    assert {"jira.comment", "jira.labels"}.issubset(task_plan_effects)
+    for definition in definitions.values():
+        assert all(
+            "jira.comment" in step.allowed_effects for step in definition.spec.steps.values()
+        )
+
+
+def test_builtin_effectful_steps_declare_domain_mutations() -> None:
+    definitions = {item.metadata.name: item for item in builtin_definitions()}
+    required = {
+        ("bug", "plan_bug_fix"): {"jira.comment", "jira.labels"},
+        ("bug", "regenerate_plan"): {"jira.comment", "jira.labels"},
+        ("task_takeover", "generate_plan"): {"jira.comment", "jira.labels"},
+        ("feature", "generate_tasks"): {"jira.issue_structure", "jira.labels"},
+        ("feature", "create_pr"): {
+            "jira.issue_structure",
+            "jira.labels",
+            "jira.status",
+            "source_control.commit",
+            "source_control.pull_request",
+        },
+    }
+    for (workflow, step), effects in required.items():
+        assert effects.issubset(definitions[workflow].spec.steps[step].allowed_effects)
+
+
+def test_shared_repair_and_review_steps_declare_source_control_writes() -> None:
+    for definition in builtin_definitions():
+        assert "jira.labels" in definition.spec.steps["ci_evaluator"].allowed_effects
+        assert "source_control.commit" in definition.spec.steps["attempt_ci_fix"].allowed_effects
+        assert {"source_control.commit", "source_control.review"}.issubset(
+            definition.spec.steps["implement_review"].allowed_effects
+        )
+        assert "source_control.review" in definition.spec.steps["answer_question"].allowed_effects
 
 
 @pytest.mark.asyncio
@@ -519,7 +549,7 @@ async def test_cli_publish_validates_and_stores_canonical_json(tmp_path) -> None
     history = await publisher.history("feature")
     assert len(history) == 1
     assert history[0].canonical_dict()["apiVersion"] == "forge/v1"
-    assert history[0].metadata.revision == 1
+    assert history[0].metadata.revision == builtin_feature_definition().metadata.revision
 
 
 @pytest.mark.asyncio

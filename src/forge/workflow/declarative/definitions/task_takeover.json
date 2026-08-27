@@ -4,7 +4,7 @@
   "metadata": {
     "description": "Forge supported task-takeover golden path",
     "name": "task_takeover",
-    "revision": 2
+    "revision": 3
   },
   "spec": {
     "entry": "triage_check",
@@ -28,7 +28,8 @@
           "jira.issue_structure",
           "jira.labels",
           "jira.project_configuration",
-          "jira.status"
+          "jira.status",
+          "source_control.review"
         ],
         "branches": {
           "task_plan_approval_gate": "task_plan_approval_gate"
@@ -44,7 +45,10 @@
         "stationContractVersion": "1.0"
       },
       "attempt_ci_fix": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "source_control.commit"
+        ],
         "branches": {
           "attempt_ci_fix": "escalate_blocked",
           "ci_evaluator": "ci_evaluator",
@@ -63,7 +67,10 @@
         "stationContractVersion": "1.0"
       },
       "ci_evaluator": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "jira.labels"
+        ],
         "branches": {
           "attempt_ci_fix": "attempt_ci_fix",
           "escalate_blocked": "escalate_blocked",
@@ -100,6 +107,10 @@
       },
       "create_pr": {
         "allowedEffects": [
+          "jira.comment",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.status",
           "source_control.branch",
           "source_control.commit",
           "source_control.pull_request",
@@ -127,7 +138,8 @@
           "jira.issue_structure",
           "jira.labels",
           "jira.project_configuration",
-          "jira.status"
+          "jira.status",
+          "source_control.review"
         ],
         "branches": {},
         "dynamicRoute": false,
@@ -139,7 +151,9 @@
         ]
       },
       "execute_task_changes": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "execute_task_changes": "execute_task_changes",
@@ -185,7 +199,9 @@
           "jira.issue_structure",
           "jira.labels",
           "jira.project_configuration",
-          "jira.status"
+          "jira.status",
+          "source_control.commit",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -205,7 +221,11 @@
         "stationContractVersion": "1.0"
       },
       "implement_review": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "source_control.commit",
+          "source_control.review"
+        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "human_review_gate": "human_review_gate",
@@ -224,7 +244,9 @@
         "stationContractVersion": "1.0"
       },
       "review_response_gate": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "__end__": "__end__",
           "human_review_gate": "human_review_gate",
@@ -239,7 +261,9 @@
         "route": "route_review_response"
       },
       "run_qualitative_review": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "create_pr": "create_pr",
           "escalate_blocked": "escalate_blocked",
@@ -258,7 +282,9 @@
         "stationContractVersion": "1.0"
       },
       "setup_workspace": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "execute_task_changes": "execute_task_changes"
@@ -272,7 +298,9 @@
         "route": "route_after_workspace_setup"
       },
       "task_plan_approval_gate": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "__end__": "__end__",
           "answer_question": "answer_question",
@@ -290,7 +318,9 @@
         "stationContractVersion": "1.0"
       },
       "teardown_workspace": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "human_review_gate": "human_review_gate",
           "setup_workspace": "setup_workspace"
@@ -331,7 +361,9 @@
         "stationContractVersion": "1.0"
       },
       "triage_gate": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "__end__": "__end__",
           "triage_check": "triage_check"

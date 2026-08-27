@@ -4,7 +4,7 @@
   "metadata": {
     "description": "Forge supported feature golden path",
     "name": "feature",
-    "revision": 1
+    "revision": 2
   },
   "spec": {
     "entry": "generate_prd",
@@ -59,7 +59,10 @@
         ]
       },
       "answer_question": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "source_control.review"
+        ],
         "branches": {
           "plan_approval_gate": "plan_approval_gate",
           "prd_approval_gate": "prd_approval_gate",
@@ -77,7 +80,10 @@
         "stationContractVersion": "1.0"
       },
       "attempt_ci_fix": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "source_control.commit"
+        ],
         "branches": {
           "attempt_ci_fix": "escalate_blocked",
           "ci_evaluator": "ci_evaluator",
@@ -96,7 +102,10 @@
         "stationContractVersion": "1.0"
       },
       "ci_evaluator": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "jira.labels"
+        ],
         "branches": {
           "attempt_ci_fix": "attempt_ci_fix",
           "escalate_blocked": "escalate_blocked",
@@ -132,7 +141,16 @@
         ]
       },
       "create_pr": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
+        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "teardown_workspace": "teardown_workspace"
@@ -183,7 +201,8 @@
           "jira.issue_structure",
           "jira.labels",
           "jira.project_configuration",
-          "jira.status"
+          "jira.status",
+          "source_control.review"
         ],
         "branches": {},
         "dynamicRoute": false,
@@ -251,7 +270,11 @@
         "stationContractVersion": "1.0"
       },
       "generate_tasks": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "jira.issue_structure",
+          "jira.labels"
+        ],
         "branches": {
           "__end__": "__end__",
           "task_approval_gate": "task_approval_gate"
@@ -274,7 +297,9 @@
           "jira.issue_structure",
           "jira.labels",
           "jira.project_configuration",
-          "jira.status"
+          "jira.status",
+          "source_control.commit",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -293,7 +318,11 @@
         "stationContractVersion": "1.0"
       },
       "implement_review": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "source_control.commit",
+          "source_control.review"
+        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "human_review_gate": "human_review_gate",
@@ -312,7 +341,9 @@
         "stationContractVersion": "1.0"
       },
       "implement_task": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "implement_task": "implement_task",
@@ -330,7 +361,9 @@
         "stationContractVersion": "1.0"
       },
       "local_review": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "create_pr": "update_documentation",
           "escalate_blocked": "escalate_blocked",
@@ -348,7 +381,9 @@
         "stationContractVersion": "1.0"
       },
       "plan_approval_gate": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "__end__": "__end__",
           "answer_question": "answer_question",
@@ -367,7 +402,9 @@
         "stationContractVersion": "1.0"
       },
       "prd_approval_gate": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "__end__": "__end__",
           "answer_question": "answer_question",
@@ -413,7 +450,12 @@
         "stationContractVersion": "1.0"
       },
       "regenerate_all_tasks": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels"
+        ],
         "branches": {
           "__end__": "__end__",
           "task_approval_gate": "task_approval_gate"
@@ -429,7 +471,12 @@
         "stationContractVersion": "1.0"
       },
       "regenerate_epic_tasks": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels"
+        ],
         "branches": {
           "__end__": "__end__",
           "task_approval_gate": "task_approval_gate"
@@ -501,7 +548,9 @@
         "stationContractVersion": "1.0"
       },
       "review_response_gate": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "__end__": "__end__",
           "human_review_gate": "human_review_gate",
@@ -516,7 +565,9 @@
         "route": "route_review_response"
       },
       "setup_workspace": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "implement_task": "implement_task"
@@ -530,7 +581,9 @@
         "route": "route_after_workspace_setup"
       },
       "spec_approval_gate": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "__end__": "__end__",
           "answer_question": "answer_question",
@@ -548,7 +601,9 @@
         "stationContractVersion": "1.0"
       },
       "task_approval_gate": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "__end__": "__end__",
           "answer_question": "answer_question",
@@ -568,7 +623,9 @@
         "stationContractVersion": "1.0"
       },
       "task_router": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {},
         "dynamicRoute": true,
         "dynamicTargets": [
@@ -584,7 +641,9 @@
         "stationContractVersion": "1.0"
       },
       "teardown_workspace": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {
           "human_review_gate": "human_review_gate",
           "setup_workspace": "setup_workspace"
@@ -598,7 +657,9 @@
         "route": "route_after_teardown"
       },
       "update_documentation": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment"
+        ],
         "branches": {},
         "dynamicRoute": false,
         "dynamicTargets": [],
