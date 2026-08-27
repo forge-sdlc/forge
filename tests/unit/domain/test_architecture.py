@@ -40,7 +40,16 @@ def test_stations_do_not_import_providers_or_complete_workflow_state() -> None:
             module = node.module if isinstance(node, ast.ImportFrom) else None
             imported = [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
             for name in [*imported, *([module] if module else [])]:
-                if name.startswith(("forge.integrations", "forge.workflow.base", "langgraph")):
+                if name.startswith(
+                    (
+                        "forge.integrations.jira",
+                        "forge.integrations.github",
+                        "forge.integrations.gitlab",
+                        "forge.integrations.source_control",
+                        "forge.workflow.base",
+                        "langgraph",
+                    )
+                ):
                     violations.append(f"{path.name}:{node.lineno}: {name}")
 
     assert not violations, "Prohibited station dependencies:\n" + "\n".join(violations)

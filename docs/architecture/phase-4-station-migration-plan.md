@@ -42,8 +42,9 @@ receive the same request, outcome-ownership, contract-version, and effect valida
 
 - Every built-in station is registered in the standalone runner and accepts serialized
   `StationRequest` fixtures without a graph or control plane.
-- Architecture tests reject provider/control-plane imports in stations, direct agent or
-  sandbox execution in graph nodes, and workflow calls that bypass the registered
-  station runner.
+- Architecture tests reject work-item/source-control provider and control-plane imports
+  in stations, direct agent or sandbox execution in graph nodes, and workflow calls that
+  bypass the registered station runner. Agent execution remains station-owned business
+  logic and is therefore intentionally available inside agent-backed stations.
 - Feature, bug, task-takeover, multi-repository, review, gate, and status-transition
   suites exercise the compatibility reducers and graph paths.
