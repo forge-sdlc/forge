@@ -140,6 +140,7 @@ class BaseState(TypedDict, total=False):
     workflow_state_profile: str
     workflow_project_key: str
     workflow_transition_count: int
+    workflow_node_attempts: dict[str, int]
 
     # Generic node-contract capabilities and durable precondition audit trail.
     # Missing capability keys preserve legacy inference; explicit booleans are

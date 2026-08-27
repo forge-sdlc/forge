@@ -4,6 +4,7 @@ from argparse import Namespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from forge.orchestrator.worker import OrchestratorWorker
@@ -95,20 +96,27 @@ def test_default_router_has_no_python_topology_workflow_runtime() -> None:
 @pytest.mark.asyncio
 async def test_publication_is_immutable_and_activation_is_explicit() -> None:
     publisher = InMemoryDefinitionPublisher()
-    first = load_workflow_value(definition_value())
+    first = builtin_feature_definition()
 
-    published = await publisher.publish(first, actor="platform", activate=False)
+    published = await publisher.publish(first, actor="platform", reason="initial publication")
     assert published.activated is False
     assert await publisher.active(first.metadata.name) is None
 
-    activated = await publisher.publish(first, actor="platform", activate=True)
+    activated = await publisher.activate(
+        first.metadata.name,
+        first.metadata.revision,
+        actor="platform",
+        reason="initial rollout",
+    )
     assert activated.activated is True
     assert (await publisher.active(first.metadata.name)).digest == first.digest
 
-    changed = definition_value()
+    changed = first.canonical_dict()
     changed["metadata"]["description"] = "changed without a revision"
     with pytest.raises(ValueError, match="immutable"):
-        await publisher.publish(load_workflow_value(changed), actor="platform")
+        await publisher.publish(
+            load_workflow_value(changed), actor="platform", reason="invalid mutation"
+        )
 
 
 def test_rejects_unknown_fields() -> None:
@@ -377,7 +385,15 @@ async def test_worker_resolves_label_selected_workflow() -> None:
     jira.get_project_property = AsyncMock(return_value=definition_value())
     jira.close = AsyncMock()
 
-    with patch("forge.orchestrator.worker.JiraClient", return_value=jira):
+    publisher = AsyncMock()
+    publisher.active.return_value = None
+    with (
+        patch("forge.orchestrator.worker.JiraClient", return_value=jira),
+        patch(
+            "forge.workflow.declarative.publication.DefinitionPublisher",
+            return_value=publisher,
+        ),
+    ):
         workflow = await worker._resolve_custom_workflow(
             "PROJ-1", ["forge:managed", "forge:workflow:short-feature"]
         )
@@ -403,7 +419,15 @@ async def test_worker_keeps_checkpoint_workflow_identity_when_label_is_removed()
     jira.get_project_property = AsyncMock(return_value=definition_value())
     jira.close = AsyncMock()
 
-    with patch("forge.orchestrator.worker.JiraClient", return_value=jira):
+    publisher = AsyncMock()
+    publisher.active.return_value = None
+    with (
+        patch("forge.orchestrator.worker.JiraClient", return_value=jira),
+        patch(
+            "forge.workflow.declarative.publication.DefinitionPublisher",
+            return_value=publisher,
+        ),
+    ):
         workflow = await worker._resolve_custom_workflow("PROJ-1", [])
 
     assert workflow is not None
@@ -428,36 +452,27 @@ def test_worker_cache_key_separates_custom_revisions() -> None:
 async def test_cli_publish_validates_and_stores_canonical_json(tmp_path) -> None:
     source = tmp_path / "workflow.yaml"
     source.write_text(
-        """apiVersion: forge/v1
-kind: Workflow
-metadata:
-  name: short-feature
-  revision: 1
-spec:
-  state: feature
-  entry: generate_prd
-  steps:
-    generate_prd:
-      next: __end__
-""",
+        yaml.safe_dump(builtin_feature_definition().canonical_dict(), sort_keys=False),
         encoding="utf-8",
     )
-    jira = MagicMock()
-    jira.get_project_property = AsyncMock(return_value=None)
-    jira.set_project_property = AsyncMock()
-    jira.close = AsyncMock()
+    publisher = InMemoryDefinitionPublisher("PROJ")
 
-    with patch("forge.workflow.declarative.cli.JiraClient", return_value=jira):
+    with patch("forge.workflow.declarative.cli.DefinitionPublisher", return_value=publisher):
         result = await cmd_workflow(
-            Namespace(workflow_command="publish", project_key="proj", file=str(source))
+            Namespace(
+                workflow_command="publish",
+                project_key="proj",
+                file=str(source),
+                actor="tester",
+                reason="contract test",
+            )
         )
 
     assert result == 0
-    key, value = jira.set_project_property.await_args.args[1:]
-    assert key == "forge.workflow.short-feature"
-    assert value["apiVersion"] == "forge/v1"
-    assert value["metadata"]["revision"] == 1
-    jira.close.assert_awaited_once()
+    history = await publisher.history("feature")
+    assert len(history) == 1
+    assert history[0].canonical_dict()["apiVersion"] == "forge/v1"
+    assert history[0].metadata.revision == 1
 
 
 @pytest.mark.asyncio

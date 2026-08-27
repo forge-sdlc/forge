@@ -170,6 +170,21 @@ class DeclarativeWorkflowCompiler:
                         f"resume mapping targets undeclared node '{target}'"
                     )
 
+    def validate_for_publication(self) -> None:
+        """Apply organizational governance in addition to structural validity."""
+        self.validate()
+        required_policies = {"forge-contracts-v1"}
+        missing_policies = required_policies - set(self.definition.spec.mandatory_policies)
+        if missing_policies:
+            raise WorkflowValidationError(
+                f"publication requires mandatory policy '{sorted(missing_policies)[0]}'"
+            )
+        missing_nodes = set(self.profile.mandatory_nodes) - set(self.definition.spec.steps)
+        if missing_nodes:
+            raise WorkflowValidationError(
+                f"publication omits mandatory gate '{sorted(missing_nodes)[0]}'"
+            )
+
     def build_graph(self) -> StateGraph[Any]:
         self.validate()
         graph: StateGraph[Any] = StateGraph(self.profile.schema)

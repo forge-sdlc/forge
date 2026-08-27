@@ -1716,6 +1716,34 @@ def main(argv: list[str] | None = None) -> int:
     workflow_publish = workflow_subparsers.add_parser("publish", help="Publish a YAML workflow")
     workflow_publish.add_argument("project_key")
     workflow_publish.add_argument("file")
+    workflow_publish.add_argument("--actor", default="forge-cli")
+    workflow_publish.add_argument("--reason", default="CLI publication")
+
+    workflow_activate = workflow_subparsers.add_parser(
+        "activate", help="Activate an already-published workflow revision"
+    )
+    workflow_activate.add_argument("project_key")
+    workflow_activate.add_argument("name")
+    workflow_activate.add_argument("revision", type=int)
+    workflow_activate.add_argument("--actor", default="forge-cli")
+    workflow_activate.add_argument("--reason", default="CLI activation")
+    workflow_activate.add_argument(
+        "--expected-active-digest",
+        help="Fail if the active definition digest has changed since it was read",
+    )
+
+    workflow_rollback = workflow_subparsers.add_parser(
+        "rollback", help="Activate a previously published compatible revision"
+    )
+    workflow_rollback.add_argument("project_key")
+    workflow_rollback.add_argument("name")
+    workflow_rollback.add_argument("revision", type=int)
+    workflow_rollback.add_argument("--actor", default="forge-cli")
+    workflow_rollback.add_argument("--reason", default="CLI rollback")
+    workflow_rollback.add_argument(
+        "--expected-active-digest",
+        help="Fail if the active definition digest has changed since it was read",
+    )
 
     workflow_show = workflow_subparsers.add_parser("show", help="Show one project workflow")
     workflow_show.add_argument("project_key")
@@ -1724,6 +1752,13 @@ def main(argv: list[str] | None = None) -> int:
 
     workflow_list = workflow_subparsers.add_parser("list", help="List project workflows")
     workflow_list.add_argument("project_key")
+
+    workflow_history = workflow_subparsers.add_parser(
+        "show-history", help="Show immutable publication and rollout audit history"
+    )
+    workflow_history.add_argument("project_key")
+    workflow_history.add_argument("name")
+    workflow_history.add_argument("--json", action="store_true")
 
     workflow_delete = workflow_subparsers.add_parser("delete", help="Delete a project workflow")
     workflow_delete.add_argument("project_key")

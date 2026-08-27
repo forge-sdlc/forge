@@ -16,6 +16,8 @@ from forge.workflow.declarative.workflow import DeclarativeWorkflow
 class DefinitionReader(Protocol):
     async def get(self, name: str, revision: int) -> Any | None: ...
 
+    async def active(self, name: str) -> Any | None: ...
+
 
 class ProjectPropertyReader(Protocol):
     async def get_project_property(self, project_key: str, property_key: str) -> Any | None: ...
@@ -80,16 +82,22 @@ async def load_project_workflow(
         if definition.digest != pinned_digest:
             raise ValueError("pinned workflow definition digest does not match checkpoint")
     else:
-        if jira is None:
-            raise ValueError("Jira property reader is required for a new workflow instance")
-        value = await jira.get_project_property(
-            project_key.upper(), f"{WORKFLOW_PROPERTY_PREFIX}{workflow_name}"
-        )
-        if value is None:
-            raise ValueError(
-                f"project {project_key.upper()} does not define workflow '{workflow_name}'"
+        published = await definition_reader.active(workflow_name) if definition_reader else None
+        if published is not None:
+            definition = (
+                published if hasattr(published, "digest") else load_workflow_value(published)
             )
-        definition = load_workflow_value(value)
+        else:
+            if jira is None:
+                raise ValueError("no active governed workflow definition is available")
+            value = await jira.get_project_property(
+                project_key.upper(), f"{WORKFLOW_PROPERTY_PREFIX}{workflow_name}"
+            )
+            if value is None:
+                raise ValueError(
+                    f"project {project_key.upper()} does not define workflow '{workflow_name}'"
+                )
+            definition = load_workflow_value(value)
     if definition.metadata.name != workflow_name:
         raise ValueError(
             f"workflow property name '{workflow_name}' does not match metadata name "

@@ -2105,12 +2105,19 @@ class OrchestratorWorker:
                 pinned_revision=int(revision) if revision is not None else None,
                 pinned_digest=str(digest) if digest is not None else None,
                 pinned_definition=canonical,
-                definition_reader=DefinitionPublisher(),
+                definition_reader=DefinitionPublisher(str(project_key)),
             )
 
         jira = JiraClient()
         try:
-            return await load_project_workflow(jira, str(project_key), str(workflow_name))
+            from forge.workflow.declarative.publication import DefinitionPublisher
+
+            return await load_project_workflow(
+                jira,
+                str(project_key),
+                str(workflow_name),
+                definition_reader=DefinitionPublisher(str(project_key)),
+            )
         finally:
             await jira.close()
 
@@ -2302,6 +2309,8 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
             issue.labels
         )
         if workflow_name:
+            from forge.workflow.declarative.publication import DefinitionPublisher
+
             workflow_instance: Any
             project_key = (
                 checkpoint_values.get("workflow_project_key")
@@ -2316,8 +2325,6 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
             )
             canonical = checkpoint_values.get("workflow_definition")
             if revision is not None or digest is not None or canonical is not None:
-                from forge.workflow.declarative.publication import DefinitionPublisher
-
                 workflow_instance = await load_project_workflow(
                     None,
                     project_key,
@@ -2325,13 +2332,14 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
                     pinned_revision=int(revision) if revision is not None else None,
                     pinned_digest=str(digest) if digest is not None else None,
                     pinned_definition=canonical,
-                    definition_reader=DefinitionPublisher(),
+                    definition_reader=DefinitionPublisher(project_key),
                 )
             else:
                 workflow_instance = await load_project_workflow(
                     jira,
                     project_key,
                     workflow_name,
+                    definition_reader=DefinitionPublisher(project_key),
                 )
             if not workflow_instance.supports_ticket_type(ticket_type):
                 raise ValueError(
