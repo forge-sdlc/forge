@@ -107,7 +107,7 @@ Exit gate: every supported station runs through the same typed boundary locally 
 
 ## Phase 5 — Versioned process definitions and governance
 
-PR: #328. Status: partial.
+PR: #328. Status: complete.
 
 Purpose: make the golden path explicit, inspectable, versioned, and enforceable rather than implicit in Python topology.
 
