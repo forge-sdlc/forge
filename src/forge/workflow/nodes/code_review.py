@@ -12,12 +12,12 @@ from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
-from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.sandbox.runner import ContainerResult
 from forge.workflow.utils.jira_status import post_status_comment
+from forge.workflow.utils.source_control import get_adapter, identity_for
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
@@ -75,13 +75,15 @@ async def run_post_change_review(
             skill_name="review-code",
         )
 
+        repo_ref, adapter = get_adapter(current_repo)
         git = GitOperations(
             Workspace(
                 path=Path(workspace_path),
                 repo_name=current_repo,
                 branch_name=branch_name,
                 ticket_key=ticket_key,
-            )
+            ),
+            await adapter.get_git_credentials(repo_ref),
         )
 
         if git.has_uncommitted_changes():
@@ -101,8 +103,8 @@ async def run_post_change_review(
 async def sync_pr_description(
     state: Any,
     git: Any,
-    owner: str,
-    repo: str,
+    *,
+    current_repo: str,
     pr_number: int | None,
     attempt: int,
 ) -> None:
@@ -115,8 +117,7 @@ async def sync_pr_description(
     Args:
         state: Current workflow state (for ticket_key and audit comment).
         git: GitOperations instance for the workspace.
-        owner: Repository owner.
-        repo: Repository name.
+        current_repo: Repository identifier (owner/repo or repos.yaml id).
         pr_number: Pull request number, or None to skip.
         attempt: Which code-change attempt this follows (0 = initial PR creation).
     """
@@ -136,11 +137,12 @@ async def sync_pr_description(
             logger.debug("PR description sync skipped — no commits on branch")
             return
 
-        github = GitHubClient()
+        repo_ref, adapter = get_adapter(current_repo)
+        identity = identity_for(repo_ref, pr_number)
         jira = JiraClient()
         try:
-            pr_data = await github.get_pull_request(owner, repo, pr_number)
-            current_body = pr_data.get("body", "") or ""
+            change_request = await adapter.get_change_request(repo_ref, identity)
+            current_body = change_request.body
 
             prompt = load_prompt(
                 "sync-pr-description",
@@ -153,7 +155,7 @@ async def sync_pr_description(
                     task="sync-pr-description",
                     policy_key="sync_pr_description",
                     prompt=prompt,
-                    context={"owner": owner, "repo": repo, "pr_number": pr_number},
+                    context={"repo": current_repo, "pr_number": pr_number},
                     trace_context={
                         "ticket_key": state.get("ticket_key", ""),
                         "ticket_type": state.get("ticket_type", ""),
@@ -171,7 +173,7 @@ async def sync_pr_description(
             if updated_body:
                 updated_body = agent._strip_preamble(updated_body)
             if updated_body and updated_body.strip() != current_body.strip():
-                await github.update_pull_request(owner, repo, pr_number, body=updated_body)
+                await adapter.update_change_request(repo_ref, identity, body=updated_body)
                 ticket_key = state.get("ticket_key", "")
                 label = f"CI fix attempt {attempt}" if attempt > 0 else "PR creation"
                 await post_status_comment(
@@ -183,7 +185,6 @@ async def sync_pr_description(
             else:
                 logger.debug(f"PR #{pr_number} description already accurate — no update needed")
         finally:
-            await github.close()
             await jira.close()
 
     except Exception as e:

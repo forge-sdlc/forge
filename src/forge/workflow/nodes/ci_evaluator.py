@@ -9,8 +9,15 @@ from typing import Any
 
 from forge.api.routes.metrics import record_ci_fix_attempt
 from forge.config import get_settings
-from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
+from forge.integrations.source_control.contracts import (
+    CheckConclusion,
+    CheckRun,
+    CheckStatus,
+    RepositoryRef,
+    SourceControlProvider,
+)
+from forge.integrations.source_control.errors import NotFoundError
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
@@ -18,11 +25,13 @@ from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_description
 from forge.workflow.nodes.error_handler import notify_error
 from forge.workflow.nodes.workspace_setup import prepare_workspace
+from forge.workflow.pr_state import find_active_pull_request
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import (
     post_status_comment,
     set_review_pending_label,
 )
+from forge.workflow.utils.source_control import get_adapter, identity_for
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.handoff import capture_handoff
 from forge.workspace.manager import Workspace
@@ -47,7 +56,12 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
     ticket_key = state["ticket_key"]
     current_pr_url = state.get("current_pr_url")
     pull_requests = state.get("pull_requests", {})
-    active_pr = pull_requests.get(state.get("current_repo", ""))
+    _, active_pr = find_active_pull_request(
+        pull_requests,
+        state.get("current_repo", ""),
+        state.get("current_pr_number"),
+        current_pr_url,
+    )
     if pull_requests:
         if not (
             isinstance(active_pr, dict)
@@ -61,6 +75,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                     "ci_status": "failed",
                     "current_node": "ci_evaluator",
                     "last_error": "Active pull request state is inconsistent",
+                    "pending_ci_event": False,
                 }
             )
         pr_urls = [current_pr_url]
@@ -83,17 +98,13 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
 
     logger.info(f"Evaluating CI status for {ticket_key}")
 
-    github = GitHubClient()
-
     try:
         # Checks whose name contains any of these substrings are treated as passing
         ci_skipped_checks = state.get("ci_skipped_checks", [])
 
-        def _is_skipped(check: dict) -> bool:
-            name = check.get("name", "")
-            return any(skip.lower() in name.lower() for skip in ci_skipped_checks)
+        def _is_skipped(check: CheckRun) -> bool:
+            return any(skip.lower() in check.name.lower() for skip in ci_skipped_checks)
 
-        # Check each PR's CI status.
         # Only *completed* non-skipped checks count toward pass/fail.
         # Pending checks (e.g. tide, which waits for merge labels) are ignored
         # once at least one real check has completed — they would block forever.
@@ -105,71 +116,61 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
         all_passed = True
         _any_skipped = False
         any_still_running = False
-        failed_checks = []
+        failed_checks: list[dict[str, Any]] = []
 
-        for pr_url in pr_urls:
-            # Parse PR URL to get owner/repo/number
-            parts = pr_url.rstrip("/").split("/")
-            owner, repo = parts[-4], parts[-3]
-            pr_number = int(parts[-1])
+        repo_ref, adapter = get_adapter(state.get("current_repo", ""))
+        identity = identity_for(repo_ref, state.get("current_pr_number"))
+        change_request = await adapter.get_change_request(repo_ref, identity)
+        checks = await adapter.get_checks(
+            repo_ref, change_request.head_sha or change_request.source_branch
+        )
 
-            # Get PR details for head SHA
-            pr_data = await github.get_pull_request(owner, repo, pr_number)
-            head_sha = pr_data.get("head", {}).get("sha", "")
+        # If no checks exist yet, CI is still pending
+        if not checks:
+            logger.info(f"No CI checks registered yet for {ticket_key}, waiting for webhook")
+            return update_state_timestamp(
+                {
+                    **state,
+                    "ci_status": "pending",
+                    "current_node": "ci_evaluator",  # Stay here, wait for webhook
+                    "pending_ci_event": False,
+                }
+            )
 
-            if not head_sha:
+        for check in checks:
+            if _is_skipped(check):
+                logger.info(f"CI check skipped by human override: {check.name}")
+                _any_skipped = True
                 continue
 
-            # Get check runs for the commit
-            check_runs = await github.get_check_runs(owner, repo, head_sha)
+            # Ignore permanently-pending meta-checks (e.g. tide) — they
+            # wait for merge labels, not for CI to pass, and would block
+            # evaluation indefinitely.
+            if check.status != CheckStatus.COMPLETED and any(
+                p in check.name.lower() for p in _permanent_pending
+            ):
+                logger.info(f"Ignoring permanently-pending check: {check.name}")
+                continue
 
-            # If no check runs exist yet, CI is still pending
-            if not check_runs:
-                logger.info(f"No CI checks registered yet for {pr_url}, waiting for webhook")
-                return update_state_timestamp(
+            if check.status != CheckStatus.COMPLETED:
+                # Real CI check still running — wait for it
+                all_passed = False
+                any_still_running = True
+                logger.info(f"CI still running for {ticket_key}")
+            elif check.conclusion not in (
+                CheckConclusion.SUCCESS,
+                CheckConclusion.SKIPPED,
+                CheckConclusion.NEUTRAL,
+            ):
+                all_passed = False
+                failed_checks.append(
                     {
-                        **state,
-                        "ci_status": "pending",
-                        "current_node": "ci_evaluator",  # Stay here, wait for webhook
-                        "pending_ci_event": False,
+                        "name": check.name,
+                        "conclusion": check.conclusion.value,
+                        "output": check.output,
+                        "logs_ref": check.logs_url,
                     }
                 )
-
-            for check in check_runs:
-                if _is_skipped(check):
-                    logger.info(f"CI check skipped by human override: {check.get('name')}")
-                    _any_skipped = True
-                    continue
-
-                check_name = check.get("name", "")
-                status = check.get("status")
-                conclusion = check.get("conclusion")
-
-                # Ignore permanently-pending meta-checks (e.g. tide) — they
-                # wait for merge labels, not for CI to pass, and would block
-                # evaluation indefinitely.
-                if status != "completed" and any(
-                    p in check_name.lower() for p in _permanent_pending
-                ):
-                    logger.info(f"Ignoring permanently-pending check: {check_name}")
-                    continue
-
-                if status != "completed":
-                    # Real CI check still running — wait for it
-                    all_passed = False
-                    any_still_running = True
-                    logger.info(f"CI still running for {pr_url}")
-                elif conclusion not in ("success", "skipped", "neutral"):
-                    all_passed = False
-                    failed_checks.append(
-                        {
-                            "pr_url": pr_url,
-                            "name": check_name,
-                            "conclusion": conclusion,
-                            "output": check.get("output", {}),
-                            "log_url": check.get("html_url", ""),
-                        }
-                    )
 
         if all_passed:
             logger.info(f"All CI checks passed for {ticket_key}")
@@ -255,8 +256,6 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
             "retry_count": state.get("retry_count", 0) + 1,
             "pending_ci_event": False,
         }
-    finally:
-        await github.close()
 
 
 async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
@@ -278,11 +277,18 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     failed_checks = state.get("ci_failed_checks", [])
 
     if not failed_checks:
+        # Defensive: attempt_ci_fix is only routed to when ci_failed_checks is
+        # non-empty. If it arrived here empty anyway (e.g. a concurrent/stale
+        # state update cleared it before this node ran), re-verify against
+        # live CI rather than asserting the checks passed.
+        logger.warning(
+            f"attempt_ci_fix entered with no ci_failed_checks for {ticket_key} "
+            "— re-verifying CI status instead of assuming pass"
+        )
         return update_state_timestamp(
             {
                 **state,
-                "ci_status": "passed",
-                "current_node": "human_review_gate",
+                "current_node": "ci_evaluator",
                 "pending_ci_event": False,
             }
         )
@@ -304,7 +310,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     fork_owner = state.get("fork_owner", "")
     fork_repo = state.get("fork_repo", "")
     try:
-        workspace_path, _ = prepare_workspace(state)
+        workspace_path, _ = await prepare_workspace(state)
         state = {**state, "workspace_path": workspace_path}
     except Exception as _setup_err:
         logger.error(f"Workspace setup failed for {ticket_key}: {_setup_err}")
@@ -322,11 +328,8 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         logs_dir = Path(workspace_path) / ".forge" / "logs"
         failures_file.parent.mkdir(parents=True, exist_ok=True)
 
-        github = GitHubClient()
-        try:
-            await _fetch_ci_logs_and_artifacts(failed_checks, logs_dir, github)
-        finally:
-            await github.close()
+        repo_ref, adapter = get_adapter(state.get("current_repo", ""))
+        await _fetch_ci_logs_and_artifacts(failed_checks, logs_dir, repo_ref, adapter)
         failures_file.write_text(_collect_error_info(failed_checks))
 
         # ── Phase 0: Attribution ─────────────────────────────────────────────
@@ -462,7 +465,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             branch_name=state.get("context", {}).get("branch_name", ""),
             ticket_key=ticket_key,
         )
-        git = GitOperations(workspace)
+        git = GitOperations(workspace, await adapter.get_git_credentials(repo_ref))
         branch_name = state.get("context", {}).get("branch_name", "")
 
         if git.has_uncommitted_changes():
@@ -501,13 +504,10 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             logger.info(f"CI fix pushed for {ticket_key} (attempt {ci_fix_attempt})")
             record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="pushed")
 
-            _repo = state.get("current_repo", "/")
-            _owner, _repo_name = (_repo.split("/") + [""])[:2]
             await sync_pr_description(
                 state,
                 git,
-                owner=_owner,
-                repo=_repo_name,
+                current_repo=state.get("current_repo", ""),
                 pr_number=state.get("current_pr_number"),
                 attempt=ci_fix_attempt,
             )
@@ -620,69 +620,59 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
         await jira.close()
 
 
-def _parse_run_info(log_url: str) -> tuple[str, str, str, str] | None:
-    """Extract (owner, repo, run_id, job_id) from a GitHub Actions html_url.
-
-    Expects: https://github.com/{owner}/{repo}/actions/runs/{run_id}/job/{job_id}
-    """
-    parts = log_url.rstrip("/").split("/")
-    if len(parts) < 10 or parts[5] != "actions" or parts[8] != "job":
-        return None
-    return parts[3], parts[4], parts[7], parts[9]
-
-
 async def _fetch_ci_logs_and_artifacts(
     failed_checks: list[dict[str, Any]],
     logs_dir: Path,
-    github: GitHubClient,
+    repo_ref: RepositoryRef,
+    adapter: SourceControlProvider,
 ) -> None:
     """Download job logs and run artifacts for all failed checks into logs_dir.
 
-    Deduplicates artifact downloads across checks sharing the same run_id.
-    Silently skips any individual download that fails so one bad log does not
-    block the whole fix pipeline.
+    Deduplicates artifact downloads across checks sharing the same run
+    (``logs_ref``). Silently skips any individual download that fails so one
+    bad log does not block the whole fix pipeline.
     """
     logs_dir.mkdir(parents=True, exist_ok=True)
-    fetched_run_ids: set[str] = set()
+    fetched_run_refs: set[str] = set()
 
-    for check in failed_checks:
-        log_url = check.get("log_url", "")
-        check_name = check.get("name", "unknown")
-        info = _parse_run_info(log_url)
-        if not info:
-            continue
-        owner, repo, run_id, job_id = info
+    for check_record in failed_checks:
+        check_name = check_record.get("name", "unknown")
+        logs_ref = check_record.get("logs_ref")
         safe_name = check_name.replace(" ", "-").replace("/", "-")
+        check = CheckRun(
+            name=check_name,
+            status=CheckStatus.COMPLETED,
+            conclusion=CheckConclusion.FAILURE,
+            logs_url=logs_ref,
+        )
 
         # Job log
         try:
-            log_text = await github.get_job_logs(owner, repo, job_id)
-            (logs_dir / f"{safe_name}-{job_id}.txt").write_text(log_text, errors="replace")
+            log_text = await adapter.get_check_logs(repo_ref, check)
+            (logs_dir / f"{safe_name}.txt").write_text(log_text, errors="replace")
             logger.info(f"Downloaded job log for '{check_name}' ({len(log_text)} chars)")
+        except NotFoundError:
+            logger.warning(f"No logs found for '{check_name}'")
         except Exception as e:
             logger.warning(f"Could not download job log for '{check_name}': {e}")
 
-        # Artifacts (once per run_id)
-        if run_id in fetched_run_ids:
+        # Artifacts (once per run)
+        if not logs_ref or logs_ref in fetched_run_refs:
             continue
-        fetched_run_ids.add(run_id)
+        fetched_run_refs.add(logs_ref)
 
         try:
-            artifacts = await github.get_run_artifacts(owner, repo, run_id)
-            for artifact in artifacts:
-                artifact_id = artifact.get("id")
-                artifact_name = artifact.get("name", str(artifact_id))
+            for artifact_name, zip_bytes in await adapter.get_check_artifacts(repo_ref, check):
                 try:
-                    zip_bytes = await github.download_artifact_zip(owner, repo, artifact_id)
                     artifact_dir = logs_dir / artifact_name
                     artifact_dir.mkdir(exist_ok=True)
                     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
                         zf.extractall(artifact_dir)
                     logger.info(f"Extracted artifact '{artifact_name}' to {artifact_dir}")
                 except Exception as e:
-                    logger.warning(f"Could not download artifact '{artifact_name}': {e}")
+                    logger.warning(f"Could not extract artifact '{artifact_name}': {e}")
         except Exception as e:
-            logger.warning(f"Could not list artifacts for run {run_id}: {e}")
+            logger.warning(f"Could not list artifacts for '{check_name}': {e}")
 
 
 def _collect_error_info(failed_checks: list[dict[str, Any]]) -> str:
@@ -697,18 +687,13 @@ def _collect_error_info(failed_checks: list[dict[str, Any]]) -> str:
     parts = []
 
     for check in failed_checks:
+        check_name = check.get("name", "unknown")
         parts.append(f"## {check.get('name', 'Unknown Check')}")
         parts.append(f"Result: {check.get('conclusion', 'failed')}")
 
-        log_url = check.get("log_url", "")
-        check_name = check.get("name", "unknown")
-        if log_url:
-            parts.append(f"Log URL: {log_url}")
-            info = _parse_run_info(log_url)
-            if info:
-                _, _, _, job_id = info
-                safe_name = check_name.replace(" ", "-").replace("/", "-")
-                parts.append(f"Log file: `.forge/logs/{safe_name}-{job_id}.txt`")
+        if check.get("logs_ref"):
+            safe_name = check_name.replace(" ", "-").replace("/", "-")
+            parts.append(f"Log file: `.forge/logs/{safe_name}.txt`")
 
         output = check.get("output", {})
         if output:

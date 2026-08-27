@@ -3,6 +3,8 @@
 import logging
 from typing import Any
 
+from forge.workflow.utils.source_control import get_adapter, identity_for
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,45 +40,47 @@ def flatten_review_threads(threads: list[dict[str, Any]]) -> list[dict[str, Any]
     ]
 
 
-def decision_matches_comment(decision: dict[str, Any], comment_id: int) -> bool:
+def decision_matches_comment(decision: dict[str, Any], comment_id: str | int) -> bool:
     """Match either the reviewer comment or Forge's reply in the same thread."""
-    return comment_id in (decision.get("comment_id"), decision.get("forge_reply_id"))
+    target = str(comment_id)
+    candidates = {
+        str(value)
+        for value in (decision.get("comment_id"), decision.get("forge_reply_id"))
+        if value is not None
+    }
+    return target in candidates
 
 
 async def reply_to_review_decisions(
     *,
-    repo_full_name: str,
+    current_repo: str,
     pr_number: int | None,
     decisions: list[dict[str, Any]],
     dispositions: set[str] | None = None,
     skip_addressed: bool = False,
 ) -> None:
     """Reply consistently and retain Forge's reply ID for later correlation."""
-    if not repo_full_name or "/" not in repo_full_name or not pr_number or not decisions:
+    if not current_repo or not pr_number or not decisions:
         return
 
-    from forge.integrations.github.client import GitHubClient
-
-    owner, repo = repo_full_name.split("/", 1)
-    github = GitHubClient()
     try:
-        for decision in decisions:
-            if dispositions is not None and decision.get("disposition") not in dispositions:
-                continue
-            if skip_addressed and decision.get("status") == "addressed":
-                continue
-            comment_id = decision.get("comment_id")
-            response = str(decision.get("response", "")).strip()
-            if not isinstance(comment_id, int) or not response:
-                continue
-            try:
-                reply = await github.reply_to_review_comment(
-                    owner, repo, pr_number, comment_id, response
-                )
-                reply_id = reply.get("id") if isinstance(reply, dict) else None
-                if isinstance(reply_id, int):
-                    decision["forge_reply_id"] = reply_id
-            except Exception as exc:
-                logger.warning("Failed replying to review comment %s: %s", comment_id, exc)
-    finally:
-        await github.close()
+        repo_ref, adapter = get_adapter(current_repo)
+        identity = identity_for(repo_ref, pr_number)
+    except Exception as exc:
+        logger.warning("Could not resolve adapter for %s: %s", current_repo, exc)
+        return
+
+    for decision in decisions:
+        if dispositions is not None and decision.get("disposition") not in dispositions:
+            continue
+        if skip_addressed and decision.get("status") == "addressed":
+            continue
+        comment_id = decision.get("comment_id")
+        response = str(decision.get("response", "")).strip()
+        if comment_id is None or not response:
+            continue
+        try:
+            reply = await adapter.reply_to_comment(repo_ref, identity, str(comment_id), response)
+            decision["forge_reply_id"] = reply.id
+        except Exception as exc:
+            logger.warning("Failed replying to review comment %s: %s", comment_id, exc)

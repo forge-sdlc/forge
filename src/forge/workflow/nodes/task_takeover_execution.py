@@ -19,6 +19,7 @@ from forge.workflow.nodes.git_persistence import (
     PushPersistenceError,
     build_persistence_error_state,
     push_to_fork_with_retry,
+    use_fork_remote,
 )
 from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.task_takeover.state import TaskTakeoverState
@@ -52,7 +53,7 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
         # Resume safely when another worker cannot see the checkpointed local
         # workspace.  The implementation branch is persisted to the fork
         # below so a newly cloned workspace contains the reviewed changes.
-        workspace_path, git = prepare_workspace(dict(state))
+        workspace_path, git = await prepare_workspace(state)
         state = {**state, "workspace_path": workspace_path}
 
         same_workspace_survived = (
@@ -62,7 +63,7 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
         )
         if state.get("implementation_push_pending") and same_workspace_survived:
             try:
-                await push_to_fork_with_retry(git)
+                await push_to_fork_with_retry(git, use_fork=use_fork_remote(state))
             except PushPersistenceError as exc:
                 return cast(
                     TaskTakeoverState,

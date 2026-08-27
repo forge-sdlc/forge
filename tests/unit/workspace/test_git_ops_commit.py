@@ -4,8 +4,11 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from forge.integrations.source_control.contracts import GitCredentials
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
+
+_CREDENTIALS = GitCredentials(host="github.com", token="test-token")
 
 
 def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -39,7 +42,7 @@ def test_commit_supplies_identity_without_global_git_config(tmp_path, monkeypatc
         ticket_key="TEST-123",
     )
     with patch("forge.workspace.git_ops.get_settings", return_value=settings):
-        git = GitOperations(workspace)
+        git = GitOperations(workspace, _CREDENTIALS)
 
     empty_global_config = tmp_path / "empty-gitconfig"
     empty_global_config.touch()
@@ -81,7 +84,7 @@ def test_commit_ignores_untracked_forge_metadata(tmp_path):
         ticket_key="TEST-123",
     )
     with patch("forge.workspace.git_ops.get_settings", return_value=settings):
-        git = GitOperations(workspace)
+        git = GitOperations(workspace, _CREDENTIALS)
 
     assert git.commit("Test commit") is False
 
@@ -100,7 +103,7 @@ def test_has_uncommitted_changes_excludes_forge_metadata(tmp_path):
         ticket_key="TEST-123",
     )
     with patch("forge.workspace.git_ops.get_settings", return_value=settings):
-        git = GitOperations(workspace)
+        git = GitOperations(workspace, _CREDENTIALS)
 
     forge_dir = repo / ".forge"
     forge_dir.mkdir()

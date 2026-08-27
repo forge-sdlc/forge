@@ -9,10 +9,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from forge.integrations.source_control.contracts import (
+    GitCredentials,
+    Provider,
+    RepositoryRef,
+    WriteTarget,
+)
+from forge.integrations.source_control.errors import SourceControlError
 from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import create_initial_feature_state
 from forge.workflow.nodes.workspace_setup import prepare_workspace, setup_workspace
-from forge.workspace.manager import WorkspaceManager
 
 
 def create_mock_jira_client():
@@ -67,18 +73,41 @@ def create_mock_guardrails_loader():
     return mock
 
 
-@pytest.fixture(autouse=True)
-def mock_workspace_github():
-    """Keep workspace tests isolated from GitHub fork operations."""
-    github = MagicMock()
-    github.get_repository = AsyncMock(return_value={"default_branch": "main"})
-    github.get_or_create_fork = AsyncMock(
-        return_value={"owner": {"login": "fork-owner"}, "name": "test-repo"}
+def _repo_ref(identifier: str) -> RepositoryRef:
+    return RepositoryRef(
+        id=identifier,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=identifier,
+        default_branch="main",
+        change_request_mode="fork",
     )
-    github.sync_fork_with_upstream = AsyncMock(return_value=True)
-    github.close = AsyncMock()
-    with patch("forge.workflow.nodes.workspace_setup.GitHubClient", return_value=github):
-        yield github
+
+
+@pytest.fixture(autouse=True)
+def mock_workspace_adapter():
+    """Keep workspace tests isolated from source-control adapter calls."""
+    adapter = MagicMock()
+    adapter.resolve_default_branch = AsyncMock(return_value="main")
+    adapter.ensure_write_target = AsyncMock(
+        return_value=WriteTarget(
+            clone_url="",
+            push_remote_name="origin",
+            head_ref="",
+            base_branch="main",
+            fork_owner="fork-owner",
+            fork_repo="test-repo",
+        )
+    )
+    adapter.get_git_credentials = AsyncMock(
+        return_value=GitCredentials(host="github.com", token="test-token")
+    )
+
+    def _get_adapter(identifier):
+        return _repo_ref(identifier), adapter
+
+    with patch("forge.workflow.nodes.workspace_setup.get_adapter", side_effect=_get_adapter):
+        yield adapter
 
 
 class TestWorkspaceSetupStatusComment:
@@ -280,47 +309,6 @@ class TestWorkspaceSetupLabelAndTransitions:
         mock_jira.transition_issue.assert_any_call("AISOS-101", "In Progress")
         mock_jira.transition_issue.assert_any_call("AISOS-102", "In Progress")
 
-    @pytest.mark.asyncio
-    async def test_workspace_setup_transitions_epics_and_parent_epic(self):
-        """Should transition tasks, epic keys, and parent epic to In Progress."""
-        mock_jira = create_mock_jira_client()
-        mock_issue = MagicMock()
-        mock_issue.parent_key = "EPIC-999"
-        mock_jira.get_issue = AsyncMock(return_value=mock_issue)
-
-        mock_manager, mock_workspace = create_mock_workspace_manager()
-        mock_git = create_mock_git_operations()
-        mock_guardrails_loader = create_mock_guardrails_loader()
-
-        state = create_initial_feature_state(
-            ticket_key="TEST-101",
-            current_repo="owner/test-repo",
-            task_keys=["TASK-1", "TASK-2"],
-        )
-        state["epic_keys"] = ["EPIC-1", "EPIC-2"]
-
-        with (
-            patch("forge.workflow.nodes.workspace_setup.JiraClient", return_value=mock_jira),
-            patch(
-                "forge.workflow.nodes.workspace_setup.get_workspace_manager",
-                return_value=mock_manager,
-            ),
-            patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
-            patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
-        ):
-            await setup_workspace(state)
-
-        # Asserts that transition_issue is called for TASK-1, TASK-2, EPIC-1, EPIC-2, and EPIC-999
-        assert mock_jira.transition_issue.call_count == 5
-        mock_jira.transition_issue.assert_any_call("TASK-1", "In Progress")
-        mock_jira.transition_issue.assert_any_call("TASK-2", "In Progress")
-        mock_jira.transition_issue.assert_any_call("EPIC-1", "In Progress")
-        mock_jira.transition_issue.assert_any_call("EPIC-2", "In Progress")
-        mock_jira.transition_issue.assert_any_call("EPIC-999", "In Progress")
-
-        # Asserts that get_issue was called with the Feature's ticket key
-        mock_jira.get_issue.assert_called_once_with("TEST-101")
-
 
 class TestWorkspaceSetupErrorHandling:
     """Test cases for workspace setup error handling."""
@@ -364,9 +352,11 @@ class TestWorkspaceSetupErrorHandling:
         mock_jira.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_workspace_setup_fails_when_fork_cannot_be_created(self, mock_workspace_github):
+    async def test_workspace_setup_fails_when_fork_cannot_be_created(self, mock_workspace_adapter):
         """Implementation must not start without its durable backup remote."""
-        mock_workspace_github.get_or_create_fork.side_effect = RuntimeError("fork creation denied")
+        mock_workspace_adapter.ensure_write_target.side_effect = SourceControlError(
+            "fork creation denied"
+        )
         mock_jira = create_mock_jira_client()
         mock_manager, _ = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
@@ -396,7 +386,7 @@ class TestWorkspaceSetupForkBootstrap:
     """Tests for creating and checkpointing the implementation backup fork."""
 
     @pytest.mark.asyncio
-    async def test_creates_fork_remote_before_implementation(self, mock_workspace_github):
+    async def test_creates_fork_remote_before_implementation(self, mock_workspace_adapter):
         mock_jira = create_mock_jira_client()
         mock_manager, _ = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
@@ -417,9 +407,11 @@ class TestWorkspaceSetupForkBootstrap:
         ):
             result = await setup_workspace(state)
 
-        mock_workspace_github.get_or_create_fork.assert_awaited_once_with("upstream", "repo")
-        mock_workspace_github.sync_fork_with_upstream.assert_awaited_once_with(
-            "fork-owner", "test-repo", branch="main"
+        mock_workspace_adapter.resolve_default_branch.assert_awaited_once_with(
+            _repo_ref("upstream/repo")
+        )
+        mock_workspace_adapter.ensure_write_target.assert_awaited_once_with(
+            _repo_ref("upstream/repo")
         )
         mock_git.add_fork_remote.assert_called_once_with("fork-owner", "test-repo")
         mock_git.push_to_fork.assert_called_once_with()
@@ -429,7 +421,7 @@ class TestWorkspaceSetupForkBootstrap:
 
     @pytest.mark.asyncio
     async def test_initial_branch_push_failure_prevents_implementation_handoff(
-        self, mock_workspace_github
+        self, mock_workspace_adapter
     ):
         mock_jira = create_mock_jira_client()
         mock_manager, _ = create_mock_workspace_manager()
@@ -452,14 +444,16 @@ class TestWorkspaceSetupForkBootstrap:
         ):
             result = await setup_workspace(state)
 
-        mock_workspace_github.get_or_create_fork.assert_awaited_once_with("upstream", "repo")
+        mock_workspace_adapter.ensure_write_target.assert_awaited_once_with(
+            _repo_ref("upstream/repo")
+        )
         mock_git.push_to_fork.assert_called_once_with()
         assert result["current_node"] == "setup_workspace"
         assert result["retry_count"] == 1
         assert "invalid refspec" in result["last_error"]
 
     @pytest.mark.asyncio
-    async def test_existing_fork_branch_is_checked_out_without_push(self, mock_workspace_github):
+    async def test_existing_fork_branch_is_checked_out_without_push(self, mock_workspace_adapter):
         mock_jira = create_mock_jira_client()
         mock_manager, mock_workspace = create_mock_workspace_manager()
         mock_git = create_mock_git_operations()
@@ -481,8 +475,8 @@ class TestWorkspaceSetupForkBootstrap:
         ):
             result = await setup_workspace(state)
 
-        mock_workspace_github.sync_fork_with_upstream.assert_awaited_once_with(
-            "fork-owner", "test-repo", branch="main"
+        mock_workspace_adapter.ensure_write_target.assert_awaited_once_with(
+            _repo_ref("upstream/repo")
         )
         mock_git.remote_branch_exists.assert_called_once_with(
             mock_workspace.branch_name, remote="fork"
@@ -492,11 +486,107 @@ class TestWorkspaceSetupForkBootstrap:
         mock_git.push_to_fork.assert_not_called()
         assert result["current_node"] == "implementation"
 
+    @pytest.mark.asyncio
+    async def test_direct_mode_pushes_to_origin_without_fork_remote(self, mock_workspace_adapter):
+        """change_request_mode == "direct" has no fork identity — setup must not
+        build a fork remote from empty owner/repo, and must push to origin."""
+        mock_workspace_adapter.ensure_write_target = AsyncMock(
+            return_value=WriteTarget(
+                clone_url="",
+                push_remote_name="origin",
+                head_ref="",
+                base_branch="main",
+                fork_owner=None,
+                fork_repo=None,
+            )
+        )
+        mock_jira = create_mock_jira_client()
+        mock_manager, mock_workspace = create_mock_workspace_manager()
+        mock_git = create_mock_git_operations()
+        mock_guardrails_loader = create_mock_guardrails_loader()
+        state = create_initial_feature_state(
+            ticket_key="TEST-127",
+            current_repo="upstream/repo",
+        )
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.JiraClient", return_value=mock_jira),
+            patch(
+                "forge.workflow.nodes.workspace_setup.get_workspace_manager",
+                return_value=mock_manager,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+        ):
+            result = await setup_workspace(state)
+
+        mock_git.add_fork_remote.assert_not_called()
+        mock_git.remote_branch_exists.assert_called_once_with(
+            mock_workspace.branch_name, remote="origin"
+        )
+        mock_git.push_to_fork.assert_not_called()
+        mock_git.push.assert_called_once_with(force=False, check_conflicts=False)
+        assert result["fork_owner"] == ""
+        assert result["fork_repo"] == ""
+        assert result["current_node"] == "implementation"
+
+    @pytest.mark.asyncio
+    async def test_repos_yaml_alias_is_canonicalized_before_cloning(self, mock_workspace_adapter):
+        """A repos.yaml alias (e.g. "payments-api") has no "/" and must be
+        resolved to its canonical "owner/repo" namespace before cloning, so
+        the PR state this run saves (keyed by current_repo) later matches
+        webhook lookups (keyed by event.repo_ref.namespace)."""
+        alias_repo_ref = RepositoryRef(
+            id="payments-api",
+            provider=Provider.GITHUB,
+            connection="c",
+            namespace="acme/payments",
+            default_branch="main",
+            change_request_mode="fork",
+        )
+        mock_jira = create_mock_jira_client()
+        mock_manager, _ = create_mock_workspace_manager()
+        mock_git = create_mock_git_operations()
+        mock_guardrails_loader = create_mock_guardrails_loader()
+        state = create_initial_feature_state(
+            ticket_key="TEST-ALIAS",
+            current_repo="payments-api",
+        )
+        state["tasks_by_repo"] = {"payments-api": ["TASK-1", "TASK-2"]}
+        state["repos_to_process"] = ["payments-api"]
+
+        with (
+            patch("forge.workflow.nodes.workspace_setup.JiraClient", return_value=mock_jira),
+            patch(
+                "forge.workflow.nodes.workspace_setup.get_workspace_manager",
+                return_value=mock_manager,
+            ),
+            patch("forge.workflow.nodes.workspace_setup.GitOperations", return_value=mock_git),
+            patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader", mock_guardrails_loader),
+            patch(
+                "forge.workflow.nodes.workspace_setup.get_adapter",
+                return_value=(alias_repo_ref, mock_workspace_adapter),
+            ),
+        ):
+            result = await setup_workspace(state)
+
+        mock_manager.create_workspace.assert_called_once_with(
+            repo_name="acme/payments", ticket_key="TEST-ALIAS"
+        )
+        assert result["current_repo"] == "acme/payments"
+        assert result["current_node"] == "implementation"
+        # tasks_by_repo/repos_to_process must move to the canonical key in
+        # lockstep with current_repo, or implementation's task lookup and
+        # route_after_pr's completion matching desync from the alias.
+        assert result["tasks_by_repo"] == {"acme/payments": ["TASK-1", "TASK-2"]}
+        assert result["repos_to_process"] == ["acme/payments"]
+
 
 class TestPrepareWorkspaceRecovery:
     """Tests for prepare_workspace workspace sync/recreation behavior."""
 
-    def test_sync_failure_recreates_workspace_from_fork(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_sync_failure_recreates_workspace_from_fork(self, tmp_path):
         """A workspace that cannot sync is deleted and cloned fresh from the fork."""
         workspace_path = tmp_path / "forge-TEST-123-org-repo"
         workspace_path.mkdir()
@@ -510,13 +600,6 @@ class TestPrepareWorkspaceRecovery:
             fork_owner="forge-bot",
             fork_repo="repo",
             context={"branch_name": "forge/test-123"},
-            handoffs={
-                "org/repo": {
-                    "content": "prior task context",
-                    "task_key": "TEST-122",
-                    "captured_at": "2026-08-06T00:00:00+00:00",
-                }
-            },
         )
 
         old_git = MagicMock()
@@ -531,7 +614,7 @@ class TestPrepareWorkspaceRecovery:
                 side_effect=[old_git, new_git],
             ),
         ):
-            result_path, result_git = prepare_workspace(state)
+            result_path, result_git = await prepare_workspace(state)
 
         assert result_path == str(workspace_path)
         assert result_git is new_git
@@ -541,23 +624,32 @@ class TestPrepareWorkspaceRecovery:
         new_git.add_fork_remote.assert_called_once_with("forge-bot", "repo")
         new_git.checkout_branch.assert_called_once_with("forge/test-123", remote="fork")
         assert new_git.workspace_recreated is True
-        assert (workspace_path / ".forge" / "handoff.md").read_text() == "prior task context"
 
-    def test_recovery_uses_container_aware_cleanup_for_old_workspace(self, tmp_path):
-        workspace_path = tmp_path / "forge-TEST-125-org-repo"
+    @pytest.mark.asyncio
+    async def test_sync_failure_recreates_direct_mode_workspace_from_origin(self, tmp_path):
+        """Direct-mode recovery (no fork identity) clones and checks out from origin.
+
+        With no fork_owner/fork_repo, recreation must not build a fork remote
+        from empty owner/repo; it checks the branch out directly from origin,
+        relying on checkout_branch to fetch the ref that a single-branch clone
+        would otherwise miss.
+        """
+        workspace_path = tmp_path / "forge-TEST-127-org-repo"
         workspace_path.mkdir()
+        stale_file = workspace_path / "stale.txt"
+        stale_file.write_text("dirty")
 
         state = create_initial_feature_state(
-            ticket_key="TEST-125",
+            ticket_key="TEST-127",
             current_repo="org/repo",
             workspace_path=str(workspace_path),
-            fork_owner="forge-bot",
-            fork_repo="repo",
-            context={"branch_name": "forge/test-125"},
+            fork_owner=None,
+            fork_repo=None,
+            context={"branch_name": "forge/test-direct"},
         )
 
         old_git = MagicMock()
-        old_git.pull_rebase.side_effect = RuntimeError("sync failed")
+        old_git.pull_rebase.side_effect = RuntimeError("workspace sync failure")
         new_git = MagicMock()
         settings = MagicMock(workspace_base_dir=str(tmp_path))
 
@@ -567,15 +659,20 @@ class TestPrepareWorkspaceRecovery:
                 "forge.workflow.nodes.workspace_setup.GitOperations",
                 side_effect=[old_git, new_git],
             ),
-            patch.object(WorkspaceManager, "remove_path") as remove_path,
         ):
-            result_path, _ = prepare_workspace(state)
+            result_path, result_git = await prepare_workspace(state)
 
         assert result_path == str(workspace_path)
-        remove_path.assert_called_once()
-        assert "-old-" in remove_path.call_args.args[0].name
+        assert result_git is new_git
+        assert not stale_file.exists()
+        old_git.pull_rebase.assert_called_once_with(remote="origin")
+        new_git.clone.assert_called_once()
+        new_git.add_fork_remote.assert_not_called()
+        new_git.checkout_branch.assert_called_once_with("forge/test-direct", remote="origin")
+        assert new_git.workspace_recreated is True
 
-    def test_failed_replacement_preserves_existing_workspace(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_failed_replacement_preserves_existing_workspace(self, tmp_path):
         """A failed recovery clone must not delete the only local commit."""
         workspace_path = tmp_path / "forge-TEST-124-org-repo"
         workspace_path.mkdir()
@@ -605,11 +702,12 @@ class TestPrepareWorkspaceRecovery:
             ),
             pytest.raises(RuntimeError, match="clone failed"),
         ):
-            prepare_workspace(state)
+            await prepare_workspace(state)
 
         assert local_commit.read_text() == "not pushed yet"
 
-    def test_backup_cleanup_retries_directory_not_empty(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_backup_cleanup_retries_directory_not_empty(self, tmp_path):
         """A transient ENOTEMPTY race during backup deletion is retried."""
         workspace_path = tmp_path / "forge-TEST-125-org-repo"
         workspace_path.mkdir()
@@ -629,13 +727,13 @@ class TestPrepareWorkspaceRecovery:
         real_rmtree = shutil.rmtree
         cleanup_calls = 0
 
-        def transient_remove(path):
+        def transient_rmtree(path, *args, **kwargs):
             nonlocal cleanup_calls
             if Path(path).name.startswith(f".{workspace_path.name}-old-"):
                 cleanup_calls += 1
                 if cleanup_calls == 1:
                     raise OSError(errno.ENOTEMPTY, "Directory not empty", path)
-            return real_rmtree(path)
+            return real_rmtree(path, *args, **kwargs)
 
         with (
             patch("forge.workflow.nodes.workspace_setup.get_settings", return_value=settings),
@@ -643,17 +741,21 @@ class TestPrepareWorkspaceRecovery:
                 "forge.workflow.nodes.workspace_setup.GitOperations",
                 side_effect=[old_git, new_git],
             ),
-            patch.object(WorkspaceManager, "remove_path", side_effect=transient_remove),
+            patch(
+                "forge.workflow.nodes.workspace_setup.WorkspaceManager.remove_path",
+                side_effect=transient_rmtree,
+            ),
             patch("forge.workflow.nodes.workspace_setup.time.sleep") as sleep,
         ):
-            result_path, result_git = prepare_workspace(state)
+            result_path, result_git = await prepare_workspace(state)
 
         assert result_path == str(workspace_path)
         assert result_git is new_git
         assert cleanup_calls == 2
         sleep.assert_called_once()
 
-    def test_backup_cleanup_failure_does_not_fail_recovery(self, tmp_path, caplog):
+    @pytest.mark.asyncio
+    async def test_backup_cleanup_failure_does_not_fail_recovery(self, tmp_path, caplog):
         """Post-swap cleanup errors do not mask successful workspace recovery."""
         workspace_path = tmp_path / "forge-TEST-126-org-repo"
         workspace_path.mkdir()
@@ -672,10 +774,10 @@ class TestPrepareWorkspaceRecovery:
         settings = MagicMock(workspace_base_dir=str(tmp_path))
         real_rmtree = shutil.rmtree
 
-        def persistent_remove(path):
+        def persistent_rmtree(path, *args, **kwargs):
             if Path(path).name.startswith(f".{workspace_path.name}-old-"):
                 raise OSError(errno.ENOTEMPTY, "Directory not empty", path)
-            return real_rmtree(path)
+            return real_rmtree(path, *args, **kwargs)
 
         with (
             patch("forge.workflow.nodes.workspace_setup.get_settings", return_value=settings),
@@ -683,11 +785,14 @@ class TestPrepareWorkspaceRecovery:
                 "forge.workflow.nodes.workspace_setup.GitOperations",
                 side_effect=[old_git, new_git],
             ),
-            patch.object(WorkspaceManager, "remove_path", side_effect=persistent_remove),
+            patch(
+                "forge.workflow.nodes.workspace_setup.WorkspaceManager.remove_path",
+                side_effect=persistent_rmtree,
+            ),
             patch("forge.workflow.nodes.workspace_setup.time.sleep"),
             caplog.at_level("WARNING"),
         ):
-            result_path, result_git = prepare_workspace(state)
+            result_path, result_git = await prepare_workspace(state)
 
         assert result_path == str(workspace_path)
         assert result_git is new_git

@@ -1,6 +1,12 @@
-"""Smoke tests for the concurrent CI/review gate design."""
+"""Smoke tests for the concurrent CI/review gate's routing-table shape.
 
-import pytest
+These only exercise routing functions with static state and graph compilation;
+they do not interleave a CI event and a review event against shared state. For
+a regression test covering the actual concurrent-webhook scenario, see
+test_review_arriving_during_in_flight_ci_cycle_is_not_dropped in
+tests/unit/orchestrator/test_worker.py.
+"""
+
 from langgraph.graph import END
 
 

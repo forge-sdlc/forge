@@ -1,23 +1,66 @@
 """Unit tests for CI attempt tracking (AISOS-654)."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from forge.models.workflow import ForgeLabel
-from forge.workflow.nodes.ci_evaluator import evaluate_ci_status
-from forge.workflow.feature.state import FeatureState
+import pytest
 
+from forge.integrations.source_control.contracts import (
+    ChangeRequest,
+    ChangeRequestIdentity,
+    ChangeRequestState,
+    CheckConclusion,
+    CheckRun,
+    CheckStatus,
+    Provider,
+    RepositoryRef,
+)
+from forge.models.workflow import ForgeLabel
+from forge.workflow.feature.state import FeatureState
+from forge.workflow.nodes.ci_evaluator import evaluate_ci_status
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def create_mock_github_client():
-    """Create a mock GitHub client with common methods."""
-    client = MagicMock()
-    client.get_pull_request = AsyncMock()
-    client.get_check_runs = AsyncMock()
-    client.close = AsyncMock()
-    return client
+def _repo_ref(repo: str = "org/repo") -> RepositoryRef:
+    return RepositoryRef(
+        id=repo,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=repo,
+        default_branch="main",
+        change_request_mode="fork",
+    )
+
+
+def _mock_adapter(status: str, conclusion: str | None, pr_number: int = 42, repo: str = "org/repo"):
+    """Patch target for ci_evaluator.get_adapter returning one check with the given result."""
+    adapter = AsyncMock()
+    adapter.get_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(connection="c", repository_id=repo, native_id=pr_number),
+            url=f"https://github.com/{repo}/pull/{pr_number}",
+            title="t",
+            body="",
+            state=ChangeRequestState.OPEN,
+            source_branch="feature",
+            target_branch="main",
+            head_sha="deadbeef",
+        )
+    )
+    adapter.get_checks = AsyncMock(
+        return_value=[
+            CheckRun(
+                name="test",
+                status=CheckStatus.COMPLETED if status == "completed" else CheckStatus.IN_PROGRESS,
+                conclusion={
+                    "failure": CheckConclusion.FAILURE,
+                    "success": CheckConclusion.SUCCESS,
+                    None: CheckConclusion.NONE,
+                }[conclusion],
+            )
+        ]
+    )
+    return adapter
 
 
 def create_base_state(**kwargs) -> FeatureState:
@@ -31,9 +74,30 @@ def create_base_state(**kwargs) -> FeatureState:
         "ci_failed_checks": [],
         "ci_skipped_checks": [],
         "current_repo": "org/repo",
+        "current_pr_number": 42,
     }
     defaults.update(kwargs)
     return FeatureState(**defaults)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_ci_status_queries_checks_by_head_sha_not_branch() -> None:
+    """CI checks must be looked up by the PR head SHA, not its source branch name.
+
+    In fork mode the head branch only exists on the fork, so GitHub cannot
+    resolve it against the upstream repository the checks are queried against.
+    """
+    adapter = _mock_adapter("completed", "failure")
+    state = create_base_state()
+
+    with (
+        patch("forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)),
+        patch("forge.integrations.jira.client.JiraClient.close", new=AsyncMock()),
+        patch("forge.workflow.utils.jira_status.set_review_pending_label", new=AsyncMock()),
+    ):
+        await evaluate_ci_status(state)
+
+    adapter.get_checks.assert_awaited_once_with(_repo_ref(), "deadbeef")
 
 
 @pytest.mark.asyncio
@@ -120,23 +184,17 @@ class TestCIAttemptIncrement:
         """First CI failure should increment current_attempt from 0 to 1."""
         state = create_base_state(ci_fix_attempt=0, ci_fix_max_attempts=3)
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            result = await evaluate_ci_status(state)
 
         assert result["ci_fix_attempt"] == 1
         assert result["current_node"] == "attempt_ci_fix"
@@ -146,23 +204,17 @@ class TestCIAttemptIncrement:
         """Second CI failure should increment current_attempt from 1 to 2."""
         state = create_base_state(ci_fix_attempt=1, ci_fix_max_attempts=3)
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            result = await evaluate_ci_status(state)
 
         assert result["ci_fix_attempt"] == 2
         assert result["current_node"] == "attempt_ci_fix"
@@ -172,23 +224,17 @@ class TestCIAttemptIncrement:
         """Third CI failure should increment current_attempt from 2 to 3."""
         state = create_base_state(ci_fix_attempt=2, ci_fix_max_attempts=3)
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            result = await evaluate_ci_status(state)
 
         assert result["ci_fix_attempt"] == 3
         assert result["current_node"] == "attempt_ci_fix"
@@ -205,26 +251,18 @@ class TestCIAttemptLimitValidation:
         """When current_attempt equals max_attempts, no more attempts should be made."""
         state = create_base_state(ci_fix_attempt=3, ci_fix_max_attempts=3)
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                with patch(
-                    "forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt"
-                ) as mock_record:
-                    result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            with patch("forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt") as mock_record:
+                result = await evaluate_ci_status(state)
 
         # Should not increment or route to attempt_ci_fix
         assert result["ci_fix_attempt"] == 3  # Unchanged
@@ -237,26 +275,18 @@ class TestCIAttemptLimitValidation:
         """When current_attempt exceeds max_attempts, no more attempts should be made."""
         state = create_base_state(ci_fix_attempt=4, ci_fix_max_attempts=3)
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                with patch(
-                    "forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt"
-                ) as mock_record:
-                    result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            with patch("forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt") as mock_record:
+                result = await evaluate_ci_status(state)
 
         # Should not increment or route to attempt_ci_fix
         assert result["ci_fix_attempt"] == 4  # Unchanged
@@ -269,23 +299,17 @@ class TestCIAttemptLimitValidation:
         """When current_attempt is one below max, one more attempt should be allowed."""
         state = create_base_state(ci_fix_attempt=2, ci_fix_max_attempts=3)
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            result = await evaluate_ci_status(state)
 
         # Should increment and route to attempt_ci_fix
         assert result["ci_fix_attempt"] == 3
@@ -304,24 +328,16 @@ class TestCIAttemptReset:
         """When CI passes, current_attempt should reset to 0."""
         state = create_base_state(ci_fix_attempt=2, ci_fix_max_attempts=3)
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "success",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "success")
 
         jira = MagicMock()
         jira.set_workflow_label = AsyncMock()
         jira.close = AsyncMock()
 
         with (
-            patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github),
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
             patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=jira),
             patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
         ):
@@ -372,23 +388,17 @@ class TestCIAttemptEdgeCases:
         # Remove current_attempt from state
         del state["ci_fix_attempt"]
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            result = await evaluate_ci_status(state)
 
         # Should default to 0 and increment to 1
         assert result["ci_fix_attempt"] == 1
@@ -400,23 +410,17 @@ class TestCIAttemptEdgeCases:
         # Remove max_attempts from state
         del state["ci_fix_max_attempts"]
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            result = await evaluate_ci_status(state)
 
         # Should allow attempt since default is 5
         assert result["ci_fix_attempt"] == 1
@@ -427,23 +431,17 @@ class TestCIAttemptEdgeCases:
         """When max_attempts is 1, only one attempt should be allowed."""
         state = create_base_state(ci_fix_attempt=0, ci_fix_max_attempts=1)
 
-        github = create_mock_github_client()
-        github.get_pull_request.return_value = {"head": {"sha": "abc123"}}
-        github.get_check_runs.return_value = [
-            {
-                "name": "test",
-                "status": "completed",
-                "conclusion": "failure",
-                "output": {},
-                "html_url": "https://github.com/org/repo/runs/1",
-            }
-        ]
+        adapter = _mock_adapter("completed", "failure")
 
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                result = await evaluate_ci_status(state)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            result = await evaluate_ci_status(state)
 
         # Should allow first attempt
         assert result["ci_fix_attempt"] == 1
@@ -451,12 +449,16 @@ class TestCIAttemptEdgeCases:
 
         # Second failure should block
         state2 = create_base_state(ci_fix_attempt=1, ci_fix_max_attempts=1)
-        with patch("forge.workflow.nodes.ci_evaluator.GitHubClient", return_value=github):
-            with patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings:
-                mock_settings.return_value.ci_fix_max_retries = 5
-                mock_settings.return_value.ignored_ci_checks = ["tide"]
-                with patch("forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt"):
-                    result2 = await evaluate_ci_status(state2)
+        with (
+            patch(
+                "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), adapter)
+            ),
+            patch("forge.workflow.nodes.ci_evaluator.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.ci_fix_max_retries = 5
+            mock_settings.return_value.ignored_ci_checks = ["tide"]
+            with patch("forge.workflow.nodes.ci_evaluator.record_ci_fix_attempt"):
+                result2 = await evaluate_ci_status(state2)
 
         assert result2["ci_fix_attempt"] == 1  # Unchanged
         assert result2["current_node"] == "ci_evaluator"

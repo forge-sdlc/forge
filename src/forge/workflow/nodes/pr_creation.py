@@ -2,14 +2,19 @@
 
 import contextlib
 import logging
-from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
-from forge.integrations.github.client import GitHubClient, PullRequestCreationResult
 from forge.integrations.jira.client import JiraClient
+from forge.integrations.source_control.contracts import (
+    ChangeRequest,
+    RepositoryRef,
+    SourceControlProvider,
+    WriteTarget,
+)
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.checkpointer import set_pr_ticket_index
 from forge.prompts import load_prompt
@@ -18,6 +23,7 @@ from forge.workflow.nodes.post_merge_summary import _extract_impact
 from forge.workflow.pr_state import save_active_pull_request
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
+from forge.workflow.utils.source_control import get_adapter, identity_for
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
@@ -26,64 +32,31 @@ WorkflowState = dict[str, Any]
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class PullRequestTarget:
-    """Resolved upstream and fork repository for PR creation."""
-
-    owner: str
-    repo: str
-    fork_owner: str
-    fork_repo: str
-
-
-async def prepare_pull_request_target(
-    github: GitHubClient,
-    git: GitOperations,
-    current_repo: str,
-) -> PullRequestTarget:
-    """Prepare a fork remote for opening a pull request from the current workspace."""
-    if not current_repo or "/" not in current_repo:
-        raise ValueError(
-            f"Invalid repository format '{current_repo}': must be in owner/repo format"
-        )
-
-    owner, repo = current_repo.split("/", 1)
-
-    logger.info(f"Getting or creating fork for {current_repo}")
-    fork_data = await github.get_or_create_fork(owner, repo)
-    fork_owner = fork_data["owner"]["login"]
-    fork_repo = fork_data["name"]
-
-    await github.sync_fork_with_upstream(fork_owner, fork_repo)
-    git.add_fork_remote(fork_owner, fork_repo)
-
-    return PullRequestTarget(
-        owner=owner,
-        repo=repo,
-        fork_owner=fork_owner,
-        fork_repo=fork_repo,
-    )
+async def prepare_write_target(
+    adapter: SourceControlProvider, repo_ref: RepositoryRef, git: GitOperations
+) -> WriteTarget:
+    """Ensure a fork exists/synced and register its remote for local pushes."""
+    target = await adapter.ensure_write_target(repo_ref)
+    if target.fork_owner and target.fork_repo:
+        git.add_fork_remote(target.fork_owner, target.fork_repo)
+    return target
 
 
-async def open_pull_request_from_fork(
-    github: GitHubClient,
-    target: PullRequestTarget,
+async def open_change_request(
+    adapter: SourceControlProvider,
+    repo_ref: RepositoryRef,
+    target: WriteTarget,
     *,
     branch_name: str,
     title: str,
     body: str,
     base: str = "main",
     draft: bool = False,
-) -> PullRequestCreationResult:
-    """Open a pull request from the prepared fork branch to upstream."""
-    return await github.create_pull_request(
-        owner=target.owner,
-        repo=target.repo,
-        title=title,
-        body=body,
-        head=f"{target.fork_owner}:{branch_name}",
-        base=base,
-        draft=draft,
+) -> ChangeRequest:
+    """Open the PR from the pushed workspace branch."""
+    target = replace(target, head_ref=branch_name, base_branch=base)
+    return await adapter.create_change_request(
+        repo_ref=repo_ref, target=target, title=title, body=body, draft=draft
     )
 
 
@@ -171,10 +144,11 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
 
     logger.info(f"Creating PR for {ticket_key} ({len(implemented_tasks)} tasks)")
 
-    github = GitHubClient()
     jira = JiraClient()
 
     try:
+        repo_ref, adapter = get_adapter(current_repo)
+
         # Set up workspace reference
         context = state.get("context", {})
         branch_name = context.get("branch_name", "")
@@ -185,9 +159,9 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
             branch_name=branch_name,
             ticket_key=ticket_key,
         )
-        git = GitOperations(workspace)
+        git = GitOperations(workspace, await adapter.get_git_credentials(repo_ref))
 
-        pr_target = await prepare_pull_request_target(github, git, current_repo)
+        target = await prepare_write_target(adapter, repo_ref, git)
 
         # Check for merge conflicts before pushing
         has_conflicts, conflicting_files = await check_merge_conflicts(git, default_branch)
@@ -216,8 +190,12 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
                 }
             )
 
-        # Push branch to fork (not origin)
-        git.push_to_fork()
+        # Push branch to the write target: the fork in fork mode, origin in
+        # direct mode (direct-mode repos have no "fork" remote to push to).
+        if target.fork_owner and target.fork_repo:
+            git.push_to_fork()
+        else:
+            git.push(force=False)
 
         # Build PR title — fetch live summary from Jira as source of truth
         ticket_summary = ""
@@ -236,9 +214,10 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         project_key = ticket_key.split("-")[0] if "-" in ticket_key else ticket_key
         is_draft = await jira.is_repo_draft(project_key, current_repo)
 
-        pr_result = await open_pull_request_from_fork(
-            github,
-            pr_target,
+        change_request = await open_change_request(
+            adapter,
+            repo_ref,
+            target,
             branch_name=branch_name,
             title=pr_title,
             body=pr_body,
@@ -246,8 +225,9 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
             draft=is_draft,
         )
 
-        pr_url = pr_result.pr.get("html_url", "")
-        pr_number = pr_result.pr.get("number")
+        pr_url = change_request.url
+        native_id = change_request.identity.native_id
+        pr_number = int(native_id) if native_id is not None else None
 
         # Log PR number extraction status
         if pr_number is not None:
@@ -276,8 +256,8 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
 
         if pr_number is not None:
             logger.info(f"Created PR #{pr_number}: {pr_url}")
-            if pr_result.created:
-                await _post_pr_commands_comment(github, pr_target, pr_number)
+            if change_request.created:
+                await _post_pr_commands_comment(adapter, repo_ref, pr_number)
         else:
             logger.info(f"Created PR (number unavailable): {pr_url}")
 
@@ -300,8 +280,7 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         await sync_pr_description(
             state,
             git,
-            owner=pr_target.owner,
-            repo=pr_target.repo,
+            current_repo=current_repo,
             pr_number=pr_number,
             attempt=0,
         )
@@ -314,17 +293,15 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
             )
             if exhaustion_section:
                 try:
-                    pr_data = await github.get_pull_request(
-                        pr_target.owner, pr_target.repo, pr_number
-                    )
-                    current_body = pr_data.get("body", "") or ""
+                    identity = identity_for(repo_ref, pr_number)
+                    current_pr = await adapter.get_change_request(repo_ref, identity)
+                    current_body = current_pr.body
                     if "## Auto-Review Notes" in current_body:
                         logger.debug("PR body already contains Auto-Review Notes — skipping append")
                     else:
-                        await github.update_pull_request(
-                            pr_target.owner,
-                            pr_target.repo,
-                            pr_number,
+                        await adapter.update_change_request(
+                            repo_ref,
+                            identity,
                             body=current_body + "\n\n" + exhaustion_section,
                         )
                         logger.info("Appended auto-review exhaustion section to PR body")
@@ -338,8 +315,8 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
                     "pr_urls": pr_urls,
                     "current_pr_url": pr_url,
                     "current_pr_number": pr_number,
-                    "fork_owner": pr_target.fork_owner,
-                    "fork_repo": pr_target.fork_repo,
+                    "fork_owner": target.fork_owner,
+                    "fork_repo": target.fork_repo,
                     "current_node": "teardown_workspace",
                     "last_error": None,
                 }
@@ -355,13 +332,12 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
             "retry_count": state.get("retry_count", 0) + 1,
         }
     finally:
-        await github.close()
         await jira.close()
 
 
 async def _post_pr_commands_comment(
-    github: GitHubClient,
-    pr_target: PullRequestTarget,
+    adapter: SourceControlProvider,
+    repo_ref: RepositoryRef,
     pr_number: int,
 ) -> None:
     """Post informational PR commands comment on a newly created pull request."""
@@ -374,12 +350,7 @@ async def _post_pr_commands_comment(
             "*   `/forge unskip-gate <name>` - Remove a previously set CI check skip.\n\n"
             "Feel free to use these commands to manage your workflow!"
         )
-        await github.create_issue_comment(
-            owner=pr_target.owner,
-            repo=pr_target.repo,
-            issue_number=pr_number,
-            body=comment_body,
-        )
+        await adapter.create_comment(repo_ref, identity_for(repo_ref, pr_number), comment_body)
         logger.info(f"Posted informational command comment on newly created PR #{pr_number}")
     except Exception as e:
         logger.warning(f"Failed to post informational command comment on PR #{pr_number}: {e}")

@@ -1,7 +1,9 @@
 # Forge Product Roadmap
 
-**Status:** Draft for discussion  
-**Planning horizon:** Outcome-based; dates and release assignments are intentionally TBD  
+**Status:** Draft for discussion
+
+**Planning horizon:** Outcome-based; dates and release assignments are intentionally TBD
+
 **Last reviewed:** 2026-08-10
 
 ## Product direction

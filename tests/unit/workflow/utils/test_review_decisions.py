@@ -1,13 +1,25 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from forge.integrations.source_control.contracts import Provider, RepositoryRef, ReviewComment
 from forge.workflow.utils.review_decisions import (
     decision_matches_comment,
     flatten_review_threads,
     merge_review_decisions,
     reply_to_review_decisions,
 )
+
+
+def _repo_ref(repo: str = "org/repo") -> RepositoryRef:
+    return RepositoryRef(
+        id=repo,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=repo,
+        default_branch="main",
+        change_request_mode="fork",
+    )
 
 
 def test_merge_keeps_latest_decision_per_thread() -> None:
@@ -49,16 +61,33 @@ def test_decision_matches_original_or_forge_reply_comment() -> None:
     assert not decision_matches_comment(decision, 12)
 
 
+def test_decision_matches_comment_across_int_and_str_ids() -> None:
+    """forge_reply_id now comes back as a str from the adapter; comment_id may
+    still be int from older persisted state. Comparison must not care which."""
+    decision = {"comment_id": 10, "forge_reply_id": "11"}
+
+    assert decision_matches_comment(decision, "10")
+    assert decision_matches_comment(decision, 11)
+    assert not decision_matches_comment(decision, 12)
+
+
 @pytest.mark.asyncio
 async def test_reply_records_forge_comment_id() -> None:
-    github = MagicMock()
-    github.reply_to_review_comment = AsyncMock(return_value={"id": 11})
-    github.close = AsyncMock()
+    adapter = AsyncMock()
+    adapter.reply_to_comment = AsyncMock(
+        return_value=ReviewComment(id="11", body="ok", author="forge")
+    )
     decision = {"comment_id": 10, "response": "Please confirm."}
 
-    with patch("forge.integrations.github.client.GitHubClient", return_value=github):
-        await reply_to_review_decisions(
-            repo_full_name="org/repo", pr_number=7, decisions=[decision]
-        )
+    with patch(
+        "forge.workflow.utils.review_decisions.get_adapter",
+        return_value=(_repo_ref(), adapter),
+    ):
+        await reply_to_review_decisions(current_repo="org/repo", pr_number=7, decisions=[decision])
 
-    assert decision["forge_reply_id"] == 11
+    assert decision["forge_reply_id"] == "11"
+    adapter.reply_to_comment.assert_awaited_once()
+    call_args = adapter.reply_to_comment.call_args[0]
+    assert call_args[1].native_id == 7
+    assert call_args[2] == "10"
+    assert call_args[3] == "Please confirm."

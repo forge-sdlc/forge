@@ -63,7 +63,6 @@ class TestPRIntegrationState:
         assert "repos_completed" in hints
         assert "implemented_tasks" in hints
         assert "current_task_key" in hints
-        assert "handoffs" in hints
 
 
 class TestCIIntegrationState:
@@ -148,7 +147,7 @@ class TestBaseWorkflow:
                 from forge.workflow.base import BaseState
                 return BaseState
 
-            def matches(self, ticket_type, labels, event):
+            def matches(self, _ticket_type, _labels, _event):
                 return True
 
             def build_graph(self):
@@ -176,9 +175,12 @@ class TestBaseWorkflow:
 class TestSharedResumeMap:
     """Tests for resolve_shared_resume_node."""
 
-    def test_wait_for_ci_gate_is_not_mapped(self):
-        """wait_for_ci_gate was removed — it must not resolve to any node."""
+    def test_wait_for_ci_gate_resolves_to_human_review_gate(self):
+        """wait_for_ci_gate was removed and merged into human_review_gate. A
+        compatibility alias must still resolve it so a ticket checkpointed at
+        wait_for_ci_gate before the merge resumes instead of silently
+        restarting its whole workflow."""
         from forge.workflow.utils import resolve_shared_resume_node
 
         result = resolve_shared_resume_node("wait_for_ci_gate")
-        assert result is None
+        assert result == "human_review_gate"

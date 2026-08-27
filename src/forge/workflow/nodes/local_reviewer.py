@@ -13,6 +13,7 @@ from forge.workflow.nodes.git_persistence import (
     PushPersistenceError,
     build_persistence_error_state,
     push_to_fork_with_retry,
+    use_fork_remote,
 )
 from forge.workflow.nodes.review_utils import (
     next_review_attempt,
@@ -106,7 +107,7 @@ async def local_review_changes(state: WorkflowState) -> WorkflowState:
     local_workspace_survived = bool(recorded_workspace and Path(recorded_workspace).exists())
 
     try:
-        workspace_path, git = prepare_workspace(state)
+        workspace_path, git = await prepare_workspace(state)
         state = {**state, "workspace_path": workspace_path}
     except Exception as exc:
         logger.error("Unable to prepare local-review workspace for %s: %s", ticket_key, exc)
@@ -121,7 +122,7 @@ async def local_review_changes(state: WorkflowState) -> WorkflowState:
     )
     if state.get("review_push_pending") and same_workspace_survived:
         try:
-            await push_to_fork_with_retry(git)
+            await push_to_fork_with_retry(git, use_fork=use_fork_remote(state))
         except PushPersistenceError as exc:
             return _review_persistence_error_state(state, exc)
         updates = state.get("review_push_pending_updates", {})
@@ -417,7 +418,7 @@ async def _persist_review_result(
 ) -> WorkflowState:
     """Persist review changes before applying the review's routing decision."""
     try:
-        await push_to_fork_with_retry(git)
+        await push_to_fork_with_retry(git, use_fork=use_fork_remote(state))
     except PushPersistenceError as exc:
         pending_state = {
             **state,

@@ -5,34 +5,72 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from forge.integrations.source_control.contracts import (
+    ChangeRequest,
+    ChangeRequestIdentity,
+    ChangeRequestState,
+    Provider,
+    RepositoryRef,
+    WriteTarget,
+)
 from forge.workflow.feature.state import create_initial_feature_state
 from forge.workflow.nodes.pr_creation import create_pull_request
-from forge.integrations.github.client import PullRequestCreationResult
 
 
-def create_mock_github_client(pr_number=123, pr_url="https://github.com/owner/repo/pull/123"):
-    """Create a mock GitHubClient with configurable PR data."""
-    mock = MagicMock()
-    mock.close = AsyncMock()
-    mock.get_or_create_fork = AsyncMock(
-        return_value={
-            "owner": {"login": "fork-owner"},
-            "name": "repo",
-        }
+def _repo_ref(identifier: str) -> RepositoryRef:
+    return RepositoryRef(
+        id=identifier,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=identifier,
+        default_branch="main",
+        change_request_mode="fork",
     )
-    mock.sync_fork_with_upstream = AsyncMock()
 
-    # PR creation response - can be configured for different scenarios
-    pr_data = {
-        "html_url": pr_url,
-    }
-    if pr_number is not None:
-        pr_data["number"] = pr_number
 
-    mock.create_pull_request = AsyncMock(
-        return_value=PullRequestCreationResult(pr=pr_data, created=True)
+def create_mock_adapter(pr_number=123, pr_url="https://github.com/owner/repo/pull/123"):
+    """Create a mock SourceControlProvider adapter with configurable PR data."""
+    adapter = AsyncMock()
+    adapter.ensure_write_target = AsyncMock(
+        return_value=WriteTarget(
+            clone_url="",
+            push_remote_name="origin",
+            head_ref="",
+            base_branch="main",
+            fork_owner="fork-owner",
+            fork_repo="repo",
+        )
     )
-    return mock
+    adapter.create_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(
+                connection="c", repository_id="owner/repo", native_id=pr_number
+            ),
+            url=pr_url,
+            title="t",
+            body="b",
+            state=ChangeRequestState.OPEN,
+            source_branch="f",
+            target_branch="main",
+            created=True,
+        )
+    )
+    adapter.get_change_request = AsyncMock(
+        return_value=ChangeRequest(
+            identity=ChangeRequestIdentity(
+                connection="c", repository_id="owner/repo", native_id=pr_number
+            ),
+            url=pr_url,
+            title="t",
+            body="",
+            state=ChangeRequestState.OPEN,
+            source_branch="f",
+            target_branch="main",
+        )
+    )
+    adapter.update_change_request = AsyncMock()
+    adapter.create_comment = AsyncMock()
+    return adapter
 
 
 def create_mock_jira_client():
@@ -88,13 +126,20 @@ def mock_external_pr_creation_side_effects():
         yield
 
 
+def _patch_adapter(adapter, identifier="owner/repo"):
+    return patch(
+        "forge.workflow.nodes.pr_creation.get_adapter",
+        return_value=(_repo_ref(identifier), adapter),
+    )
+
+
 class TestPRNumberExtractionSuccess:
     """Test cases for successful PR number extraction from GitHub API response."""
 
     @pytest.mark.asyncio
     async def test_pr_number_extracted_from_github_response(self):
         """Should extract PR number from GitHub API response and store in state."""
-        mock_github = create_mock_github_client(
+        mock_adapter = create_mock_adapter(
             pr_number=456, pr_url="https://github.com/owner/repo/pull/456"
         )
         mock_jira = create_mock_jira_client()
@@ -109,7 +154,7 @@ class TestPRNumberExtractionSuccess:
         state["context"] = {"branch_name": "feat/test-branch"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -128,7 +173,7 @@ class TestPRNumberExtractionSuccess:
     @pytest.mark.asyncio
     async def test_pr_number_used_in_jira_remote_link(self):
         """Should use PR number in Jira remote link label when available."""
-        mock_github = create_mock_github_client(pr_number=789)
+        mock_adapter = create_mock_adapter(pr_number=789)
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -141,7 +186,7 @@ class TestPRNumberExtractionSuccess:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -162,7 +207,7 @@ class TestPRNumberExtractionSuccess:
     @pytest.mark.asyncio
     async def test_pr_number_used_in_info_logging(self, caplog):
         """Should include PR number in info log message when available."""
-        mock_github = create_mock_github_client(pr_number=999)
+        mock_adapter = create_mock_adapter(pr_number=999)
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -175,7 +220,7 @@ class TestPRNumberExtractionSuccess:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -196,19 +241,28 @@ class TestPRNumberExtractionSuccess:
         )
 
 
-class TestPRNumberExtractionMissing:
-    """Test cases for handling missing PR number in GitHub API response."""
+class TestPRCreationDirectMode:
+    """Direct-mode repos (no fork identity) must push to origin, not 'fork'."""
 
     @pytest.mark.asyncio
-    async def test_pr_number_none_when_unavailable(self):
-        """Should set current_pr_number to None when PR number unavailable in API response."""
-        # GitHub API returns response without 'number' field
-        mock_github = create_mock_github_client(pr_number=None)
+    async def test_direct_mode_pushes_to_origin_not_fork(self):
+        mock_adapter = create_mock_adapter(pr_number=1)
+        mock_adapter.ensure_write_target = AsyncMock(
+            return_value=WriteTarget(
+                clone_url="",
+                push_remote_name="origin",
+                head_ref="",
+                base_branch="main",
+                fork_owner=None,
+                fork_repo=None,
+            )
+        )
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
+        mock_git.push = MagicMock()
 
         state = create_initial_feature_state(
-            ticket_key="FEAT-111",
+            ticket_key="FEAT-DIRECT",
             current_repo="owner/repo",
         )
         state["workspace_path"] = "/tmp/test-workspace"
@@ -216,7 +270,7 @@ class TestPRNumberExtractionMissing:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -229,15 +283,56 @@ class TestPRNumberExtractionMissing:
         ):
             result = await create_pull_request(state)
 
-        # Verify PR number is None in state
+        mock_git.add_fork_remote.assert_not_called()
+        mock_git.push_to_fork.assert_not_called()
+        mock_git.push.assert_called_once_with(force=False)
+        assert result["last_error"] is None
+
+
+class TestPRNumberExtractionMissing:
+    """Test cases for handling missing PR number in GitHub API response."""
+
+    @pytest.mark.asyncio
+    async def test_pr_number_none_when_unavailable(self):
+        """Should set current_pr_number to None when PR number unavailable in API response."""
+        # GitHub API returns response without 'number' field
+        mock_adapter = create_mock_adapter(pr_number=None)
+        mock_jira = create_mock_jira_client()
+        mock_git = create_mock_git_operations()
+
+        state = create_initial_feature_state(
+            ticket_key="FEAT-111",
+            current_repo="owner/repo",
+        )
+        state["workspace_path"] = "/tmp/test-workspace"
+        state["implemented_tasks"] = ["TASK-1"]
+        state["context"] = {"branch_name": "feat/test"}
+
+        with (
+            _patch_adapter(mock_adapter),
+            patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
+            patch(
+                "forge.workflow.nodes.pr_creation.Workspace", return_value=create_mock_workspace()
+            ),
+            patch(
+                "forge.workflow.nodes.pr_creation.check_merge_conflicts", return_value=(False, [])
+            ),
+            patch("forge.workflow.nodes.pr_creation.sync_pr_description", new_callable=AsyncMock),
+        ):
+            result = await create_pull_request(state)
+
+        # Verify PR number is None in state. With no number known, the record is
+        # keyed by URL (f"{repo}:{url}") — see workflow.pr_state.
         assert result["current_pr_number"] is None
-        assert result["pull_requests"]["owner/repo"]["number"] is None
-        assert result["pull_requests"]["owner/repo"]["url"] == result["current_pr_url"]
+        url_key = f"owner/repo:{result['current_pr_url']}"
+        assert result["pull_requests"][url_key]["number"] is None
+        assert result["pull_requests"][url_key]["url"] == result["current_pr_url"]
 
     @pytest.mark.asyncio
     async def test_workflow_continues_when_pr_number_unavailable(self):
         """Should continue workflow successfully even when PR number unavailable."""
-        mock_github = create_mock_github_client(pr_number=None)
+        mock_adapter = create_mock_adapter(pr_number=None)
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -250,7 +345,7 @@ class TestPRNumberExtractionMissing:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -275,7 +370,7 @@ class TestPRNumberExtractionMissing:
     async def test_warning_logged_when_pr_number_unavailable(self, caplog):
         """Should log warning with diagnostic info when PR number unavailable."""
         pr_url = "https://github.com/owner/repo/pull/123"
-        mock_github = create_mock_github_client(pr_number=None, pr_url=pr_url)
+        mock_adapter = create_mock_adapter(pr_number=None, pr_url=pr_url)
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -288,7 +383,7 @@ class TestPRNumberExtractionMissing:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -313,7 +408,7 @@ class TestPRNumberExtractionMissing:
     @pytest.mark.asyncio
     async def test_generic_label_used_when_pr_number_unavailable(self):
         """Should use generic 'Pull Request' label in Jira remote link when PR number unavailable."""
-        mock_github = create_mock_github_client(pr_number=None)
+        mock_adapter = create_mock_adapter(pr_number=None)
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -326,7 +421,7 @@ class TestPRNumberExtractionMissing:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -348,7 +443,7 @@ class TestPRNumberExtractionMissing:
     async def test_info_log_indicates_number_unavailable(self, caplog):
         """Should log info message indicating PR number unavailable."""
         pr_url = "https://github.com/owner/repo/pull/456"
-        mock_github = create_mock_github_client(pr_number=None, pr_url=pr_url)
+        mock_adapter = create_mock_adapter(pr_number=None, pr_url=pr_url)
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -361,7 +456,7 @@ class TestPRNumberExtractionMissing:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -389,7 +484,7 @@ class TestPRNumberExtractionEdgeCases:
     async def test_pr_number_zero_handled_correctly(self):
         """Should handle PR number 0 (edge case) correctly without treating it as None."""
         # PR number 0 is technically valid (though rare) and should not be treated as missing
-        mock_github = create_mock_github_client(pr_number=0)
+        mock_adapter = create_mock_adapter(pr_number=0)
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -402,7 +497,7 @@ class TestPRNumberExtractionEdgeCases:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -427,7 +522,7 @@ class TestPRNumberExtractionEdgeCases:
     async def test_pr_number_extracted_when_pr_url_missing(self):
         """Should extract PR number even when PR URL is missing from response."""
         # Edge case: API returns number but not html_url
-        mock_github = create_mock_github_client(pr_number=111, pr_url="")
+        mock_adapter = create_mock_adapter(pr_number=111, pr_url="")
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -440,7 +535,7 @@ class TestPRNumberExtractionEdgeCases:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github),
+            _patch_adapter(mock_adapter),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -460,7 +555,7 @@ class TestPRNumberExtractionEdgeCases:
     async def test_multiple_prs_each_have_own_pr_number(self):
         """Should handle multiple PR creations with different PR numbers independently."""
         # This tests that pr_number is properly isolated per PR creation
-        mock_github_1 = create_mock_github_client(pr_number=100)
+        mock_adapter_1 = create_mock_adapter(pr_number=100)
         mock_jira = create_mock_jira_client()
         mock_git = create_mock_git_operations()
 
@@ -473,7 +568,7 @@ class TestPRNumberExtractionEdgeCases:
         state["context"] = {"branch_name": "feat/test"}
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github_1),
+            _patch_adapter(mock_adapter_1),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -488,16 +583,16 @@ class TestPRNumberExtractionEdgeCases:
 
         # Verify first PR has correct number
         assert result_1["current_pr_number"] == 100
-        assert result_1["pull_requests"]["owner/repo"]["number"] == 100
+        assert result_1["pull_requests"]["owner/repo:100"]["number"] == 100
 
         # Simulate second PR creation with different number
-        mock_github_2 = create_mock_github_client(
+        mock_adapter_2 = create_mock_adapter(
             pr_number=200, pr_url="https://github.com/owner/other/pull/200"
         )
         result_1["current_repo"] = "owner/other"
 
         with (
-            patch("forge.workflow.nodes.pr_creation.GitHubClient", return_value=mock_github_2),
+            _patch_adapter(mock_adapter_2, identifier="owner/other"),
             patch("forge.workflow.nodes.pr_creation.JiraClient", return_value=mock_jira),
             patch("forge.workflow.nodes.pr_creation.GitOperations", return_value=mock_git),
             patch(
@@ -510,7 +605,7 @@ class TestPRNumberExtractionEdgeCases:
         ):
             result_2 = await create_pull_request(result_1)
 
-        # Verify second PR has correct number
+        # Verify second PR has correct number; each PR occupies its own slot.
         assert result_2["current_pr_number"] == 200
-        assert result_2["pull_requests"]["owner/repo"]["number"] == 100
-        assert result_2["pull_requests"]["owner/other"]["number"] == 200
+        assert result_2["pull_requests"]["owner/repo:100"]["number"] == 100
+        assert result_2["pull_requests"]["owner/other:200"]["number"] == 200

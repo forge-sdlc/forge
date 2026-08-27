@@ -490,3 +490,44 @@ class TestAISOS709Regression:
             "TICKET-B (fast) should have completed before TICKET-A (slow). "
             "This is the AISOS-709 regression — sequential processing detected."
         )
+
+
+class TestLegacyStreamMigration:
+    """The pre-rename source-control stream is never auto-consumed.
+
+    Its entries predate the NormalizedEvent/adapter cutover and have no
+    normalized_event to deserialize, so processing them would silently ack
+    away whatever CI/review/merge signal they carried instead of acting on
+    it. They're left for a deliberate, out-of-band migration; only
+    forge:events:source_control (and forge:events:jira) are consumed live.
+    """
+
+    @pytest.mark.asyncio
+    async def test_ensure_consumer_groups_does_not_include_legacy_stream(self) -> None:
+        redis_mock = _make_redis_mock()
+        consumer = _make_consumer(redis_mock)
+
+        await consumer._ensure_consumer_groups()
+
+        created_streams = {call.args[0] for call in redis_mock.xgroup_create.await_args_list}
+        assert "forge:events:github" not in created_streams
+        assert "forge:events:source_control" in created_streams
+
+    @pytest.mark.asyncio
+    async def test_start_does_not_consume_legacy_stream(self) -> None:
+        redis_mock = _make_redis_mock()
+        consumer = _make_consumer(redis_mock)
+        consumer.register_handler(EventSource.SOURCE_CONTROL, AsyncMock())
+
+        consumed_streams: list[str] = []
+
+        async def fake_consume_stream(stream: str, _source: EventSource) -> None:
+            consumed_streams.append(stream)
+
+        consumer._consume_stream = fake_consume_stream
+        consumer._process_retry_queue = AsyncMock()
+
+        await consumer.start()
+
+        assert "forge:events:source_control" in consumed_streams
+        assert "forge:events:github" not in consumed_streams

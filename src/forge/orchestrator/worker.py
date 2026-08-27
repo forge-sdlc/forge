@@ -18,14 +18,23 @@ from forge.api.routes.metrics import (
     record_workflow_started,
 )
 from forge.config import get_settings
-from forge.integrations.github.client import GitHubClient
-from forge.integrations.github.comment_signature import is_self_comment, resolve_bot_login
+from forge.integrations.github.comment_signature import is_self_comment
 from forge.integrations.jira.client import JiraClient
+from forge.integrations.source_control.contracts import (
+    ChangeRequestState,
+    CheckStatus,
+    EventKind,
+    NormalizedEvent,
+    RepositoryRef,
+    Review,
+    ReviewState,
+)
+from forge.integrations.source_control.registry import get_registry
 from forge.models.events import EventSource
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.checkpointer import get_checkpointer, get_ticket_from_pr_index
 from forge.queue.consumer import QueueConsumer
-from forge.queue.models import QueueMessage
+from forge.queue.models import QueueMessage, normalized_event_from_dict
 from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
@@ -57,13 +66,54 @@ from forge.workflow.utils.proposal_review_threads import (
 )
 from forge.workflow.utils.review_decisions import (
     decision_matches_comment,
-    flatten_review_threads,
     merge_review_decisions,
 )
+from forge.workflow.utils.source_control import get_adapter, identity_for
 
 logger = logging.getLogger(__name__)
 
 _CI_STAGES = ("ci_evaluator", "attempt_ci_fix", "human_review_gate")
+
+
+def _flatten_review_threads(reviews: list[Review]) -> list[dict[str, Any]]:
+    """Return the latest comment from each non-empty review thread.
+
+    Mirrors workflow.utils.review_decisions.flatten_review_threads, sourced
+    from adapter-mapped Review objects (one per thread) instead of the raw
+    GraphQL-shaped dicts that helper expects.
+    """
+    return [
+        {
+            "path": review.comments[-1].path or "",
+            "line": review.comments[-1].line,
+            "body": review.comments[-1].body,
+        }
+        for review in reviews
+        if review.comments
+    ]
+
+
+def _reviews_to_raw_threads(reviews: list[Review]) -> list[dict[str, Any]]:
+    """Convert adapter-mapped Review objects (one per thread) into the raw
+    dict shape triage_proposal_review_threads/reply_to_proposal_decisions and
+    the proposal-thread diffing below expect: JSON-serializable dicts with
+    "thread_id"/"comments" keys, not dataclasses.
+    """
+    return [
+        {
+            "thread_id": review.id,
+            "path": review.comments[0].path if review.comments else None,
+            "line": review.comments[0].line if review.comments else None,
+            "comments": [
+                {
+                    "comment_id": int(c.id) if c.id.isdigit() else c.id,
+                    "body": c.body,
+                }
+                for c in review.comments
+            ],
+        }
+        for review in reviews
+    ]
 
 
 def _is_workflow_errored(state: dict) -> bool:
@@ -154,21 +204,34 @@ class OrchestratorWorker:
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
         self._compiled_workflows: dict[str, Any] = {}  # Cache compiled workflows by name
-        self._forge_github_login: str | None = None
+        # Keyed by connection name -- a different connection may authenticate
+        # as a different bot identity, so a single process-wide login is wrong
+        # once more than the default connection is configured.
+        self._forge_github_logins: dict[str, str] = {}
 
-    async def _get_forge_github_login(self) -> str:
-        """Resolve and cache the authenticated Forge GitHub login."""
-        cached = getattr(self, "_forge_github_login", None)
+    def _deserialize_event(self, message: QueueMessage) -> NormalizedEvent | None:
+        """Reconstruct the typed NormalizedEvent a source-control message carries.
+
+        Returns None for Jira messages (which never set normalized_event) or for
+        a source-control message that predates this field for some reason (e.g.
+        a backlog entry queued before this field existed). Callers currently
+        treat None as "no match" / "nothing to detect" rather than falling back
+        to raw-payload handling -- there is no fallback path implemented.
+        """
+        if message.normalized_event is None:
+            return None
+        return normalized_event_from_dict(message.normalized_event)
+
+    async def _get_forge_github_login(self, repo_ref: RepositoryRef) -> str:
+        """Resolve and cache the authenticated Forge identity for this connection."""
+        cached = self._forge_github_logins.get(repo_ref.connection)
         if cached:
             return cached
-        github = GitHubClient()
-        try:
-            login = await resolve_bot_login(github)
-        finally:
-            await github.close()
-        if login:
-            self._forge_github_login = login
-        return login
+        _, adapter = get_adapter(repo_ref.namespace)
+        identity = await adapter.get_authenticated_identity(repo_ref)
+        if identity.login:
+            self._forge_github_logins[repo_ref.connection] = identity.login
+        return identity.login
 
     async def _handle_terminal_failure(self, message: QueueMessage, error: str) -> None:
         """Post one Jira comment after queue retries are exhausted."""
@@ -209,8 +272,8 @@ class OrchestratorWorker:
         """
         await self._process_workflow(message)
 
-    async def _handle_github_event(self, message: QueueMessage) -> None:
-        """Handle a GitHub webhook event.
+    async def _handle_source_control_event(self, message: QueueMessage) -> None:
+        """Handle a source-control webhook event.
 
         Args:
             message: The queue message to process.
@@ -219,7 +282,7 @@ class OrchestratorWorker:
             message = await self._resolve_ticket_from_pr_index(message)
             if not message.ticket_key:
                 logger.info(
-                    f"Dropping GitHub event {message.event_id}: "
+                    f"Dropping source-control event {message.event_id}: "
                     "no ticket key in message and PR URL not found in Redis index"
                 )
                 return
@@ -286,38 +349,40 @@ class OrchestratorWorker:
         return message
 
     def _is_prd_pr_event(self, message: QueueMessage, current_state: dict[str, Any]) -> bool:
-        """Check if a GitHub event targets the PRD proposals PR."""
-        if message.source != EventSource.GITHUB:
+        """Check if a source-control event targets the PRD proposals PR."""
+        if message.source != EventSource.SOURCE_CONTROL:
             return False
         prd_pr_number = current_state.get("prd_pr_number")
         prd_pr_repo = current_state.get("prd_pr_repo")
         if not prd_pr_number or not prd_pr_repo:
             return False
 
-        payload = message.payload
-        repo_full = payload.get("repository", {}).get("full_name", "")
-        event_pr_number = payload.get("pull_request", {}).get("number") or payload.get(
-            "issue", {}
-        ).get("number")
+        event = self._deserialize_event(message)
+        if event is None or event.change_request is None:
+            return False
 
-        return repo_full == prd_pr_repo and event_pr_number == prd_pr_number
+        return (
+            event.repo_ref.namespace == prd_pr_repo
+            and event.change_request.identity.native_id == prd_pr_number
+        )
 
     def _is_spec_pr_event(self, message: QueueMessage, current_state: dict[str, Any]) -> bool:
-        """Check if a GitHub event targets the spec proposals PR."""
-        if message.source != EventSource.GITHUB:
+        """Check if a source-control event targets the spec proposals PR."""
+        if message.source != EventSource.SOURCE_CONTROL:
             return False
         spec_pr_number = current_state.get("spec_pr_number")
         spec_pr_repo = current_state.get("spec_pr_repo")
         if not spec_pr_number or not spec_pr_repo:
             return False
 
-        payload = message.payload
-        repo_full = payload.get("repository", {}).get("full_name", "")
-        event_pr_number = payload.get("pull_request", {}).get("number") or payload.get(
-            "issue", {}
-        ).get("number")
+        event = self._deserialize_event(message)
+        if event is None or event.change_request is None:
+            return False
 
-        return repo_full == spec_pr_repo and event_pr_number == spec_pr_number
+        return (
+            event.repo_ref.namespace == spec_pr_repo
+            and event.change_request.identity.native_id == spec_pr_number
+        )
 
     async def _process_workflow(self, message: QueueMessage) -> None:
         """Process a message through the workflow.
@@ -591,8 +656,9 @@ class OrchestratorWorker:
             Updated state for workflow resumption.
         """
         payload = message.payload
-        current_state = activate_pull_request_for_event(current_state, payload)
-        targets_implementation_pr = event_targets_pull_request(current_state, payload)
+        event_obj = self._deserialize_event(message)
+        current_state = activate_pull_request_for_event(current_state, event_obj)
+        targets_implementation_pr = event_targets_pull_request(current_state, event_obj)
         changelog = payload.get("changelog", {})
         comment = payload.get("comment", {})
 
@@ -620,27 +686,34 @@ class OrchestratorWorker:
         # Preserve unrelated contested threads and re-run review analysis so any
         # newly accepted item can proceed without globally clearing objections.
         if (
-            message.source == EventSource.GITHUB
-            and "pull_request_review_comment" in message.event_type
+            event_obj is not None
+            and event_obj.kind == EventKind.COMMENT_CREATED
+            and event_obj.comment is not None
+            and event_obj.comment.path is not None
             and current_node == "review_response_gate"
             and current_state.get("is_paused", True)
         ):
-            reply = payload.get("comment", {})
-            replied_to = reply.get("in_reply_to_id")
-            sender_login = payload.get("sender", {}).get("login", "")
+            reply = event_obj.comment
+            sender_login = event_obj.actor.login
             if sender_login:
-                forge_login = await self._get_forge_github_login()
+                forge_login = await self._get_forge_github_login(event_obj.repo_ref)
                 settings = get_settings()
                 forge_bot_comment_prefix = settings.forge_bot_comment_prefix
                 if is_self_comment(
                     sender_login=sender_login,
-                    comment_body=reply.get("body", ""),
+                    comment_body=reply.body,
                     bot_login=forge_login,
                     prefix=forge_bot_comment_prefix,
                 ):
                     logger.debug("Ignoring Forge's own inline review comment")
                     return current_state
-            if replied_to:
+            in_reply_to_raw = reply.in_reply_to
+            replied_to = (
+                int(in_reply_to_raw)
+                if in_reply_to_raw is not None and in_reply_to_raw.isdigit()
+                else None
+            )
+            if replied_to is not None:
                 contested = current_state.get("contested_comments", [])
                 remaining = [
                     item for item in contested if not decision_matches_comment(item, replied_to)
@@ -649,7 +722,7 @@ class OrchestratorWorker:
                     **current_state,
                     "is_paused": False,
                     "revision_requested": True,
-                    "feedback_comment": reply.get("body", ""),
+                    "feedback_comment": reply.body,
                     "contested_comments": remaining,
                     "context": {
                         **current_state.get("context", {}),
@@ -658,59 +731,60 @@ class OrchestratorWorker:
                         "review_thread_comment_id": replied_to,
                     },
                 }
+            own_id = int(reply.id) if reply.id and reply.id.isdigit() else None
             return {
                 **current_state,
                 "is_paused": False,
                 "revision_requested": True,
-                "feedback_comment": reply.get("body", ""),
+                "feedback_comment": reply.body,
                 "context": {
                     **current_state.get("context", {}),
                     "resume_event": message.event_type,
                     "payload": payload,
-                    "review_thread_comment_id": reply.get("id"),
+                    "review_thread_comment_id": own_id,
                 },
             }
 
-        # GitHub check_run/check_suite events are the explicit signal for wait_for_ci_gate.
-        # They don't carry Jira labels or comments, so handle them before the label loop.
-        # For check_suite and check_run events (both real GitHub webhooks and poller
-        # forwarded ones), only wake up CI evaluation when the suite is completed.
-        # GitHub fires check_suite webhooks for created/in_progress/completed — evaluating
-        # on the earlier actions would see a partial set of check runs and could
-        # prematurely declare success. Other event types (push, pull_request) always wake up.
-        event = message.event_type
-        is_check_event = "check_suite" in event or "check_run" in event
-        if message.source == EventSource.GITHUB and (
+        is_check_event = event_obj is not None and event_obj.kind == EventKind.CHECK_UPDATED
+        if event_obj is not None and (
             current_node == "ci_evaluator" or (targets_implementation_pr and is_check_event)
         ):
             if is_check_event:
-                suite_status = payload.get("check_suite", {}).get("status") or payload.get(
-                    "check_run", {}
-                ).get("check_suite", {}).get("status")
-                if suite_status and suite_status != "completed":
+                suite_status = event_obj.check_suite_status
+                if suite_status and suite_status != CheckStatus.COMPLETED:
                     logger.info(
-                        f"Ignoring {event} for {message.ticket_key}: "
+                        f"Ignoring {message.event_type} for {message.ticket_key}: "
                         f"check_suite not yet completed (status={suite_status!r})"
                     )
                 else:
                     is_ci_webhook = True
-                    logger.info(f"Detected GitHub CI webhook signal for {current_node}")
-            elif (
-                "issue_comment" not in event
-                and "pull_request_review" not in event
-                and payload.get("pull_request", {}).get("merged") is not True
+                    logger.info(f"Detected source-control CI webhook signal for {current_node}")
+            elif not (
+                event_obj.kind
+                in (EventKind.COMMENT_CREATED, EventKind.REVIEW_SUBMITTED, EventKind.UNKNOWN)
+                or (
+                    event_obj.change_request
+                    and event_obj.change_request.state == ChangeRequestState.MERGED
+                )
             ):
                 is_ci_webhook = True
-                logger.info(f"Detected GitHub CI webhook signal for {current_node}")
+                logger.info(f"Detected source-control CI webhook signal for {current_node}")
 
         # GitHub issue_comment events: detect /forge skip-gate and /forge unskip-gate
         # commands posted as PR comments.
-        if message.source == EventSource.GITHUB and "issue_comment" in message.event_type:
-            gh_comment_body = payload.get("comment", {}).get("body", "").strip()
-            repo_full = payload.get("repository", {}).get("full_name", "")
-            pr_number = payload.get("issue", {}).get("number")
-            sender = payload.get("sender", {}).get("login", "")
-            _owner, _, _repo = repo_full.partition("/")
+        if (
+            event_obj is not None
+            and event_obj.kind == EventKind.COMMENT_CREATED
+            and event_obj.comment is not None
+            and event_obj.comment.path is None
+        ):
+            gh_comment_body = (event_obj.comment.body or "").strip()
+            repo_full = event_obj.repo_ref.namespace
+            native_id = (
+                event_obj.change_request.identity.native_id if event_obj.change_request else None
+            )
+            pr_number = int(native_id) if native_id is not None else None
+            sender = event_obj.actor.login
 
             skip_prefix = "/forge skip-gate"
             unskip_prefix = "/forge unskip-gate"
@@ -724,8 +798,7 @@ class OrchestratorWorker:
                     logger.info(f"CI gate skip added for {message.ticket_key}: '{check_name}'")
                     await self._post_skip_gate_feedback(
                         ticket_key=message.ticket_key,
-                        owner=_owner,
-                        repo=_repo,
+                        repo_ref=event_obj.repo_ref,
                         pr_number=pr_number,
                         check_name=check_name,
                         sender=sender,
@@ -748,8 +821,7 @@ class OrchestratorWorker:
                     logger.info(f"CI gate skip removed for {message.ticket_key}: '{check_name}'")
                     await self._post_skip_gate_feedback(
                         ticket_key=message.ticket_key,
-                        owner=_owner,
-                        repo=_repo,
+                        repo_ref=event_obj.repo_ref,
                         pr_number=pr_number,
                         check_name=check_name,
                         sender=sender,
@@ -774,8 +846,7 @@ class OrchestratorWorker:
                 logger.info(f"Detected /forge rebase for {message.ticket_key}")
                 await self._post_rebase_feedback(
                     ticket_key=message.ticket_key,
-                    owner=_owner,
-                    repo=_repo,
+                    repo_ref=event_obj.repo_ref,
                     pr_number=pr_number,
                     sender=sender,
                 )
@@ -1032,29 +1103,35 @@ class OrchestratorWorker:
         # A human reply to a proposal review thread resumes only that thread's
         # feedback. Forge-authored replies are informational and must not loop.
         if (
-            message.source == EventSource.GITHUB
-            and "pull_request_review_comment" in message.event_type
+            event_obj is not None
+            and event_obj.kind == EventKind.COMMENT_CREATED
+            and event_obj.comment is not None
+            and event_obj.comment.path is not None
         ):
+            reply = event_obj.comment
+            in_reply_to_raw = reply.in_reply_to
+            replied_to = (
+                int(in_reply_to_raw)
+                if in_reply_to_raw is not None and in_reply_to_raw.isdigit()
+                else None
+            )
             is_proposal_reply = (
                 self._is_prd_pr_event(message, current_state) and current_node in _PRD_GATE_NODES
             ) or (
                 self._is_spec_pr_event(message, current_state) and current_node in _SPEC_GATE_NODES
             )
-            reply = payload.get("comment", {})
-            replied_to = reply.get("in_reply_to_id")
-            if is_proposal_reply:
-                sender_login = payload.get("sender", {}).get("login", "")
-                if sender_login:
-                    forge_login = await self._get_forge_github_login()
-                    settings = get_settings()
-                    forge_bot_comment_prefix = settings.forge_bot_comment_prefix
-                    if is_self_comment(
-                        sender_login=sender_login,
-                        comment_body=reply.get("body", ""),
-                        bot_login=forge_login,
-                        prefix=forge_bot_comment_prefix,
-                    ):
-                        return current_state
+            sender_login = event_obj.actor.login
+            if is_proposal_reply and sender_login:
+                forge_login = await self._get_forge_github_login(event_obj.repo_ref)
+                settings = get_settings()
+                forge_bot_comment_prefix = settings.forge_bot_comment_prefix
+                if is_self_comment(
+                    sender_login=sender_login,
+                    comment_body=reply.body,
+                    bot_login=forge_login,
+                    prefix=forge_bot_comment_prefix,
+                ):
+                    return current_state
             if is_proposal_reply and replied_to:
                 previous = current_state.get("proposal_review_decisions", [])
                 matching = next(
@@ -1062,11 +1139,16 @@ class OrchestratorWorker:
                     None,
                 )
                 if matching:
-                    reply_body = reply.get("body", "").strip()
+                    reply_body = reply.body.strip()
+                    reply_comment_id = int(reply.id) if reply.id.isdigit() else None
                     decisions = [
                         {
                             **item,
-                            "comment_id": reply.get("id", item.get("comment_id")),
+                            "comment_id": (
+                                reply_comment_id
+                                if reply_comment_id is not None
+                                else item.get("comment_id")
+                            ),
                             "disposition": "accept",
                             "feedback": reply_body,
                             "status": "pending",
@@ -1089,59 +1171,69 @@ class OrchestratorWorker:
                     replied_to,
                 )
             elif is_proposal_reply:
-                body = reply.get("body", "").strip()
-                comment_id = reply.get("id")
-                if body and isinstance(comment_id, int):
+                body = reply.body.strip()
+                if body and reply.id.isdigit():
+                    comment_id = int(reply.id)
                     proposal_review_threads = [
                         {
                             "thread_id": f"comment-{comment_id}",
-                            "path": reply.get("path", ""),
-                            "line": reply.get("line") or reply.get("original_line"),
+                            "path": reply.path or "",
+                            "line": reply.line,
                             "comments": [
                                 {
                                     "comment_id": comment_id,
                                     "body": body,
                                     "author": sender_login,
-                                    "commit_sha": reply.get("commit_id", ""),
+                                    "commit_sha": event_obj.raw.get("comment", {}).get(
+                                        "commit_id", ""
+                                    ),
                                 }
                             ],
                         }
                     ]
                     is_rejected = True
                     feedback = body
+                else:
+                    logger.warning(
+                        "Dropping proposal reply with empty body or non-numeric "
+                        f"comment id (id={reply.id!r}) for {message.ticket_key}"
+                    )
 
         # GitHub events targeting the PRD proposals PR — handled at prd_approval_gate.
         # Merge = approval. Review with feedback = revision. Comment = feedback/question.
         if self._is_prd_pr_event(message, current_state) and current_node in _PRD_GATE_NODES:
-            event = message.event_type
-
-            if "pull_request_review" in event:
-                review = payload.get("review", {})
-                review_state = review.get("state", "").lower()
-                review_body = review.get("body", "") or ""
+            if (
+                event_obj is not None
+                and event_obj.kind == EventKind.REVIEW_SUBMITTED
+                and event_obj.review is not None
+            ):
+                pr_review = event_obj.review
 
                 # Merge-only approval: review approval is intentionally ignored
-                if review_state in ("changes_requested", "commented"):
-                    repo_full = payload.get("repository", {}).get("full_name", "")
-                    pr_number = payload.get("pull_request", {}).get("number")
+                if pr_review.state in (ReviewState.CHANGES_REQUESTED, ReviewState.COMMENTED):
+                    repo_full = event_obj.repo_ref.namespace
+                    native_id = (
+                        event_obj.change_request.identity.native_id
+                        if event_obj.change_request
+                        else None
+                    )
+                    pr_number = int(native_id) if native_id is not None else None
                     inline_comments: list[dict[str, Any]] = []
                     if repo_full and pr_number:
-                        _owner, _repo = repo_full.split("/", 1)
-                        gh = GitHubClient()
-                        try:
-                            proposal_review_threads = await gh.get_pull_request_review_threads(
-                                _owner, _repo, pr_number
-                            )
-                            inline_comments = flatten_review_threads(proposal_review_threads)
-                        finally:
-                            await gh.close()
+                        _repo_ref_obj, _adapter = get_adapter(repo_full)
+                        _identity = identity_for(_repo_ref_obj, pr_number)
+                        _reviews = await _adapter.get_review_thread_comments(
+                            _repo_ref_obj, _identity
+                        )
+                        proposal_review_threads = _reviews_to_raw_threads(_reviews)
+                        inline_comments = _flatten_review_threads(_reviews)
 
                     parts = []
-                    if review_body.strip():
-                        parts.append(review_body.strip())
+                    if pr_review.body.strip():
+                        parts.append(pr_review.body.strip())
                     if inline_comments:
                         inline_text = "\n\n".join(
-                            f"**{c['path']}** (line {c.get('line') or c.get('original_line', '?')}):\n{c['body']}"
+                            f"**{c['path']}** (line {c.get('line') or '?'}):\n{c['body']}"
                             for c in inline_comments
                         )
                         parts.append(f"Inline comments:\n{inline_text}")
@@ -1150,18 +1242,22 @@ class OrchestratorWorker:
                         feedback = "\n\n".join(parts)
                         is_rejected = True
                         logger.info(
-                            f"PRD PR review ({review_state}) for {message.ticket_key}: "
-                            f"body={'yes' if review_body.strip() else 'no'}, "
+                            f"PRD PR review ({pr_review.state.value}) for {message.ticket_key}: "
+                            f"body={'yes' if pr_review.body.strip() else 'no'}, "
                             f"inline={len(inline_comments)}"
                         )
                     else:
                         logger.info(
-                            f"PRD PR review ({review_state}) for {message.ticket_key} "
+                            f"PRD PR review ({pr_review.state.value}) for {message.ticket_key} "
                             "with no content — ignoring"
                         )
                         return current_state
 
-            elif "pull_request" in event and payload.get("pull_request", {}).get("merged") is True:
+            elif (
+                event_obj is not None
+                and event_obj.change_request is not None
+                and event_obj.change_request.state == ChangeRequestState.MERGED
+            ):
                 is_approved = True
                 pr_merged = True
                 logger.info(f"PRD PR merged for {message.ticket_key}")
@@ -1177,19 +1273,18 @@ class OrchestratorWorker:
                 finally:
                     await jira.close()
 
-            elif "issue_comment" in event:
-                gh_comment = payload.get("comment", {})
-                comment_body = gh_comment.get("body", "").strip()
-                sender_login = payload.get("sender", {}).get("login", "")
+            elif (
+                event_obj is not None
+                and event_obj.kind == EventKind.COMMENT_CREATED
+                and event_obj.comment is not None
+                and event_obj.comment.path is None
+            ):
+                comment_body = (event_obj.comment.body or "").strip()
+                sender_login = event_obj.actor.login
 
                 if comment_body and sender_login:
                     # Skip self-comments
-                    gh = GitHubClient()
-                    try:
-                        forge_user = await gh.get_authenticated_user()
-                        forge_login = forge_user.get("login", "")
-                    finally:
-                        await gh.close()
+                    forge_login = await self._get_forge_github_login(event_obj.repo_ref)
 
                     settings = get_settings()
                     forge_bot_comment_prefix = settings.forge_bot_comment_prefix
@@ -1223,34 +1318,37 @@ class OrchestratorWorker:
 
         # GitHub events targeting the spec proposals PR — same pattern as PRD PR.
         if self._is_spec_pr_event(message, current_state) and current_node in _SPEC_GATE_NODES:
-            event = message.event_type
+            if (
+                event_obj is not None
+                and event_obj.kind == EventKind.REVIEW_SUBMITTED
+                and event_obj.review is not None
+            ):
+                pr_review = event_obj.review
 
-            if "pull_request_review" in event:
-                review = payload.get("review", {})
-                review_state = review.get("state", "").lower()
-                review_body = review.get("body", "") or ""
-
-                if review_state in ("changes_requested", "commented"):
-                    repo_full = payload.get("repository", {}).get("full_name", "")
-                    pr_number = payload.get("pull_request", {}).get("number")
+                if pr_review.state in (ReviewState.CHANGES_REQUESTED, ReviewState.COMMENTED):
+                    repo_full = event_obj.repo_ref.namespace
+                    native_id = (
+                        event_obj.change_request.identity.native_id
+                        if event_obj.change_request
+                        else None
+                    )
+                    pr_number = int(native_id) if native_id is not None else None
                     inline_comments: list[dict[str, Any]] = []
                     if repo_full and pr_number:
-                        _owner, _repo = repo_full.split("/", 1)
-                        gh = GitHubClient()
-                        try:
-                            proposal_review_threads = await gh.get_pull_request_review_threads(
-                                _owner, _repo, pr_number
-                            )
-                            inline_comments = flatten_review_threads(proposal_review_threads)
-                        finally:
-                            await gh.close()
+                        _repo_ref_obj, _adapter = get_adapter(repo_full)
+                        _identity = identity_for(_repo_ref_obj, pr_number)
+                        _reviews = await _adapter.get_review_thread_comments(
+                            _repo_ref_obj, _identity
+                        )
+                        proposal_review_threads = _reviews_to_raw_threads(_reviews)
+                        inline_comments = _flatten_review_threads(_reviews)
 
                     parts = []
-                    if review_body.strip():
-                        parts.append(review_body.strip())
+                    if pr_review.body.strip():
+                        parts.append(pr_review.body.strip())
                     if inline_comments:
                         inline_text = "\n\n".join(
-                            f"**{c['path']}** (line {c.get('line') or c.get('original_line', '?')}):\n{c['body']}"
+                            f"**{c['path']}** (line {c.get('line') or '?'}):\n{c['body']}"
                             for c in inline_comments
                         )
                         parts.append(f"Inline comments:\n{inline_text}")
@@ -1259,18 +1357,22 @@ class OrchestratorWorker:
                         feedback = "\n\n".join(parts)
                         is_rejected = True
                         logger.info(
-                            f"Spec PR review ({review_state}) for {message.ticket_key}: "
-                            f"body={'yes' if review_body.strip() else 'no'}, "
+                            f"Spec PR review ({pr_review.state.value}) for {message.ticket_key}: "
+                            f"body={'yes' if pr_review.body.strip() else 'no'}, "
                             f"inline={len(inline_comments)}"
                         )
                     else:
                         logger.info(
-                            f"Spec PR review ({review_state}) for {message.ticket_key} "
+                            f"Spec PR review ({pr_review.state.value}) for {message.ticket_key} "
                             "with no content — ignoring"
                         )
                         return current_state
 
-            elif "pull_request" in event and payload.get("pull_request", {}).get("merged") is True:
+            elif (
+                event_obj is not None
+                and event_obj.change_request is not None
+                and event_obj.change_request.state == ChangeRequestState.MERGED
+            ):
                 is_approved = True
                 pr_merged = True
                 logger.info(f"Spec PR merged for {message.ticket_key}")
@@ -1316,18 +1418,17 @@ class OrchestratorWorker:
                 finally:
                     await jira.close()
 
-            elif "issue_comment" in event:
-                gh_comment = payload.get("comment", {})
-                comment_body = gh_comment.get("body", "").strip()
-                sender_login = payload.get("sender", {}).get("login", "")
+            elif (
+                event_obj is not None
+                and event_obj.kind == EventKind.COMMENT_CREATED
+                and event_obj.comment is not None
+                and event_obj.comment.path is None
+            ):
+                comment_body = (event_obj.comment.body or "").strip()
+                sender_login = event_obj.actor.login
 
                 if comment_body and sender_login:
-                    gh = GitHubClient()
-                    try:
-                        forge_user = await gh.get_authenticated_user()
-                        forge_login = forge_user.get("login", "")
-                    finally:
-                        await gh.close()
+                    forge_login = await self._get_forge_github_login(event_obj.repo_ref)
 
                     settings = get_settings()
                     forge_bot_comment_prefix = settings.forge_bot_comment_prefix
@@ -1478,62 +1579,65 @@ class OrchestratorWorker:
         # GitHub pull_request_review events — handled when paused at human_review_gate or review_response_gate.
         # A review submission is the primary signal for the human review stage.
         if (
-            message.source == EventSource.GITHUB
-            and "pull_request_review" in message.event_type
+            event_obj is not None
+            and event_obj.kind == EventKind.REVIEW_SUBMITTED
+            and event_obj.review is not None
             and (current_node in _REVIEW_GATES or targets_implementation_pr)
-            and current_state.get("is_paused", True)
+            and (current_state.get("is_paused", True) or current_state.get("pending_ci_event"))
         ):
-            sender_login = payload.get("sender", {}).get("login", "")
-            review = payload.get("review", {}) or {}
-            review_body = review.get("body", "") or ""
+            review = event_obj.review
+            sender_login = review.author
             if sender_login:
-                forge_login = await self._get_forge_github_login()
+                forge_login = await self._get_forge_github_login(event_obj.repo_ref)
                 settings = get_settings()
                 forge_bot_comment_prefix = settings.forge_bot_comment_prefix
                 if is_self_comment(
                     sender_login=sender_login,
-                    comment_body=review_body,
+                    comment_body=review.body,
                     bot_login=forge_login,
                     prefix=forge_bot_comment_prefix,
                 ):
                     logger.debug("Ignoring Forge's own pull request review")
                     return current_state
 
-            review_state = review.get("state", "").lower()
-
-            if review_state == "approved":
+            if review.state == ReviewState.APPROVED:
                 if targets_implementation_pr:
                     implementation_pr_approved = True
                 is_approved = True
                 logger.info(f"Detected PR review approval for {message.ticket_key}")
-            elif review_state in ("changes_requested", "commented"):
+            elif review.state in (ReviewState.CHANGES_REQUESTED, ReviewState.COMMENTED):
                 # Always fetch inline comments so the agent gets the full picture,
                 # regardless of whether a summary body is also present.
-                repo_full = payload.get("repository", {}).get("full_name", "")
-                pr_number = payload.get("pull_request", {}).get("number")
+                repo_full = event_obj.repo_ref.namespace
+                pr_number = (
+                    event_obj.change_request.identity.native_id
+                    if event_obj.change_request
+                    else None
+                )
                 inline_comments = []
                 if repo_full and pr_number:
-                    owner, repo_name = repo_full.split("/", 1)
-                    gh = GitHubClient()
-                    try:
-                        review_id = review.get("id")
-                        if review_id:
-                            inline_comments = await gh.get_review_comments(
-                                owner, repo_name, pr_number, review_id
-                            )
-                        else:
-                            inline_comments = await gh.get_pull_request_review_comments(
-                                owner, repo_name, pr_number
-                            )
-                    finally:
-                        await gh.close()
+                    _repo_ref_obj, _adapter = get_adapter(repo_full)
+                    _identity = identity_for(_repo_ref_obj, pr_number)
+                    review_id = int(review.id) if review.id else None
+                    if review_id:
+                        review_comments = await _adapter.get_review_comments_for_submission(
+                            _repo_ref_obj, _identity, str(review_id)
+                        )
+                    else:
+                        threads = await _adapter.get_review_thread_comments(
+                            _repo_ref_obj, _identity
+                        )
+                        review_comments = [c for thread in threads for c in thread.comments]
+                    inline_comments = [
+                        {"path": c.path, "line": c.line, "body": c.body} for c in review_comments
+                    ]
 
                 parts = []
-                if review_body.strip():
-                    parts.append(review_body.strip())
+                if review.body.strip():
+                    parts.append(review.body.strip())
                 if inline_comments:
                     inline_text = "\n\n".join(
-                        f"**{c['path']}** (line {c.get('line') or c.get('original_line') or c.get('position') or '?'}):\n{c['body']}"
+                        f"**{c['path']}** (line {c.get('line') or '?'}):\n{c['body']}"
                         for c in inline_comments
                     )
                     parts.append(f"Inline comments:\n{inline_text}")
@@ -1542,22 +1646,22 @@ class OrchestratorWorker:
                     feedback = "\n\n".join(parts)
                     is_rejected = True
                     logger.info(
-                        f"Detected PR review ({review_state}) for {message.ticket_key}: "
-                        f"body={'yes' if review_body.strip() else 'no'}, "
+                        f"Detected PR review ({review.state.value}) for {message.ticket_key}: "
+                        f"body={'yes' if review.body.strip() else 'no'}, "
                         f"inline comments={len(inline_comments)}"
                     )
                 else:
                     logger.info(
-                        f"Detected PR review ({review_state}) for {message.ticket_key} "
+                        f"Detected PR review ({review.state.value}) for {message.ticket_key} "
                         f"with no body and no inline comments — ignoring"
                     )
                     return current_state
 
         # GitHub pull_request:closed + merged — PR was actually merged
         if (
-            message.source == EventSource.GITHUB
-            and "pull_request" in message.event_type
-            and payload.get("pull_request", {}).get("merged") is True
+            event_obj is not None
+            and event_obj.change_request is not None
+            and event_obj.change_request.state == ChangeRequestState.MERGED
             and (current_node in _REVIEW_GATES or targets_implementation_pr)
         ):
             is_approved = True
@@ -1579,7 +1683,7 @@ class OrchestratorWorker:
         if targets_implementation_pr and is_ci_webhook and current_node != "human_review_gate":
             updated_state["current_node"] = "ci_evaluator"
         elif targets_implementation_pr and (
-            "pull_request_review" in message.event_type or pr_merged
+            (event_obj is not None and event_obj.kind == EventKind.REVIEW_SUBMITTED) or pr_merged
         ):
             updated_state["current_node"] = "human_review_gate"
 
@@ -1706,7 +1810,7 @@ class OrchestratorWorker:
                 updated_state["human_review_status"] = "approved"
             if pr_merged:
                 updated_state["pr_merged"] = True
-                if event_targets_pull_request(updated_state, payload):
+                if event_targets_pull_request(updated_state, event_obj):
                     updated_state = mark_active_pull_request_merged(updated_state)
                     updated_state["pr_merged"] = all_pull_requests_merged(updated_state)
                     if not updated_state["pr_merged"]:
@@ -1810,6 +1914,7 @@ class OrchestratorWorker:
                 "ci_evaluator",
                 "attempt_ci_fix",
                 "human_review_gate",
+                "review_response_gate",
             )
             if (
                 not current_state.get("is_paused", True)
@@ -1922,8 +2027,7 @@ class OrchestratorWorker:
     async def _post_skip_gate_feedback(
         self,
         ticket_key: str,
-        owner: str,
-        repo: str,
+        repo_ref: RepositoryRef,
         pr_number: int | None,
         check_name: str,
         sender: str,
@@ -1933,15 +2037,14 @@ class OrchestratorWorker:
 
         Args:
             ticket_key: Jira ticket key for the audit comment.
-            owner: Repository owner.
-            repo: Repository name.
+            repo_ref: Repository reference the PR belongs to.
             pr_number: Pull request number.
             check_name: The check name that was skipped or unskipped.
             sender: GitHub login of the user who issued the command.
             action: "skip" or "unskip".
         """
         try:
-            github = GitHubClient()
+            _, adapter = get_adapter(repo_ref.namespace)
             jira = JiraClient()
             try:
                 if action == "skip":
@@ -1970,10 +2073,10 @@ class OrchestratorWorker:
                     )
 
                 if pr_number:
-                    await github.create_issue_comment(owner, repo, pr_number, gh_comment)
+                    identity = identity_for(repo_ref, pr_number)
+                    await adapter.create_comment(repo_ref, identity, gh_comment)
                 await post_status_comment(jira, ticket_key, jira_comment)
             finally:
-                await github.close()
                 await jira.close()
         except Exception as e:
             logger.warning(f"Failed to post skip-gate feedback: {e}")
@@ -1981,14 +2084,13 @@ class OrchestratorWorker:
     async def _post_rebase_feedback(
         self,
         ticket_key: str,
-        owner: str,
-        repo: str,
+        repo_ref: RepositoryRef,
         pr_number: int | None,
         sender: str,
     ) -> None:
         """Post feedback for a /forge rebase command."""
         try:
-            github = GitHubClient()
+            _, adapter = get_adapter(repo_ref.namespace)
             jira = JiraClient()
             try:
                 gh_comment = (
@@ -2000,10 +2102,10 @@ class OrchestratorWorker:
                     f"Rebase triggered via `/forge rebase` on PR #{pr_number} by {sender}."
                 )
                 if pr_number:
-                    await github.create_issue_comment(owner, repo, pr_number, gh_comment)
+                    identity = identity_for(repo_ref, pr_number)
+                    await adapter.create_comment(repo_ref, identity, gh_comment)
                 await post_status_comment(jira, ticket_key, jira_comment)
             finally:
-                await github.close()
                 await jira.close()
         except Exception as e:
             logger.warning(f"Failed to post rebase feedback: {e}")
@@ -2284,7 +2386,9 @@ class OrchestratorWorker:
 
         # Register handlers
         self.consumer.register_handler(EventSource.JIRA, self._handle_jira_event)
-        self.consumer.register_handler(EventSource.GITHUB, self._handle_github_event)
+        self.consumer.register_handler(
+            EventSource.SOURCE_CONTROL, self._handle_source_control_event
+        )
 
         try:
             await self.consumer.start()
@@ -2292,6 +2396,7 @@ class OrchestratorWorker:
             pass
         finally:
             await self.consumer.stop()
+            await get_registry().aclose()
             logger.info("Worker shut down gracefully")
 
     def _handle_shutdown(self) -> None:

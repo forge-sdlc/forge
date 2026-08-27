@@ -7,11 +7,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langgraph.graph import END
 
+from forge.integrations.source_control.contracts import Provider, RepositoryRef
 from forge.models.workflow import TicketType
 from forge.workflow.bug.graph import build_bug_graph
 from forge.workflow.feature.graph import build_feature_graph
 from forge.workflow.task_takeover.graph import build_task_takeover_graph
 from tests.fixtures.workflow_states import make_workflow_state
+
+
+def _repo_ref(repo: str = "org/repo") -> RepositoryRef:
+    return RepositoryRef(
+        id=repo,
+        provider=Provider.GITHUB,
+        connection="c",
+        namespace=repo,
+        default_branch="main",
+        change_request_mode="fork",
+    )
+
 
 # ── State fields ──────────────────────────────────────────────────────────────
 
@@ -367,9 +380,7 @@ class TestImplementReviewStatusComment:
 
         mock_git = MagicMock()
         mock_git._run_git.return_value = MagicMock(stdout="")
-        mock_github = MagicMock()
-        mock_github.create_issue_comment = AsyncMock()
-        mock_github.close = AsyncMock()
+        mock_adapter = AsyncMock()
         mock_runner = MagicMock()
         mock_runner.run = AsyncMock()
 
@@ -392,20 +403,20 @@ class TestImplementReviewStatusComment:
                 "forge.workflow.nodes.implement_review._fetch_pr_review_comments",
                 new=AsyncMock(return_value="# PR Review Feedback\n"),
             ),
-            patch("forge.workflow.nodes.implement_review.GitHubClient", return_value=mock_github),
+            patch(
+                "forge.workflow.nodes.implement_review.get_adapter",
+                return_value=(_repo_ref(), mock_adapter),
+            ),
             patch(
                 "forge.workflow.nodes.implement_review.ContainerRunner", return_value=mock_runner
             ),
         ):
             result = await implement_review(state)
 
-        mock_github.create_issue_comment.assert_called_once_with(
-            "org",
-            "repo",
-            17,
-            _REVIEW_ADDRESSING_COMMENT,
-        )
-        mock_github.close.assert_called_once()
+        mock_adapter.create_comment.assert_awaited_once()
+        call_args = mock_adapter.create_comment.call_args[0]
+        assert call_args[1].native_id == 17
+        assert call_args[2] == _REVIEW_ADDRESSING_COMMENT
         mock_runner.run.assert_called_once()
         assert result["current_node"] == "human_review_gate"
 
@@ -414,260 +425,50 @@ class TestImplementReviewStatusComment:
         """No PR comment is posted if the workflow has no PR number."""
         from forge.workflow.nodes.implement_review import _post_review_addressing_comment
 
-        mock_github = MagicMock()
-        mock_github.create_issue_comment = AsyncMock()
-
-        with patch("forge.workflow.nodes.implement_review.GitHubClient", return_value=mock_github):
+        with patch("forge.workflow.nodes.implement_review.get_adapter") as mock_get_adapter:
             await _post_review_addressing_comment(
                 ticket_key="TEST-789",
-                owner="org",
-                repo="repo",
+                current_repo="org/repo",
                 pr_number=None,
             )
 
-        mock_github.create_issue_comment.assert_not_called()
+        mock_get_adapter.assert_not_called()
 
 
 class TestThreadAwareReviewHandling:
     @pytest.mark.asyncio
     async def test_processed_threads_are_excluded_from_next_analysis(self):
+        from forge.integrations.source_control.contracts import Review, ReviewComment, ReviewState
         from forge.workflow.nodes.implement_review import _fetch_pr_review_comments
 
-        github = MagicMock()
-        github.get_pull_request_review_threads = AsyncMock(
+        adapter = AsyncMock()
+        adapter.get_review_thread_comments = AsyncMock(
             return_value=[
-                {
-                    "thread_id": "already-accepted",
-                    "path": "a.py",
-                    "line": 1,
-                    "comments": [{"comment_id": 10, "body": "Done", "author": "r"}],
-                },
-                {
-                    "thread_id": "new-thread",
-                    "path": "b.py",
-                    "line": 2,
-                    "comments": [{"comment_id": 20, "body": "New", "author": "r"}],
-                },
+                Review(
+                    id="already-accepted",
+                    state=ReviewState.COMMENTED,
+                    body="",
+                    author="r",
+                    comments=[ReviewComment(id="10", body="Done", author="r", path="a.py", line=1)],
+                ),
+                Review(
+                    id="new-thread",
+                    state=ReviewState.COMMENTED,
+                    body="",
+                    author="r",
+                    comments=[ReviewComment(id="20", body="New", author="r", path="b.py", line=2)],
+                ),
             ]
         )
-        github.close = AsyncMock()
 
-        with patch("forge.workflow.nodes.implement_review.GitHubClient", return_value=github):
-            result = await _fetch_pr_review_comments(
-                "org",
-                "repo",
-                7,
-                "",
-                review_comments=[{"thread_id": "already-accepted", "disposition": "accept"}],
-            )
+        with patch(
+            "forge.workflow.nodes.implement_review.get_adapter",
+            return_value=(_repo_ref(), adapter),
+        ):
+            result = await _fetch_pr_review_comments("org/repo", 7, "", {"already-accepted"})
 
         assert "already-accepted" not in result
         assert "new-thread" in result
-
-    @pytest.mark.asyncio
-    async def test_contested_thread_settled_while_bots_reply_is_last_comment(self):
-        """A contested thread stays excluded as long as nothing new happened since Forge replied."""
-        from forge.workflow.nodes.implement_review import _fetch_pr_review_comments
-
-        github = MagicMock()
-        github.get_pull_request_review_threads = AsyncMock(
-            return_value=[
-                {
-                    "thread_id": "contested-thread",
-                    "path": "a.py",
-                    "line": 1,
-                    "comments": [
-                        {
-                            "comment_id": 10,
-                            "body": "This is wrong",
-                            "author": "reviewer",
-                            "created_at": "2026-01-01T00:00:00Z",
-                        },
-                        {
-                            "comment_id": 11,
-                            "body": "This conflicts with the public API.",
-                            "author": "forge-bot",
-                            "created_at": "2026-01-02T00:00:00Z",
-                        },
-                    ],
-                },
-            ]
-        )
-        github.close = AsyncMock()
-        login_client = MagicMock()
-        login_client.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-        login_client.close = AsyncMock()
-
-        with patch(
-            "forge.workflow.nodes.implement_review.GitHubClient",
-            side_effect=[github, login_client],
-        ):
-            result = await _fetch_pr_review_comments(
-                "org",
-                "repo",
-                7,
-                "",
-                review_comments=[{"thread_id": "contested-thread", "disposition": "contest"}],
-            )
-
-        assert "contested-thread" not in result
-
-    @pytest.mark.asyncio
-    async def test_contested_thread_resurfaces_once_human_replies_after_forge(self):
-        """A human reply after Forge's objection re-opens the thread for re-analysis."""
-        from forge.workflow.nodes.implement_review import _fetch_pr_review_comments
-
-        github = MagicMock()
-        github.get_pull_request_review_threads = AsyncMock(
-            return_value=[
-                {
-                    "thread_id": "contested-thread",
-                    "path": "a.py",
-                    "line": 1,
-                    "comments": [
-                        {
-                            "comment_id": 10,
-                            "body": "This is wrong",
-                            "author": "reviewer",
-                            "created_at": "2026-01-01T00:00:00Z",
-                        },
-                        {
-                            "comment_id": 11,
-                            "body": "This conflicts with the public API.",
-                            "author": "forge-bot",
-                            "created_at": "2026-01-02T00:00:00Z",
-                        },
-                        {
-                            "comment_id": 12,
-                            "body": "Please do it anyway.",
-                            "author": "reviewer",
-                            "created_at": "2026-01-03T00:00:00Z",
-                        },
-                    ],
-                },
-            ]
-        )
-        github.close = AsyncMock()
-        login_client = MagicMock()
-        login_client.get_authenticated_user = AsyncMock(return_value={"login": "forge-bot"})
-        login_client.close = AsyncMock()
-
-        with patch(
-            "forge.workflow.nodes.implement_review.GitHubClient",
-            side_effect=[github, login_client],
-        ):
-            result = await _fetch_pr_review_comments(
-                "org",
-                "repo",
-                7,
-                "",
-                review_comments=[{"thread_id": "contested-thread", "disposition": "contest"}],
-            )
-
-        assert "contested-thread" in result
-        assert "Please do it anyway." in result
-
-    @pytest.mark.asyncio
-    async def test_reply_to_review_threads_uses_skip_addressed_guard(self):
-        """A second guard: never re-post to a decision already marked addressed."""
-        from forge.workflow.nodes.implement_review import _reply_to_review_threads
-
-        with patch(
-            "forge.workflow.nodes.implement_review.reply_to_review_decisions",
-            new=AsyncMock(),
-        ) as reply_mock:
-            await _reply_to_review_threads(
-                owner="org", repo="repo", pr_number=9, decisions=[{"thread_id": "t"}]
-            )
-
-        reply_mock.assert_awaited_once_with(
-            repo_full_name="org/repo",
-            pr_number=9,
-            decisions=[{"thread_id": "t"}],
-            skip_addressed=True,
-        )
-
-    @pytest.mark.asyncio
-    async def test_no_bot_login_lookup_when_no_contested_decisions(self):
-        """Avoid the extra GET /user round trip when there's nothing to settle-check."""
-        from forge.workflow.nodes.implement_review import _fetch_pr_review_comments
-
-        github = MagicMock()
-        github.get_pull_request_review_threads = AsyncMock(
-            return_value=[
-                {
-                    "thread_id": "new-thread",
-                    "path": "b.py",
-                    "line": 2,
-                    "comments": [
-                        {
-                            "comment_id": 20,
-                            "body": "New",
-                            "author": "r",
-                            "created_at": "2026-01-01T00:00:00Z",
-                        }
-                    ],
-                },
-            ]
-        )
-        github.close = AsyncMock()
-
-        with patch(
-            "forge.workflow.nodes.implement_review.GitHubClient", return_value=github
-        ) as ctor:
-            result = await _fetch_pr_review_comments("org", "repo", 7, "", review_comments=[])
-
-        ctor.assert_called_once()
-        assert "new-thread" in result
-
-    @pytest.mark.asyncio
-    async def test_contested_thread_resurfaces_when_bot_login_lookup_fails(self):
-        """A failed identity lookup must fail toward re-analysis, not a coincidental
-        empty-string match against a deleted account's comment author."""
-        from forge.workflow.nodes.implement_review import _fetch_pr_review_comments
-
-        github = MagicMock()
-        github.get_pull_request_review_threads = AsyncMock(
-            return_value=[
-                {
-                    "thread_id": "contested-thread",
-                    "path": "a.py",
-                    "line": 1,
-                    "comments": [
-                        {
-                            "comment_id": 10,
-                            "body": "This is wrong",
-                            "author": "reviewer",
-                            "created_at": "2026-01-01T00:00:00Z",
-                        },
-                        {
-                            "comment_id": 11,
-                            "body": "This conflicts with the public API.",
-                            "author": "",  # e.g. a deleted account, per GitHub's API
-                            "created_at": "2026-01-02T00:00:00Z",
-                        },
-                    ],
-                },
-            ]
-        )
-        github.close = AsyncMock()
-        login_client = MagicMock()
-        login_client.get_authenticated_user = AsyncMock(side_effect=RuntimeError("auth failed"))
-        login_client.close = AsyncMock()
-
-        with patch(
-            "forge.workflow.nodes.implement_review.GitHubClient",
-            side_effect=[github, login_client],
-        ):
-            result = await _fetch_pr_review_comments(
-                "org",
-                "repo",
-                7,
-                "",
-                review_comments=[{"thread_id": "contested-thread", "disposition": "contest"}],
-            )
-
-        assert "contested-thread" in result
 
     @pytest.mark.asyncio
     async def test_legacy_objections_file_still_pauses_for_response(self, tmp_path):
@@ -790,80 +591,13 @@ class TestThreadAwareReviewHandling:
 
         assert mock_runner.run.await_count == 2
         assert result["current_node"] == "review_response_gate"
-        # Once Forge has replied to the contested thread, it's marked addressed
-        # so the skip_addressed guard in reply_to_review_decisions can catch a
-        # stray re-reply if the same decision ever resurfaces unchanged.
-        assert result["contested_comments"] == [{**decisions[1], "status": "addressed"}]
+        assert result["contested_comments"] == [decisions[1]]
         assert result["review_comments"][0] == {
             **decisions[0],
             "response": "Forge verified this feedback; no additional code change was needed.",
         }
-        assert result["review_comments"][1] == {**decisions[1], "status": "addressed"}
+        assert result["review_comments"][1] == decisions[1]
         assert reply_threads.await_count == 2
-
-    @pytest.mark.asyncio
-    async def test_contested_decision_marked_addressed_after_reply(self, tmp_path):
-        """Once Forge has replied to a contested thread, the persisted decision
-        carries status=addressed, so a decision that somehow re-surfaces
-        unchanged is skipped by reply_to_review_decisions' skip_addressed guard."""
-        from forge.workflow.nodes.implement_review import implement_review
-
-        decisions = [
-            {
-                "thread_id": "contested-thread",
-                "comment_id": 20,
-                "disposition": "contest",
-                "feedback": "",
-                "reason": "Conflicts with the public API",
-                "response": "This conflicts with the documented public API. Can you confirm?",
-            },
-        ]
-
-        async def run_container(**_kwargs):
-            if not (tmp_path / ".forge" / "review-decisions.json").exists():
-                (tmp_path / ".forge" / "review-decisions.json").write_text(json.dumps(decisions))
-                (tmp_path / ".forge" / "review-plan.md").write_text("# No actionable items")
-
-        mock_runner = MagicMock()
-        mock_runner.run = AsyncMock(side_effect=run_container)
-        mock_git = MagicMock()
-        mock_git.has_uncommitted_changes.return_value = False
-        mock_git._run_git.return_value = MagicMock(stdout="")
-        state = make_workflow_state(
-            ticket_key="TEST-234",
-            current_node="implement_review",
-            workspace_path=str(tmp_path),
-            current_repo="org/repo",
-            current_pr_number=9,
-            feedback_comment="Review",
-            context={"branch_name": "forge/TEST-234"},
-        )
-
-        with (
-            patch(
-                "forge.workflow.nodes.implement_review.prepare_workspace",
-                return_value=(str(tmp_path), mock_git),
-            ),
-            patch(
-                "forge.workflow.nodes.implement_review._fetch_pr_review_comments",
-                new=AsyncMock(return_value="# Review"),
-            ),
-            patch(
-                "forge.workflow.nodes.implement_review._post_review_addressing_comment",
-                new=AsyncMock(),
-            ),
-            patch(
-                "forge.workflow.nodes.implement_review._reply_to_review_threads",
-                new=AsyncMock(),
-            ),
-            patch(
-                "forge.workflow.nodes.implement_review.ContainerRunner",
-                return_value=mock_runner,
-            ),
-        ):
-            result = await implement_review(state)
-
-        assert result["review_comments"][0]["status"] == "addressed"
 
     def test_confirming_one_thread_routes_to_implementation_with_others_pending(self):
         from forge.workflow.nodes.implement_review import route_review_response

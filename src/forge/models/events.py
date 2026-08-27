@@ -10,7 +10,7 @@ class EventSource(StrEnum):
     """Source of webhook events."""
 
     JIRA = "jira"
-    GITHUB = "github"
+    SOURCE_CONTROL = "source_control"
 
 
 class EventStatus(StrEnum):

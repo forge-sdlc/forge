@@ -10,8 +10,12 @@ import contextlib
 import logging
 
 from forge.config import get_settings
-from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
+from forge.integrations.source_control.contracts import (
+    ChangeRequestIdentity,
+    RepositoryRef,
+    SourceControlProvider,
+)
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
@@ -21,9 +25,18 @@ from forge.workflow.nodes.workspace_setup import (
 )
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
+from forge.workflow.utils.source_control import get_adapter, identity_for
 from forge.workspace.git_ops import GitOperations
 
 logger = logging.getLogger(__name__)
+
+
+async def _fetch_pr_body(
+    adapter: SourceControlProvider, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+) -> str:
+    """Fetch the current PR description, used as context for conflict resolution."""
+    change_request = await adapter.get_change_request(repo_ref, identity)
+    return change_request.body
 
 
 async def rebase_pr(state: WorkflowState) -> WorkflowState:
@@ -42,45 +55,54 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
     pr_number = state.get("current_pr_number")
     rebase_return_node = state.get("rebase_return_node", "ci_evaluator")
 
-    if not current_repo or not fork_owner or not fork_repo or not pr_number:
-        logger.error(f"Cannot rebase {ticket_key}: missing PR/fork state")
+    if not current_repo or not pr_number:
+        logger.error(f"Cannot rebase {ticket_key}: missing PR state")
         return update_state_timestamp(
             {
                 **state,
                 "current_node": rebase_return_node,
                 "rebase_return_node": None,
-                "last_error": "Cannot rebase: missing PR or fork information in workflow state",
+                "last_error": "Cannot rebase: missing repo or PR number in workflow state",
             }
         )
+    use_fork = bool(fork_owner and fork_repo)
+    push_remote = "fork" if use_fork else "origin"
 
-    owner, repo = current_repo.split("/", 1)
     settings = get_settings()
     jira = JiraClient()
-    github = GitHubClient()
 
     try:
+        repo_ref, adapter = get_adapter(current_repo)
+        identity = identity_for(repo_ref, pr_number)
+
         # Set up workspace: clone, add fork remote, checkout PR branch
         manager = get_workspace_manager()
         workspace = manager.create_workspace(repo_name=current_repo, ticket_key=ticket_key)
-        git = GitOperations(workspace)
+        git = GitOperations(workspace, await adapter.get_git_credentials(repo_ref))
         git.clone()
         write_workspace_identity(
             workspace.path,
             ticket_key=ticket_key,
             repo_name=current_repo,
         )
-        git.add_fork_remote(fork_owner, fork_repo)
+        if use_fork:
+            git.add_fork_remote(fork_owner, fork_repo)
 
-        if git.remote_branch_exists(workspace.branch_name, remote="fork"):
-            git.checkout_branch(workspace.branch_name, remote="fork")
+        if git.remote_branch_exists(workspace.branch_name, remote=push_remote):
+            git.checkout_branch(workspace.branch_name, remote=push_remote)
         else:
-            logger.error(f"Branch {workspace.branch_name} not found on fork")
+            logger.error(f"Branch {workspace.branch_name} not found on {push_remote}")
             return update_state_timestamp(
                 {
                     **state,
                     "current_node": rebase_return_node,
                     "rebase_return_node": None,
-                    "last_error": f"Branch {workspace.branch_name} not found on fork {fork_owner}/{fork_repo}",
+                    "last_error": (
+                        f"Branch {workspace.branch_name} not found on {push_remote} "
+                        f"{fork_owner}/{fork_repo}"
+                        if use_fork
+                        else f"Branch {workspace.branch_name} not found on {push_remote}"
+                    ),
                 }
             )
 
@@ -104,12 +126,14 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
 
             # Clean merge — push it
             logger.info(f"{ticket_key}: clean merge with main, pushing")
-            git.push_to_fork(force=True)
+            if use_fork:
+                git.push_to_fork(force=True)
+            else:
+                git.push(force=True, check_conflicts=False)
 
-            await github.create_issue_comment(
-                owner,
-                repo,
-                pr_number,
+            await adapter.create_comment(
+                repo_ref,
+                identity,
                 "Branch has been rebased onto main (no conflicts). CI should re-run.",
             )
             await post_status_comment(
@@ -139,10 +163,12 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         pr_description = ""
         changed_files = ""
         try:
-            pr_data = await github.get_pull_request(owner, repo, pr_number)
-            pr_description = pr_data.get("body", "") or ""
+            pr_description = await _fetch_pr_body(adapter, repo_ref, identity)
             diff_result = git._run_git(
-                "diff", "--name-only", f"origin/main...fork/{workspace.branch_name}", check=False
+                "diff",
+                "--name-only",
+                f"origin/main...{push_remote}/{workspace.branch_name}",
+                check=False,
             )
             changed_files = diff_result.stdout.strip()
         except Exception as e:
@@ -214,13 +240,15 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
             git.stage_all()
             git.commit(f"[{ticket_key}] merge: resolve conflicts with main")
 
-        git.push_to_fork(force=True)
-        logger.info(f"{ticket_key}: conflicts resolved and pushed to fork")
+        if use_fork:
+            git.push_to_fork(force=True)
+        else:
+            git.push(force=True, check_conflicts=False)
+        logger.info(f"{ticket_key}: conflicts resolved and pushed")
 
-        await github.create_issue_comment(
-            owner,
-            repo,
-            pr_number,
+        await adapter.create_comment(
+            repo_ref,
+            identity,
             f"Merge conflicts resolved and pushed. The PR branch has been updated.\n\n"
             f"Resolved files: {', '.join(f'`{f}`' for f in conflicted_files)}",
         )
@@ -255,4 +283,3 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         )
     finally:
         await jira.close()
-        await github.close()

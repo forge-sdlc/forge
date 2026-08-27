@@ -15,7 +15,7 @@ from forge.integrations.jira import JiraClient
 from forge.models.events import EventSource
 from forge.orchestrator.checkpointer import get_redis_client
 from forge.queue.models import QueueMessage
-from forge.queue.producer import GITHUB_STREAM, JIRA_STREAM
+from forge.queue.producer import JIRA_STREAM, SOURCE_CONTROL_STREAM
 from forge.queue.retry import RETRY_CLAIM_RENEW_SECONDS, RetryEntry, RetryQueue
 
 logger = logging.getLogger(__name__)
@@ -150,7 +150,7 @@ class QueueConsumer:
         """Ensure consumer groups exist for all streams."""
         redis_client = await self._get_redis()
 
-        for stream in [JIRA_STREAM, GITHUB_STREAM]:
+        for stream in [JIRA_STREAM, SOURCE_CONTROL_STREAM]:
             try:
                 await redis_client.xgroup_create(stream, CONSUMER_GROUP, id="0", mkstream=True)
                 logger.info(f"Created consumer group {CONSUMER_GROUP} for {stream}")
@@ -407,7 +407,7 @@ class QueueConsumer:
         entries = await self._retry_queue.claim_due_messages()
         for entry in entries:
             retry_stream = (
-                JIRA_STREAM if entry.message.source == EventSource.JIRA else GITHUB_STREAM
+                JIRA_STREAM if entry.message.source == EventSource.JIRA else SOURCE_CONTROL_STREAM
             )
             try:
                 async with self._renew_retry_claim(entry):
@@ -488,8 +488,15 @@ class QueueConsumer:
         tasks = []
         if EventSource.JIRA in self._handlers:
             tasks.append(self._consume_stream(JIRA_STREAM, EventSource.JIRA))
-        if EventSource.GITHUB in self._handlers:
-            tasks.append(self._consume_stream(GITHUB_STREAM, EventSource.GITHUB))
+        if EventSource.SOURCE_CONTROL in self._handlers:
+            tasks.append(self._consume_stream(SOURCE_CONTROL_STREAM, EventSource.SOURCE_CONTROL))
+            # LEGACY_SOURCE_CONTROL_STREAM (the pre-rename "forge:events:github")
+            # is intentionally not auto-consumed: those entries predate the
+            # NormalizedEvent/adapter cutover and have no normalized_event to
+            # deserialize, so the handler could only silently no-op and ack them
+            # -- discarding whatever CI/review/merge signal they carried instead
+            # of processing it. health_check reports its depth so a nonzero
+            # backlog is visible for a deliberate, out-of-band migration.
 
         if tasks:
             tasks.append(self._process_retry_queue())

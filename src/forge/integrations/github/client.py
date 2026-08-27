@@ -53,14 +53,27 @@ class GitHubClient:
     pull requests, and code reviews.
     """
 
-    def __init__(self, settings: Settings | None = None):
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        base_url: str | None = None,
+        ca_path: str | None = None,
+    ):
         """Initialize the GitHub client.
 
         Args:
             settings: Application settings. Uses default if not provided.
+            base_url: API base URL for the target connection (e.g. a GitHub
+                Enterprise Server's ``https://ghe.example.com/api/v3``). Falls
+                back to the public GitHub API when not provided.
+            ca_path: Path to a CA bundle to verify the connection's TLS
+                certificate against, for self-signed Enterprise Server
+                deployments. Falls back to the default trust store.
         """
         self.settings = settings or get_settings()
-        self.base_url = "https://api.github.com"
+        self.base_url = base_url or "https://api.github.com"
+        self._ca_path = ca_path
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -74,6 +87,7 @@ class GitHubClient:
                     "X-GitHub-Api-Version": "2022-11-28",
                 },
                 timeout=30.0,
+                verify=self._ca_path or True,
             )
         return self._client
 
@@ -170,6 +184,37 @@ class GitHubClient:
         response = await client.get(f"/repos/{owner}/{repo}/pulls/{pr_number}")
         response.raise_for_status()
         return response.json()
+
+    async def get_reviews(self, owner: str, repo: str, pr_number: int) -> list[dict[str, Any]]:
+        """Get the formal review submissions on a pull request.
+
+        Each item carries a submission-level ``state`` (APPROVED,
+        CHANGES_REQUESTED, COMMENTED, DISMISSED, or PENDING), which is distinct
+        from the inline review comment threads returned by
+        get_pull_request_review_threads.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+
+        Returns:
+            List of review submission dicts.
+        """
+        client = await self._get_client()
+        reviews: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            response = await client.get(
+                f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews",
+                params={"per_page": 100, "page": page},
+            )
+            response.raise_for_status()
+            batch: list[dict[str, Any]] = response.json()
+            reviews.extend(batch)
+            if len(batch) < 100:
+                return reviews
+            page += 1
 
     async def create_review_comment(
         self,
@@ -512,6 +557,39 @@ class GitHubClient:
         )
         response.raise_for_status()
         return response.text
+
+    async def list_workflow_run_jobs(
+        self, owner: str, repo: str, run_id: int | str
+    ) -> list[dict[str, Any]]:
+        """List the jobs belonging to a workflow run.
+
+        This is how a check run is resolved to its Actions job: a check-run id is
+        a Checks API resource id, not an Actions job id, so callers match a job
+        by name within the run to recover the job id that /actions/jobs/{id}/logs
+        expects.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            run_id: Workflow run ID.
+
+        Returns:
+            List of job dicts, each carrying its Actions ``id`` and ``name``. The
+            default ``latest`` filter returns only the most recent attempt of
+            each job, so re-runs don't surface as duplicate same-named entries.
+
+            Capped at the first 100 jobs (one page); Link-header pagination is
+            not followed, consistent with the other list endpoints on this
+            client. A workflow run with more than 100 jobs would truncate here,
+            in which case a job past the cap can't be resolved for log fetching.
+        """
+        client = await self._get_client()
+        response = await client.get(
+            f"/repos/{owner}/{repo}/actions/runs/{run_id}/jobs",
+            params={"per_page": 100, "filter": "latest"},
+        )
+        response.raise_for_status()
+        return response.json().get("jobs", [])
 
     async def get_job_logs(self, owner: str, repo: str, job_id: int | str) -> str:
         """Download logs for a specific Actions job as plain text.

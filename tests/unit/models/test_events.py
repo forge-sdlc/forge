@@ -15,7 +15,7 @@ class TestEventSource:
     def test_event_sources_exist(self):
         """Verify event sources are defined."""
         assert EventSource.JIRA.value == "jira"
-        assert EventSource.GITHUB.value == "github"
+        assert EventSource.SOURCE_CONTROL.value == "source_control"
 
 
 class TestEventStatus:
@@ -52,12 +52,12 @@ class TestWebhookEvent:
         """Create a GitHub webhook event."""
         event = WebhookEvent(
             event_id="evt-002",
-            source=EventSource.GITHUB,
+            source=EventSource.SOURCE_CONTROL,
             event_type="check_run",
             ticket_key="TEST-123",
             payload={"action": "completed"},
         )
-        assert event.source == EventSource.GITHUB
+        assert event.source == EventSource.SOURCE_CONTROL
         assert event.event_type == "check_run"
 
     def test_default_status_is_pending(self):
@@ -130,7 +130,7 @@ class TestWebhookEvent:
         """Event has received_at timestamp."""
         event = WebhookEvent(
             event_id="evt-008",
-            source=EventSource.GITHUB,
+            source=EventSource.SOURCE_CONTROL,
             event_type="pull_request",
             ticket_key="TEST-456",
         )

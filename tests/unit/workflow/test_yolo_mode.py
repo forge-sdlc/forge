@@ -86,7 +86,7 @@ class TestBuildInitialStateYoloMode:
         from forge.models.events import EventSource
         msg = MagicMock()
         msg.ticket_key = "TEST-1"
-        msg.source = EventSource.GITHUB
+        msg.source = EventSource.SOURCE_CONTROL
         msg.event_type = "pull_request"
         msg.event_id = "evt-1"
         msg.retry_count = 0

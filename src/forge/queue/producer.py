@@ -5,6 +5,7 @@ from typing import Any
 
 import redis.asyncio as redis
 
+from forge.integrations.source_control.contracts import NormalizedEvent
 from forge.models.events import EventSource
 from forge.orchestrator.checkpointer import get_redis_client
 from forge.queue.deduplication import DEDUP_KEY_PREFIX, DEDUP_TTL_SECONDS
@@ -14,7 +15,13 @@ logger = logging.getLogger(__name__)
 
 # Stream names for different event sources
 JIRA_STREAM = "forge:events:jira"
-GITHUB_STREAM = "forge:events:github"
+SOURCE_CONTROL_STREAM = "forge:events:source_control"
+
+# Pre-rename stream name (source-control events used to publish here, and to
+# EventSource value "github"). New events never publish to this stream, but
+# it may still hold unconsumed entries from before the rename, so the
+# consumer keeps draining it -- see queue/consumer.py.
+LEGACY_SOURCE_CONTROL_STREAM = "forge:events:github"
 
 _PUBLISH_ONCE_SCRIPT = """
 local reserved = redis.call('SET', KEYS[1], '1', 'EX', ARGV[1], 'NX')
@@ -45,7 +52,7 @@ class QueueProducer:
 
     def _get_stream_name(self, source: EventSource) -> str:
         """Get the appropriate stream name for an event source."""
-        return JIRA_STREAM if source == EventSource.JIRA else GITHUB_STREAM
+        return JIRA_STREAM if source == EventSource.JIRA else SOURCE_CONTROL_STREAM
 
     async def publish(
         self,
@@ -121,6 +128,54 @@ class QueueProducer:
             logger.info("Skipped duplicate event %s for %s", event_id, stream)
             return None
         logger.info("Published new event %s to %s as %s", event_id, stream, message_id)
+        return str(message_id)
+
+    async def publish_event(self, event: NormalizedEvent, ticket_key: str) -> str | None:
+        """Atomically publish a NormalizedEvent to the source-control stream,
+        unless its id was already seen.
+
+        GitHub redelivers webhooks on timeouts, 5xx responses, and manual
+        "Redeliver," so this needs the same SET-NX-then-XADD dedup guarantee
+        publish_once gives Jira events -- a plain XADD here would silently
+        reprocess every retried delivery (duplicate PR comments, duplicate
+        CI-fix attempts, etc).
+
+        Args:
+            event: The normalized webhook event.
+            ticket_key: Jira ticket key this event resolves to (extracted by the
+                caller before publishing).
+
+        Returns:
+            The Redis stream message ID, or None if event.id was a duplicate.
+        """
+        from forge.queue.models import normalized_event_to_dict  # avoid a cycle at import time
+
+        redis_client = await self._get_redis()
+        message = QueueMessage(
+            message_id="",
+            event_id=event.id,
+            source=EventSource.SOURCE_CONTROL,
+            event_type=event.kind.value,
+            ticket_key=ticket_key,
+            payload=event.raw,
+            normalized_event=normalized_event_to_dict(event),
+        )
+        fields = message.to_dict()
+        field_values = [item for pair in fields.items() for item in pair]
+        message_id = await redis_client.eval(
+            _PUBLISH_ONCE_SCRIPT,
+            2,
+            f"{DEDUP_KEY_PREFIX}{event.id}",
+            SOURCE_CONTROL_STREAM,
+            DEDUP_TTL_SECONDS,
+            *field_values,
+        )
+        if message_id is None:
+            logger.info("Skipped duplicate event %s for %s", event.id, SOURCE_CONTROL_STREAM)
+            return None
+        logger.info(
+            "Published new event %s to %s as %s", event.id, SOURCE_CONTROL_STREAM, message_id
+        )
         return str(message_id)
 
     async def republish(self, message: QueueMessage) -> str:
