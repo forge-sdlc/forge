@@ -58,6 +58,10 @@ class EffectJournal(Protocol):
 
     async def retry(self, result: EffectResult, delay: timedelta) -> EffectRecord: ...
 
+    async def replay(self, idempotency_key: str) -> EffectRecord: ...
+
+    async def purge_terminal_before(self, cutoff: datetime) -> int: ...
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -172,10 +176,50 @@ class InMemoryEffectJournal:
                     "next_attempt_at": result.completed_at + (delay or timedelta()),
                     "lease_until": None,
                     "result": result,
+                    "attempt_history": [*record.attempt_history, result],
                 }
             )
             self._records[result.idempotency_key] = updated
             return updated
+
+    async def replay(self, idempotency_key: str) -> EffectRecord:
+        async with self._lock:
+            record = self._records[idempotency_key]
+            if record.status not in {
+                EffectRecordStatus.PRECONDITION_FAILED,
+                EffectRecordStatus.TERMINAL_FAILURE,
+            }:
+                raise ValueError(f"Effect {idempotency_key} is not terminal")
+            now = _now()
+            updated = record.model_copy(
+                update={
+                    "status": EffectRecordStatus.PENDING,
+                    "updated_at": now,
+                    "next_attempt_at": now,
+                    "lease_until": None,
+                    "result": None,
+                    "replay_count": record.replay_count + 1,
+                }
+            )
+            self._records[idempotency_key] = updated
+            return updated
+
+    async def purge_terminal_before(self, cutoff: datetime) -> int:
+        async with self._lock:
+            keys = [
+                key
+                for key, record in self._records.items()
+                if record.status
+                in {
+                    EffectRecordStatus.SUCCEEDED,
+                    EffectRecordStatus.PRECONDITION_FAILED,
+                    EffectRecordStatus.TERMINAL_FAILURE,
+                }
+                and record.updated_at < cutoff
+            ]
+            for key in keys:
+                del self._records[key]
+            return len(keys)
 
 
 class RedisEffectJournal:
@@ -318,6 +362,7 @@ class RedisEffectJournal:
                 "next_attempt_at": next_attempt,
                 "lease_until": None,
                 "result": result,
+                "attempt_history": [*record.attempt_history, result],
             }
         )
         key = f"{_RECORD_PREFIX}{result.idempotency_key}"
@@ -329,3 +374,62 @@ class RedisEffectJournal:
             pipeline.zrem(_DUE_KEY, result.idempotency_key)
         await pipeline.execute()
         return updated
+
+    async def replay(self, idempotency_key: str) -> EffectRecord:
+        redis = await self._client()
+        record = await self.get(idempotency_key)
+        if record is None:
+            raise KeyError(idempotency_key)
+        if record.status not in {
+            EffectRecordStatus.PRECONDITION_FAILED,
+            EffectRecordStatus.TERMINAL_FAILURE,
+        }:
+            raise ValueError(f"Effect {idempotency_key} is not terminal")
+        now = _now()
+        updated = record.model_copy(
+            update={
+                "status": EffectRecordStatus.PENDING,
+                "updated_at": now,
+                "next_attempt_at": now,
+                "lease_until": None,
+                "result": None,
+                "replay_count": record.replay_count + 1,
+            }
+        )
+        pipeline = redis.pipeline(transaction=True)
+        pipeline.set(f"{_RECORD_PREFIX}{idempotency_key}", updated.model_dump_json())
+        pipeline.zadd(_DUE_KEY, {idempotency_key: now.timestamp()})
+        await pipeline.execute()
+        return updated
+
+    async def purge_terminal_before(self, cutoff: datetime) -> int:
+        redis = await self._client()
+        cursor: int | bytes = 0
+        removed = 0
+        while True:
+            cursor, keys = await redis.scan(cursor=cursor, match=f"{_RECORD_PREFIX}*", count=100)
+            for raw_key in keys:
+                key = raw_key.decode() if isinstance(raw_key, bytes) else raw_key
+                value = await redis.get(key)
+                if not value:
+                    continue
+                record = EffectRecord.model_validate_json(value)
+                if (
+                    record.status
+                    in {
+                        EffectRecordStatus.SUCCEEDED,
+                        EffectRecordStatus.PRECONDITION_FAILED,
+                        EffectRecordStatus.TERMINAL_FAILURE,
+                    }
+                    and record.updated_at < cutoff
+                ):
+                    identity = record.command.idempotency_key
+                    pipeline = redis.pipeline(transaction=True)
+                    pipeline.delete(key)
+                    pipeline.zrem(_DUE_KEY, identity)
+                    pipeline.srem(f"{_WORKFLOW_PREFIX}{record.command.workflow.run_id}", identity)
+                    await pipeline.execute()
+                    removed += 1
+            if cursor in {0, b"0", "0"}:
+                break
+        return removed

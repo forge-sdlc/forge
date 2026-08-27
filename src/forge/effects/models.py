@@ -28,3 +28,5 @@ class EffectRecord(DomainModel):
     next_attempt_at: datetime
     lease_until: datetime | None = None
     result: EffectResult | None = None
+    attempt_history: list[EffectResult] = Field(default_factory=list)
+    replay_count: int = Field(default=0, ge=0)

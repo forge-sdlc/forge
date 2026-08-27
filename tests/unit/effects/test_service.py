@@ -16,6 +16,7 @@ from forge.effects import (
     InMemoryEffectJournal,
     RequiredEffectError,
 )
+from forge.integrations.source_control.errors import ConflictError
 
 
 def _command(key: str = "same-logical-effect") -> EffectCommand:
@@ -145,3 +146,65 @@ async def test_required_effect_fails_closed_on_retryable_result() -> None:
 
     with pytest.raises(RequiredEffectError):
         await service.execute_required(_command())
+
+
+@pytest.mark.asyncio
+async def test_attempt_history_survives_retry_and_success() -> None:
+    class FlakyExecutor(_Executor):
+        async def execute(self, command: EffectCommand) -> EffectResult:
+            if self.calls == 0:
+                self.calls += 1
+                raise TimeoutError("later")
+            return await super().execute(command)
+
+    journal = InMemoryEffectJournal()
+    registry = EffectExecutorRegistry()
+    registry.register(FlakyExecutor())
+    service = EffectService(journal, registry, base_retry_delay=timedelta(0))
+    await service.submit(_command())
+
+    await service.run_due()
+    completed = (await service.run_due())[0]
+
+    assert [attempt.status for attempt in completed.attempt_history] == [
+        EffectResultStatus.RETRYABLE_FAILURE,
+        EffectResultStatus.SUCCEEDED,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_precondition_failure_requires_explicit_replay() -> None:
+    class ConflictingExecutor(_Executor):
+        async def execute(self, _command: EffectCommand) -> EffectResult:
+            raise ConflictError("provider state changed")
+
+    journal = InMemoryEffectJournal()
+    registry = EffectExecutorRegistry()
+    registry.register(ConflictingExecutor())
+    service = EffectService(journal, registry)
+    await service.submit(_command())
+
+    failed = (await service.run_due())[0]
+    replayed = await service.replay(_command().idempotency_key)
+
+    assert failed.status is EffectRecordStatus.PRECONDITION_FAILED
+    assert replayed.status is EffectRecordStatus.PENDING
+    assert replayed.replay_count == 1
+    assert len(replayed.attempt_history) == 1
+
+
+@pytest.mark.asyncio
+async def test_retention_only_purges_old_terminal_effects() -> None:
+    journal = InMemoryEffectJournal()
+    executor = _Executor()
+    registry = EffectExecutorRegistry()
+    registry.register(executor)
+    service = EffectService(journal, registry)
+    await service.execute_now(_command("old"))
+    await service.submit(_command("pending"))
+
+    removed = await service.purge_terminal_before(datetime.now(UTC) + timedelta(seconds=1))
+
+    assert removed == 1
+    assert await journal.get("old") is None
+    assert await journal.get("pending") is not None
