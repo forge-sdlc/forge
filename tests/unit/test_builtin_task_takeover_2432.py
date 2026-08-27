@@ -23,3 +23,9 @@ def test_builtin_task_takeover_content() -> None:
         "smoke test completed" in content.lower()
         or "smoke test completed successfully" in content.lower()
     )
+
+
+def test_builtin_task_takeover_has_markdown_extension() -> None:
+    """Verify that the markdown file ends with .md suffix."""
+    file_path = Path(__file__).parents[2] / "docs" / "testing" / "builtin-task-20260827-112952.md"
+    assert file_path.suffix == ".md", "The file must be a markdown file."
