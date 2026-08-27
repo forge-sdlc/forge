@@ -4,7 +4,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from forge.domain import EffectCommand, ResourceIdentity, WorkflowIdentity
-from forge.effects.jira import JIRA_COMMENT_OPERATION, JiraCommentExecutor
+from forge.effects.jira import (
+    JIRA_ATTACHMENT_REPLACE_OPERATION,
+    JIRA_COMMENT_OPERATION,
+    JIRA_CUSTOM_FIELD_OPERATION,
+    JIRA_DESCRIPTION_OPERATION,
+    JIRA_LABEL_OPERATION,
+    JiraCommentExecutor,
+    JiraMutationExecutor,
+)
 
 
 def _command() -> EffectCommand:
@@ -30,6 +38,74 @@ async def test_comment_executor_adds_recovery_marker() -> None:
     body = jira.add_comment.await_args.args[1]
     assert "forge-effect:stable-key" in body
     assert result.provider_reference == "comment-1"
+
+
+@pytest.mark.parametrize(
+    ("operation", "payload", "method", "expected"),
+    [
+        (
+            JIRA_LABEL_OPERATION,
+            {"label": "forge:done"},
+            "set_workflow_label",
+            ("FORGE-1", "forge:done"),
+        ),
+        (
+            JIRA_DESCRIPTION_OPERATION,
+            {"description": "new"},
+            "update_description",
+            ("FORGE-1", "new"),
+        ),
+        (
+            JIRA_CUSTOM_FIELD_OPERATION,
+            {"field": "customfield_1", "value": "new"},
+            "update_custom_field",
+            ("FORGE-1", "customfield_1", "new"),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_idempotent_jira_mutation_executors(operation, payload, method, expected) -> None:
+    jira = MagicMock()
+    setattr(jira, method, AsyncMock())
+    jira.close = AsyncMock()
+    command = _command().model_copy(update={"operation": operation, "payload": payload})
+
+    result = await JiraMutationExecutor(operation, lambda: jira).execute(command)
+
+    getattr(jira, method).assert_awaited_once_with(*expected)
+    assert result.provider_reference == "FORGE-1"
+    jira.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_attachment_replace_recovers_by_replacing_name() -> None:
+    jira = MagicMock()
+    jira.delete_attachments_by_name = AsyncMock(return_value=1)
+    jira.add_attachment = AsyncMock(return_value=SimpleNamespace(id="attachment-2"))
+    jira.close = AsyncMock()
+    command = _command().model_copy(
+        update={
+            "operation": JIRA_ATTACHMENT_REPLACE_OPERATION,
+            "payload": {
+                "filename": "spec.md",
+                "content": "body",
+                "content_type": "text/markdown",
+            },
+        }
+    )
+
+    result = await JiraMutationExecutor(JIRA_ATTACHMENT_REPLACE_OPERATION, lambda: jira).execute(
+        command
+    )
+
+    jira.delete_attachments_by_name.assert_awaited_once_with("FORGE-1", "spec.md")
+    jira.add_attachment.assert_awaited_once_with(
+        "FORGE-1",
+        filename="spec.md",
+        content="body",
+        content_type="text/markdown",
+    )
+    assert result.provider_reference == "attachment-2"
     jira.close.assert_awaited_once()
 
 
