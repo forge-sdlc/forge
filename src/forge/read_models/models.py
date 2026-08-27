@@ -1,0 +1,85 @@
+"""Versioned, execution-neutral operator read models."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import StrEnum
+
+from forge.domain import JsonValue, VersionedDomainModel
+
+
+class ExecutionStatus(StrEnum):
+    RUNNING = "running"
+    WAITING = "waiting"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+    COMPLETED = "completed"
+
+
+class DefinitionView(VersionedDomainModel):
+    name: str
+    revision: int
+    digest: str | None = None
+    available: bool
+    manifest: dict[str, JsonValue] | None = None
+
+
+class WaitingView(VersionedDomainModel):
+    code: str
+    message: str
+    since: datetime | None = None
+    recovery: str | None = None
+
+
+class NextTransitionView(VersionedDomainModel):
+    outcome: str | None = None
+    target: str
+
+
+class ObservationView(VersionedDomainModel):
+    observation_id: str | None = None
+    source_system: str | None = None
+    observed_at: datetime | None = None
+    stale: bool | None = None
+    conflicting: bool = False
+    available: bool
+
+
+class StationAttemptView(VersionedDomainModel):
+    station_name: str
+    invocation_id: str
+    attempt: int
+    status: str
+    completed_at: datetime | None = None
+    reason: str | None = None
+
+
+class EffectView(VersionedDomainModel):
+    effect_id: str
+    operation: str
+    target: str
+    status: str
+    attempt: int
+    updated_at: datetime
+    provider_reference: str | None = None
+    error: str | None = None
+
+
+class MigrationView(VersionedDomainModel):
+    eligible: bool | None = None
+    incompatibilities: tuple[str, ...] = ()
+
+
+class ExecutionReadModel(VersionedDomainModel):
+    run_id: str
+    ticket_key: str
+    status: ExecutionStatus
+    current_position: str
+    definition: DefinitionView
+    permitted_commands: tuple[str, ...]
+    next_transitions: tuple[NextTransitionView, ...]
+    waiting: WaitingView | None = None
+    last_observation: ObservationView
+    station_attempts: tuple[StationAttemptView, ...] = ()
+    effects: tuple[EffectView, ...] = ()
+    migration: MigrationView = MigrationView()

@@ -14,6 +14,7 @@ from forge import __version__
 from forge.api.middleware.correlation import CorrelationIdMiddleware
 from forge.api.routes import (
     effects_router,
+    executions_router,
     github_router,
     health_router,
     jira_router,
@@ -147,6 +148,7 @@ All webhook endpoints verify signatures:
     app.include_router(effects_router)
     app.include_router(jira_router)
     app.include_router(github_router)
+    app.include_router(executions_router)
 
     return app
 
