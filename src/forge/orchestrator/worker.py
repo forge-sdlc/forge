@@ -18,6 +18,14 @@ from forge.api.routes.metrics import (
     record_workflow_started,
 )
 from forge.config import get_settings
+from forge.domain import (
+    EffectCommand,
+    JsonValue,
+    ResourceIdentity,
+    WorkflowIdentity,
+    stable_identity,
+)
+from forge.effects import EffectService, create_default_effect_service
 from forge.integrations.github.comment_signature import is_self_comment
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
@@ -185,6 +193,7 @@ class OrchestratorWorker:
         event_adapters: EventAdapterRegistry | None = None,
         command_handlers: CommandHandlerRegistry | None = None,
         review_enrichment: ReviewEnrichmentService | None = None,
+        effect_service: EffectService | None = None,
     ) -> None:
         """Initialize the worker.
 
@@ -202,6 +211,7 @@ class OrchestratorWorker:
         self.event_adapters = event_adapters or create_default_event_adapter_registry()
         self.command_handlers = command_handlers or create_default_command_handler_registry()
         self.review_enrichment = review_enrichment
+        self.effect_service = effect_service or create_default_effect_service()
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
         self._compiled_workflows: dict[str, Any] = {}  # Cache compiled workflows by name
@@ -217,6 +227,22 @@ class OrchestratorWorker:
             self.review_enrichment = service
         return service
 
+    def _event_adapter_registry(self) -> EventAdapterRegistry:
+        """Lazily restore adapters for legacy fixtures that bypass ``__init__``."""
+        registry = getattr(self, "event_adapters", None)
+        if registry is None:
+            registry = create_default_event_adapter_registry()
+            self.event_adapters = registry
+        return registry
+
+    def _durable_effect_service(self) -> EffectService:
+        """Lazily restore the effect runtime for legacy fixtures."""
+        service = getattr(self, "effect_service", None)
+        if service is None:
+            service = create_default_effect_service()
+            self.effect_service = service
+        return service
+
     def _deserialize_event(self, message: QueueMessage) -> NormalizedEvent | None:
         """Reconstruct the typed NormalizedEvent a source-control message carries.
 
@@ -228,8 +254,7 @@ class OrchestratorWorker:
         """
         if message.normalized_event is None:
             return None
-        adapters = getattr(self, "event_adapters", None) or create_default_event_adapter_registry()
-        return adapters.adapt(message).normalized_event
+        return self._event_adapter_registry().adapt(message).normalized_event
 
     async def _get_forge_github_login(self, repo_ref: RepositoryRef) -> str:
         """Resolve and cache the authenticated Forge identity for this connection."""
@@ -291,7 +316,7 @@ class OrchestratorWorker:
 
     async def _handle_event(self, message: QueueMessage) -> None:
         """Handle any registered ingress source through its adapter."""
-        adapted = self.event_adapters.adapt(message)
+        adapted = self._event_adapter_registry().adapt(message)
         if adapted.requires_ticket_correlation:
             message = await self._resolve_ticket_from_pr_index(message)
             if not message.ticket_key:
@@ -314,7 +339,7 @@ class OrchestratorWorker:
         Returns:
             Message with ticket_key populated if found, otherwise unchanged.
         """
-        adapted = self.event_adapters.adapt(message)
+        adapted = self._event_adapter_registry().adapt(message)
         pr_url = adapted.change_request_url
 
         logger.debug(f"PR URL extracted for {message.event_id}: {pr_url!r}")
@@ -674,8 +699,7 @@ class OrchestratorWorker:
         Returns:
             Updated state for workflow resumption.
         """
-        adapters = getattr(self, "event_adapters", None) or create_default_event_adapter_registry()
-        adapted_event = adapted_event or adapters.adapt(message)
+        adapted_event = adapted_event or self._event_adapter_registry().adapt(message)
         command_decision = command_decision or interpret_event(
             message, adapted_event, current_state
         )
@@ -1493,6 +1517,7 @@ class OrchestratorWorker:
                 signal_type="question",
                 current_node=current_node,
                 source_ticket_key=comment_ticket_key,
+                event_id=message.event_id,
             )
         elif is_rejected and feedback:
             updated_state["is_paused"] = False
@@ -1526,6 +1551,7 @@ class OrchestratorWorker:
                 signal_type="revision",
                 current_node=current_node,
                 source_ticket_key=comment_ticket_key,
+                event_id=message.event_id,
             )
         elif was_errored:
             # Workflow has an error — auto-resume up to MAX_AUTO_RETRIES times,
@@ -1605,6 +1631,7 @@ class OrchestratorWorker:
         signal_type: str,
         current_node: str,
         source_ticket_key: str | None = None,
+        event_id: str | None = None,
     ) -> None:
         """Post a best-effort Jira acknowledgement for user-visible resume signals."""
         stage = self._stage_label_for_node(current_node)
@@ -1630,14 +1657,27 @@ class OrchestratorWorker:
                 "and is regenerating the artifact."
             )
 
-        try:
-            jira = JiraClient()
-            try:
-                await post_status_comment(jira, comment_target_key, message)
-            finally:
-                await jira.close()
-        except Exception as e:
-            logger.warning(f"Failed to post resume acknowledgement to {comment_target_key}: {e}")
+        identity_parts: dict[str, JsonValue] = {
+            "ticket_key": ticket_key,
+            "target": comment_target_key,
+            "signal_type": signal_type,
+            "current_node": current_node,
+            "event_id": event_id or "legacy",
+        }
+        effect_id = stable_identity("effect", identity_parts)
+        command = EffectCommand(
+            effect_id=effect_id,
+            idempotency_key=effect_id,
+            workflow=WorkflowIdentity(
+                run_id=ticket_key,
+                workflow_name="legacy",
+                definition_revision=1,
+            ),
+            operation="jira.comment.create",
+            target=ResourceIdentity(resource_type="issue", external_id=comment_target_key),
+            payload={"body": message},
+        )
+        await self._durable_effect_service().submit(command)
 
     @staticmethod
     def _stage_label_for_node(current_node: str) -> str:
@@ -1927,7 +1967,7 @@ class OrchestratorWorker:
         """
         if message.source != EventSource.JIRA:
             return TicketType.UNKNOWN
-        return self.event_adapters.adapt(message).ticket_type
+        return self._event_adapter_registry().adapt(message).ticket_type
 
     def _get_compiled_workflow(self, workflow_instance: Any) -> Any:
         """Get or compile a workflow graph.
@@ -2035,14 +2075,18 @@ class OrchestratorWorker:
 
         # Every registered source follows the same transport path. Adding an
         # adapter does not require another worker branch.
-        for source in self.event_adapters.sources:
+        for source in self._event_adapter_registry().sources:
             self.consumer.register_handler(source, self._handle_event)
 
+        effect_stop = asyncio.Event()
+        effect_task = asyncio.create_task(self._durable_effect_service().run_forever(effect_stop))
         try:
             await self.consumer.start()
         except asyncio.CancelledError:
             pass
         finally:
+            effect_stop.set()
+            await effect_task
             await self.consumer.stop()
             await get_registry().aclose()
             logger.info("Worker shut down gracefully")

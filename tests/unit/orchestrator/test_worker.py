@@ -38,6 +38,16 @@ def _patch_adapter(repo_ref: RepositoryRef, adapter):
     return patch("forge.orchestrator.worker.get_adapter", return_value=(repo_ref, adapter))
 
 
+@pytest.fixture(autouse=True)
+def durable_effect_service_mock():
+    """Keep worker unit tests infrastructure-free at the durable-effect boundary."""
+    service = MagicMock()
+    service.submit = AsyncMock()
+    service.run_forever = AsyncMock()
+    with patch("forge.orchestrator.worker.create_default_effect_service", return_value=service):
+        yield service
+
+
 @pytest.mark.parametrize(
     ("result", "error_before_invoke", "expected"),
     [
@@ -357,15 +367,9 @@ class TestQuestionDetection:
     """Tests for Q&A mode question detection."""
 
     @pytest.fixture(autouse=True)
-    def ack_comment_mocks(self):
-        """Mock Jira acknowledgement posting for direct resume-event tests."""
-        mock_jira = AsyncMock()
-        mock_jira.close = AsyncMock()
-        with (
-            patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira),
-            patch("forge.orchestrator.worker.post_status_comment", new_callable=AsyncMock) as post,
-        ):
-            yield post
+    def ack_comment_mocks(self, durable_effect_service_mock):
+        """Expose durable acknowledgement submissions for assertions."""
+        yield durable_effect_service_mock.submit
 
     @pytest.fixture
     def worker(self) -> OrchestratorWorker:
@@ -438,8 +442,9 @@ class TestQuestionDetection:
         assert result["revision_requested"] is False
         assert result["is_paused"] is False
         ack_comment_mocks.assert_awaited_once()
-        assert ack_comment_mocks.await_args.args[1] == "TEST-123"
-        ack_text = ack_comment_mocks.await_args.args[2]
+        effect = ack_comment_mocks.await_args.args[0]
+        assert effect.target.external_id == "TEST-123"
+        ack_text = effect.payload["body"]
         assert "received your question" in ack_text
         assert "the PRD" in ack_text
 
@@ -479,8 +484,9 @@ class TestQuestionDetection:
         assert result["feedback_comment"] == "Please add more detail to the security section"
         assert result["is_paused"] is False
         ack_comment_mocks.assert_awaited_once()
-        assert ack_comment_mocks.await_args.args[1] == "TEST-123"
-        ack_text = ack_comment_mocks.await_args.args[2]
+        effect = ack_comment_mocks.await_args.args[0]
+        assert effect.target.external_id == "TEST-123"
+        ack_text = effect.payload["body"]
         assert "received your revision request" in ack_text
         assert "regenerating" in ack_text
 
@@ -521,8 +527,9 @@ class TestQuestionDetection:
         assert result["current_epic_key"] == "TEST-124"
         assert result["current_task_key"] is None
         ack_comment_mocks.assert_awaited_once()
-        assert ack_comment_mocks.await_args.args[1] == "TEST-124"
-        ack_text = ack_comment_mocks.await_args.args[2]
+        effect = ack_comment_mocks.await_args.args[0]
+        assert effect.target.external_id == "TEST-124"
+        ack_text = effect.payload["body"]
         assert "from TEST-124" in ack_text
 
     @pytest.mark.asyncio
@@ -560,8 +567,9 @@ class TestQuestionDetection:
         assert result["feedback_comment"] == "Please revise this epic plan"
         assert result["current_epic_key"] == "TEST-124"
         ack_comment_mocks.assert_awaited_once()
-        assert ack_comment_mocks.await_args.args[1] == "TEST-124"
-        ack_text = ack_comment_mocks.await_args.args[2]
+        effect = ack_comment_mocks.await_args.args[0]
+        assert effect.target.external_id == "TEST-124"
+        ack_text = effect.payload["body"]
         assert "received your revision request" in ack_text
         assert "from TEST-124" in ack_text
 
