@@ -619,14 +619,23 @@ class OrchestratorWorker:
                 and existing_state
                 and existing_state.values
             ):
+                values = dict(existing_state.values)
+                # A pinned artifact is immutable: validate it and continue on
+                # that exact graph. Revision adoption belongs to the explicit
+                # migration operation, never to ordinary event handling.
                 try:
-                    migrated = workflow_instance.migrate_state(dict(existing_state.values))
+                    status = workflow_instance.pin_status(values)
+                    if status == "pinned":
+                        workflow_instance.validate_pinned_state(values)
+                    elif status == "legacy_unpinned":
+                        # Compatibility for checkpoints predating definition
+                        # pinning is explicit and auditable in the state.
+                        pinned = workflow_instance.pin_legacy_state(values)
+                        await compiled_workflow.aupdate_state(config, pinned)
+                        existing_state = await compiled_workflow.aget_state(config)
                 except Exception as exc:
                     await self._report_custom_workflow_configuration_error(ticket_key, str(exc))
                     return
-                if migrated != existing_state.values:
-                    await compiled_workflow.aupdate_state(config, migrated)
-                    existing_state = await compiled_workflow.aget_state(config)
 
             # Debug logging for checkpoint state
             logger.debug(f"Existing state for {ticket_key}: {existing_state}")
@@ -2060,7 +2069,13 @@ class OrchestratorWorker:
     async def _resolve_custom_workflow(
         self, ticket_key: str, labels: list[str]
     ) -> DeclarativeWorkflow | None:
-        """Resolve a pinned custom identity or the workflow selected by a ticket label."""
+        """Resolve a pinned identity or a workflow selected by a label.
+
+        Pinned checkpoints carry their canonical artifact, so resuming one does
+        not consult the mutable Jira project property. Identity-only checkpoints
+        use the publication store and fail closed if that exact artifact is
+        unavailable.
+        """
         raw_checkpoint: dict[str, Any] | None = None
         config = {"configurable": {"thread_id": ticket_key}}
         with contextlib.suppress(Exception):
@@ -2076,6 +2091,22 @@ class OrchestratorWorker:
             project_key = ticket_key.split("-", 1)[0] if workflow_name else None
         if not workflow_name:
             return None
+
+        revision = values.get("workflow_definition_revision", values.get("workflow_revision"))
+        digest = values.get("workflow_definition_digest", values.get("workflow_digest"))
+        canonical = values.get("workflow_definition")
+        if revision is not None or digest is not None or canonical is not None:
+            from forge.workflow.declarative.publication import DefinitionPublisher
+
+            return await load_project_workflow(
+                None,
+                str(project_key),
+                str(workflow_name),
+                pinned_revision=int(revision) if revision is not None else None,
+                pinned_digest=str(digest) if digest is not None else None,
+                pinned_definition=canonical,
+                definition_reader=DefinitionPublisher(),
+            )
 
         jira = JiraClient()
         try:
@@ -2271,13 +2302,37 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
             issue.labels
         )
         if workflow_name:
-            workflow_instance: Any = await load_project_workflow(
-                jira,
+            workflow_instance: Any
+            project_key = (
                 checkpoint_values.get("workflow_project_key")
                 or issue.project_key
-                or ticket_key.split("-", 1)[0],
-                workflow_name,
+                or ticket_key.split("-", 1)[0]
             )
+            revision = checkpoint_values.get(
+                "workflow_definition_revision", checkpoint_values.get("workflow_revision")
+            )
+            digest = checkpoint_values.get(
+                "workflow_definition_digest", checkpoint_values.get("workflow_digest")
+            )
+            canonical = checkpoint_values.get("workflow_definition")
+            if revision is not None or digest is not None or canonical is not None:
+                from forge.workflow.declarative.publication import DefinitionPublisher
+
+                workflow_instance = await load_project_workflow(
+                    None,
+                    project_key,
+                    workflow_name,
+                    pinned_revision=int(revision) if revision is not None else None,
+                    pinned_digest=str(digest) if digest is not None else None,
+                    pinned_definition=canonical,
+                    definition_reader=DefinitionPublisher(),
+                )
+            else:
+                workflow_instance = await load_project_workflow(
+                    jira,
+                    project_key,
+                    workflow_name,
+                )
             if not workflow_instance.supports_ticket_type(ticket_type):
                 raise ValueError(
                     f"workflow '{workflow_name}' is incompatible with ticket type "
@@ -2316,7 +2371,12 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
             **initial_state,
         }
         if checkpoint_values:
-            initial_state = workflow_instance.migrate_state(checkpoint_values)
+            status = workflow_instance.pin_status(checkpoint_values)
+            if status == "pinned":
+                workflow_instance.validate_pinned_state(checkpoint_values)
+                initial_state = dict(checkpoint_values)
+            elif status == "legacy_unpinned":
+                initial_state = workflow_instance.pin_legacy_state(checkpoint_values)
 
     # Use ticket_key as thread_id for checkpointing
     config: dict[str, Any] = checkpoint_config

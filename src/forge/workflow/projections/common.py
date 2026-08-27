@@ -14,8 +14,10 @@ def project_workflow_identity(state: Mapping[str, Any]) -> WorkflowIdentity:
     return WorkflowIdentity(
         run_id=str(state.get("thread_id") or ticket_key),
         workflow_name=str(state.get("workflow_name") or state.get("ticket_type") or "legacy"),
-        definition_revision=int(state.get("workflow_revision") or 1),
-        definition_digest=state.get("workflow_digest"),
+        definition_revision=int(
+            state.get("workflow_definition_revision") or state.get("workflow_revision") or 1
+        ),
+        definition_digest=state.get("workflow_definition_digest") or state.get("workflow_digest"),
     )
 
 

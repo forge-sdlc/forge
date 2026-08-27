@@ -131,6 +131,12 @@ class BaseState(TypedDict, total=False):
     workflow_name: str
     workflow_revision: int
     workflow_digest: str
+    # Canonical names for the immutable process artifact.  The shorter
+    # workflow_* fields above remain for checkpoint compatibility.
+    workflow_definition_revision: int
+    workflow_definition_digest: str
+    workflow_definition: dict[str, Any]
+    workflow_pin_status: str
     workflow_state_profile: str
     workflow_project_key: str
     workflow_transition_count: int
