@@ -33,6 +33,15 @@ end
 return members
 """
 
+_CLAIM_ONE_SCRIPT = """
+local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
+if not score or tonumber(score) > tonumber(ARGV[2]) then
+  return nil
+end
+redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
+return ARGV[1]
+"""
+
 
 class EffectJournal(Protocol):
     async def submit(self, command: EffectCommand) -> EffectRecord: ...
@@ -42,6 +51,8 @@ class EffectJournal(Protocol):
     async def list_for_workflow(self, run_id: str) -> Sequence[EffectRecord]: ...
 
     async def claim_due(self, limit: int = 10) -> Sequence[EffectRecord]: ...
+
+    async def claim(self, idempotency_key: str) -> EffectRecord | None: ...
 
     async def complete(self, result: EffectResult) -> EffectRecord: ...
 
@@ -116,6 +127,33 @@ class InMemoryEffectJournal:
                 self._records[record.command.idempotency_key] = updated
                 claimed.append(updated)
             return claimed
+
+    async def claim(self, idempotency_key: str) -> EffectRecord | None:
+        now = _now()
+        async with self._lock:
+            record = self._records.get(idempotency_key)
+            if (
+                record is None
+                or record.status
+                not in {
+                    EffectRecordStatus.PENDING,
+                    EffectRecordStatus.RETRYABLE_FAILURE,
+                    EffectRecordStatus.RUNNING,
+                }
+                or record.next_attempt_at > now
+                or (record.lease_until is not None and record.lease_until > now)
+            ):
+                return None
+            updated = record.model_copy(
+                update={
+                    "status": EffectRecordStatus.RUNNING,
+                    "attempt": record.attempt + 1,
+                    "updated_at": now,
+                    "lease_until": now + self._lease,
+                }
+            )
+            self._records[idempotency_key] = updated
+            return updated
 
     async def complete(self, result: EffectResult) -> EffectRecord:
         return await self._store_result(result, delay=None)
@@ -230,6 +268,36 @@ class RedisEffectJournal:
             await redis.set(f"{_RECORD_PREFIX}{idempotency_key}", updated.model_dump_json())
             claimed.append(updated)
         return claimed
+
+    async def claim(self, idempotency_key: str) -> EffectRecord | None:
+        redis = await self._client()
+        now = _now()
+        lease_until = now + self._lease
+        claimed = await redis.eval(
+            _CLAIM_ONE_SCRIPT,
+            1,
+            _DUE_KEY,
+            idempotency_key,
+            now.timestamp(),
+            lease_until.timestamp(),
+        )
+        if not claimed:
+            return None
+        record = await self.get(idempotency_key)
+        if record is None:
+            await redis.zrem(_DUE_KEY, idempotency_key)
+            return None
+        updated = record.model_copy(
+            update={
+                "status": EffectRecordStatus.RUNNING,
+                "attempt": record.attempt + 1,
+                "updated_at": now,
+                "lease_until": lease_until,
+                "next_attempt_at": lease_until,
+            }
+        )
+        await redis.set(f"{_RECORD_PREFIX}{idempotency_key}", updated.model_dump_json())
+        return updated
 
     async def complete(self, result: EffectResult) -> EffectRecord:
         return await self._store_result(result, delay=None)

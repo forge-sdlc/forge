@@ -4,7 +4,7 @@ from forge.effects.defaults import create_default_effect_service
 from forge.effects.executors import EffectExecutor, EffectExecutorRegistry
 from forge.effects.journal import EffectJournal, InMemoryEffectJournal, RedisEffectJournal
 from forge.effects.models import EffectRecord, EffectRecordStatus
-from forge.effects.service import EffectService
+from forge.effects.service import EffectService, RequiredEffectError
 
 __all__ = [
     "EffectExecutor",
@@ -13,6 +13,7 @@ __all__ = [
     "EffectRecord",
     "EffectRecordStatus",
     "EffectService",
+    "RequiredEffectError",
     "InMemoryEffectJournal",
     "RedisEffectJournal",
     "create_default_effect_service",

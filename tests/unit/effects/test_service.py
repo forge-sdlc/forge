@@ -14,6 +14,7 @@ from forge.effects import (
     EffectRecordStatus,
     EffectService,
     InMemoryEffectJournal,
+    RequiredEffectError,
 )
 
 
@@ -101,3 +102,46 @@ async def test_expired_running_lease_is_recovered() -> None:
 
     assert first.attempt == 1
     assert recovered.attempt == 2
+
+
+@pytest.mark.asyncio
+async def test_execute_now_persists_claims_and_executes_exact_effect() -> None:
+    journal = InMemoryEffectJournal()
+    executor = _Executor()
+    registry = EffectExecutorRegistry()
+    registry.register(executor)
+    service = EffectService(journal, registry)
+
+    first = await service.execute_now(_command())
+    duplicate = await service.execute_now(_command())
+
+    assert first.status is EffectRecordStatus.SUCCEEDED
+    assert duplicate == first
+    assert executor.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_claim_one_excludes_parallel_claim() -> None:
+    journal = InMemoryEffectJournal()
+    await journal.submit(_command())
+
+    first = await journal.claim("same-logical-effect")
+    competing = await journal.claim("same-logical-effect")
+
+    assert first is not None
+    assert competing is None
+
+
+@pytest.mark.asyncio
+async def test_required_effect_fails_closed_on_retryable_result() -> None:
+    class FailingExecutor(_Executor):
+        async def execute(self, _command: EffectCommand) -> EffectResult:
+            raise TimeoutError("later")
+
+    journal = InMemoryEffectJournal()
+    registry = EffectExecutorRegistry()
+    registry.register(FailingExecutor())
+    service = EffectService(journal, registry)
+
+    with pytest.raises(RequiredEffectError):
+        await service.execute_required(_command())

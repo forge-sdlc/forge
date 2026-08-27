@@ -10,10 +10,16 @@ from datetime import UTC, datetime, timedelta
 from forge.domain import EffectCommand, EffectResult, EffectResultStatus
 from forge.effects.executors import EffectExecutorRegistry
 from forge.effects.journal import EffectJournal
-from forge.effects.models import EffectRecord
+from forge.effects.models import EffectRecord, EffectRecordStatus
 from forge.utils.redaction import redact_secrets
 
 logger = logging.getLogger(__name__)
+
+
+class RequiredEffectError(RuntimeError):
+    def __init__(self, record: EffectRecord) -> None:
+        super().__init__(f"Required effect {record.command.effect_id} is {record.status.value}")
+        self.record = record
 
 
 class EffectService:
@@ -33,6 +39,30 @@ class EffectService:
     async def submit(self, command: EffectCommand) -> EffectRecord:
         """Persist intent before any provider call; duplicates return the first record."""
         return await self.journal.submit(command)
+
+    async def execute_now(self, command: EffectCommand) -> EffectRecord:
+        """Persist and exclusively execute one workflow-critical effect."""
+        submitted = await self.journal.submit(command)
+        if submitted.result is not None and submitted.status.value not in {
+            "pending",
+            "running",
+            "retryable_failure",
+        }:
+            return submitted
+        claimed = await self.journal.claim(command.idempotency_key)
+        if claimed is None:
+            current = await self.journal.get(command.idempotency_key)
+            if current is None:  # pragma: no cover - journal contract violation
+                raise RuntimeError("submitted effect disappeared from journal")
+            return current
+        return await self._execute(claimed)
+
+    async def execute_required(self, command: EffectCommand) -> EffectRecord:
+        """Execute now and fail closed until the durable effect succeeds."""
+        record = await self.execute_now(command)
+        if record.status is not EffectRecordStatus.SUCCEEDED:
+            raise RequiredEffectError(record)
+        return record
 
     async def run_due(self, limit: int = 10) -> list[EffectRecord]:
         completed = []
