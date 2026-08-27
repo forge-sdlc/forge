@@ -33,6 +33,7 @@ from forge.workflow.preconditions import (
     PreconditionAction,
     Requirement,
 )
+from forge.workflow.registry import create_default_router
 
 
 def definition_value(
@@ -82,6 +83,13 @@ def test_every_supported_golden_path_uses_the_versioned_definition_compiler() ->
             "forge-contracts-v1" in step.required_policies
             for step in definition.spec.steps.values()
         )
+
+
+def test_default_router_has_no_python_topology_workflow_runtime() -> None:
+    router = create_default_router()
+
+    assert router._workflows  # noqa: SLF001 - architecture assertion
+    assert all(issubclass(item, DeclarativeWorkflow) for item in router._workflows)  # noqa: SLF001
 
 
 @pytest.mark.asyncio

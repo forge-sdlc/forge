@@ -65,6 +65,7 @@ class DeclarativeWorkflow(BaseWorkflow):
             "workflow_name": self.name,
             "workflow_revision": self.definition.metadata.revision,
             "workflow_digest": self.definition.digest,
+            "workflow_definition": self.definition.canonical_dict(),
             "workflow_state_profile": self.definition.spec.state,
             "workflow_project_key": self.project_key,
             "workflow_transition_count": 0,
