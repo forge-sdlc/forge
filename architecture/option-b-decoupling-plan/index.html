@@ -1,0 +1,2290 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="AI-powered SDLC orchestrator — from Jira ticket to shipped PR">
+      
+      
+      
+        <link rel="canonical" href="https://forge-sdlc.github.io/forge/architecture/option-b-decoupling-plan/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../images/logo.png">
+      <meta name="generator" content="zensical-0.0.40">
+    
+    
+      
+        <title>Option B alignment and decoupling plan - Forge SDLC Guide</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/modern/main.fba56155.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/modern/palette.dfe2e883.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CJetBrains+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-label="Navigation"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#option-b-alignment-and-decoupling-plan" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Forge SDLC Guide" class="md-header__button md-logo" aria-label="Forge SDLC Guide" data-md-component="logo">
+      
+  <img src="../../images/logo.png" alt="Forge SDLC Guide">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer" aria-label="Navigation">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-menu" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Forge SDLC Guide
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Option B alignment and decoupling plan
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search" aria-label="Search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+        <a href="https://github.com/forge-sdlc/forge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    forge-sdlc/forge
+  </div>
+</a>
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../roadmap/" class="md-tabs__link">
+        
+  
+  Product Roadmap
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guide/feature-workflow/" class="md-tabs__link">
+          
+  
+  User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../developer-guide/" class="md-tabs__link">
+          
+  
+  Developer Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../skills/" class="md-tabs__link">
+          
+  
+  Skills
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../reference/api/" class="md-tabs__link">
+          
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Forge SDLC Guide" class="md-nav__button md-logo" aria-label="Forge SDLC Guide" data-md-component="logo">
+      
+  <img src="../../images/logo.png" alt="Forge SDLC Guide">
+
+    </a>
+    Forge SDLC Guide
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/forge-sdlc/forge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    forge-sdlc/forge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Home
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting Started
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../roadmap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Product Roadmap
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  User Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  User Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/feature-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Feature Workflow
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/bug-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Bug Workflow
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/task-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Task Workflow
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/auto-review/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Auto-Review
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/labels/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Jira Labels
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guide/pr-commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  PR Commands
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Skill Testing & Evaluation
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Skill Testing & Evaluation
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/test-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Testing Skills Locally
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/skill-evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Skill Evaluation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Developer Guide
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Developer Guide
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Overview
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Architecture
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Architecture
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Overview
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  System & Components
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../internals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Local Setup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Testing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Skill Testing & Evaluation
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Skill Testing & Evaluation
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/test-skill/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Testing Skills Locally
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/skill-evaluation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Skill Evaluation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../dev/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Contributing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Skills
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Skills
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skills/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Overview
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skills/authoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Authoring Guide
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../skills/defaults/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Default Skills
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Reference
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+  Reference
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  API Endpoints
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/declarative-workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Declarative Workflows
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/proposals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Proposals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/review-md-schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  review.md Schema
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                    
+                    
+                    
+                      
+                    
+                    
+                      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+                      <div class="md-sidebar-button__wrapper">
+                        <label class="md-sidebar-button" for="__toc"></label>
+                      </div>
+                    
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#target-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Target architecture
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#impact-of-the-pending-dev-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Impact of the pending <code>dev</code> merge
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architectural-rules" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Architectural rules
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#delivery-plan" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Delivery plan
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Delivery plan">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-0-baseline-behavior-and-dependency-map" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 0 — Baseline behavior and dependency map
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-establish-versioned-domain-contracts" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 1 — Establish versioned domain contracts
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-2-split-event-interpretation-out-of-the-worker" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 2 — Split event interpretation out of the worker
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-add-an-idempotent-effect-journal" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 3 — Add an idempotent effect journal
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-migrate-nodes-into-independently-executable-stations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 4 — Migrate nodes into independently executable stations
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-5-make-graphs-purely-coordinative-and-governed" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 5 — Make graphs purely coordinative and governed
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-6-formalize-poller-reconciliation-semantics" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 6 — Formalize poller reconciliation semantics
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-7-add-process-and-execution-read-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 7 — Add process and execution read models
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-8-remove-compatibility-paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Phase 8 — Remove compatibility paths
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommended-migration-order" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Recommended migration order
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implications-and-trade-offs" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Implications and trade-offs
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Implications and trade-offs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#product-and-governance" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Product and governance
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#engineering" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Engineering
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#runtime-and-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Runtime and data
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#operations-and-observability" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Operations and observability
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Security
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-and-cost" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Performance and cost
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#program-level-completion-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Program-level completion criteria
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+  
+    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/architecture/option-b-decoupling-plan.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="option-b-alignment-and-decoupling-plan">Option B alignment and decoupling plan<a class="headerlink" href="#option-b-alignment-and-decoupling-plan" title="Permanent link">&para;</a></h1>
+<p><strong>Status:</strong> Proposed</p>
+<p><strong>Scope:</strong> Forge control plane, workflow definitions, nodes, provider adapters, and the
+Forge–poller boundary</p>
+<p><strong>Intent:</strong> Preserve Forge as the authoritative, checkpointed workflow engine while
+reducing coupling between event ingestion, process coordination, station logic, and
+external side effects.</p>
+<h2 id="target-architecture">Target architecture<a class="headerlink" href="#target-architecture" title="Permanent link">&para;</a></h2>
+<p>Forge implements the centralized workflow-engine model. LangGraph and Forge-owned
+workflow definitions decide which transition is valid next. A workflow instance carries
+its position, version, gate outcomes, and references to durable artifacts. The sibling
+<code>forge-poller</code> project supplies reconciliation observations when webhooks are unavailable
+or missed; it does not determine workflow position or select the next station.</p>
+<p>The intended boundaries are:</p>
+<ol>
+<li><strong>Poller and webhook gateway:</strong> produce normalized, replayable observations.</li>
+<li><strong>Event adapters:</strong> translate observations into workflow commands without knowing graph
+   topology.</li>
+<li><strong>Workflow engine:</strong> owns process position, transition validity, policy gates,
+   checkpointing, concurrency, and definition versioning.</li>
+<li><strong>Stations:</strong> perform bounded domain operations through versioned input/output
+   contracts without reading or replacing the complete workflow state.</li>
+<li><strong>Effect handlers:</strong> perform Jira, source-control, execution, and notification writes
+   through idempotent commands outside station business logic.</li>
+<li><strong>Read models:</strong> explain workflow position, waiting reasons, transition history, and
+   external-resource status without changing execution state.</li>
+</ol>
+<p>This preserves Option B's single executable process definition while preventing the graph
+or worker from absorbing provider details and station implementation logic.</p>
+<h2 id="impact-of-the-pending-dev-merge">Impact of the pending <code>dev</code> merge<a class="headerlink" href="#impact-of-the-pending-dev-merge" title="Permanent link">&para;</a></h2>
+<p>The pending <code>dev</code> changes do not alter the target architecture or the rationale for this
+plan. They implement useful portions of it and therefore change the starting point and
+sequencing:</p>
+<ul>
+<li>The provider-neutral source-control contracts and GitHub adapter are the foundation for
+  effect handlers and source-control observations. Extend these contracts; do not add a
+  second generic provider interface.</li>
+<li><code>NormalizedEvent</code> and its Redis transport are the starting point for <code>Observation</code>.
+  Evolve or wrap that type with schema version, observed-resource revision, origin
+  (<code>webhook</code> or <code>poller</code>), and stable deduplication identity rather than introducing a
+  parallel event envelope.</li>
+<li>The source-control conformance suite is the model for station, effect-handler, and
+  poller/webhook conformance suites.</li>
+<li>The test preventing workflow code from importing the concrete GitHub client is an
+  initial architecture fitness check. Generalize it to all concrete providers and to
+  prohibited dependency directions.</li>
+<li>Shared post-PR graph wiring removes graph duplication and is a useful intermediate
+  step. It is not yet the final station boundary because its routers still read the broad
+  workflow-state dictionary.</li>
+<li>The concurrent CI/review work makes command validation and deterministic event handling
+  more important: CI, review, and merge observations can legitimately arrive in any
+  order, while the workflow graph remains authoritative for progression.</li>
+</ul>
+<p>Accordingly, Phase 0 and the source-control portions of Phases 1, 2, and 5 are partially
+delivered by <code>dev</code>. After merging, first reconcile the provider contracts, normalized
+event model, workflow state additions, and shared graph code with the declarative-workflow
+and layered-state branches. Then baseline the combined tree before further extraction.</p>
+<p>This is a semantic integration, not only a Git merge: both lines modify the worker,
+workflow base state, and the built-in graphs. Preserve <code>dev</code>'s provider-neutral contracts
+and normalized ingress while preserving the current branch's workflow revision,
+precondition, artifact, and work-unit semantics.</p>
+<h2 id="architectural-rules">Architectural rules<a class="headerlink" href="#architectural-rules" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Workflow position and definition version are authoritative inside Forge. Jira labels,
+  GitHub state, and poller events are observations or gate inputs, not an alternative
+  program counter.</li>
+<li>A station receives a station-specific input and returns a versioned outcome. It cannot
+  mutate arbitrary workflow fields.</li>
+<li>Graph routers use normalized outcomes and policy decisions, not provider payloads.</li>
+<li>External writes are expressed as idempotent effect commands with stable keys. A
+  transition is not considered operationally complete until its required effects have a
+  durable result.</li>
+<li>Provider-specific types stop at adapter boundaries.</li>
+<li>New declarative workflows compose registered station contracts, gates, and routers;
+  they cannot import implementation code or bypass mandatory policies.</li>
+<li>Built-in and declarative workflows use the same runtime contracts and migration rules.</li>
+</ul>
+<h2 id="delivery-plan">Delivery plan<a class="headerlink" href="#delivery-plan" title="Permanent link">&para;</a></h2>
+<h3 id="phase-0-baseline-behavior-and-dependency-map">Phase 0 — Baseline behavior and dependency map<a class="headerlink" href="#phase-0-baseline-behavior-and-dependency-map" title="Permanent link">&para;</a></h3>
+<p><strong>Status:</strong> Implemented. See
+<a href="../stage-0-integration-baseline/">Stage 0 integration baseline</a>.</p>
+<p>Document the state fields read and written by every node, all provider calls made by each
+node, graph routes, checkpoint boundaries, and side effects. Add characterization tests
+for the feature, bug, and task golden paths, including duplicate events, restarts between
+an external write and checkpointing, revision upgrades, and poller/webhook duplicates.</p>
+<p>Deliverables:</p>
+<ul>
+<li>A generated node-to-state/effect dependency report in CI.</li>
+<li>End-to-end fixtures for representative Jira, GitHub, and poller observations.</li>
+<li>Architecture fitness checks that reject new imports from provider clients into the
+  workflow-domain and station-contract packages.</li>
+<li>Baseline measures for worker size, fields touched per node, duplicate effects, recovery
+  time, and workflow migration failures.</li>
+</ul>
+<p>Exit criterion: later phases can demonstrate behavioral equivalence and quantify reduced
+coupling.</p>
+<h3 id="phase-1-establish-versioned-domain-contracts">Phase 1 — Establish versioned domain contracts<a class="headerlink" href="#phase-1-establish-versioned-domain-contracts" title="Permanent link">&para;</a></h3>
+<p>Introduce small, Forge-owned contracts independent of LangGraph and providers:</p>
+<ul>
+<li><code>Observation</code>: source, external identity, resource identity, observed revision/time,
+  normalized facts, and correlation metadata.</li>
+<li><code>WorkflowCommand</code>: start, resume, approve, reject, retry, cancel, or synchronize an
+  existing instance.</li>
+<li><code>StationRequest[T]</code>: workflow/run identity, station invocation identity, scoped inputs,
+  artifact references, policy context, and attempt metadata.</li>
+<li><code>StationOutcome[T]</code>: success, blocked, waiting, retryable failure, or terminal failure,
+  plus typed outputs and requested effects.</li>
+<li><code>EffectCommand</code> and <code>EffectResult</code>: stable idempotency key, expected precondition,
+  provider-neutral operation, and durable result.</li>
+</ul>
+<p>After the <code>dev</code> merge, these contracts must compose with the existing source-control
+contracts. <code>Observation</code> should be an evolution or provider-independent wrapper of
+<code>NormalizedEvent</code>; <code>EffectCommand</code> should use <code>SourceControlProvider</code> operations through
+handlers rather than duplicate them.</p>
+<p>Create explicit state projections for each station. Retain the existing <code>BaseState</code> as a
+checkpoint representation initially, but access it through projectors and reducers:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>checkpoint state -&gt; station input projector -&gt; station
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>station outcome   -&gt; validated reducer       -&gt; checkpoint update
+</code></pre></div>
+<p>Exit criterion: a migrated station has no dependency on a complete feature, bug, or task
+state dictionary, and malformed outcomes fail before routing or side effects.</p>
+<h3 id="phase-2-split-event-interpretation-out-of-the-worker">Phase 2 — Split event interpretation out of the worker<a class="headerlink" href="#phase-2-split-event-interpretation-out-of-the-worker" title="Permanent link">&para;</a></h3>
+<p>Reduce <code>OrchestratorWorker</code> to queue consumption, instance locking, workflow resolution,
+checkpoint invocation, acknowledgement, and terminal failure handling. Extract:</p>
+<ul>
+<li>Jira observation adapters.</li>
+<li>GitHub observation adapters.</li>
+<li>Poller-origin normalization and deduplication.</li>
+<li>Approval/rejection/retry command derivation.</li>
+<li>PR-to-workflow correlation.</li>
+<li>Workflow-specific command handlers for exceptional interactions.</li>
+</ul>
+<p>Adapters return commands and evidence; they do not assign <code>current_node</code>. The workflow
+decides whether a command is valid at its current position. Invalid or irrelevant commands
+are durably recorded with a reason rather than silently changing state.</p>
+<p>The <code>dev</code> branch already normalizes source-control webhooks before queue transport. Retain
+that ingress normalization, then extract the still-central conversion from normalized
+events to workflow commands. Raw payload fallback should be treated as a compatibility
+path with an explicit removal milestone.</p>
+<p>Exit criterion: adding a provider event does not require editing the central worker, and
+event adapters can be tested without Redis, LangGraph, Jira, or GitHub clients.</p>
+<h3 id="phase-3-add-an-idempotent-effect-journal">Phase 3 — Add an idempotent effect journal<a class="headerlink" href="#phase-3-add-an-idempotent-effect-journal" title="Permanent link">&para;</a></h3>
+<p>Separate transition computation from external mutation. Persist effect intent before
+execution and persist its result after execution. Use a stable key derived from workflow
+instance, definition revision, transition/invocation identity, effect type, and logical
+target. Handlers implement provider-specific precondition checks and safe replay.</p>
+<p>Initially journal the highest-risk effects:</p>
+<ol>
+<li>PR creation and branch push.</li>
+<li>Jira issue creation and status/label changes.</li>
+<li>Jira and GitHub comments.</li>
+<li>Workspace/runtime creation and teardown.</li>
+<li>CI/review follow-up operations.</li>
+</ol>
+<p>Use an outbox worker or an equivalent durable executor. The graph may wait for required
+effect results, but station code must not call provider clients directly.</p>
+<p>Exit criterion: crashing after an external write but before the next graph checkpoint
+does not duplicate that write, and operators can inspect and retry effects independently.</p>
+<h3 id="phase-4-migrate-nodes-into-independently-executable-stations">Phase 4 — Migrate nodes into independently executable stations<a class="headerlink" href="#phase-4-migrate-nodes-into-independently-executable-stations" title="Permanent link">&para;</a></h3>
+<p>Migrate one vertical slice at a time, beginning with a low-side-effect planning station,
+then implementation, review, and publication stages. Each registered station provides:</p>
+<ul>
+<li>Contract name and semantic version.</li>
+<li>Input and output schemas.</li>
+<li>Required capabilities and effects.</li>
+<li>Retry and timeout classification.</li>
+<li>Compatibility declarations.</li>
+<li>A local runner and fixtures.</li>
+<li>Contract and conformance tests.</li>
+</ul>
+<p>Keep station execution in-process where appropriate; independence is a contract property,
+not a requirement to create a service or container for every node. Expensive or untrusted
+stations can use an execution driver without changing graph semantics.</p>
+<p>Exit criterion: every golden-path station can be invoked by the local harness from a
+fixture and returns the same validated outcome used by LangGraph.</p>
+<h3 id="phase-5-make-graphs-purely-coordinative-and-governed">Phase 5 — Make graphs purely coordinative and governed<a class="headerlink" href="#phase-5-make-graphs-purely-coordinative-and-governed" title="Permanent link">&para;</a></h3>
+<p>Update built-in and declarative graphs so nodes are thin station invocations or explicit
+policy gates. Route only on typed outcome categories and documented domain fields. Extend
+declarative workflow validation to check:</p>
+<ul>
+<li>Station contract and state-schema compatibility.</li>
+<li>Required organizational gates and policies.</li>
+<li>Complete outcome routing.</li>
+<li>Concurrency and join semantics.</li>
+<li>Effect capability requirements.</li>
+<li>Removed/reordered station migration coverage.</li>
+<li>Workflow and station version compatibility.</li>
+</ul>
+<p>Use <code>dev</code>'s shared post-PR lifecycle as the first migration target: preserve the common
+subgraph, replace broad-state routers with typed CI/review outcomes, and register the same
+contracts for built-in and declarative workflows.</p>
+<p>Pin new workflow instances to a definition revision. Apply backward-compatible station
+updates under an explicit compatibility policy. Require an operator-visible migration or
+an explicit opt-in policy before an in-flight instance adopts a structurally newer graph.</p>
+<p>Exit criterion: the graph is the readable, versioned source of coordination truth, while
+station implementation changes do not require graph changes unless their contract or
+process role changes.</p>
+<h3 id="phase-6-formalize-poller-reconciliation-semantics">Phase 6 — Formalize poller reconciliation semantics<a class="headerlink" href="#phase-6-formalize-poller-reconciliation-semantics" title="Permanent link">&para;</a></h3>
+<p>Keep polling in <code>forge-poller</code>, but define and test the cross-project contract:</p>
+<ul>
+<li>Polling and webhooks produce the same normalized observation schema.</li>
+<li>Observation identity is stable across both paths when they describe the same external
+  revision.</li>
+<li>Duplicates and older observations are harmless.</li>
+<li>A newer authoritative observation may update external facts but cannot skip a workflow
+  transition or overwrite workflow position.</li>
+<li>Drift is classified as expected, reconcilable, policy-blocking, or requiring operator
+  intervention.</li>
+<li>Poller cursors are not Forge workflow checkpoints; losing a cursor affects load and
+  latency, not correctness.</li>
+</ul>
+<p>Add cross-repository contract tests that replay captured provider states through both the
+webhook and polling paths and assert identical Forge commands.</p>
+<p>Exit criterion: loss, duplication, or reordering on either ingress path converges to the
+same workflow state without duplicate effects.</p>
+<h3 id="phase-7-add-process-and-execution-read-models">Phase 7 — Add process and execution read models<a class="headerlink" href="#phase-7-add-process-and-execution-read-models" title="Permanent link">&para;</a></h3>
+<p>Build projections from checkpoints, transition decisions, station invocations, effect
+results, and observations. Expose:</p>
+<ul>
+<li>Current workflow definition and pinned revision.</li>
+<li>Current position and permitted commands.</li>
+<li>Why the instance is waiting or blocked.</li>
+<li>Last observation and whether external state is stale or conflicting.</li>
+<li>Station attempts, outcomes, effects, and recovery actions.</li>
+<li>Migration eligibility and incompatibilities.</li>
+</ul>
+<p>Do not make dashboards infer position from Jira labels or reconstruct the graph from log
+messages.</p>
+<p>Exit criterion: an operator can answer “why has this not advanced?” and “what will run
+next?” from durable records without reading worker logs.</p>
+<h3 id="phase-8-remove-compatibility-paths">Phase 8 — Remove compatibility paths<a class="headerlink" href="#phase-8-remove-compatibility-paths" title="Permanent link">&para;</a></h3>
+<p>After all golden paths use contracts, reducers, and the effect journal:</p>
+<ul>
+<li>Remove direct provider calls from stations and graph routers.</li>
+<li>Remove legacy broad-state access where projections exist.</li>
+<li>Remove event-to-node routing from the worker.</li>
+<li>Version or migrate legacy checkpoints, with a documented rollback window.</li>
+<li>Turn dependency-report warnings into enforced architecture checks.</li>
+</ul>
+<p>Exit criterion: the old paths are deleted, rather than retained as a second execution
+model.</p>
+<h2 id="recommended-migration-order">Recommended migration order<a class="headerlink" href="#recommended-migration-order" title="Permanent link">&para;</a></h2>
+<p>Use vertical slices rather than rewriting the whole engine:</p>
+<ol>
+<li>Integrate <code>dev</code> with the declarative-workflow and layered-state changes, resolve the
+   overlapping event/state contracts, and establish combined characterization tests.</li>
+<li>Migrate the shared post-PR CI/review lifecycle, proving normalized observation to
+   command translation under concurrent and out-of-order events.</li>
+<li>Migrate PR creation, proving that the existing source-control adapter can sit behind
+   the effect journal with idempotent replay.</li>
+<li>Migrate PRD generation and approval, proving station contracts and command handling.</li>
+<li>Migrate task-takeover planning, proving reusable station contracts across workflow
+   profiles.</li>
+<li>Migrate workspace setup and implementation, proving execution-driver isolation.</li>
+<li>Migrate multi-repository fan-out/join and aggregate completion.</li>
+<li>Migrate remaining feature and bug stages, followed by legacy removal.</li>
+</ol>
+<p>Each slice should run the old and new decision code in shadow comparison where safe, then
+switch one project or workflow revision at a time.</p>
+<h2 id="implications-and-trade-offs">Implications and trade-offs<a class="headerlink" href="#implications-and-trade-offs" title="Permanent link">&para;</a></h2>
+<h3 id="product-and-governance">Product and governance<a class="headerlink" href="#product-and-governance" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Forge becomes more explicitly responsible for the golden-path process, compatibility
+  policy, mandatory gates, and workflow migrations. This requires product/process
+  ownership in addition to infrastructure ownership.</li>
+<li>Project-specific composition becomes safer but more constrained. Teams may combine only
+  registered compatible stations and cannot bypass organization policy through arbitrary
+  graph code.</li>
+<li>Workflow revisions become release artifacts requiring review, rollout notes, and
+  migration support.</li>
+</ul>
+<h3 id="engineering">Engineering<a class="headerlink" href="#engineering" title="Permanent link">&para;</a></h3>
+<ul>
+<li>There will initially be more types, adapters, reducers, and translation code. The payoff
+  is smaller change blast radius and independently testable components.</li>
+<li>A dual-model migration temporarily increases complexity. It must be time-bounded, with
+  per-slice removal criteria, or adapters will become permanent duplication.</li>
+<li>Typed contracts expose ambiguous legacy behavior. Some migrations will require explicit
+  product decisions rather than mechanical refactoring.</li>
+<li>LangGraph remains replaceable only if Forge owns the contracts, reducers, workflow
+  representation, and history schema rather than exposing LangGraph internals as public
+  interfaces.</li>
+</ul>
+<h3 id="runtime-and-data">Runtime and data<a class="headerlink" href="#runtime-and-data" title="Permanent link">&para;</a></h3>
+<ul>
+<li>The effect journal adds storage, an executor, retention policy, and operational states
+  such as pending or indeterminate. It materially improves replay safety but introduces
+  eventual completion between a transition and its external effects.</li>
+<li>Workflow revision pinning increases the number of definitions supported concurrently.
+  Retention and maximum-supported-version policies are required.</li>
+<li>Checkpoint migrations become first-class production operations and require backups,
+  dry-run reports, rollback plans, and failure-injection tests.</li>
+<li>Strong per-instance serialization must work across workers; an in-process lock is not
+  sufficient once the control plane scales horizontally.</li>
+</ul>
+<h3 id="operations-and-observability">Operations and observability<a class="headerlink" href="#operations-and-observability" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Operators gain precise transition and effect history, but must monitor more queues and
+  states: observation ingress, workflow commands, station attempts, and effect execution.</li>
+<li>Dead-letter handling must distinguish an invalid observation, invalid command, station
+  failure, graph incompatibility, and effect failure.</li>
+<li>The poller remains independently deployable, but schema-version compatibility and
+  end-to-end service-level objectives become shared responsibilities across repositories.</li>
+</ul>
+<h3 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Central effect handlers improve credential isolation because stations no longer require
+  Jira or source-control credentials.</li>
+<li>Station registration and declarative composition become trust boundaries. Schema
+  validation, capability allowlists, signed/versioned packages where applicable, and
+  policy enforcement must fail closed.</li>
+</ul>
+<h3 id="performance-and-cost">Performance and cost<a class="headerlink" href="#performance-and-cost" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Validation, journaling, and projections add modest latency and storage use.</li>
+<li>In-process stations avoid unnecessary network overhead; separate execution should be
+  reserved for isolation, scaling, or runtime needs.</li>
+<li>Better idempotency and checkpoint recovery reduce repeated inference and duplicate
+  external operations, partially offsetting the additional control-plane work.</li>
+</ul>
+<h2 id="program-level-completion-criteria">Program-level completion criteria<a class="headerlink" href="#program-level-completion-criteria" title="Permanent link">&para;</a></h2>
+<p>The decoupling effort is complete when:</p>
+<ul>
+<li>The central worker contains no workflow-stage-specific event logic.</li>
+<li>Every station declares and passes versioned input/output conformance tests.</li>
+<li>No station directly performs provider mutations.</li>
+<li>Every consequential external effect is journaled and replay-safe.</li>
+<li>Graphs and gates alone determine valid progression, using typed outcomes.</li>
+<li>Workflow instances have explicit definition-version and migration behavior.</li>
+<li>Poller and webhook observations converge under duplicate, missing, and reordered event
+  tests.</li>
+<li>A local harness can execute any station without Redis, the worker, or a running graph.</li>
+<li>Operators can inspect position, eligibility, waiting reason, effects, and supported
+  recovery from durable read models.</li>
+<li>Legacy broad-state and direct-side-effect paths have been removed.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-circle-arrow-up" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 12-4-4-4 4M12 16V8"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/forge-sdlc/forge" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2026 Fonticons, Inc.--><path fill="currentColor" d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.tabs","navigation.sections","navigation.expand","navigation.top","toc.follow","search.suggest","search.highlight","content.code.copy","content.code.annotate","content.action.edit"],"search":"../../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.dbc0afdc.min.js"></script>
+      
+    
+  </body>
+</html>
