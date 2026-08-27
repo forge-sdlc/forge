@@ -7,6 +7,7 @@ from forge.effects.source_control import (
     SC_BRANCH_CREATE_OPERATION,
     SC_CHANGE_REQUEST_UPDATE_OPERATION,
     SC_COMMENT_CREATE_OPERATION,
+    SC_COMMENT_REPLY_OPERATION,
     SC_FILE_PUT_OPERATION,
     SourceControlMutationExecutor,
 )
@@ -17,6 +18,7 @@ from forge.integrations.source_control.contracts import (
     Provider,
     RepositoryRef,
     ResolvedRepository,
+    Review,
     ReviewComment,
 )
 
@@ -129,3 +131,33 @@ async def test_file_effect_recovers_after_provider_success_before_acknowledgemen
 
     adapter.put_file.assert_not_awaited()
     assert result.provider_reference == "forge/work:docs/plan.md"
+
+
+@pytest.mark.asyncio
+async def test_review_reply_recovers_from_inline_thread_marker() -> None:
+    command, registry, adapter = _fixture(
+        SC_COMMENT_REPLY_OPERATION, {"body": "Fixed", "comment_id": "8"}
+    )
+    adapter.get_review_thread_comments = AsyncMock(
+        return_value=[
+            Review(
+                id="thread-1",
+                state="commented",
+                body="",
+                author="reviewer",
+                comments=[
+                    ReviewComment(
+                        id="9", body="<!-- forge-effect:stable-key -->", author="bot"
+                    )
+                ],
+            )
+        ]
+    )
+    adapter.reply_to_comment = AsyncMock()
+
+    result = await SourceControlMutationExecutor(
+        SC_COMMENT_REPLY_OPERATION, lambda: registry
+    ).execute(command)
+
+    adapter.reply_to_comment.assert_not_awaited()
+    assert result.provider_reference == "9"

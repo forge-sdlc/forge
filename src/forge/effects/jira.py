@@ -25,6 +25,7 @@ JIRA_PROJECT_PROPERTY_DELETE_OPERATION = "jira.project_property.delete"
 JIRA_TASK_CREATE_OPERATION = "jira.task.create"
 JIRA_EPIC_CREATE_OPERATION = "jira.epic.create"
 JIRA_ISSUE_LINK_CREATE_OPERATION = "jira.issue_link.create"
+JIRA_REMOTE_LINK_CREATE_OPERATION = "jira.remote_link.create"
 
 
 class JiraCommentExecutor:
@@ -186,6 +187,13 @@ class JiraMutationExecutor:
                 if not exists:
                     await jira.create_issue_link(link_type, inward_key, outward_key)
                 provider_reference = f"{inward_key}:{link_type}:{outward_key}"
+            elif self.operation == JIRA_REMOTE_LINK_CREATE_OPERATION:
+                url = str(command.payload["url"])
+                title = str(command.payload["title"])
+                links = await jira.get_remote_links(issue_key)
+                if not any(link.get("url") == url for link in links):
+                    await jira.create_remote_link(issue_key, url, title)
+                provider_reference = url
             else:  # pragma: no cover - registry construction prevents this
                 raise ValueError(f"Unsupported Jira effect operation: {self.operation}")
             return EffectResult(
@@ -216,6 +224,7 @@ def register_jira_executors(registry: EffectExecutorRegistry) -> None:
         JIRA_TASK_CREATE_OPERATION,
         JIRA_EPIC_CREATE_OPERATION,
         JIRA_ISSUE_LINK_CREATE_OPERATION,
+        JIRA_REMOTE_LINK_CREATE_OPERATION,
     ):
         registry.register(JiraMutationExecutor(operation))
 

@@ -95,7 +95,15 @@ class SourceControlMutationExecutor:
                 output = {"url": change.url, "number": reference}
             elif self.operation in {SC_COMMENT_CREATE_OPERATION, SC_COMMENT_REPLY_OPERATION}:
                 marker = f"forge-effect:{command.idempotency_key}"
-                comments = await adapter.get_change_request_comments(resolved.repo_ref, identity)
+                if self.operation == SC_COMMENT_REPLY_OPERATION:
+                    threads = await adapter.get_review_thread_comments(
+                        resolved.repo_ref, identity
+                    )
+                    comments = [comment for thread in threads for comment in thread.comments]
+                else:
+                    comments = await adapter.get_change_request_comments(
+                        resolved.repo_ref, identity
+                    )
                 existing = next((item for item in comments if marker in item.body), None)
                 if existing is None:
                     body = f"{command.payload['body']}\n\n<!-- {marker} -->"

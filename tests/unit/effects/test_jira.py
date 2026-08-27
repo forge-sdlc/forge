@@ -12,6 +12,7 @@ from forge.effects.jira import (
     JIRA_ISSUE_LINK_CREATE_OPERATION,
     JIRA_LABEL_OPERATION,
     JIRA_LABELS_ADD_OPERATION,
+    JIRA_REMOTE_LINK_CREATE_OPERATION,
     JIRA_TASK_CREATE_OPERATION,
     JIRA_TRANSITION_OPERATION,
     JiraCommentExecutor,
@@ -213,3 +214,26 @@ async def test_issue_link_recovers_when_relationship_already_exists() -> None:
 
     jira.create_issue_link.assert_not_awaited()
     assert result.provider_reference == "FORGE-9:Related:FORGE-1"
+
+
+@pytest.mark.asyncio
+async def test_remote_link_recovers_by_url() -> None:
+    jira = MagicMock()
+    jira.get_remote_links = AsyncMock(
+        return_value=[{"url": "https://example.test/pull/7", "title": "PR 7"}]
+    )
+    jira.create_remote_link = AsyncMock()
+    jira.close = AsyncMock()
+    command = _command().model_copy(
+        update={
+            "operation": JIRA_REMOTE_LINK_CREATE_OPERATION,
+            "payload": {"url": "https://example.test/pull/7", "title": "PR 7"},
+        }
+    )
+
+    result = await JiraMutationExecutor(
+        JIRA_REMOTE_LINK_CREATE_OPERATION, lambda: jira
+    ).execute(command)
+
+    jira.create_remote_link.assert_not_awaited()
+    assert result.provider_reference == "https://example.test/pull/7"

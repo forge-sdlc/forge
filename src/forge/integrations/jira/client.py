@@ -523,6 +523,22 @@ class JiraClient:
         response.raise_for_status()
         logger.info(f"Added remote link to {issue_key}: {url}")
 
+    async def get_remote_links(self, issue_key: str) -> list[dict[str, str]]:
+        """Return remote-link URLs and titles for idempotent reconciliation."""
+        client = await self._get_client()
+        response = await client.get(f"/issue/{issue_key}/remotelink")
+        response.raise_for_status()
+        links: list[dict[str, str]] = []
+        for item in response.json():
+            remote_object = item.get("object") or {}
+            links.append(
+                {
+                    "url": str(remote_object.get("url") or ""),
+                    "title": str(remote_object.get("title") or ""),
+                }
+            )
+        return links
+
     async def create_issue_link(
         self,
         link_type: str,
