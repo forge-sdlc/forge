@@ -41,6 +41,10 @@ _OPERATION_CAPABILITIES = {
     "jira.description.update": "jira.issue_content",
     "jira.custom_field.update": "jira.issue_content",
     "jira.attachment.replace": "jira.issue_content",
+    "jira.attachment.add": "jira.issue_content",
+    "jira.attachment.delete_by_name": "jira.issue_content",
+    "jira.error_comment.create": "jira.comment",
+    "jira.model_policy_error_comment.create": "jira.comment",
     "jira.issue.archive": "jira.issue_lifecycle",
     "jira.task.create": "jira.issue_structure",
     "jira.epic.create": "jira.issue_structure",
@@ -54,6 +58,7 @@ _OPERATION_CAPABILITIES = {
     "source_control.change_request.update": "source_control.pull_request",
     "source_control.comment.create": "source_control.review",
     "source_control.comment.reply": "source_control.review",
+    "repository.ref.push": "source_control.commit",
 }
 
 
@@ -80,6 +85,4 @@ def require_effect_capability(operation: str) -> None:
         raise PermissionError(f"effect operation '{operation}' has no governed capability")
     if required in capabilities:
         return
-    raise PermissionError(
-        f"process step is not allowed to emit effect operation '{operation}'"
-    )
+    raise PermissionError(f"process step is not allowed to emit effect operation '{operation}'")

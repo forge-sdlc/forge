@@ -61,6 +61,7 @@ from forge.integrations.source_control.contracts import (
     ReviewComment,
     WriteTarget,
 )
+from forge.workflow.declarative.capabilities import require_effect_capability
 from forge.workspace.git_ops import GitOperations
 
 _service: ContextVar[EffectService | None] = ContextVar("workflow_effect_service", default=None)
@@ -170,6 +171,7 @@ class JiraClient:
             "origin": location,
         }
         effect_id = stable_identity("effect", parts)
+        require_effect_capability(operation)
         record = await self._runtime().execute_required(
             EffectCommand(
                 effect_id=effect_id,
@@ -422,6 +424,7 @@ async def push_repository(
             "commit_sha": commit_sha,
         },
     )
+    require_effect_capability(REPOSITORY_PUSH_OPERATION)
     await service.execute_required(
         EffectCommand(
             effect_id=effect_id,
@@ -522,6 +525,7 @@ class SourceControlAdapter:
                 "origin": location,
             },
         )
+        require_effect_capability(operation)
         record = await self._runtime().execute_required(
             EffectCommand(
                 effect_id=effect_id,
