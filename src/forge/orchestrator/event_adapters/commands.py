@@ -9,9 +9,11 @@ from enum import StrEnum
 from typing import Any
 
 from forge.domain import (
+    CommentType,
     WorkflowCommand,
     WorkflowCommandType,
     WorkflowIdentity,
+    classify_comment,
     stable_identity,
 )
 from forge.integrations.source_control.contracts import (
@@ -22,7 +24,6 @@ from forge.integrations.source_control.contracts import (
 )
 from forge.models.events import EventSource
 from forge.orchestrator.event_adapters.contracts import AdaptedEvent, IngressMessage
-from forge.workflow.utils.comment_classifier import CommentType, classify_comment
 
 
 class CommandDecisionStatus(StrEnum):

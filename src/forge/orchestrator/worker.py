@@ -46,7 +46,6 @@ from forge.orchestrator.event_adapters import (
     interpret_event,
     record_command_decision,
 )
-from forge.orchestrator.event_adapters.source_control import extract_change_request_url
 from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
 from forge.skills.orchestrator import ensure_skills
@@ -68,10 +67,7 @@ from forge.workflow.pr_state import (
 )
 from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
-from forge.workflow.utils.automated_review_triage import (
-    is_bot_sender,
-    triage_automated_review,
-)
+from forge.workflow.utils.automated_review_triage import triage_automated_review
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.proposal_review_threads import (
@@ -181,8 +177,6 @@ _FRESH_INVOKE_NODES = (
 
 # Matches >option N anywhere in comment (case-insensitive, first match wins)
 # Supports both start-of-line usage (>option 2) and in-prose usage (let's go with >option 2)
-_OPTION_PATTERN = re.compile(r"(?mi)>option\s+(\d+)")
-
 class OrchestratorWorker:
     """Worker that processes workflow events from Redis queue."""
 
@@ -314,7 +308,7 @@ class OrchestratorWorker:
             Message with ticket_key populated if found, otherwise unchanged.
         """
         adapted = self.event_adapters.adapt(message)
-        pr_url = adapted.change_request_url or extract_change_request_url(message.payload)
+        pr_url = adapted.change_request_url
 
         logger.debug(f"PR URL extracted for {message.event_id}: {pr_url!r}")
 
@@ -402,6 +396,7 @@ class OrchestratorWorker:
             )
 
         try:
+            ingress = self.event_adapters.adapt(message)
             # Determine ticket type early to select workflow
             ticket_type = self._extract_ticket_type(message)
 
@@ -409,7 +404,12 @@ class OrchestratorWorker:
             existing_state = None
             config: dict[str, Any] = {"configurable": {"thread_id": ticket_key}}
 
-            labels = message.payload.get("issue", {}).get("fields", {}).get("labels", []) or []
+            observed_issue = ingress.observation.facts.get("issue", {})
+            labels = (
+                observed_issue.get("fields", {}).get("labels", [])
+                if isinstance(observed_issue, dict)
+                else []
+            ) or []
             try:
                 custom_workflow = await self._resolve_custom_workflow(ticket_key, labels)
             except Exception as exc:
@@ -451,7 +451,7 @@ class OrchestratorWorker:
                 workflow_instance = self.router.resolve(
                     ticket_type=ticket_type,
                     labels=labels,
-                    event=message.payload,
+                    event=dict(ingress.observation.facts),
                 )
 
                 if workflow_instance is None:
@@ -684,18 +684,9 @@ class OrchestratorWorker:
                 command_decision.reason,
             )
 
-        payload = message.payload
         event_obj = self._deserialize_event(message)
         current_state = activate_pull_request_for_event(current_state, event_obj)
         targets_implementation_pr = event_targets_pull_request(current_state, event_obj)
-        changelog = payload.get("changelog", {})
-        comment = payload.get("comment", {})
-
-        # Check for label changes indicating approval or retry
-        label_changes = [
-            item for item in changelog.get("items", []) if item.get("field") == "labels"
-        ]
-
         is_approved = False
         is_rejected = False
         is_question = False
@@ -708,6 +699,8 @@ class OrchestratorWorker:
         implementation_pr_approved = False
 
         current_node = current_state.get("current_node", "")
+        comment_ticket_key = None
+        comment_ticket_type = None
 
         if workflow_command is not None:
             handlers = getattr(
@@ -821,7 +814,7 @@ class OrchestratorWorker:
                     "context": {
                         **current_state.get("context", {}),
                         "resume_event": message.event_type,
-                        "payload": payload,
+                        "observation_id": adapted_event.observation.observation_id,
                         "review_thread_comment_id": replied_to,
                     },
                 }
@@ -834,7 +827,7 @@ class OrchestratorWorker:
                 "context": {
                     **current_state.get("context", {}),
                     "resume_event": message.event_type,
-                    "payload": payload,
+                    "observation_id": adapted_event.observation.observation_id,
                     "review_thread_comment_id": own_id,
                 },
             }
@@ -863,232 +856,6 @@ class OrchestratorWorker:
             ):
                 is_ci_webhook = True
                 logger.info(f"Detected source-control CI webhook signal for {current_node}")
-
-        for change in label_changes:
-            to_labels = change.get("toString", "")
-            from_labels = change.get("fromString", "")
-
-            # Check for approval labels - but only if it matches the current stage
-            if "approved" in to_labels.lower() and "pending" in from_labels.lower():
-                # Validate the approval matches the workflow stage
-                approval_stage = None
-                if "prd-approved" in to_labels.lower():
-                    approval_stage = "prd"
-                elif "spec-approved" in to_labels.lower():
-                    approval_stage = "spec"
-                elif "plan-approved" in to_labels.lower():
-                    approval_stage = "plan"
-                elif "task-approved" in to_labels.lower():
-                    approval_stage = "task"
-
-                # Map current node to expected approval stage
-                node_to_stage = {
-                    "prd_approval_gate": "prd",
-                    "generate_prd": "prd",
-                    "regenerate_prd": "prd",
-                    "spec_approval_gate": "spec",
-                    "generate_spec": "spec",
-                    "regenerate_spec": "spec",
-                    "plan_approval_gate": "plan",
-                    "decompose_epics": "plan",
-                    "regenerate_all_epics": "plan",
-                    "update_single_epic": "plan",
-                    "task_plan_approval_gate": "plan",
-                    "task_approval_gate": "task",
-                    "generate_tasks": "task",
-                }
-                expected_stage = node_to_stage.get(current_node)
-                if approval_stage and expected_stage and approval_stage == expected_stage:
-                    is_approved = True
-                    logger.info(
-                        f"Detected {approval_stage} approval via label change: "
-                        f"{from_labels} -> {to_labels}"
-                    )
-                elif approval_stage:
-                    logger.warning(
-                        f"Ignoring {approval_stage} approval - workflow at {current_node} "
-                        f"(expects {expected_stage})"
-                    )
-
-        # Fallback: check current labels on the ticket when changelog-based
-        # detection missed the approval (e.g. user changed labels in two steps).
-        if not is_approved and not is_rejected:
-            current_labels = payload.get("issue", {}).get("fields", {}).get("labels", [])
-            current_labels_lower = [lbl.lower() for lbl in current_labels]
-            gate_to_approved_label = {
-                "prd_approval_gate": "forge:prd-approved",
-                "spec_approval_gate": "forge:spec-approved",
-                "plan_approval_gate": "forge:plan-approved",
-                "task_plan_approval_gate": "forge:plan-approved",
-                "task_approval_gate": "forge:task-approved",
-            }
-            expected_label = gate_to_approved_label.get(current_node)
-            if expected_label and expected_label in current_labels_lower:
-                is_approved = True
-                stage = current_node.replace("_approval_gate", "")
-                logger.info(f"Detected {stage} approval via current label: {expected_label}")
-
-        # Check for rejection comment (contains feedback)
-        # Determine if comment is on Epic/Task (child) vs Feature (parent)
-        # based on current workflow phase
-        #
-        # Skip Jira comment feedback when PRD review happens on a GitHub PR —
-        # feedback should come from the PR, not Jira.
-        comment_ticket_key = None
-        comment_ticket_type = None  # "epic" or "task"
-        if comment and current_state.get("prd_pr_number") and current_node in _PRD_GATE_NODES:
-            logger.info(
-                f"Ignoring Jira comment for {message.ticket_key} — PRD review is on GitHub PR"
-            )
-            comment = {}
-        if comment and current_state.get("spec_pr_number") and current_node in _SPEC_GATE_NODES:
-            logger.info(
-                f"Ignoring Jira comment for {message.ticket_key} — spec review is on GitHub PR"
-            )
-            comment = {}
-        if comment:
-            comment_body = comment.get("body", "")
-            # Extract text from ADF if needed
-            if isinstance(comment_body, dict):
-                comment_body = self._extract_text_from_adf(comment_body)
-
-            if comment_body.strip():
-                # >option N detection for rca_option_gate (runs before general classification)
-                if current_node == "rca_option_gate":
-                    option_match = _OPTION_PATTERN.search(comment_body)
-                    if option_match:
-                        n = int(option_match.group(1))
-                        rca_options = current_state.get("rca_options", [])
-                        if 1 <= n <= len(rca_options):
-                            logger.info(f"Detected >option {n} for {message.ticket_key}")
-                            return {
-                                **current_state,
-                                "selected_fix_option": n,
-                                "selected_fix_approach": rca_options[n - 1],
-                                "is_paused": False,
-                                "is_question": False,
-                                "revision_requested": False,
-                                "feedback_comment": None,
-                                "context": {
-                                    **current_state.get("context", {}),
-                                    "resume_event": message.event_type,
-                                    "payload": payload,
-                                },
-                            }
-                        else:
-                            max_n = len(rca_options)
-                            logger.info(
-                                f">option {n} out of range (max {max_n}) for {message.ticket_key}"
-                            )
-                            jira = JiraClient()
-                            try:
-                                await post_status_comment(
-                                    jira,
-                                    message.ticket_key,
-                                    f"Please reply with >option N where N is between 1 and {max_n}.",
-                                )
-                            finally:
-                                await jira.close()
-                            return current_state
-
-                comment_type = classify_comment(comment_body)
-
-                if comment_type == CommentType.QUESTION:
-                    is_question = True
-                    feedback = comment_body
-                    logger.info(f"Detected question comment: {feedback[:100]}...")
-                elif comment_type == CommentType.FEEDBACK:
-                    is_rejected = True
-                    feedback = re.sub(r"^\s*!\s*", "", comment_body)
-                    logger.info(f"Detected revision comment: {feedback[:100]}...")
-                else:
-                    logger.info(
-                        f"Informational comment on {message.ticket_key}, "
-                        f"ignoring: {comment_body[:100]}..."
-                    )
-
-                # Determine workflow phase from current_node for feedback/questions
-                # (skip for approvals since they don't have feedback)
-                if feedback:
-                    workflow_ticket_key = current_state.get("ticket_key", "")
-                    epic_keys = current_state.get("epic_keys", [])
-                    task_keys = current_state.get("task_keys", [])
-
-                    # source_ticket_key is set by the Jira webhook handler when a
-                    # child ticket (Epic/Task) event is re-routed to the parent Feature.
-                    # message.ticket_key will equal workflow_ticket_key in that case,
-                    # so we use source_ticket_key to detect the true origin.
-                    source_ticket_key = payload.get("source_ticket_key")
-                    child_ticket_key = (
-                        source_ticket_key
-                        if source_ticket_key and source_ticket_key != workflow_ticket_key
-                        else (
-                            message.ticket_key
-                            if message.ticket_key != workflow_ticket_key
-                            else None
-                        )
-                    )
-
-                    # Determine which phase we're in based on current_node
-                    plan_phase_nodes = (
-                        "plan_approval_gate",
-                        "decompose_epics",
-                        "regenerate_all_epics",
-                        "update_single_epic",
-                    )
-                    task_phase_nodes = (
-                        "task_approval_gate",
-                        "generate_tasks",
-                        "regenerate_all_tasks",
-                        "regenerate_epic_tasks",
-                        "update_single_task",
-                    )
-
-                    if child_ticket_key:
-                        # Comment originated from a child ticket - determine type by phase
-                        if current_node in plan_phase_nodes:
-                            # In plan phase - check if it's an Epic
-                            if child_ticket_key in epic_keys:
-                                comment_ticket_key = child_ticket_key
-                                comment_ticket_type = "epic"
-                                logger.info(
-                                    f"Detected Epic-level comment on {comment_ticket_key}: "
-                                    f"{feedback[:100]}..."
-                                )
-                            else:
-                                logger.info(
-                                    f"Detected comment on child ticket {child_ticket_key} "
-                                    f"(not in epic_keys): {feedback[:100]}..."
-                                )
-                        elif current_node in task_phase_nodes:
-                            # In task phase - comments may target a Task or its Epic.
-                            if child_ticket_key in task_keys:
-                                comment_ticket_key = child_ticket_key
-                                comment_ticket_type = "task"
-                                logger.info(
-                                    f"Detected Task-level comment on {comment_ticket_key}: "
-                                    f"{feedback[:100]}..."
-                                )
-                            elif child_ticket_key in epic_keys:
-                                comment_ticket_key = child_ticket_key
-                                comment_ticket_type = "epic"
-                                logger.info(
-                                    f"Detected Epic-level task comment on {comment_ticket_key}: "
-                                    f"{feedback[:100]}..."
-                                )
-                            else:
-                                logger.info(
-                                    f"Detected comment on child ticket {child_ticket_key} "
-                                    f"(not in task_keys): {feedback[:100]}..."
-                                )
-                        else:
-                            # Not in a phase that handles child comments
-                            logger.info(
-                                f"Detected comment on child ticket {child_ticket_key} "
-                                f"at unexpected node {current_node}: {feedback[:100]}..."
-                            )
-                    else:
-                        logger.info(f"Detected Feature-level comment: {feedback[:100]}...")
 
         # A human reply to a proposal review thread resumes only that thread's
         # feedback. Forge-authored replies are informational and must not loop.
@@ -1464,7 +1231,8 @@ class OrchestratorWorker:
             is_rejected
             and proposal_review_threads
             and (is_prd_review or is_spec_review)
-            and is_bot_sender(payload)
+            and event_obj is not None
+            and event_obj.actor.is_bot
         ):
             previous_decisions = {
                 item.get("thread_id"): item
@@ -1488,8 +1256,13 @@ class OrchestratorWorker:
                     threads=proposal_review_threads,
                     ticket_key=message.ticket_key,
                 )
-                repo_full = payload.get("repository", {}).get("full_name", "")
-                pr_number = payload.get("pull_request", {}).get("number")
+                repo_full = event_obj.repo_ref.namespace if event_obj is not None else ""
+                native_id = (
+                    event_obj.change_request.identity.native_id
+                    if event_obj is not None and event_obj.change_request
+                    else None
+                )
+                pr_number = int(native_id) if native_id is not None else None
                 if repo_full and pr_number:
                     await reply_to_proposal_decisions(
                         repo_full_name=repo_full,
@@ -1524,14 +1297,12 @@ class OrchestratorWorker:
             is_rejected
             and feedback
             and (is_prd_review or is_spec_review)
-            and is_bot_sender(payload)
+            and event_obj is not None
+            and event_obj.actor.is_bot
             and not proposal_review_decisions
         ):
-            review = payload.get("review", {})
-            review_state = review.get("state", "comment")
-            review_author = payload.get("sender", {}).get("login") or review.get("user", {}).get(
-                "login", "unknown bot"
-            )
+            review_state = event_obj.review.state.value if event_obj.review else "comment"
+            review_author = event_obj.actor.login or "unknown bot"
             artifact_type = "PRD" if is_prd_review else "specification"
             artifact_content = current_state.get(
                 "prd_content" if is_prd_review else "spec_content", ""
@@ -1667,7 +1438,7 @@ class OrchestratorWorker:
             "context": {
                 **current_state.get("context", {}),
                 "resume_event": message.event_type,
-                "payload": payload,
+                "observation_id": adapted_event.observation.observation_id,
             },
         }
         if targets_implementation_pr and is_ci_webhook and current_node != "human_review_gate":
@@ -2195,11 +1966,17 @@ class OrchestratorWorker:
         Returns:
             Initial state dictionary.
         """
-        # Extract ticket type and labels from payload
+        # Extract ticket type and labels from normalized observation evidence.
         ticket_type = "Unknown"  # Require explicit type, don't default to Feature
         labels: list[str] = []
+        observation_id = f"transport:{message.event_id}"
         if message.source == EventSource.JIRA:
-            issue_data = message.payload.get("issue", {})
+            adapters = getattr(
+                self, "event_adapters", None
+            ) or create_default_event_adapter_registry()
+            adapted = adapters.adapt(message)
+            observation_id = adapted.observation.observation_id
+            issue_data = adapted.observation.facts.get("issue", {})
             fields = issue_data.get("fields", {})
             issue_type = fields.get("issuetype", {})
             ticket_type = issue_type.get("name", "Unknown")
@@ -2222,7 +1999,7 @@ class OrchestratorWorker:
             "context": {
                 "source": message.source.value,
                 "event_id": message.event_id,
-                "payload": message.payload,
+                "observation_id": observation_id,
             },
             "current_node": "entry",
             "is_paused": False,

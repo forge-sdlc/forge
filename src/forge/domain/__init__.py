@@ -8,6 +8,7 @@ from forge.domain.identity import (
     WorkflowIdentity,
     stable_identity,
 )
+from forge.domain.interactions import CommentType, classify_comment
 from forge.domain.observations import Observation, ObservationSource
 from forge.domain.schema import DomainModel, JsonValue, VersionedDomainModel
 from forge.domain.stations import (
@@ -18,6 +19,7 @@ from forge.domain.stations import (
 )
 
 __all__ = [
+    "CommentType",
     "DomainModel",
     "EffectCommand",
     "EffectResult",
@@ -36,4 +38,5 @@ __all__ = [
     "WorkflowCommandType",
     "WorkflowIdentity",
     "stable_identity",
+    "classify_comment",
 ]

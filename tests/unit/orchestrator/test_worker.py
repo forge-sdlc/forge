@@ -1600,7 +1600,14 @@ class TestWorkerRouting:
         mock_router.resolve.assert_called_once_with(
             ticket_type=TicketType.TASK,
             labels=["forge:managed"],
-            event=message.payload,
+            event={
+                "event_type": "jira:issue_updated",
+                "issue": message.payload["issue"],
+                "changelog": {},
+                "comment": None,
+                "comment_text": "",
+                "source_ticket_key": None,
+            },
         )
 
 
