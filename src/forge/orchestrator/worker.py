@@ -18,7 +18,6 @@ from forge.api.routes.metrics import (
     record_workflow_started,
 )
 from forge.config import get_settings
-from forge.domain import WorkflowCommandType
 from forge.integrations.github.comment_signature import is_self_comment
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
@@ -34,6 +33,11 @@ from forge.integrations.source_control.registry import get_registry
 from forge.models.events import EventSource
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.checkpointer import get_checkpointer, get_ticket_from_pr_index
+from forge.orchestrator.command_handlers import (
+    CommandHandlerRegistry,
+    FeedbackKind,
+    create_default_command_handler_registry,
+)
 from forge.orchestrator.event_adapters import (
     AdaptedEvent,
     CommandDecision,
@@ -179,17 +183,6 @@ _FRESH_INVOKE_NODES = (
 # Supports both start-of-line usage (>option 2) and in-prose usage (let's go with >option 2)
 _OPTION_PATTERN = re.compile(r"(?mi)>option\s+(\d+)")
 
-# Gates where forge:yolo label addition triggers auto-approval and workflow resumption
-_YOLO_GATES = {
-    "prd_approval_gate",
-    "spec_approval_gate",
-    "plan_approval_gate",
-    "task_plan_approval_gate",
-    "task_approval_gate",
-    "rca_option_gate",
-}
-
-
 class OrchestratorWorker:
     """Worker that processes workflow events from Redis queue."""
 
@@ -198,6 +191,7 @@ class OrchestratorWorker:
         consumer_name: str | None = None,
         router: WorkflowRouter | None = None,
         event_adapters: EventAdapterRegistry | None = None,
+        command_handlers: CommandHandlerRegistry | None = None,
     ) -> None:
         """Initialize the worker.
 
@@ -213,6 +207,7 @@ class OrchestratorWorker:
         )
         self.router = router or create_default_router()
         self.event_adapters = event_adapters or create_default_event_adapter_registry()
+        self.command_handlers = command_handlers or create_default_command_handler_registry()
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
         self._compiled_workflows: dict[str, Any] = {}  # Cache compiled workflows by name
@@ -232,7 +227,8 @@ class OrchestratorWorker:
         """
         if message.normalized_event is None:
             return None
-        return self.event_adapters.adapt(message).normalized_event
+        adapters = getattr(self, "event_adapters", None) or create_default_event_adapter_registry()
+        return adapters.adapt(message).normalized_event
 
     async def _get_forge_github_login(self, repo_ref: RepositoryRef) -> str:
         """Resolve and cache the authenticated Forge identity for this connection."""
@@ -668,7 +664,8 @@ class OrchestratorWorker:
         Returns:
             Updated state for workflow resumption.
         """
-        adapted_event = adapted_event or self.event_adapters.adapt(message)
+        adapters = getattr(self, "event_adapters", None) or create_default_event_adapter_registry()
+        adapted_event = adapted_event or adapters.adapt(message)
         command_decision = command_decision or interpret_event(
             message, adapted_event, current_state
         )
@@ -704,7 +701,6 @@ class OrchestratorWorker:
         is_retry = False
         is_question = False
         is_ci_webhook = False
-        is_yolo = False
         pr_merged = False
         feedback = None
         automated_review_revision_pending = None
@@ -713,6 +709,38 @@ class OrchestratorWorker:
         implementation_pr_approved = False
 
         current_node = current_state.get("current_node", "")
+
+        if workflow_command is not None:
+            handlers = getattr(
+                self, "command_handlers", None
+            ) or create_default_command_handler_registry()
+            application = handlers.apply(workflow_command, current_state)
+            if application is not None:
+                feedback_request = application.feedback
+                if feedback_request is not None and event_obj is not None:
+                    native_id = (
+                        event_obj.change_request.identity.native_id
+                        if event_obj.change_request
+                        else None
+                    )
+                    pr_number = int(native_id) if native_id is not None else None
+                    if feedback_request.kind is FeedbackKind.SKIP_GATE:
+                        await self._post_skip_gate_feedback(
+                            ticket_key=message.ticket_key,
+                            repo_ref=event_obj.repo_ref,
+                            pr_number=pr_number,
+                            check_name=str(feedback_request.arguments["check_name"]),
+                            sender=str(feedback_request.arguments.get("sender") or ""),
+                            action=str(feedback_request.arguments["action"]),
+                        )
+                    elif feedback_request.kind is FeedbackKind.REBASE:
+                        await self._post_rebase_feedback(
+                            ticket_key=message.ticket_key,
+                            repo_ref=event_obj.repo_ref,
+                            pr_number=pr_number,
+                            sender=str(feedback_request.arguments.get("sender") or ""),
+                        )
+                return application.state
 
         # An inline reply at the review-response gate applies only to its thread.
         # Preserve unrelated contested threads and re-run review analysis so any
@@ -802,105 +830,9 @@ class OrchestratorWorker:
                 is_ci_webhook = True
                 logger.info(f"Detected source-control CI webhook signal for {current_node}")
 
-        # GitHub issue_comment events: detect /forge skip-gate and /forge unskip-gate
-        # commands posted as PR comments.
-        if (
-            event_obj is not None
-            and event_obj.kind == EventKind.COMMENT_CREATED
-            and event_obj.comment is not None
-            and event_obj.comment.path is None
-        ):
-            native_id = (
-                event_obj.change_request.identity.native_id if event_obj.change_request else None
-            )
-            pr_number = int(native_id) if native_id is not None else None
-            sender = event_obj.actor.login
-
-            if (
-                workflow_command is not None
-                and workflow_command.command_type is WorkflowCommandType.SKIP_GATE
-            ):
-                check_name = str(workflow_command.arguments["check_name"])
-                if current_node in _CI_STAGES:
-                    skipped = list(current_state.get("ci_skipped_checks", []))
-                    if check_name not in skipped:
-                        skipped.append(check_name)
-                    logger.info(f"CI gate skip added for {message.ticket_key}: '{check_name}'")
-                    await self._post_skip_gate_feedback(
-                        ticket_key=message.ticket_key,
-                        repo_ref=event_obj.repo_ref,
-                        pr_number=pr_number,
-                        check_name=check_name,
-                        sender=sender,
-                        action="skip",
-                    )
-                    return {
-                        **current_state,
-                        "ci_skipped_checks": skipped,
-                        "is_paused": False,
-                        "current_node": "ci_evaluator",
-                    }
-                return current_state
-
-            elif (
-                workflow_command is not None
-                and workflow_command.command_type is WorkflowCommandType.UNSKIP_GATE
-            ):
-                check_name = str(workflow_command.arguments["check_name"])
-                if current_node in _CI_STAGES:
-                    skipped = [
-                        s for s in current_state.get("ci_skipped_checks", []) if s != check_name
-                    ]
-                    logger.info(f"CI gate skip removed for {message.ticket_key}: '{check_name}'")
-                    await self._post_skip_gate_feedback(
-                        ticket_key=message.ticket_key,
-                        repo_ref=event_obj.repo_ref,
-                        pr_number=pr_number,
-                        check_name=check_name,
-                        sender=sender,
-                        action="unskip",
-                    )
-                    return {
-                        **current_state,
-                        "ci_skipped_checks": skipped,
-                        "is_paused": False,
-                        "current_node": "ci_evaluator",
-                    }
-                return current_state
-
-            if (
-                workflow_command is not None
-                and workflow_command.command_type is WorkflowCommandType.REBASE
-            ):
-                logger.info(f"Detected /forge rebase for {message.ticket_key}")
-                await self._post_rebase_feedback(
-                    ticket_key=message.ticket_key,
-                    repo_ref=event_obj.repo_ref,
-                    pr_number=pr_number,
-                    sender=sender,
-                )
-                return {
-                    **current_state,
-                    "rebase_return_node": current_node,
-                    "is_paused": False,
-                    "current_node": "rebase_pr",
-                }
-
         for change in label_changes:
             to_labels = change.get("toString", "")
             from_labels = change.get("fromString", "")
-
-            # Check for yolo label addition — activate yolo mode if at a gate
-            if (
-                "forge:yolo" in to_labels
-                and "forge:yolo" not in from_labels
-                and current_node in _YOLO_GATES
-            ):
-                logger.info(
-                    f"forge:yolo label added for {message.ticket_key} at {current_node} "
-                    "— activating yolo mode"
-                )
-                is_yolo = True
 
             # Check for retry label - triggers retry of current stage
             if "forge:retry" in to_labels.lower() and "forge:retry" not in from_labels.lower():
@@ -1824,12 +1756,6 @@ class OrchestratorWorker:
                 # during the CI cycle are still accepted from the queue.
                 updated_state["pending_ci_event"] = True
 
-        elif is_yolo:
-            updated_state["yolo_mode"] = True
-            updated_state["is_paused"] = False
-            updated_state["revision_requested"] = False
-            updated_state["feedback_comment"] = None
-            updated_state["last_error"] = None
         elif is_approved:
             updated_state["is_paused"] = implementation_pr_approved
             updated_state["revision_requested"] = False
