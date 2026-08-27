@@ -54,7 +54,7 @@ class TestForgeDirectorySetup:
             patch("forge.workflow.nodes.workspace_setup.GitOperations") as MockGit,
             patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader") as MockGuardrails,
             patch("forge.workflow.nodes.workspace_setup.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.workspace_setup.GitHubClient") as MockGitHub,
+            patch("forge.workflow.nodes.workspace_setup.get_adapter") as MockGetAdapter,
         ):
             mock_git = MagicMock()
             MockGit.return_value = mock_git
@@ -70,10 +70,14 @@ class TestForgeDirectorySetup:
             MockJira.return_value.get_labels = AsyncMock(return_value=[])
             MockJira.return_value.add_labels = AsyncMock()
             MockJira.return_value.remove_labels = AsyncMock()
-            MockGitHub.return_value.get_repository = AsyncMock(
-                return_value={"default_branch": "main"}
+            repo_ref = MagicMock(namespace="test-org/test-repo")
+            adapter = MagicMock()
+            adapter.get_git_credentials = AsyncMock(return_value=MagicMock())
+            adapter.resolve_default_branch = AsyncMock(return_value="main")
+            adapter.ensure_write_target = AsyncMock(
+                return_value=MagicMock(fork_owner="forge-bot", fork_repo="test-repo")
             )
-            MockGitHub.return_value.close = AsyncMock()
+            MockGetAdapter.return_value = (repo_ref, adapter)
 
             result = await setup_workspace(initial_state)
 
