@@ -12,7 +12,7 @@ from forge.domain import (
     Observation,
     ObservationSource,
     ResourceIdentity,
-    stable_identity,
+    observation_identity,
 )
 from forge.integrations.source_control.contracts import NormalizedEvent
 
@@ -44,20 +44,25 @@ def normalized_event_to_observation(
     external_id = event.repo_ref.id
     resource_type = "repository"
     revision: str | None = None
-    if change_request:
-        resource_type = "change_request"
-        external_id = f"{event.repo_ref.id}#{native_id}"
-        revision = change_request.head_sha or None
-    elif event.check:
+    # Event-specific resources must win over the optional change-request
+    # context attached by GitHub's check/comment/review payloads.  Otherwise
+    # every check or comment on one head SHA is misidentified as that PR state.
+    if event.check:
         resource_type = "check"
         external_id = f"{event.repo_ref.id}:{event.check.name}"
-        revision = f"{event.check.status.value}:{event.check.conclusion.value}"
+        revision = _check_revision(event)
     elif event.comment:
         resource_type = "comment"
         external_id = f"{event.repo_ref.id}:{event.comment.id}"
+        revision = event.comment.id
     elif event.review:
         resource_type = "review"
         external_id = f"{event.repo_ref.id}:{event.review.id}"
+        revision = event.review.id
+    elif change_request:
+        resource_type = "change_request"
+        external_id = f"{event.repo_ref.id}#{native_id}"
+        revision = change_request.head_sha or None
 
     facts = _json_value(
         {
@@ -72,27 +77,44 @@ def normalized_event_to_observation(
         }
     )
     assert isinstance(facts, dict)
-    observation_id = stable_identity(
-        "observation",
-        {
-            "source_system": event.repo_ref.provider.value,
-            "event_id": event.id,
-            "resource_revision": revision,
-        },
+    resource = ResourceIdentity(
+        resource_type=resource_type,
+        external_id=external_id,
+        namespace=event.repo_ref.connection,
+    )
+    observation_id = observation_identity(
+        source_system=event.repo_ref.provider.value,
+        provider_event_id=event.id,
+        resource=resource,
+        resource_revision=revision,
     )
     return Observation(
         observation_id=observation_id,
         source=source,
         source_system=event.repo_ref.provider.value,
-        resource=ResourceIdentity(
-            resource_type=resource_type,
-            external_id=external_id,
-            namespace=event.repo_ref.connection,
-        ),
+        resource=resource,
         resource_revision=revision,
         observed_at=event.received_at,
         received_at=event.received_at,
         facts=facts,
-        correlation={"transport_event_id": event.id, "repository_id": event.repo_ref.id},
+        correlation={
+            "provider_event_id": event.id,
+            "transport_event_id": event.id,
+            "repository_id": event.repo_ref.id,
+        },
         evidence_reference=f"source-control-event:{event.id}" if event.raw else None,
     )
+
+
+def _check_revision(event: NormalizedEvent) -> str:
+    """Return a revision for a check state, scoped to the checked commit.
+
+    ``CheckRun`` intentionally keeps only provider-neutral fields.  Combining
+    those fields with the associated change-request head prevents a successful
+    check on two commits from being treated as one revision.  For standalone
+    checks, the event ID is the provider's only available immutable identity.
+    """
+    assert event.check is not None
+    head_sha = event.change_request.head_sha if event.change_request else ""
+    scope = head_sha or event.id
+    return f"{scope}:{event.check.status.value}:{event.check.conclusion.value}"

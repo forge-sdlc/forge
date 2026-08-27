@@ -141,7 +141,11 @@ def interpret_event(
     command_id = stable_identity(
         "workflow-command",
         {
-            "event_id": message.event_id,
+            # The transport event ID changes when one provider revision is
+            # delivered by both webhook and poller.  Command identity must be
+            # tied to the source-independent observation so either delivery
+            # selects the same durable command/effect.
+            "observation_delivery_identity": adapted.observation.delivery_identity,
             "run_id": workflow.run_id,
             "command_type": command_type.value,
         },

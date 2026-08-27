@@ -19,6 +19,7 @@ from forge.orchestrator.event_adapters.jira import JiraEventAdapter
 from forge.orchestrator.event_adapters.registry import EventAdapterRegistry
 from forge.orchestrator.event_adapters.source_control import extract_change_request_url
 from forge.queue.models import QueueMessage, normalized_event_to_dict
+from forge.reconciliation import InMemoryObservationLedger, ObservationDisposition
 
 
 def _message(
@@ -87,6 +88,116 @@ def test_default_registry_adapts_jira_without_provider_clients() -> None:
     assert adapted.ticket_type is TicketType.FEATURE
     assert adapted.observation.resource.external_id == "FORGE-42"
     assert adapted.observation.facts["event_type"] == "updated"
+
+
+def test_jira_issue_revision_is_shared_when_delivery_ids_differ() -> None:
+    payload = {
+        "issue": {
+            "key": "FORGE-42",
+            "fields": {
+                "issuetype": {"name": "Feature"},
+                "updated": "2026-08-27T10:00:00.000+0000",
+            },
+        },
+        "changelog": {"items": [{"field": "labels", "toString": "forge:managed"}]},
+    }
+    webhook = _message(source=EventSource.JIRA, payload=payload)
+    poller = _message(source=EventSource.JIRA, payload=payload)
+    poller.event_id = "poller-delivery-42"
+
+    adapter = JiraEventAdapter()
+    webhook_observation = adapter.adapt(webhook).observation
+    poller_observation = adapter.adapt(poller).observation
+
+    assert webhook_observation.resource_revision == "updated:2026-08-27T10:00:00.000+0000"
+    assert webhook_observation.revision_order is not None
+    assert webhook_observation.delivery_identity == poller_observation.delivery_identity
+
+
+def test_jira_comment_id_wins_over_issue_revision_for_cross_source_replay() -> None:
+    webhook_payload = {
+        "issue": {
+            "key": "FORGE-42",
+            "fields": {
+                "issuetype": {"name": "Feature"},
+                "updated": "2026-08-27T10:00:00.000+0000",
+            },
+        },
+        "comment": {"id": "10042", "body": "Please revise"},
+    }
+    poller_payload = {
+        **webhook_payload,
+        "issue": {
+            **webhook_payload["issue"],
+            "fields": {
+                **webhook_payload["issue"]["fields"],
+                "updated": "2026-08-27T10:01:00.000+0000",
+            },
+        },
+    }
+    adapter = JiraEventAdapter()
+    webhook = adapter.adapt(_message(source=EventSource.JIRA, payload=webhook_payload)).observation
+    poller = adapter.adapt(_message(source=EventSource.JIRA, payload=poller_payload)).observation
+
+    assert webhook.resource_revision == "comment:10042"
+    assert webhook.delivery_identity == poller.delivery_identity
+
+
+def test_jira_comment_created_timestamp_orders_comments_without_issue_updated() -> None:
+    payload = {
+        "issue": {"key": "FORGE-42", "fields": {"issuetype": {"name": "Feature"}}},
+        "comment": {"id": "10042", "created": "2026-08-27T10:01:00.000+0000"},
+    }
+
+    adapted = JiraEventAdapter().adapt(_message(source=EventSource.JIRA, payload=payload))
+
+    assert adapted.observation.resource_revision == "comment:10042"
+    assert adapted.observation.revision_order is not None
+
+
+@pytest.mark.asyncio
+async def test_rich_webhook_and_minimal_poller_facts_deduplicate_same_issue_revision() -> None:
+    rich_payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "id": "10042",
+            "key": "FORGE-42",
+            "fields": {
+                "issuetype": {"name": "Feature", "id": "10001"},
+                "status": {"name": "In Progress", "id": "3"},
+                "labels": ["forge:managed", "forge:pending"],
+                "summary": "A richer provider issue",
+                "description": {"type": "doc", "content": []},
+                "updated": "2026-08-27T10:00:00.000+0000",
+            },
+        },
+        "changelog": {"id": "history-1", "items": [{"field": "labels"}]},
+        "user": {"accountId": "provider-user", "displayName": "Provider"},
+    }
+    minimal_payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "key": "FORGE-42",
+            "fields": {
+                "issuetype": {"name": "Feature"},
+                "status": {"name": "In Progress"},
+                "labels": ["forge:managed", "forge:pending"],
+                "updated": "2026-08-27T10:00:00.000+0000",
+            },
+        },
+    }
+    adapter = JiraEventAdapter()
+    webhook_message = _message(source=EventSource.JIRA, payload=rich_payload)
+    poller_message = _message(source=EventSource.JIRA, payload=minimal_payload)
+    poller_message.event_id = "poller-delivery-42"
+    webhook = adapter.adapt(webhook_message).observation
+    poller = adapter.adapt(poller_message).observation
+
+    assert webhook.facts == poller.facts
+    assert webhook.delivery_identity == poller.delivery_identity
+    ledger = InMemoryObservationLedger()
+    assert (await ledger.record(webhook)).disposition is ObservationDisposition.ACCEPTED
+    assert (await ledger.record(poller)).disposition is ObservationDisposition.DUPLICATE
 
 
 def test_child_jira_event_rerouted_to_parent_does_not_start_child_workflow() -> None:

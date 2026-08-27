@@ -16,7 +16,11 @@ Gateway and Worker communicate only through Redis and can be deployed on separat
 
 **Checkpointing:** LangGraph workflow state is persisted via `AsyncRedisSaver`, keyed by Jira ticket key (e.g., `AISOS-123`). Checkpoints are written after each graph node completes. When a new event arrives for an existing ticket, the workflow resumes from its last checkpoint.
 
-**Idempotency:** A `DeduplicationService` exists but is not yet wired into the webhook routes. Branch creation and label operations are naturally idempotent; Jira comment posting is not.
+**Idempotency:** The worker records normalized webhook/poller observations in
+the reconciliation ledger before command interpretation. Duplicate, stale,
+and conflicting observations do not re-enter the workflow. External writes
+still use durable effect identities; provider operations such as Jira comment
+posting must remain idempotent across crash recovery.
 
 **Consistency boundary:** Workflow mutations are persisted as stable effect intents before
 provider execution. Provider-specific recovery evidence and idempotent ref updates close

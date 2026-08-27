@@ -1,0 +1,53 @@
+{
+  "webhook": {
+    "schema_version": "1.0",
+    "observation_id": "observation:webhook-delivery-7",
+    "source": "webhook",
+    "source_system": "github",
+    "resource": {
+      "resource_type": "change_request",
+      "external_id": "acme/api#42",
+      "namespace": "public"
+    },
+    "resource_revision": "abc123",
+    "revision_order": 17,
+    "observed_at": "2026-08-27T10:00:00Z",
+    "received_at": "2026-08-27T10:00:01Z",
+    "facts": {
+      "kind": "cr_updated",
+      "state": "open",
+      "head_sha": "abc123"
+    },
+    "correlation": {
+      "provider_event_id": "delivery-7",
+      "transport_event_id": "delivery-7",
+      "repository_id": "acme/api"
+    },
+    "evidence_reference": "source-control-event:delivery-7"
+  },
+  "poller": {
+    "schema_version": "1.0",
+    "observation_id": "observation:poller-observation-99",
+    "source": "poller",
+    "source_system": "github",
+    "resource": {
+      "resource_type": "change_request",
+      "external_id": "acme/api#42",
+      "namespace": "public"
+    },
+    "resource_revision": "abc123",
+    "revision_order": 17,
+    "observed_at": "2026-08-27T10:00:00Z",
+    "received_at": "2026-08-27T10:05:00Z",
+    "facts": {
+      "kind": "cr_updated",
+      "state": "open",
+      "head_sha": "abc123"
+    },
+    "correlation": {
+      "provider_event_id": "poller-observation-99",
+      "transport_event_id": "poller-observation-99",
+      "repository_id": "acme/api"
+    }
+  }
+}

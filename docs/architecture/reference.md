@@ -26,7 +26,9 @@ Workflows pause at defined gates and wait indefinitely for human approval. The `
 
 - **No PEL reclaim**: Unacknowledged messages from crashed workers remain in Redis PEL indefinitely. Recovery requires manual `XCLAIM`.
 - **No distributed per-ticket lock**: Multiple workers can process events for the same ticket concurrently, causing potential checkpoint conflicts.
-- **Webhook deduplication not wired**: `DeduplicationService` exists but is not connected to webhook routes.
+- **Ingress delivery is at-least-once**: webhook and poller observations are
+  deduplicated and classified by the reconciliation ledger, but the gateway
+  may still enqueue a retried transport message before the worker records it.
 - **Webhook signature validation is optional**: Endpoints accept unsigned payloads when secrets are not configured.
 - **No approval gate timeout**: Paused workflows wait indefinitely with no escalation.
 - **Single Redis dependency**: No Sentinel, Cluster, or HA. Redis is a single point of failure.

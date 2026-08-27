@@ -125,7 +125,7 @@ Exit gate: the supported process can be rendered from a versioned definition, an
 
 ## Phase 6 — Reconciliation and poller convergence
 
-PR: new stacked PR based on Phase 5. Status: missing.
+PR: #331 (`phase6/reconciliation-contract`). Status: complete.
 
 Purpose: make webhooks and the existing forge-poller equivalent observation sources while workflow state remains authoritative for transition progress.
 
@@ -140,6 +140,17 @@ Work:
 7. Add cross-repository tests that replay identical provider states through polling and webhook paths and assert identical command decisions.
 
 Exit gate: lost, duplicated, and reordered delivery converges to the same workflow/effect state without duplicate effects.
+
+Evidence: the versioned Observation fixtures in
+`tests/contracts/fixtures/observations/` and
+`tests/contracts/fixtures/reconciliation/`, adapter and identity tests in
+`tests/contracts/` and `tests/unit/integrations/source_control/`, ledger
+classification tests in `tests/unit/reconciliation/`, and replay/worker
+convergence tests in `tests/contracts/reconciliation/` and
+`tests/unit/orchestrator/test_reconciliation_worker.py`. The explicit
+no-native-revision limitation is documented in
+`docs/architecture/phase-6-observation-contract.md`; such input is retained
+for operator review and never used to infer workflow position.
 
 ## Phase 7 — Execution read models and operations
 
@@ -181,7 +192,7 @@ Exit gate: all supported flows use normalized observations, authoritative comman
 2. Finish #326, then rebase all descendants.
 3. Finish #327, then rebase all descendants.
 4. Finish #328.
-5. Create `phase6/reconciliation-contract` from the Phase 5 tip and open its stacked PR.
+5. Phase 6 is implemented by Forge PR #331 and the companion forge-poller PR #10.
 6. Rebase `phase7/execution-read-models` from the old Phase 5 base onto Phase 6; change #329's base to the Phase 6 branch.
 7. Rebase `phase8-compatibility-removal` onto the rebased Phase 7 branch; retain #330's Phase 7 base.
 8. Finish Phase 6, then Phase 7, then Phase 8, rebasing descendants after each phase changes.

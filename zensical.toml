@@ -28,6 +28,8 @@ nav = [
       {"Overview" = "architecture/index.md"},
       {"System & Components" = "architecture/overview.md"},
       {"Internals" = "architecture/internals.md"},
+      {"Phase 6 Observation Contract" = "architecture/phase-6-observation-contract.md"},
+      {"Phase 6 Reconciliation" = "architecture/phase-6-reconciliation-contract.md"},
       {"Reference" = "architecture/reference.md"},
     ]},
     {"Local Setup" = "dev/setup.md"},

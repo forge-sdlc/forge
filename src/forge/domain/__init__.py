@@ -9,7 +9,12 @@ from forge.domain.identity import (
     stable_identity,
 )
 from forge.domain.interactions import CommentType, classify_comment
-from forge.domain.observations import Observation, ObservationSource
+from forge.domain.observations import (
+    Observation,
+    ObservationSource,
+    observation_delivery_identity,
+    observation_identity,
+)
 from forge.domain.schema import DomainModel, JsonValue, VersionedDomainModel
 from forge.domain.stations import (
     StationFailure,
@@ -27,6 +32,8 @@ __all__ = [
     "JsonValue",
     "Observation",
     "ObservationSource",
+    "observation_delivery_identity",
+    "observation_identity",
     "ResourceIdentity",
     "StationFailure",
     "StationInvocationIdentity",

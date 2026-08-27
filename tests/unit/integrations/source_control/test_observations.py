@@ -10,6 +10,7 @@ from forge.integrations.source_control.contracts import (
     NormalizedEvent,
     Provider,
     RepositoryRef,
+    ReviewComment,
 )
 from forge.integrations.source_control.observations import normalized_event_to_observation
 
@@ -63,3 +64,32 @@ def test_poller_and_webhook_use_same_identity_for_same_external_event() -> None:
 
     assert webhook.observation_id == polled.observation_id
     assert polled.source is ObservationSource.POLLER
+
+
+def test_poller_and_webhook_deduplicate_revision_even_with_different_delivery_ids() -> None:
+    webhook_event = _event()
+    poller_event = _event()
+    poller_event.id = "poller-observation-99"
+
+    webhook = normalized_event_to_observation(webhook_event)
+    polled = normalized_event_to_observation(poller_event, source=ObservationSource.POLLER)
+
+    # The observation records retain their provider delivery identity, while
+    # the delivery key is derived from the external revision and is shared.
+    assert webhook.observation_id != polled.observation_id
+    assert webhook.delivery_identity == polled.delivery_identity
+
+
+def test_event_resources_do_not_share_a_change_request_delivery_key() -> None:
+    first = _event()
+    first.kind = EventKind.COMMENT_CREATED
+    first.comment = ReviewComment(id="comment-1", body="one", author="octocat")
+    second = _event()
+    second.kind = EventKind.COMMENT_CREATED
+    second.comment = ReviewComment(id="comment-2", body="two", author="octocat")
+
+    first_observation = normalized_event_to_observation(first)
+    second_observation = normalized_event_to_observation(second)
+
+    assert first_observation.resource.resource_type == "comment"
+    assert first_observation.delivery_identity != second_observation.delivery_identity

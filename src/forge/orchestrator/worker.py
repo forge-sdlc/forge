@@ -561,6 +561,7 @@ class OrchestratorWorker:
             ingress = self.event_adapters.adapt(message)
             observation_decision = await self._observation_ledger().record(ingress.observation)
             if observation_decision.disposition in {
+                ObservationDisposition.DUPLICATE,
                 ObservationDisposition.STALE,
                 ObservationDisposition.CONFLICT,
             }:
