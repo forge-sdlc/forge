@@ -1,85 +1,56 @@
-# System & Components
+# System and components
 
-## System Context
-
-Forge sits between project management (Jira), source control (GitHub), and LLM providers, orchestrating work from ticket creation through merged PR.
+Forge is a centralized, durable workflow engine for an agentic SDLC. Jira and source-control
+systems remain authoritative for their domain facts. Forge owns process interpretation: the
+versioned process definition, each run's pinned definition and position, transition decisions,
+station attempts, and external-effect history.
 
 ```mermaid
 flowchart LR
-    A["Jira / GitHub\n(webhooks)"] --> B["Gateway\n(FastAPI)"]
-    B --> C["Redis\n(Streams + State)"]
-    C --> D["Workers\n(LangGraph)"]
-    D --> E["Podman\nContainers"]
-    D <--> F["LLM\n(Claude / Gemini)"]
-    E <--> F
-    D --> A
+    External["Jira / source control"] -->|webhook or poller observation| Gateway["Gateway"]
+    Gateway --> Queue["Redis Streams"]
+    Queue --> Worker["Worker control plane"]
+    Worker --> Ledger["Observation ledger"]
+    Worker --> Engine["Pinned workflow instance"]
+    Engine --> Station["Typed station"]
+    Station --> Agent["Deep Agent / sandbox"]
+    Engine --> Effects["Durable effect journal"]
+    Effects --> External
+    Worker --> ReadModel["Execution timeline and read model"]
 ```
 
-**External actors:**
+## Runtime responsibilities
 
-- **Jira**: Source of ticket lifecycle events (issue and comment webhooks)
-- **GitHub**: Source of PR, CI, and code review events (PR, check suite, and review webhooks)
-- **LLM providers**: Anthropic (direct API) and Google Vertex AI (Claude and Gemini models)
-- **Langfuse**: Optional observability for LLM call tracing and cost tracking
-- **Human reviewers**: Approve or revise artifacts at defined workflow gates
+- **Gateway** authenticates Jira and source-control webhooks and enqueues their payloads. It
+  contains no process-routing rules.
+- **Poller** is a peer ingress source. Webhooks improve latency; polling supplies recovery. Both
+  become the same versioned `Observation` before process logic sees them.
+- **Observation ledger** deduplicates equivalent webhook/poller deliveries, rejects stale or
+  conflicting revisions, and prevents external observations from changing workflow-owned facts.
+- **Worker** adapts accepted observations into validated commands, resolves the workflow instance,
+  and invokes its pinned definition. It does not embed an independent per-ingress workflow.
+- **Workflow engine** compiles built-in or project-published definitions to LangGraph. An instance
+  pins the definition name, revision, digest, and current position in its durable checkpoint.
+- **Stations** implement bounded operations through Forge-owned typed requests and outcomes.
+  Projectors and reducers isolate station code from the complete checkpoint and graph runtime.
+- **Effect service** journals required Jira, source-control, and repository mutations before
+  execution and records attempts and provider evidence for safe recovery or operator replay.
+- **Sandbox** runs implementation work in an ephemeral rootless Podman container. It receives the
+  repository and model credentials, but not Jira, Redis, or source-control credentials.
+- **Read models** combine the pinned process manifest, checkpoint, observation decisions, station
+  attempts, and effects into an operator-facing execution status and timeline.
 
-## Component Responsibilities
+## Process ownership
 
-```mermaid
-flowchart TD
-    subgraph External["External Systems"]
-        Jira
-        GitHub
-        Langfuse["Langfuse (Observability)"]
-    end
+Forge ships immutable, versioned golden-path definitions for Feature/Story, Bug, and managed
+Task/Epic workflows. Project administrators can publish constrained definitions composed only from
+registered nodes, routes, gates, stations, and effect capabilities. Definitions cannot execute
+arbitrary Python or weaken mandatory policies. See
+[Declarative workflows](../reference/declarative-workflows.md) and
+[Workflow-definition governance](phase-5-workflow-definition-governance.md).
 
-    subgraph Gateway["FastAPI Gateway (:8000)"]
-        JiraWH["POST /api/v1/webhooks/jira"]
-        GitHubWH["POST /api/v1/webhooks/github"]
-    end
+## Model execution
 
-    subgraph Queue["Redis"]
-        Streams["Streams: forge:events:jira\nforge:events:github"]
-        State["AsyncRedisSaver\nLangGraph checkpointing"]
-    end
-
-    subgraph Workers["Worker Processes (consumer group: forge-workers)"]
-        Router{"WorkflowRouter\nroute by issue type"}
-        Feature["FeatureWorkflow\n(Feature/Story)"]
-        Bug["BugWorkflow\n(Bug)"]
-        Task["TaskTakeoverWorkflow\n(Task/Epic)"]
-    end
-
-    subgraph Container["Podman Container (ephemeral)"]
-        Agent["Deep Agents + MCP\n/workspace (repo mounted)"]
-    end
-
-    LLM["LLM Backends\nAnthropic API (Claude)\nVertex AI (Claude/Gemini)"]
-
-    Jira -- webhooks --> JiraWH
-    GitHub -- webhooks --> GitHubWH
-    JiraWH --> Streams
-    GitHubWH --> Streams
-    Streams --> Router
-    Router --> Feature
-    Router --> Bug
-    Router --> Task
-    Feature --> Container
-    Bug --> Container
-    Task --> Container
-    Workers <--> LLM
-    Container <--> LLM
-    Workers --> Jira
-    Workers --> GitHub
-    Workers --> Langfuse
-```
-
-**Gateway (FastAPI)**: Accepts webhooks over HTTPS, validates HMAC-SHA256 signatures, and publishes events to Redis Streams. Performs no workflow logic.
-
-**Worker**: Consumes events from Redis Streams via the `forge-workers` consumer group. The `WorkflowRouter` resolves the target LangGraph workflow (Feature, Bug, or Task Takeover) based on Jira issue type and drives execution through planning, implementation, CI repair, and human review stages.
-
-**Redis**: Event bus (Redis Streams), workflow state store (LangGraph `AsyncRedisSaver` checkpoints per ticket), retry queue, dead-letter queue, and supporting indexes (PR-to-ticket mapping, deduplication keys).
-
-**Podman Container**: Ephemeral rootless containers that execute implementation tasks. Each container receives the repo at `/workspace` (read-write), a task file at `/task.json` (read-only), and LLM credentials. Runs Deep Agents with MCP tool access. The orchestrator handles pushing and PR creation after the container exits.
-
-**LLM Backends**: Claude and Gemini models called by both orchestrator nodes (planning, review) and container agents (code generation). Supports Anthropic direct API and Google Vertex AI, selected automatically based on configured credentials.
+Planning and review stations use Deep Agents. Data-shaped decisions use strict Pydantic response
+contracts with provider-native structured output and a validated tool-strategy fallback; narrative
+artifacts remain Markdown. See [Structured model output](structured-output.md).

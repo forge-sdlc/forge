@@ -1,26 +1,10 @@
-"""Enforce Phase 8 cutovers and expose any remaining compatibility path."""
+"""Prevent retired compatibility paths from returning."""
 
 import ast
-import json
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
-INVENTORY = ROOT / "docs" / "architecture" / "phase-8-removal-inventory.json"
 WORKER = ROOT / "src" / "forge" / "orchestrator" / "worker.py"
-
-
-def test_inventory_is_zero_ambiguity_and_remaining_paths_have_evidence() -> None:
-    document = json.loads(INVENTORY.read_text())
-    assert document["schema_version"] == "2.0"
-    assert document["remaining"] == []
-    entries = document["remaining"] + document["removed"]
-    assert len({item["id"] for item in entries}) == len(entries)
-    for item in entries:
-        assert all(
-            item[field].strip() for field in ("owner", "prerequisite", "replacement", "proof")
-        )
-    for item in document["remaining"]:
-        assert any((ROOT / path).exists() for path in item["evidence_paths"])
 
 
 def test_worker_exposes_only_generic_ingress_handler() -> None:

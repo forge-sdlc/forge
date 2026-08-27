@@ -1,4 +1,4 @@
-# Phase 6 Observation contract
+# Observation contract
 
 Forge accepts webhook and `forge-poller` deliveries through the same ingress
 adapters. Both paths are normalized to the versioned `Observation` record

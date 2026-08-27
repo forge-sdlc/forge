@@ -48,6 +48,8 @@ graph TD
 - [Bug Workflow](guide/bug-workflow.md) — How bug diagnosis and implementation flow through Forge
 - [Task Workflow](guide/task-workflow.md) — How standalone Tasks and Epics become PRs
 - [Developer Guide](developer-guide.md) — Full local development reference
+- [Architecture](architecture/index.md) — How workflow state, reconciliation, stations, and effects fit together
+- [Declarative Workflows](reference/declarative-workflows.md) — Compose registered Forge stages safely
 - [Skills System](skills/index.md) — Customize Forge for your stack
 - [Contributing](dev/contributing.md) — How to contribute
 

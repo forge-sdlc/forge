@@ -55,9 +55,11 @@ definitions block execution instead of silently falling back.
 - Each step name is a canonical, registered Forge node. A step has either `next` or `route` with a
   complete branch map. Use `__end__` to stop the current invocation.
 - Graphs may contain a cycle only when it crosses an approved human/CI pause boundary.
-- An active ticket keeps its workflow name but adopts newer revisions when it resumes.
+- A new instance pins the selected definition's name, revision, digest, and canonical artifact.
+  Publishing or activating a newer revision does not silently change an active instance.
 
-If a newer revision removes the node saved in a checkpoint, add an explicit migration:
+To move a pinned instance when a newer revision removes or renames its saved node, add an explicit
+migration mapping and run compatibility simulation before activation:
 
 ```yaml
 spec:
@@ -68,8 +70,8 @@ spec:
 ```
 
 State-profile changes, revision rollback, and content changes without a revision increment are
-rejected. Removing the project property blocks active runs, so delete definitions only after their
-checkpoints have finished or been cleared.
+rejected. Published revisions are immutable and retained for pinned instances. Removing an active
+pointer prevents new selection but does not mutate an existing checkpoint.
 
 ## Operational safeguards
 
@@ -84,9 +86,9 @@ graphs: workspace setup requires a resolved repository, pull-request creation re
 and workspace, and CI evaluation requires an existing pull request. Missing structural inputs block
 before the node performs external side effects.
 
-Lifecycle capabilities are tri-state. An absent capability preserves compatibility with existing
-checkpoints; an explicit `true` or `false` value is authoritative. This permits safe optional PR and
-CI stages once implementation has durably recorded whether code changes and a PR are expected.
+Lifecycle capabilities are tri-state. An absent capability preserves compatibility with older
+state; an explicit `true` or `false` value is authoritative. This permits safe optional PR and CI
+stages once implementation has durably recorded whether code changes and a PR are expected.
 
 For taskless execution, use the allowlisted `implement_work` node after `setup_workspace`. It
 resolves implementation input in descending specificity: the current Jira Task, a pending Task for

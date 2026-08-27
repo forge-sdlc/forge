@@ -56,9 +56,13 @@ The built-in model factory supports direct Anthropic API credentials and Google 
 
 Forge is not just an agent with a large prompt or a folder of skills. It is a stateful delivery workflow that decides what should happen next, when to pause, which artifact needs review, which repository should be changed, and how to recover when something fails.
 
-- **Workflow first, agents second**: LangGraph coordinates the lifecycle from ticket intake to PR review. Agents perform bounded stage work; the workflow owns routing, checkpoints, retries, approvals, and handoffs.
+- **Workflow first, agents second**: Forge-owned, versioned definitions coordinate the lifecycle
+  from ticket intake to PR review. LangGraph executes those definitions; typed stations perform
+  bounded work without owning routing, checkpoints, approvals, or handoffs.
 - **Cross-repo by design**: Forge can plan features and bugs across services, clients, infrastructure, and documentation repos, then split the work into repo-scoped units that can be implemented and reviewed independently.
-- **Controlled write boundaries**: Agents do not directly mutate Jira, GitHub, or production repositories. Implementation agents write only inside their local/container workspace; Forge's integration layer performs external updates such as Jira comments, labels, branch pushes, and PR creation at explicit workflow steps.
+- **Controlled write boundaries**: Agents do not directly mutate Jira, GitHub, or production
+  repositories. Forge journals required external effects before execution and retains attempt and
+  provider evidence for recovery and operator replay.
 - **Native engineering loop**: Forge works through Jira tickets, Jira comments, Jira labels, GitHub PRs, GitHub reviews, and CI webhooks instead of forcing teams into a separate agent UI.
 - **Traceable by default**: Work is reflected back into Jira and GitHub as comments, labels, PRs, review updates, CI decisions, and post-merge summaries, so teams can follow why the workflow moved or paused.
 - **Project visibility**: Prometheus metrics, Langfuse traces, and Grafana dashboards expose workflow throughput, step latency, ticket execution cost, model usage, CI behavior, and observability health by project, ticket type, workflow step, and Jira issue.
@@ -170,19 +174,24 @@ This lets Forge follow local engineering conventions without forking the orchest
 
 ## Architecture
 
-Forge is event-driven:
+Forge is event-driven and checkpointed:
 
 ```text
-Jira + GitHub Webhooks
+Jira + GitHub Webhooks / Poller
   -> FastAPI Gateway
   -> Redis Streams Queue
-  -> LangGraph Workflow
-  -> Host Orchestrator Agent
-  -> Container Agent for Implementation
-  -> Jira + GitHub Updates
+  -> Observation Reconciliation
+  -> Pinned Versioned Workflow
+  -> Typed Stations
+  -> Durable External Effects
+  -> Jira + GitHub
 ```
 
-Jira and GitHub send webhooks to Forge. Forge queues events, resumes the right workflow state, runs the next node, and posts the result back to Jira or GitHub. Planning runs through the host orchestrator. Code implementation runs in short-lived containers. Agents generate artifacts and local code changes; Forge's workflow and integration layer decide when those outputs become Jira updates, branch pushes, or pull requests.
+Webhook and poller deliveries normalize to the same observation contract. Forge deduplicates and
+orders provider revisions, interprets accepted evidence through the instance's pinned workflow
+definition, and invokes typed stations. Planning agents run on the host and implementation agents
+run in short-lived containers. Jira and source-control mutations cross a durable effect journal;
+operators can inspect the combined process, observation, station, and effect timeline.
 
 ## Quick Start
 
@@ -218,6 +227,10 @@ See [Getting Started](https://Forge-sdlc.github.io/forge/getting-started/) for t
 - [Task Workflow](https://Forge-sdlc.github.io/forge/guide/task-workflow/): Understand standalone Task and Epic implementation.
 - [PR Commands](https://Forge-sdlc.github.io/forge/guide/pr-commands/): Rebase PRs and handle CI gate skips.
 - [Configuration Reference](https://Forge-sdlc.github.io/forge/reference/config/): Environment variables and project configuration.
+- [Architecture](https://Forge-sdlc.github.io/forge/architecture/): Versioned workflows,
+  reconciliation, typed stations, durable effects, and execution inspection.
+- [Declarative Workflows](https://Forge-sdlc.github.io/forge/reference/declarative-workflows/):
+  Author and govern constrained project workflow definitions.
 - [Skills System](https://Forge-sdlc.github.io/forge/skills/): Customize Forge for your team and stack.
 - [Developer Guide](https://Forge-sdlc.github.io/forge/developer-guide/): Local testing, debugging, Prometheus metrics, Langfuse tracing, and Grafana dashboards.
 

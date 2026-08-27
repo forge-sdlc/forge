@@ -1,6 +1,6 @@
-# Phase 6: reconciliation contract
+# Reconciliation contract
 
-Phase 6 makes webhook and polling delivery interchangeable inputs to Forge.
+Webhook and polling delivery are interchangeable inputs to Forge.
 Workflow position remains owned by the workflow instance; an external
 observation may update an external-state projection but cannot set
 `current_node`, workflow identity, or transition counters.
