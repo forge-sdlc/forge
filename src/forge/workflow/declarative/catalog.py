@@ -19,6 +19,11 @@ class StateProfile:
     pause_nodes: frozenset[str]
     contracts: dict[str, NodeContract] = field(default_factory=dict)
     station_bindings: dict[str, tuple[str, str]] = field(default_factory=dict)
+    mandatory_nodes: frozenset[str] = frozenset()
+    supported_policies: frozenset[str] = frozenset({"forge-contracts-v1"})
+    supported_extensions: frozenset[str] = frozenset(
+        {"station-behavior", "optional-stations", "routing-branches"}
+    )
 
 
 def _common_nodes() -> dict[str, Callable[..., Any]]:
@@ -200,7 +205,28 @@ def get_state_profile(name: str) -> StateProfile:
                 "spec_approval_gate": ("approval-policy", "1.0"),
                 "plan_approval_gate": ("approval-policy", "1.0"),
                 "task_approval_gate": ("approval-policy", "1.0"),
+                "generate_tasks": ("agent-operation", "1.0"),
+                "regenerate_all_tasks": ("agent-operation", "1.0"),
+                "regenerate_epic_tasks": ("agent-operation", "1.0"),
+                "answer_question": ("agent-operation", "1.0"),
+                "implement_task": ("sandbox-execution", "1.0"),
+                "local_review": ("sandbox-execution", "1.0"),
+                "update_documentation": ("sandbox-execution", "1.0"),
+                "create_pr": ("agent-operation", "1.0"),
+                "ci_evaluator": ("sandbox-execution", "1.0"),
+                "attempt_ci_fix": ("sandbox-execution", "1.0"),
+                "human_review_gate": ("persistence-actions", "1.0"),
+                "implement_review": ("sandbox-execution", "1.0"),
             },
+            frozenset(
+                {
+                    "prd_approval_gate",
+                    "spec_approval_gate",
+                    "plan_approval_gate",
+                    "task_approval_gate",
+                    "human_review_gate",
+                }
+            ),
         )
 
     if name == "bug":
@@ -284,7 +310,28 @@ def get_state_profile(name: str) -> StateProfile:
             routers,
             pauses,
             contracts_for(nodes),
-            {"plan_approval_gate": ("approval-policy", "1.0")},
+            {
+                "plan_approval_gate": ("approval-policy", "1.0"),
+                "triage_check": ("triage-evaluation", "1.0"),
+                "analyze_bug": ("sandbox-execution", "1.0"),
+                "reflect_rca": ("sandbox-execution", "1.0"),
+                "regenerate_rca": ("sandbox-execution", "1.0"),
+                "plan_bug_fix": ("sandbox-execution", "1.0"),
+                "regenerate_plan": ("sandbox-execution", "1.0"),
+                "answer_question": ("agent-operation", "1.0"),
+                "implement_bug_fix": ("sandbox-execution", "1.0"),
+                "local_review": ("sandbox-execution", "1.0"),
+                "update_documentation": ("sandbox-execution", "1.0"),
+                "create_pr": ("agent-operation", "1.0"),
+                "ci_evaluator": ("sandbox-execution", "1.0"),
+                "attempt_ci_fix": ("sandbox-execution", "1.0"),
+                "human_review_gate": ("persistence-actions", "1.0"),
+                "implement_review": ("sandbox-execution", "1.0"),
+                "post_merge_summary": ("persistence-actions", "1.0"),
+            },
+            frozenset(
+                {"triage_gate", "rca_option_gate", "plan_approval_gate", "human_review_gate"}
+            ),
         )
 
     if name == "task_takeover":
@@ -350,7 +397,20 @@ def get_state_profile(name: str) -> StateProfile:
             routers,
             pauses,
             contracts_for(nodes),
-            {"task_plan_approval_gate": ("approval-policy", "1.0")},
+            {
+                "task_plan_approval_gate": ("approval-policy", "1.0"),
+                "triage_check": ("triage-evaluation", "1.0"),
+                "generate_plan": ("agent-operation", "1.0"),
+                "answer_question": ("agent-operation", "1.0"),
+                "execute_task_changes": ("sandbox-execution", "1.0"),
+                "run_qualitative_review": ("sandbox-execution", "1.0"),
+                "create_pr": ("agent-operation", "1.0"),
+                "ci_evaluator": ("sandbox-execution", "1.0"),
+                "attempt_ci_fix": ("sandbox-execution", "1.0"),
+                "human_review_gate": ("persistence-actions", "1.0"),
+                "implement_review": ("sandbox-execution", "1.0"),
+            },
+            frozenset({"triage_gate", "task_plan_approval_gate", "human_review_gate"}),
         )
 
     raise ValueError(f"unknown state profile: {name}")

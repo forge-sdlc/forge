@@ -57,6 +57,67 @@ def _artifact_route(router: str, branches: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _bind_station_contracts(
+    steps: dict[str, dict[str, Any]], bindings: dict[str, str]
+) -> dict[str, dict[str, Any]]:
+    """Make every Phase 4 station invocation explicit in the process artifact."""
+    for node_name, contract in bindings.items():
+        step = steps[node_name]
+        if step.get("kind") != "gate":
+            step["kind"] = "station"
+        step["stationContract"] = contract
+        step["stationContractVersion"] = "1.0"
+    return steps
+
+
+FEATURE_STATION_BINDINGS = {
+    "generate_tasks": "agent-operation",
+    "regenerate_all_tasks": "agent-operation",
+    "regenerate_epic_tasks": "agent-operation",
+    "answer_question": "agent-operation",
+    "implement_task": "sandbox-execution",
+    "local_review": "sandbox-execution",
+    "update_documentation": "sandbox-execution",
+    "create_pr": "agent-operation",
+    "ci_evaluator": "sandbox-execution",
+    "attempt_ci_fix": "sandbox-execution",
+    "human_review_gate": "persistence-actions",
+    "implement_review": "sandbox-execution",
+}
+
+BUG_STATION_BINDINGS = {
+    "triage_check": "triage-evaluation",
+    "analyze_bug": "sandbox-execution",
+    "reflect_rca": "sandbox-execution",
+    "regenerate_rca": "sandbox-execution",
+    "plan_bug_fix": "sandbox-execution",
+    "regenerate_plan": "sandbox-execution",
+    "answer_question": "agent-operation",
+    "implement_bug_fix": "sandbox-execution",
+    "local_review": "sandbox-execution",
+    "update_documentation": "sandbox-execution",
+    "create_pr": "agent-operation",
+    "ci_evaluator": "sandbox-execution",
+    "attempt_ci_fix": "sandbox-execution",
+    "human_review_gate": "persistence-actions",
+    "implement_review": "sandbox-execution",
+    "post_merge_summary": "persistence-actions",
+}
+
+TASK_TAKEOVER_STATION_BINDINGS = {
+    "triage_check": "triage-evaluation",
+    "generate_plan": "agent-operation",
+    "answer_question": "agent-operation",
+    "execute_task_changes": "sandbox-execution",
+    "run_qualitative_review": "sandbox-execution",
+    "create_pr": "agent-operation",
+    "ci_evaluator": "sandbox-execution",
+    "attempt_ci_fix": "sandbox-execution",
+    "human_review_gate": "persistence-actions",
+    "implement_review": "sandbox-execution",
+}
+
+
 def builtin_feature_definition() -> WorkflowDefinition:
     """Return the immutable feature golden-path definition."""
     steps = {
@@ -211,6 +272,7 @@ def builtin_feature_definition() -> WorkflowDefinition:
                 "__end__": "__end__",
             },
             kind="gate",
+            effects=JIRA_EFFECTS,
         ),
         "implement_review": _route(
             "route_current_node",
@@ -245,6 +307,7 @@ def builtin_feature_definition() -> WorkflowDefinition:
         ),
         "escalate_blocked": _next("__end__", effects=JIRA_EFFECTS),
     }
+    _bind_station_contracts(steps, FEATURE_STATION_BINDINGS)
     return WorkflowDefinition.model_validate(
         {
             "apiVersion": "forge/v1",
@@ -478,6 +541,7 @@ def builtin_bug_definition() -> WorkflowDefinition:
         "post_merge_summary": _next("__end__", effects=JIRA_EFFECTS),
         "escalate_blocked": _next("__end__", effects=JIRA_EFFECTS),
     }
+    _bind_station_contracts(steps, BUG_STATION_BINDINGS)
     return WorkflowDefinition.model_validate(
         {
             "apiVersion": "forge/v1",
@@ -645,6 +709,7 @@ def builtin_task_takeover_definition() -> WorkflowDefinition:
         "complete_task_takeover": _next("__end__", effects=JIRA_EFFECTS),
         "escalate_blocked": _next("__end__", effects=JIRA_EFFECTS),
     }
+    _bind_station_contracts(steps, TASK_TAKEOVER_STATION_BINDINGS)
     return WorkflowDefinition.model_validate(
         {
             "apiVersion": "forge/v1",

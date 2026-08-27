@@ -13,6 +13,7 @@ from typing import Any
 
 from forge.domain import DomainModel, StationOutcome, StationRequest
 from forge.effects import EffectRecord, EffectService
+from forge.workflow.declarative.capabilities import require_effect_capability
 from forge.workflow.stations.agent_operation import (
     AgentOperationInput,
     run_agent_operation_station,
@@ -157,6 +158,7 @@ async def invoke_station(
     for effect in outcome.requested_effects:
         if effect.workflow != request.workflow:
             raise ValueError("Station effect does not belong to its workflow")
+        require_effect_capability(effect.operation)
         assert effect_service is not None
         record = await effect_service.execute_required(effect)
         if effect_records is not None:

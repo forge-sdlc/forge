@@ -75,6 +75,10 @@ class WorkflowStep(StrictModel):
             raise ValueError("stationContract and stationContractVersion must be declared together")
         if self.max_concurrency is not None and not self.dynamic_route:
             raise ValueError("maxConcurrency is only valid for dynamic routing")
+        if self.dynamic_route and self.max_concurrency is None:
+            raise ValueError("dynamicRoute requires an explicit maxConcurrency")
+        if self.join is not None and self.dynamic_route:
+            raise ValueError("a fan-out step cannot also be a join")
         return self
 
 
