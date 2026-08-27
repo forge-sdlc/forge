@@ -202,6 +202,8 @@ def get_state_profile(name: str) -> StateProfile:
             _route_after_plan_bug_fix,
             _route_after_reflect_rca,
             _route_after_regenerate_plan,
+            _route_after_workspace_setup,
+            _route_human_review_bug,
         )
         from forge.workflow.bug.state import BugState, create_initial_bug_state
         from forge.workflow.nodes import (
@@ -254,9 +256,11 @@ def get_state_profile(name: str) -> StateProfile:
             "route_after_pr_creation": route_after_pr_creation,
             "route_after_reflect_rca": _route_after_reflect_rca,
             "route_after_regenerate_plan": _route_after_regenerate_plan,
+            "route_after_workspace_setup": _route_after_workspace_setup,
             "route_plan_approval": route_bug_plan_approval,
             "route_rca_option": route_rca_option,
             "route_triage_gate": route_triage_gate,
+            "route_human_review_bug": _route_human_review_bug,
         }
         pauses = common_pauses | {"triage_gate", "rca_option_gate", "plan_approval_gate"}
         return StateProfile(
@@ -287,6 +291,8 @@ def get_state_profile(name: str) -> StateProfile:
             _route_after_execution,
             _route_after_generate_plan,
             _route_after_qualitative_review,
+            _route_after_triage_check,
+            _route_human_review_task_takeover,
             complete_task_takeover,
         )
         from forge.workflow.task_takeover.graph import (
@@ -315,9 +321,11 @@ def get_state_profile(name: str) -> StateProfile:
             "route_after_generate_plan": _route_after_generate_plan,
             "route_after_pr_creation": route_after_pr_creation,
             "route_after_qualitative_review": _route_after_qualitative_review,
+            "route_after_triage_check": _route_after_triage_check,
             "route_after_workspace_setup": route_after_task_workspace_setup,
             "route_task_plan_approval": route_task_plan_approval,
             "route_triage_gate": route_triage_gate,
+            "route_human_review_task_takeover": _route_human_review_task_takeover,
         }
         pauses = common_pauses | {"triage_gate", "task_plan_approval_gate"}
         return StateProfile(

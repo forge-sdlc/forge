@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from forge.orchestrator.worker import OrchestratorWorker
-from forge.workflow.declarative.builtins import builtin_feature_definition
+from forge.workflow.declarative.builtins import builtin_definitions, builtin_feature_definition
 from forge.workflow.declarative.cli import cmd_workflow
 from forge.workflow.declarative.compiler import (
     DeclarativeWorkflowCompiler,
@@ -67,6 +67,21 @@ def test_builtin_feature_golden_path_is_valid_and_inspectable() -> None:
     assert len(manifest.nodes) == 32
     assert any(node.name == "task_router" and node.station_contract for node in manifest.nodes)
     assert any(node.name == "prd_approval_gate" and node.kind == "gate" for node in manifest.nodes)
+
+
+def test_every_supported_golden_path_uses_the_versioned_definition_compiler() -> None:
+    definitions = builtin_definitions()
+
+    assert {item.metadata.name for item in definitions} == {"feature", "bug", "task_takeover"}
+    for definition in definitions:
+        DeclarativeWorkflowCompiler(definition).validate()
+        graph = DeclarativeWorkflowCompiler(definition).build_graph()
+        assert graph is not None
+        assert definition.spec.mandatory_policies == ("forge-contracts-v1",)
+        assert all(
+            "forge-contracts-v1" in step.required_policies
+            for step in definition.spec.steps.values()
+        )
 
 
 @pytest.mark.asyncio
