@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from forge.domain import StationOutcome, StationOutcomeStatus, StationRequest
+from forge.workflow.reducers.common import validate_station_outcome
 from forge.workflow.stations.implementation_input import ImplementationInput, ImplementationOutput
 
 
@@ -12,22 +13,7 @@ def reduce_implementation_input(
     request: StationRequest[ImplementationInput],
     outcome: StationOutcome[ImplementationOutput],
 ) -> dict[str, Any]:
-    expected_run = state.get("thread_id")
-    if expected_run and expected_run != request.workflow.run_id:
-        raise ValueError("Station request does not belong to the checkpoint workflow run")
-    expected_name = state.get("workflow_name")
-    if expected_name and expected_name != request.workflow.workflow_name:
-        raise ValueError("Station request workflow definition does not match the checkpoint")
-    expected_revision = state.get("workflow_revision")
-    if expected_revision and expected_revision != request.workflow.definition_revision:
-        raise ValueError("Station request workflow revision does not match the checkpoint")
-    if outcome.workflow != request.workflow or outcome.invocation != request.invocation:
-        raise ValueError("Station outcome does not belong to this workflow invocation")
-    if (outcome.contract_name, outcome.contract_version) != (
-        request.contract_name,
-        request.contract_version,
-    ):
-        raise ValueError("Station outcome contract does not match its request")
+    validate_station_outcome(state, request, outcome)
     if outcome.status is not StationOutcomeStatus.SUCCEEDED or outcome.output is None:
         raise ValueError(f"Implementation-input station did not succeed: {outcome.status}")
     output = outcome.output
