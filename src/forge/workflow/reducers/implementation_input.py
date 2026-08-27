@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from forge.domain import StationOutcome, StationOutcomeStatus, StationRequest
-from forge.workflow.reducers.common import validate_station_outcome
+from forge.workflow.reducers.common import append_station_attempt, validate_station_outcome
 from forge.workflow.stations.implementation_input import ImplementationInput, ImplementationOutput
 
 
@@ -27,6 +27,7 @@ def reduce_implementation_input(
         previous if previous and previous.get("status") == "completed" else work_unit
     )
     return {
+        "station_history": append_station_attempt(state, request, outcome),
         "artifacts": list(artifacts_by_id.values()),
         "work_units": list(units_by_id.values()),
         "current_work_unit_id": work_unit["id"],

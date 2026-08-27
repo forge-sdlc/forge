@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from forge.domain import StationOutcome, StationOutcomeStatus, StationRequest
-from forge.workflow.reducers.common import validate_station_outcome
+from forge.workflow.reducers.common import append_station_attempt, validate_station_outcome
 from forge.workflow.stations.task_routing import (
     RepositoryAggregationInput,
     RepositoryAggregationOutput,
@@ -25,12 +25,14 @@ def reduce_task_routing(
         raise ValueError("Task-routing station returned no output")
     if outcome.status is StationOutcomeStatus.BLOCKED:
         return {
+            "station_history": append_station_attempt(state, request, outcome),
             "last_error": outcome.reason or "No tasks available for routing",
             "current_node": "route_tasks",
         }
     if outcome.status is not StationOutcomeStatus.SUCCEEDED:
         raise ValueError(f"Task-routing station did not succeed: {outcome.status}")
     return {
+        "station_history": append_station_attempt(state, request, outcome),
         "repos_to_process": list(outcome.output.repositories),
         "current_repo": outcome.output.first_repository,
         "repos_completed": [],
@@ -49,6 +51,7 @@ def reduce_repository_aggregation(
     if outcome.status is not StationOutcomeStatus.SUCCEEDED or outcome.output is None:
         raise ValueError(f"Repository aggregation did not succeed: {outcome.status}")
     return {
+        "station_history": append_station_attempt(state, request, outcome),
         "pr_urls": list(outcome.output.pull_request_urls),
         "repos_completed": list(outcome.output.completed_repositories),
         "implemented_tasks": list(outcome.output.implemented_tasks),

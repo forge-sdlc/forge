@@ -58,6 +58,7 @@ def test_reducer_owns_legacy_topology_mapping() -> None:
     assert update["current_node"] == "setup_workspace"
     assert update["current_repo"] == "acme/api"
     assert set(update) == {
+        "station_history",
         "repos_to_process",
         "current_repo",
         "repos_completed",
@@ -77,10 +78,9 @@ def test_empty_mapping_returns_structured_blocked_outcome() -> None:
     assert outcome.status is StationOutcomeStatus.BLOCKED
     assert outcome.failure is not None
     assert outcome.failure.code == "no_tasks"
-    assert update == {
-        "last_error": "No tasks available for routing",
-        "current_node": "route_tasks",
-    }
+    assert update["last_error"] == "No tasks available for routing"
+    assert update["current_node"] == "route_tasks"
+    assert update["station_history"][0]["status"] == "blocked"
 
 
 def test_stale_outcome_is_rejected() -> None:

@@ -32,3 +32,30 @@ def validate_station_outcome(
         request.contract_version,
     ):
         raise ValueError("Station outcome contract does not match its request")
+
+
+def append_station_attempt(
+    state: Mapping[str, Any],
+    request: StationRequest[InputT],
+    outcome: StationOutcome[OutputT],
+) -> list[dict[str, Any]]:
+    """Append compact durable evidence without retaining full station payloads."""
+    history = list(state.get("station_history") or [])
+    record = {
+        "station_name": request.invocation.station_name,
+        "invocation_id": request.invocation.invocation_id,
+        "attempt": request.attempt,
+        "status": outcome.status.value,
+        "completed_at": outcome.completed_at.isoformat(),
+        "reason": outcome.reason,
+    }
+    for index, existing in enumerate(history):
+        if (
+            existing.get("invocation_id") == request.invocation.invocation_id
+            and existing.get("attempt") == request.attempt
+        ):
+            history[index] = record
+            break
+    else:
+        history.append(record)
+    return history

@@ -63,6 +63,7 @@ def test_reducer_owns_only_documented_checkpoint_fields() -> None:
     update = reduce_implementation_input({"unrelated": "preserved"}, station_request, outcome)
 
     assert set(update) == {
+        "station_history",
         "artifacts",
         "work_units",
         "current_work_unit_id",
