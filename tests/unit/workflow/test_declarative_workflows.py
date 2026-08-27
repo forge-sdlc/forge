@@ -86,6 +86,25 @@ def test_every_supported_golden_path_uses_the_versioned_definition_compiler() ->
         )
 
 
+def test_builtin_agent_steps_declare_the_jira_effects_they_emit() -> None:
+    definitions = {item.metadata.name: item for item in builtin_definitions()}
+
+    assert "jira.comment" in definitions["bug"].spec.steps["analyze_bug"].allowed_effects
+    task_plan_effects = definitions["task_takeover"].spec.steps["generate_plan"].allowed_effects
+    assert {"jira.comment", "jira.labels"}.issubset(task_plan_effects)
+
+
+@pytest.mark.asyncio
+async def test_guarded_node_records_retry_target_before_escalation() -> None:
+    async def fail(_state: dict) -> dict:
+        return {"current_node": "escalate_blocked", "last_error": "failed"}
+
+    guarded = DeclarativeWorkflowCompiler._guarded_node(fail, "generate_plan", terminal=False)
+    result = await guarded({"ticket_key": "PROJ-1"})
+
+    assert result["retry_node"] == "generate_plan"
+
+
 def test_builtin_golden_paths_select_the_governed_observation_policy() -> None:
     for definition in builtin_definitions():
         workflow = DeclarativeWorkflow(definition, "BUILTIN")

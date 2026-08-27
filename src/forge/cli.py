@@ -56,7 +56,16 @@ async def _get_compiled_workflow_for_ticket(ticket_key: str):
         if workflow_name:
             project_key = values.get("workflow_project_key") or issue.project_key
             workflow_instance = await load_project_workflow(
-                jira, project_key or ticket_key.split("-", 1)[0], workflow_name
+                jira,
+                project_key or ticket_key.split("-", 1)[0],
+                workflow_name,
+                pinned_revision=values.get(
+                    "workflow_definition_revision", values.get("workflow_revision")
+                ),
+                pinned_digest=values.get(
+                    "workflow_definition_digest", values.get("workflow_digest")
+                ),
+                pinned_definition=values.get("workflow_definition"),
             )
         else:
             workflow_instance = None

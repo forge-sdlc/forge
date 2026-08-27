@@ -25,8 +25,8 @@ _DEFINITIONS = {
 # checked-in artifact and this snapshot together.
 _DIGESTS = {
     "feature": "f2240bad6450f43ef0cf2787b8890c70e9963d1ae174203e1fb3dbae9d95741e",
-    "bug": "c738a6324e60671f570a08bee13e7b8733f05c03b3e39da9f37ff9e68257e400",
-    "task_takeover": "a2d9f6ae17ab534295ef14ede1e42beae007c3d57f7d9cab721d73d2ddb7c2a1",
+    "bug": "4150e2dc6002a1fcb160c59390fb6ad18298d0979d6ee0f5452f0958acad5df8",
+    "task_takeover": "3adc871b06bfca01c3f85e46329cc22f5e88d89dde764ce853388e73c2bb9dd8",
 }
 
 

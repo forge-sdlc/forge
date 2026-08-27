@@ -345,6 +345,11 @@ class DeclarativeWorkflowCompiler:
                 result = await guarded_func(state)
             if not isinstance(result, dict):
                 raise TypeError(f"node '{node_name}' must return a state dictionary")
+            # Some legacy nodes route to the shared escalation node by replacing
+            # current_node. Preserve the actual failing step so an explicit
+            # forge:retry can return there after escalation completes.
+            if result.get("current_node") == "escalate_blocked" and node_name != "escalate_blocked":
+                result = {**result, "retry_node": node_name}
             if terminal and not any(
                 (result.get("last_error"), result.get("is_paused"), result.get("is_blocked"))
             ):

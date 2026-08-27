@@ -11,9 +11,7 @@ def _command(command_type: WorkflowCommandType, **arguments) -> WorkflowCommand:
     return WorkflowCommand(
         command_id=f"command-{command_type.value}",
         command_type=command_type,
-        workflow=WorkflowIdentity(
-            run_id="FORGE-1", workflow_name="feature", definition_revision=1
-        ),
+        workflow=WorkflowIdentity(run_id="FORGE-1", workflow_name="feature", definition_revision=1),
         requested_at=datetime(2026, 8, 27, tzinfo=UTC),
         arguments=arguments,
     )
@@ -77,6 +75,25 @@ def test_retry_at_gate_requests_regeneration() -> None:
     assert application.state["last_error"] is None
     assert application.feedback is not None
     assert application.feedback.kind is FeedbackKind.RETRY_ACKNOWLEDGEMENT
+
+
+def test_retry_from_escalation_returns_to_recorded_failed_step() -> None:
+    application = create_default_command_handler_registry().apply(
+        _command(WorkflowCommandType.RETRY, stage="escalate_blocked"),
+        {
+            "current_node": "escalate_blocked",
+            "retry_node": "generate_plan",
+            "is_paused": True,
+            "is_blocked": True,
+            "last_error": "comment failed",
+        },
+    )
+
+    assert application is not None
+    assert application.state["current_node"] == "generate_plan"
+    assert application.state["is_blocked"] is False
+    assert application.feedback is not None
+    assert application.feedback.arguments["stage"] == "generate_plan"
 
 
 def test_jira_feedback_application_targets_known_child() -> None:

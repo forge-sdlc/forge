@@ -162,6 +162,9 @@ def _apply_retry(_command: WorkflowCommand, state: Mapping[str, Any]) -> Command
         "auto_retry_cap_notified": False,
         "retry_count": 0,
     }
+    if current_node == "escalate_blocked" and state.get("retry_node"):
+        current_node = str(state["retry_node"])
+        updated["current_node"] = current_node
     approval_gates = {
         "prd_approval_gate",
         "spec_approval_gate",

@@ -597,7 +597,13 @@ class JiraClient:
             )
         return result
 
-    async def add_comment(self, issue_key: str, body: str) -> JiraComment:
+    async def add_comment(
+        self,
+        issue_key: str,
+        body: str,
+        *,
+        properties: dict[str, Any] | None = None,
+    ) -> JiraComment:
         """Add a comment to a Jira issue.
 
         Args:
@@ -612,7 +618,18 @@ class JiraClient:
 
         response = await client.post(
             f"/issue/{issue_key}/comment",
-            json={"body": adf_content},
+            json={
+                "body": adf_content,
+                **(
+                    {
+                        "properties": [
+                            {"key": key, "value": value} for key, value in properties.items()
+                        ]
+                    }
+                    if properties
+                    else {}
+                ),
+            },
         )
         response.raise_for_status()
         data = response.json()
@@ -625,6 +642,8 @@ class JiraClient:
         error_message: str,
         node_name: str,
         mention_account_ids: list[str] | None = None,
+        *,
+        properties: dict[str, Any] | None = None,
     ) -> JiraComment:
         """Add an error notification comment with user mentions.
 
@@ -700,7 +719,18 @@ class JiraClient:
 
         response = await client.post(
             f"/issue/{issue_key}/comment",
-            json={"body": adf_content},
+            json={
+                "body": adf_content,
+                **(
+                    {
+                        "properties": [
+                            {"key": key, "value": value} for key, value in properties.items()
+                        ]
+                    }
+                    if properties
+                    else {}
+                ),
+            },
         )
         response.raise_for_status()
         data = response.json()
@@ -715,6 +745,8 @@ class JiraClient:
         available_connections: str,
         fix_command: str,
         mention_account_ids: list[str] | None = None,
+        *,
+        properties: dict[str, Any] | None = None,
     ) -> JiraComment:
         """Post an actionable model-policy configuration error in Jira."""
         client = await self._get_client()
@@ -792,7 +824,18 @@ class JiraClient:
         ]
         response = await client.post(
             f"/issue/{issue_key}/comment",
-            json={"body": {"version": 1, "type": "doc", "content": content}},
+            json={
+                "body": {"version": 1, "type": "doc", "content": content},
+                **(
+                    {
+                        "properties": [
+                            {"key": key, "value": value} for key, value in properties.items()
+                        ]
+                    }
+                    if properties
+                    else {}
+                ),
+            },
         )
         response.raise_for_status()
         logger.info(f"Added model policy error guidance to {issue_key}")
@@ -815,7 +858,11 @@ class JiraClient:
         while True:
             response = await client.get(
                 f"/issue/{issue_key}/comment",
-                params={"startAt": start_at, "maxResults": max_results},
+                params={
+                    "startAt": start_at,
+                    "maxResults": max_results,
+                    "expand": "properties",
+                },
             )
             response.raise_for_status()
             data = response.json()
@@ -937,6 +984,8 @@ class JiraClient:
         title: str,
         content: str,
         comment_type: str = "forge-artifact",
+        *,
+        properties: dict[str, Any] | None = None,
     ) -> JiraComment:
         """Add a structured comment with a marker for later retrieval.
 
@@ -960,7 +1009,7 @@ class JiraClient:
             f"[/FORGE:{comment_type.upper()}]\n\n"
             f"{artifact_interaction_options(comment_type)}"
         )
-        return await self.add_comment(issue_key, formatted_body)
+        return await self.add_comment(issue_key, formatted_body, properties=properties)
 
     async def get_structured_comment(
         self,

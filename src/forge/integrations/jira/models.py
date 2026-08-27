@@ -198,6 +198,7 @@ class JiraComment:
     author_name: str
     created: datetime | None = None
     updated: datetime | None = None
+    properties: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> "JiraComment":
@@ -235,4 +236,9 @@ class JiraComment:
             author_name=author.get("displayName", ""),
             created=created,
             updated=updated,
+            properties={
+                str(item["key"]): item.get("value")
+                for item in data.get("properties", [])
+                if isinstance(item, dict) and item.get("key")
+            },
         )

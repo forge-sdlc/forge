@@ -30,6 +30,26 @@ JIRA_ISSUE_LINK_CREATE_OPERATION = "jira.issue_link.create"
 JIRA_REMOTE_LINK_CREATE_OPERATION = "jira.remote_link.create"
 JIRA_ERROR_COMMENT_OPERATION = "jira.error_comment.create"
 JIRA_MODEL_POLICY_ERROR_COMMENT_OPERATION = "jira.model_policy_error_comment.create"
+_EFFECT_PROPERTY = "forge.effect"
+
+
+def _effect_property(idempotency_key: str) -> dict[str, str]:
+    return {"idempotency_key": idempotency_key}
+
+
+def _find_effect_comment(comments: list[Any], idempotency_key: str) -> Any | None:
+    """Find a property-tagged comment while retaining recovery for old visible markers."""
+    legacy_marker = f"forge-effect:{idempotency_key}"
+    return next(
+        (
+            comment
+            for comment in comments
+            if getattr(comment, "properties", {}).get(_EFFECT_PROPERTY)
+            == _effect_property(idempotency_key)
+            or legacy_marker in comment.body
+        ),
+        None,
+    )
 
 
 class JiraCommentExecutor:
@@ -41,14 +61,16 @@ class JiraCommentExecutor:
     async def execute(self, command: EffectCommand) -> EffectResult:
         issue_key = command.target.external_id
         body = str(command.payload["body"])
-        marker = f"forge-effect:{command.idempotency_key}"
-        rendered = f"{body}\n\n{{{marker}}}"
         jira = self._client_factory()
         try:
             comments = await jira.get_comments(issue_key)
-            existing = next((comment for comment in comments if marker in comment.body), None)
+            existing = _find_effect_comment(comments, command.idempotency_key)
             if existing is None:
-                created = await jira.add_comment(issue_key, rendered)
+                created = await jira.add_comment(
+                    issue_key,
+                    body,
+                    properties={_EFFECT_PROPERTY: _effect_property(command.idempotency_key)},
+                )
                 provider_reference = str(created.id)
             else:
                 provider_reference = str(existing.id)
@@ -115,15 +137,15 @@ class JiraMutationExecutor:
                 )
                 output = {"deleted": deleted}
             elif self.operation == JIRA_STRUCTURED_COMMENT_OPERATION:
-                marker = f"forge-effect:{command.idempotency_key}"
                 comments = await jira.get_comments(issue_key)
-                existing = next((comment for comment in comments if marker in comment.body), None)
+                existing = _find_effect_comment(comments, command.idempotency_key)
                 if existing is None:
                     structured_comment = await jira.add_structured_comment(
                         issue_key,
                         str(command.payload["title"]),
-                        f"{command.payload['content']}\n\n{{{marker}}}",
+                        str(command.payload["content"]),
                         comment_type=str(command.payload["comment_type"]),
+                        properties={_EFFECT_PROPERTY: _effect_property(command.idempotency_key)},
                     )
                     provider_reference = str(structured_comment.id)
                 else:
@@ -212,35 +234,35 @@ class JiraMutationExecutor:
                     await jira.create_remote_link(issue_key, url, title)
                 provider_reference = url
             elif self.operation == JIRA_ERROR_COMMENT_OPERATION:
-                marker = f"forge-effect:{command.idempotency_key}"
                 comments = await jira.get_comments(issue_key)
-                existing = next((comment for comment in comments if marker in comment.body), None)
+                existing = _find_effect_comment(comments, command.idempotency_key)
                 if existing is None:
                     error_comment = await jira.add_error_comment(
                         issue_key,
-                        f"{command.payload['error_message']}\n\n{{{marker}}}",
+                        str(command.payload["error_message"]),
                         str(command.payload["node_name"]),
                         mention_account_ids=[
                             *_string_list(command.payload.get("mention_account_ids", []))
                         ],
+                        properties={_EFFECT_PROPERTY: _effect_property(command.idempotency_key)},
                     )
                     provider_reference = str(error_comment.id)
                 else:
                     provider_reference = str(existing.id)
             elif self.operation == JIRA_MODEL_POLICY_ERROR_COMMENT_OPERATION:
-                marker = f"forge-effect:{command.idempotency_key}"
                 comments = await jira.get_comments(issue_key)
-                existing = next((comment for comment in comments if marker in comment.body), None)
+                existing = _find_effect_comment(comments, command.idempotency_key)
                 if existing is None:
                     policy_comment = await jira.add_model_policy_error_comment(
                         issue_key,
                         str(command.payload["node_name"]),
-                        f"{command.payload['problem']}\n\n{{{marker}}}",
+                        str(command.payload["problem"]),
                         str(command.payload["available_connections"]),
                         str(command.payload["fix_command"]),
                         mention_account_ids=[
                             *_string_list(command.payload.get("mention_account_ids", []))
                         ],
+                        properties={_EFFECT_PROPERTY: _effect_property(command.idempotency_key)},
                     )
                     provider_reference = str(policy_comment.id)
                 else:

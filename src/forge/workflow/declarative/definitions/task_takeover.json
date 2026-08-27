@@ -4,7 +4,7 @@
   "metadata": {
     "description": "Forge supported task-takeover golden path",
     "name": "task_takeover",
-    "revision": 1
+    "revision": 2
   },
   "spec": {
     "entry": "triage_check",
@@ -157,7 +157,10 @@
         "stationContractVersion": "1.0"
       },
       "generate_plan": {
-        "allowedEffects": [],
+        "allowedEffects": [
+          "jira.comment",
+          "jira.labels"
+        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "generate_plan": "generate_plan",

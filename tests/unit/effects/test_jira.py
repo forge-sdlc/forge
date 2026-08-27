@@ -32,7 +32,7 @@ def _command() -> EffectCommand:
 
 
 @pytest.mark.asyncio
-async def test_comment_executor_adds_recovery_marker() -> None:
+async def test_comment_executor_adds_hidden_recovery_property() -> None:
     jira = MagicMock()
     jira.get_comments = AsyncMock(return_value=[])
     jira.add_comment = AsyncMock(return_value=SimpleNamespace(id="comment-1"))
@@ -41,7 +41,10 @@ async def test_comment_executor_adds_recovery_marker() -> None:
     result = await JiraCommentExecutor(lambda: jira).execute(_command())
 
     body = jira.add_comment.await_args.args[1]
-    assert "forge-effect:stable-key" in body
+    assert body == "Work accepted"
+    assert jira.add_comment.await_args.kwargs["properties"] == {
+        "forge.effect": {"idempotency_key": "stable-key"}
+    }
     assert result.provider_reference == "comment-1"
 
 
@@ -130,6 +133,27 @@ async def test_retry_after_crash_finds_provider_marker_without_duplicate() -> No
 
 
 @pytest.mark.asyncio
+async def test_retry_after_crash_finds_hidden_provider_property_without_duplicate() -> None:
+    jira = MagicMock()
+    jira.get_comments = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                id="comment-1",
+                body="Work accepted",
+                properties={"forge.effect": {"idempotency_key": "stable-key"}},
+            )
+        ]
+    )
+    jira.add_comment = AsyncMock()
+    jira.close = AsyncMock()
+
+    result = await JiraCommentExecutor(lambda: jira).execute(_command())
+
+    jira.add_comment.assert_not_awaited()
+    assert result.provider_reference == "comment-1"
+
+
+@pytest.mark.asyncio
 async def test_transition_recovers_when_target_status_was_already_reached() -> None:
     jira = MagicMock()
     jira.get_issue = AsyncMock(return_value=SimpleNamespace(status="Closed"))
@@ -191,9 +215,7 @@ async def test_task_create_recovers_by_creation_marker() -> None:
 async def test_issue_link_recovers_when_relationship_already_exists() -> None:
     jira = MagicMock()
     jira.get_issue_links = AsyncMock(
-        return_value=[
-            {"type": "related", "inward_key": "FORGE-9", "outward_key": "FORGE-1"}
-        ]
+        return_value=[{"type": "related", "inward_key": "FORGE-9", "outward_key": "FORGE-1"}]
     )
     jira.create_issue_link = AsyncMock()
     jira.close = AsyncMock()
@@ -208,9 +230,9 @@ async def test_issue_link_recovers_when_relationship_already_exists() -> None:
         }
     )
 
-    result = await JiraMutationExecutor(
-        JIRA_ISSUE_LINK_CREATE_OPERATION, lambda: jira
-    ).execute(command)
+    result = await JiraMutationExecutor(JIRA_ISSUE_LINK_CREATE_OPERATION, lambda: jira).execute(
+        command
+    )
 
     jira.create_issue_link.assert_not_awaited()
     assert result.provider_reference == "FORGE-9:Related:FORGE-1"
@@ -231,9 +253,9 @@ async def test_remote_link_recovers_by_url() -> None:
         }
     )
 
-    result = await JiraMutationExecutor(
-        JIRA_REMOTE_LINK_CREATE_OPERATION, lambda: jira
-    ).execute(command)
+    result = await JiraMutationExecutor(JIRA_REMOTE_LINK_CREATE_OPERATION, lambda: jira).execute(
+        command
+    )
 
     jira.create_remote_link.assert_not_awaited()
     assert result.provider_reference == "https://example.test/pull/7"
