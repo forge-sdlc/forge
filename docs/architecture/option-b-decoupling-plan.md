@@ -111,6 +111,8 @@ coupling.
 
 ### Phase 1 — Establish versioned domain contracts
 
+**Detailed plan:** [Phase 1 domain contracts plan](phase-1-domain-contracts-plan.md).
+
 Introduce small, Forge-owned contracts independent of LangGraph and providers:
 
 - `Observation`: source, external identity, resource identity, observed revision/time,
