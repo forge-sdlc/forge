@@ -14,7 +14,12 @@ from forge.domain import (
     WorkflowIdentity,
     stable_identity,
 )
-from forge.integrations.source_control.contracts import ChangeRequestState, EventKind
+from forge.integrations.source_control.contracts import (
+    ChangeRequestState,
+    CheckStatus,
+    EventKind,
+    ReviewState,
+)
 from forge.models.events import EventSource
 from forge.orchestrator.event_adapters.contracts import AdaptedEvent, IngressMessage
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
@@ -241,7 +246,10 @@ def _source_control_signal(
     if event is None:
         return None
     if event.change_request and event.change_request.state is ChangeRequestState.MERGED:
-        return WorkflowCommandType.APPROVE, {"reason": "change_request_merged"}
+        return WorkflowCommandType.APPROVE, {
+            "reason": "change_request_merged",
+            "source_system": event.repo_ref.provider.value,
+        }
     if event.kind is EventKind.COMMENT_CREATED and event.comment is not None:
         comment = event.comment
         if comment.path is None:
@@ -271,7 +279,44 @@ def _source_control_signal(
                     "sender": event.actor.login,
                 }
     if event.kind is EventKind.CHECK_UPDATED:
-        return WorkflowCommandType.SYNCHRONIZE, {"subject": "checks"}
-    if event.kind in {EventKind.REVIEW_SUBMITTED, EventKind.COMMENT_CREATED}:
-        return WorkflowCommandType.SYNCHRONIZE, {"subject": "review"}
+        if event.check_suite_status and event.check_suite_status is not CheckStatus.COMPLETED:
+            return None
+        return WorkflowCommandType.SYNCHRONIZE, {
+            "subject": "checks",
+            "source_system": event.repo_ref.provider.value,
+        }
+    if event.kind is EventKind.REVIEW_SUBMITTED and event.review is not None:
+        review = event.review
+        common = {
+            "source_system": event.repo_ref.provider.value,
+            "review_id": review.id,
+            "sender": review.author,
+        }
+        if review.state is ReviewState.APPROVED:
+            return WorkflowCommandType.APPROVE, {**common, "reason": "review_approved"}
+        if review.state in {ReviewState.CHANGES_REQUESTED, ReviewState.COMMENTED}:
+            return WorkflowCommandType.REJECT, {
+                **common,
+                "feedback": review.body,
+                "requires_thread_enrichment": True,
+            }
+        return None
+    if event.kind is EventKind.COMMENT_CREATED and event.comment is not None:
+        body = event.comment.body.strip()
+        common = {
+            "source_system": event.repo_ref.provider.value,
+            "comment_id": event.comment.id,
+            "sender": event.actor.login,
+            "path": event.comment.path,
+            "in_reply_to": event.comment.in_reply_to,
+        }
+        classification = classify_comment(body)
+        if classification is CommentType.QUESTION:
+            return WorkflowCommandType.RESUME, {**common, "question": body}
+        if classification is CommentType.FEEDBACK or event.comment.path is not None:
+            return WorkflowCommandType.REJECT, {
+                **common,
+                "feedback": re.sub(r"^\s*!\s*", "", body),
+                "requires_thread_enrichment": event.comment.path is not None,
+            }
     return None

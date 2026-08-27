@@ -10,7 +10,9 @@ from forge.integrations.source_control.contracts import (
     NormalizedEvent,
     Provider,
     RepositoryRef,
+    Review,
     ReviewComment,
+    ReviewState,
 )
 from forge.models.events import EventSource
 from forge.orchestrator.event_adapters import (
@@ -224,3 +226,44 @@ def test_command_decision_records_are_json_safe_bounded_and_idempotent() -> None
             "command_type": None,
         }
     ]
+
+
+def test_source_control_review_rejection_is_semantic_command() -> None:
+    repo = RepositoryRef(
+        id="1",
+        provider=Provider.GITHUB,
+        connection="default",
+        namespace="acme/repo",
+        default_branch="main",
+        change_request_mode="direct",
+    )
+    event = NormalizedEvent(
+        id="github-review",
+        kind=EventKind.REVIEW_SUBMITTED,
+        repo_ref=repo,
+        actor=Actor(login="alice", is_bot=False),
+        received_at=NOW,
+        review=Review(
+            id="9",
+            state=ReviewState.CHANGES_REQUESTED,
+            body="please fix",
+            author="alice",
+        ),
+    )
+    message = QueueMessage(
+        message_id="1",
+        event_id="github-review",
+        source=EventSource.SOURCE_CONTROL,
+        event_type="review_submitted",
+        ticket_key="FORGE-42",
+        payload={},
+        normalized_event=normalized_event_to_dict(event),
+        timestamp=NOW,
+    )
+    adapted = create_default_event_adapter_registry().adapt(message)
+
+    decision = interpret_event(message, adapted, STATE)
+
+    assert decision.command is not None
+    assert decision.command.command_type is WorkflowCommandType.REJECT
+    assert decision.command.arguments["requires_thread_enrichment"] is True
