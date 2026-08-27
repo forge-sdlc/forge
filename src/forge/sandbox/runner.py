@@ -432,7 +432,10 @@ class ContainerRunner:
                 )
 
         for host_path, container_path in skill_mounts:
-            mounts.append((host_path, container_path, "ro,Z"))
+            # Skill trees are shared by concurrent sandbox containers. A private
+            # SELinux label (``Z``) lets a later mount revoke an already-running
+            # container's access; ``z`` labels this read-only mount as shared.
+            mounts.append((host_path, container_path, "ro,z"))
 
         return mounts
 
