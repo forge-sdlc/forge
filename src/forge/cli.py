@@ -7,6 +7,7 @@ import sys
 from typing import Any
 
 import forge.integrations.source_control.github  # noqa: F401  (registers GitHub adapter factory)
+import forge.integrations.source_control.gitlab  # noqa: F401  (registers GitLab adapter factory)
 from forge.config import get_settings
 
 

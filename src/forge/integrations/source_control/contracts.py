@@ -162,6 +162,10 @@ class GitCredentials:
     # Enterprise Server). None for the common case (public GitHub or a CA
     # trusted by the default store).
     ca_path: str | None = None
+    # HTTPS basic-auth username to pair with the token in a remote URL. GitHub
+    # requires "x-access-token"; GitLab requires "oauth2". None means the
+    # consumer picks its default ("x-access-token").
+    url_user: str | None = None
 
 
 @dataclass

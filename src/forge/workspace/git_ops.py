@@ -45,7 +45,8 @@ class GitOperations:
     def _remote_url(self, owner: str, repo: str) -> str:
         """Build an authenticated HTTPS clone/remote URL for owner/repo on
         this workspace's connection host."""
-        return f"https://x-access-token:{self.credentials.token}@{self.credentials.host}/{owner}/{repo}.git"
+        user = self.credentials.url_user or "x-access-token"
+        return f"https://{user}:{self.credentials.token}@{self.credentials.host}/{owner}/{repo}.git"
 
     def _git_env(self) -> dict[str, str] | None:
         """Subprocess environment for git commands, trusting this connection's
