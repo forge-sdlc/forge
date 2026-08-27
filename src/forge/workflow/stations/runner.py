@@ -26,6 +26,10 @@ from forge.workflow.stations.implementation_input import (
     ImplementationInput,
     run_implementation_input_station,
 )
+from forge.workflow.stations.sandbox_execution import (
+    SandboxExecutionInput,
+    run_sandbox_execution_station,
+)
 from forge.workflow.stations.task_routing import (
     RepositoryAggregationInput,
     TaskRoutingInput,
@@ -89,6 +93,11 @@ def create_builtin_station_registry() -> StationRegistry:
     registry.register(
         StationDefinition(
             "implementation-input", "1.0", ImplementationInput, run_implementation_input_station
+        )
+    )
+    registry.register(
+        StationDefinition(
+            "sandbox-execution", "1.0", SandboxExecutionInput, run_sandbox_execution_station
         )
     )
     registry.register(

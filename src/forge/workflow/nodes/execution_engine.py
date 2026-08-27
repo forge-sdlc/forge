@@ -6,13 +6,29 @@ This module owns the invariant execution mechanics once that context is known.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
+from forge.domain import StationRequest
 from forge.prompts import load_prompt
 from forge.sandbox.runner import ContainerRunner
 from forge.workflow.nodes.git_persistence import PushPersistenceError, push_to_fork_with_retry
 from forge.workflow.nodes.repository_scope import implementation_repository_scope
+from forge.workflow.projections.common import (
+    project_invocation_identity,
+    project_requested_at,
+    project_workflow_identity,
+)
+from forge.workflow.stations.sandbox_execution import (
+    CONTRACT_NAME as SANDBOX_CONTRACT_NAME,
+)
+from forge.workflow.stations.sandbox_execution import (
+    CONTRACT_VERSION as SANDBOX_CONTRACT_VERSION,
+)
+from forge.workflow.stations.sandbox_execution import (
+    SandboxExecutionInput,
+    as_container_result,
+    run_sandbox_execution_station,
+)
 from forge.workflow.utils import merge_review_exhaustion
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.handoff import capture_handoff
@@ -103,18 +119,31 @@ async def run_and_persist_execution(
     Push failures intentionally propagate for the calling node to apply its
     workflow-specific retry state.
     """
-    result = await runner.run(
-        workspace_path=Path(request.workspace_path),
-        task_summary=request.summary,
-        task_description=prompt,
-        ticket_key=request.ticket_key,
-        task_key=request.work_id,
-        repo_name=request.repository,
-        step_name=request.step_name,
-        policy_key=request.policy_key,
-        skill_name=request.skill_name,
-        **request.runner_options,
+    station_request = StationRequest[SandboxExecutionInput](
+        workflow=project_workflow_identity(state),
+        invocation=project_invocation_identity(
+            state, f"{SANDBOX_CONTRACT_NAME}:{request.step_name}:{request.work_id}"
+        ),
+        contract_name=SANDBOX_CONTRACT_NAME,
+        contract_version=SANDBOX_CONTRACT_VERSION,
+        attempt=int(state.get("retry_count") or 0) + 1,
+        requested_at=project_requested_at(state),
+        input=SandboxExecutionInput(
+            workspace_path=request.workspace_path,
+            task_summary=request.summary,
+            task_description=prompt,
+            ticket_key=request.ticket_key,
+            task_key=request.work_id,
+            repo_name=request.repository,
+            step_name=request.step_name,
+            policy_key=request.policy_key,
+            skill_name=request.skill_name,
+            runner_options=dict(request.runner_options),
+        ),
     )
+    outcome = await run_sandbox_execution_station(station_request, runner=runner)
+    assert outcome.output is not None
+    result = as_container_result(outcome.output)
     updated = merge_review_exhaustion(dict(state), result, request.work_id, request.step_name)
     updated = capture_handoff(
         request.workspace_path,
