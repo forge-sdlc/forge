@@ -61,7 +61,7 @@ class TestGeneratePrd:
     async def test_generates_prd_from_description(self, initial_state, mock_jira, mock_agent):
         """PRD is generated from issue description."""
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await generate_prd(initial_state)
 
         assert result["prd_content"] != ""
@@ -71,7 +71,7 @@ class TestGeneratePrd:
     async def test_updates_current_node(self, initial_state, mock_jira, mock_agent):
         """Current node is updated after generation."""
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await generate_prd(initial_state)
 
         assert result["current_node"] == "prd_approval_gate"
@@ -80,7 +80,7 @@ class TestGeneratePrd:
     async def test_sets_prd_pending_label(self, initial_state, mock_jira, mock_agent):
         """PRD pending label is set on Jira issue."""
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 await generate_prd(initial_state)
 
         mock_jira.set_workflow_label.assert_called_once()
@@ -93,7 +93,7 @@ class TestGeneratePrd:
         initial_state["last_error"] = "Previous error"
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await generate_prd(initial_state)
 
         assert result["last_error"] is None
@@ -116,7 +116,7 @@ class TestGeneratePrd:
         )
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await generate_prd(initial_state)
 
         assert result["last_error"] is not None
@@ -128,7 +128,7 @@ class TestGeneratePrd:
         mock_agent.generate_prd = AsyncMock(side_effect=Exception("API error"))
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await generate_prd(initial_state)
 
         assert result["last_error"] is not None
@@ -176,7 +176,7 @@ class TestRegeneratePrdWithFeedback:
     async def test_regenerates_with_feedback(self, state_with_feedback, mock_jira, mock_agent):
         """PRD is regenerated incorporating feedback."""
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 await regenerate_prd_with_feedback(state_with_feedback)
 
         mock_agent.regenerate_with_feedback.assert_called_once()
@@ -188,7 +188,7 @@ class TestRegeneratePrdWithFeedback:
         """Feedback is cleared after regeneration."""
         with (
             patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent),
         ):
             result = await regenerate_prd_with_feedback(state_with_feedback)
 
@@ -199,7 +199,7 @@ class TestRegeneratePrdWithFeedback:
     async def test_returns_to_approval_gate(self, state_with_feedback, mock_jira, mock_agent):
         """Node returns to PRD approval gate."""
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await regenerate_prd_with_feedback(state_with_feedback)
 
         assert result["current_node"] == "prd_approval_gate"
@@ -213,7 +213,7 @@ class TestRegeneratePrdWithFeedback:
 
         with (
             patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent),
         ):
             result = await regenerate_prd_with_feedback(state_with_feedback)
 
@@ -227,7 +227,7 @@ class TestRegeneratePrdWithFeedback:
         mock_settings.jira_store_in_comments = True
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 with patch("forge.workflow.nodes.prd_generation.get_settings", return_value=mock_settings):
                     await regenerate_prd_with_feedback(state_with_feedback)
 
@@ -246,7 +246,7 @@ class TestRegeneratePrdWithFeedback:
         mock_settings.jira_store_in_comments = False
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 with patch("forge.workflow.nodes.prd_generation.get_settings", return_value=mock_settings):
                     await regenerate_prd_with_feedback(state_with_feedback)
 
@@ -267,7 +267,7 @@ class TestRegeneratePrdWithFeedback:
         # No feedback_comment set
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 await regenerate_prd_with_feedback(state)
 
         # Agent should not be called

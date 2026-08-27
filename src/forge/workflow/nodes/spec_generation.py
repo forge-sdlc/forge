@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import (
     artifact_interaction_options,
     pr_interaction_options,
@@ -22,6 +21,11 @@ from forge.workflow.nodes.proposal_pr import (
     SPEC_PROPOSAL,
     create_proposal_pr,
     update_proposal_pr,
+)
+from forge.workflow.projections.artifact_generation import project_artifact_generation
+from forge.workflow.stations.artifact_generation import (
+    ArtifactKind,
+    run_artifact_generation_station,
 )
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
@@ -92,7 +96,6 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         await post_qa_summary_if_needed(ticket_key, qa_history, "prd")
 
     jira = JiraClient()
-    agent = ForgeAgent()
     spec_content = None
     jira_error = None
 
@@ -134,7 +137,16 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         prd_content = await fetch_and_inject_references(state, jira, prd_content)
 
         # Generate specification using the configured LLM backend - primary operation
-        spec_content = await agent.generate_spec(prd_content, context)
+        outcome = await run_artifact_generation_station(
+            project_artifact_generation(
+                state,
+                kind=ArtifactKind.SPEC,
+                source_content=prd_content,
+                context=context,
+            )
+        )
+        assert outcome.output is not None
+        spec_content = outcome.output.content
 
         # Publish spec — either as GitHub PR or Jira update
         proposals_repo = await _resolve_prd_proposals_repo(issue.project_key, jira)
@@ -214,7 +226,6 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         return result_state
     finally:
         await jira.close()
-        await agent.close()
 
 
 async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
@@ -237,25 +248,27 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
     logger.info(f"Regenerating spec for {ticket_key} with feedback")
 
     jira = JiraClient()
-    agent = ForgeAgent()
-
     try:
         original_spec_with_refs = await fetch_and_inject_references(state, jira, original_spec)
 
         # Regenerate spec with feedback
-        new_spec = await agent.regenerate_with_feedback(
-            original_content=original_spec_with_refs,
-            feedback=feedback,
-            content_type="spec",
-            ticket_key=ticket_key,
-            context={
-                "ticket_type": state.get("ticket_type", ""),
-                "current_node": state.get("current_node", ""),
-                "event_type": state.get("event_type", ""),
-                "event_source": state.get("context", {}).get("source", ""),
-                "retry_count": state.get("retry_count", 0),
-            },
+        outcome = await run_artifact_generation_station(
+            project_artifact_generation(
+                state,
+                kind=ArtifactKind.SPEC,
+                source_content=original_spec_with_refs,
+                feedback=feedback,
+                context={
+                    "ticket_type": state.get("ticket_type", ""),
+                    "current_node": state.get("current_node", ""),
+                    "event_type": state.get("event_type", ""),
+                    "event_source": state.get("context", {}).get("source", ""),
+                    "retry_count": state.get("retry_count", 0),
+                },
+            )
         )
+        assert outcome.output is not None
+        new_spec = outcome.output.content
 
         # Publish revised spec
         if state.get("spec_pr_number"):
@@ -351,4 +364,3 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await agent.close()

@@ -76,7 +76,7 @@ Revised PRD with user personas.
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await regenerate_prd_with_feedback(prd_pending_state)
 
         # Verify agent was called with feedback
@@ -103,7 +103,7 @@ Revised PRD with user personas.
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await regenerate_prd_with_feedback(prd_pending_state)
 
         assert result["current_node"] == "prd_approval_gate"
@@ -170,7 +170,7 @@ class TestPrdRejectedMultiple:
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 result = await regenerate_prd_with_feedback(prd_state_first_revision)
 
         # Error case increments retry count
@@ -211,7 +211,7 @@ class TestPrdRevisionPreservesContext:
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 await regenerate_prd_with_feedback(prd_with_context)
 
         call_kwargs = mock_agent.regenerate_with_feedback.call_args.kwargs
@@ -232,7 +232,7 @@ class TestPrdRevisionPreservesContext:
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
                 await regenerate_prd_with_feedback(prd_with_context)
 
         call_kwargs = mock_agent.regenerate_with_feedback.call_args.kwargs

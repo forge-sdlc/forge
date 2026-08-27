@@ -69,7 +69,7 @@ class TestPRDGenerationContext:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.prd_generation.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -120,7 +120,7 @@ class TestPRDGenerationContext:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.prd_generation.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -157,7 +157,7 @@ class TestSpecGenerationContext:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.spec_generation.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -206,7 +206,7 @@ class TestSpecGenerationContext:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.spec_generation.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):

@@ -159,7 +159,7 @@ class TestFeatureWorkflowExecution:
 
             # Mock external dependencies
             with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
+                 patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -196,7 +196,7 @@ class TestFeatureWorkflowExecution:
             )
 
             with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
+                 patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -283,7 +283,7 @@ class TestWorkflowResumption:
             )
 
             with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
+                 patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent

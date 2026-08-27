@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import (
     artifact_interaction_options,
     pr_interaction_options,
@@ -17,6 +16,11 @@ from forge.workflow.nodes.proposal_pr import (
     PRD_PROPOSAL,
     create_proposal_pr,
     update_proposal_pr,
+)
+from forge.workflow.projections.artifact_generation import project_artifact_generation
+from forge.workflow.stations.artifact_generation import (
+    ArtifactKind,
+    run_artifact_generation_station,
 )
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
@@ -125,7 +129,6 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
     logger.info(f"Generating PRD for {ticket_key}")
 
     jira = JiraClient()
-    agent = ForgeAgent()
     prd_content = None
     jira_error = None
 
@@ -166,7 +169,16 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
         }
 
         # Generate PRD using the configured LLM backend - primary operation
-        prd_content = await agent.generate_prd(raw_requirements, context)
+        outcome = await run_artifact_generation_station(
+            project_artifact_generation(
+                state,
+                kind=ArtifactKind.PRD,
+                source_content=raw_requirements,
+                context=context,
+            )
+        )
+        assert outcome.output is not None
+        prd_content = outcome.output.content
 
         # Publish PRD - either as GitHub PR or Jira update
         # Per-project opt-in: check forge.prd_proposals_repo project property
@@ -237,7 +249,6 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
         return result_state
     finally:
         await jira.close()
-        await agent.close()
 
 
 async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
@@ -264,25 +275,27 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
     logger.info(f"Regenerating PRD for {ticket_key} with feedback")
 
     jira = JiraClient()
-    agent = ForgeAgent()
-
     try:
         original_prd_with_refs = await fetch_and_inject_references(state, jira, original_prd)
 
         # Regenerate PRD with feedback
-        new_prd = await agent.regenerate_with_feedback(
-            original_content=original_prd_with_refs,
-            feedback=feedback,
-            content_type="prd",
-            ticket_key=ticket_key,
-            context={
-                "ticket_type": state.get("ticket_type", ""),
-                "current_node": state.get("current_node", ""),
-                "event_type": state.get("event_type", ""),
-                "event_source": state.get("context", {}).get("source", ""),
-                "retry_count": state.get("retry_count", 0),
-            },
+        outcome = await run_artifact_generation_station(
+            project_artifact_generation(
+                state,
+                kind=ArtifactKind.PRD,
+                source_content=original_prd_with_refs,
+                feedback=feedback,
+                context={
+                    "ticket_type": state.get("ticket_type", ""),
+                    "current_node": state.get("current_node", ""),
+                    "event_type": state.get("event_type", ""),
+                    "event_source": state.get("context", {}).get("source", ""),
+                    "retry_count": state.get("retry_count", 0),
+                },
+            )
         )
+        assert outcome.output is not None
+        new_prd = outcome.output.content
 
         # Publish revised PRD
         if state.get("prd_pr_number"):
@@ -360,4 +373,3 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await agent.close()
