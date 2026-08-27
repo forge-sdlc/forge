@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from pydantic import field_validator
+
 from forge.domain import DomainModel, StationOutcome, StationOutcomeStatus, StationRequest
 from forge.integrations.agents import ForgeAgent
 from forge.prompts import load_prompt
@@ -28,6 +30,12 @@ class TriageInput(DomainModel):
 class TriageOutput(DomainModel):
     sufficient: bool
     missing_fields: tuple[str, ...] = ()
+
+    @field_validator("missing_fields", mode="before")
+    @classmethod
+    def accept_json_array(cls, value: object) -> object:
+        """Normalize the JSON array emitted by model providers for strict validation."""
+        return tuple(value) if isinstance(value, list) else value
 
 
 async def run_triage_station(

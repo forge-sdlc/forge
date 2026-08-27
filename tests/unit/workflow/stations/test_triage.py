@@ -58,3 +58,9 @@ async def test_missing_fields_are_returned_as_typed_output() -> None:
 
     assert parsed.output is not None
     assert parsed.output.missing_fields == ("steps", "logs")
+
+
+def test_triage_output_accepts_provider_json_array() -> None:
+    output = TriageOutput.model_validate({"sufficient": False, "missing_fields": ["steps", "logs"]})
+
+    assert output.missing_fields == ("steps", "logs")
