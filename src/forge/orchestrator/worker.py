@@ -47,6 +47,7 @@ from forge.orchestrator.event_adapters import (
     record_command_decision,
     validate_command_decision,
 )
+from forge.orchestrator.review_enrichment import ReviewEnrichmentService
 from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
 from forge.skills.orchestrator import ensure_skills
@@ -68,13 +69,8 @@ from forge.workflow.pr_state import (
 )
 from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
-from forge.workflow.utils.automated_review_triage import triage_automated_review
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
 from forge.workflow.utils.jira_status import post_status_comment
-from forge.workflow.utils.proposal_review_threads import (
-    reply_to_proposal_decisions,
-    triage_proposal_review_threads,
-)
 from forge.workflow.utils.review_decisions import (
     decision_matches_comment,
     merge_review_decisions,
@@ -187,6 +183,7 @@ class OrchestratorWorker:
         router: WorkflowRouter | None = None,
         event_adapters: EventAdapterRegistry | None = None,
         command_handlers: CommandHandlerRegistry | None = None,
+        review_enrichment: ReviewEnrichmentService | None = None,
     ) -> None:
         """Initialize the worker.
 
@@ -203,6 +200,7 @@ class OrchestratorWorker:
         self.router = router or create_default_router()
         self.event_adapters = event_adapters or create_default_event_adapter_registry()
         self.command_handlers = command_handlers or create_default_command_handler_registry()
+        self.review_enrichment = review_enrichment
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
         self._compiled_workflows: dict[str, Any] = {}  # Cache compiled workflows by name
@@ -210,6 +208,13 @@ class OrchestratorWorker:
         # as a different bot identity, so a single process-wide login is wrong
         # once more than the default connection is configured.
         self._forge_github_logins: dict[str, str] = {}
+
+    def _review_enrichment(self) -> ReviewEnrichmentService:
+        service = getattr(self, "review_enrichment", None)
+        if service is None:
+            service = ReviewEnrichmentService(get_adapter)
+            self.review_enrichment = service
+        return service
 
     def _deserialize_event(self, message: QueueMessage) -> NormalizedEvent | None:
         """Reconstruct the typed NormalizedEvent a source-control message carries.
@@ -983,10 +988,8 @@ class OrchestratorWorker:
                     pr_number = int(native_id) if native_id is not None else None
                     inline_comments: list[dict[str, Any]] = []
                     if repo_full and pr_number:
-                        _repo_ref_obj, _adapter = get_adapter(repo_full)
-                        _identity = identity_for(_repo_ref_obj, pr_number)
-                        _reviews = await _adapter.get_review_thread_comments(
-                            _repo_ref_obj, _identity
+                        _reviews = await self._review_enrichment().review_threads(
+                            repo_full, pr_number
                         )
                         proposal_review_threads = _reviews_to_raw_threads(_reviews)
                         inline_comments = _flatten_review_threads(_reviews)
@@ -1098,10 +1101,8 @@ class OrchestratorWorker:
                     pr_number = int(native_id) if native_id is not None else None
                     inline_comments: list[dict[str, Any]] = []
                     if repo_full and pr_number:
-                        _repo_ref_obj, _adapter = get_adapter(repo_full)
-                        _identity = identity_for(_repo_ref_obj, pr_number)
-                        _reviews = await _adapter.get_review_thread_comments(
-                            _repo_ref_obj, _identity
+                        _reviews = await self._review_enrichment().review_threads(
+                            repo_full, pr_number
                         )
                         proposal_review_threads = _reviews_to_raw_threads(_reviews)
                         inline_comments = _flatten_review_threads(_reviews)
@@ -1256,7 +1257,7 @@ class OrchestratorWorker:
                 artifact_content = current_state.get(
                     "prd_content" if is_prd_review else "spec_content", ""
                 )
-                proposal_review_decisions = await triage_proposal_review_threads(
+                proposal_review_decisions = await self._review_enrichment().triage_threads(
                     artifact_type=artifact_type,
                     artifact_content=artifact_content,
                     threads=proposal_review_threads,
@@ -1270,11 +1271,10 @@ class OrchestratorWorker:
                 )
                 pr_number = int(native_id) if native_id is not None else None
                 if repo_full and pr_number:
-                    await reply_to_proposal_decisions(
+                    await self._review_enrichment().reply_to_decisions(
                         repo_full_name=repo_full,
                         pr_number=pr_number,
                         decisions=proposal_review_decisions,
-                        dispositions={"reply", "ignore"},
                     )
                 actionable_feedback = [
                     decision.get("feedback")
@@ -1313,7 +1313,7 @@ class OrchestratorWorker:
             artifact_content = current_state.get(
                 "prd_content" if is_prd_review else "spec_content", ""
             )
-            decision = await triage_automated_review(
+            decision = await self._review_enrichment().triage_automated(
                 artifact_type=artifact_type,
                 artifact_content=artifact_content,
                 review_state=review_state,
@@ -1383,18 +1383,10 @@ class OrchestratorWorker:
                 )
                 inline_comments = []
                 if repo_full and pr_number:
-                    _repo_ref_obj, _adapter = get_adapter(repo_full)
-                    _identity = identity_for(_repo_ref_obj, pr_number)
                     review_id = int(review.id) if review.id else None
-                    if review_id:
-                        review_comments = await _adapter.get_review_comments_for_submission(
-                            _repo_ref_obj, _identity, str(review_id)
-                        )
-                    else:
-                        threads = await _adapter.get_review_thread_comments(
-                            _repo_ref_obj, _identity
-                        )
-                        review_comments = [c for thread in threads for c in thread.comments]
+                    review_comments = await self._review_enrichment().review_comments(
+                        repo_full, int(pr_number), review_id
+                    )
                     inline_comments = [
                         {"path": c.path, "line": c.line, "body": c.body} for c in review_comments
                     ]

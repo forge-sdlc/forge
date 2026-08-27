@@ -463,11 +463,11 @@ class TestHandlePrdPrReview:
         with (
             _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
-                "forge.orchestrator.worker.triage_proposal_review_threads",
+                "forge.orchestrator.review_enrichment.triage_proposal_review_threads",
                 new=AsyncMock(return_value=decisions),
             ),
             patch(
-                "forge.orchestrator.worker.reply_to_proposal_decisions",
+                "forge.orchestrator.review_enrichment.reply_to_proposal_decisions",
                 new=AsyncMock(),
             ) as reply_decisions,
         ):
@@ -735,7 +735,7 @@ class TestHandlePrdPrComment:
                 worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
             ),
             patch(
-                "forge.orchestrator.worker.triage_proposal_review_threads",
+                "forge.orchestrator.review_enrichment.triage_proposal_review_threads",
                 new=AsyncMock(return_value=[decision]),
             ) as triage,
         ):
@@ -764,7 +764,7 @@ class TestHandlePrdPrComment:
         with (
             _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
-                "forge.orchestrator.worker.triage_automated_review",
+                "forge.orchestrator.review_enrichment.triage_automated_review",
                 new=AsyncMock(
                     return_value=AutomatedReviewDecision(
                         "satisfied", reason="The overall review passes"
@@ -795,7 +795,7 @@ class TestHandlePrdPrComment:
         with (
             _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
-                "forge.orchestrator.worker.triage_automated_review",
+                "forge.orchestrator.review_enrichment.triage_automated_review",
                 new=AsyncMock(
                     return_value=AutomatedReviewDecision(
                         "blocking",
@@ -831,7 +831,7 @@ class TestHandlePrdPrComment:
         with (
             _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
-                "forge.orchestrator.worker.triage_automated_review",
+                "forge.orchestrator.review_enrichment.triage_automated_review",
                 new=AsyncMock(
                     return_value=AutomatedReviewDecision(
                         "uncertain", reason="The disposition is contradictory"
@@ -864,7 +864,7 @@ class TestHandlePrdPrComment:
         with (
             _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
-                "forge.orchestrator.worker.triage_automated_review",
+                "forge.orchestrator.review_enrichment.triage_automated_review",
                 new=AsyncMock(
                     return_value=AutomatedReviewDecision(
                         "blocking", blocking_feedback="Revise again."
@@ -1017,7 +1017,7 @@ class TestHumanReviewSkipsTriage:
         with (
             _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch(
-                "forge.orchestrator.worker.triage_proposal_review_threads",
+                "forge.orchestrator.review_enrichment.triage_proposal_review_threads",
                 new=AsyncMock(),
             ) as triage,
         ):

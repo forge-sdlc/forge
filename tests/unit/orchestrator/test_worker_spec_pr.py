@@ -300,7 +300,7 @@ async def test_satisfied_bot_spec_review_stays_paused(worker):
     with (
         _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
         patch(
-            "forge.orchestrator.worker.triage_automated_review",
+            "forge.orchestrator.review_enrichment.triage_automated_review",
             new=AsyncMock(return_value=AutomatedReviewDecision("satisfied")),
         ) as triage,
     ):
