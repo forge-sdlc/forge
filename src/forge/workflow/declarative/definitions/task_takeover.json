@@ -1,0 +1,312 @@
+{
+  "apiVersion": "forge/v1",
+  "kind": "Workflow",
+  "metadata": {
+    "description": "Forge supported task-takeover golden path",
+    "name": "task_takeover",
+    "revision": 1
+  },
+  "spec": {
+    "entry": "triage_check",
+    "extensionPoints": [
+      "station-behavior"
+    ],
+    "mandatoryPolicies": [
+      "forge-contracts-v1"
+    ],
+    "resume": {
+      "fromRevisions": {}
+    },
+    "state": "task_takeover",
+    "steps": {
+      "answer_question": {
+        "allowedEffects": [
+          "jira.*"
+        ],
+        "branches": {
+          "task_plan_approval_gate": "task_plan_approval_gate"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_after_answer",
+        "stationContract": "agent-operation",
+        "stationContractVersion": "1.0"
+      },
+      "attempt_ci_fix": {
+        "allowedEffects": [],
+        "branches": {
+          "attempt_ci_fix": "escalate_blocked",
+          "ci_evaluator": "ci_evaluator",
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "retryBound": 5,
+        "route": "route_current_node",
+        "stationContract": "sandbox-execution",
+        "stationContractVersion": "1.0"
+      },
+      "ci_evaluator": {
+        "allowedEffects": [],
+        "branches": {
+          "attempt_ci_fix": "attempt_ci_fix",
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_ci_evaluation",
+        "stationContract": "sandbox-execution",
+        "stationContractVersion": "1.0"
+      },
+      "complete_task_takeover": {
+        "allowedEffects": [
+          "jira.*"
+        ],
+        "branches": {},
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "operation",
+        "next": "__end__",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ]
+      },
+      "create_pr": {
+        "allowedEffects": [
+          "source_control.*"
+        ],
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "teardown_workspace": "teardown_workspace"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_after_pr_creation",
+        "stationContract": "agent-operation",
+        "stationContractVersion": "1.0"
+      },
+      "escalate_blocked": {
+        "allowedEffects": [
+          "jira.*"
+        ],
+        "branches": {},
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "operation",
+        "next": "__end__",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ]
+      },
+      "execute_task_changes": {
+        "allowedEffects": [],
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "execute_task_changes": "execute_task_changes",
+          "run_qualitative_review": "run_qualitative_review"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "retryBound": 100,
+        "route": "route_after_execution",
+        "stationContract": "sandbox-execution",
+        "stationContractVersion": "1.0"
+      },
+      "generate_plan": {
+        "allowedEffects": [],
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "generate_plan": "generate_plan",
+          "task_plan_approval_gate": "task_plan_approval_gate"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "retryBound": 3,
+        "route": "route_after_generate_plan",
+        "stationContract": "agent-operation",
+        "stationContractVersion": "1.0"
+      },
+      "human_review_gate": {
+        "allowedEffects": [
+          "jira.*"
+        ],
+        "branches": {
+          "__end__": "__end__",
+          "ci_evaluator": "ci_evaluator",
+          "complete_task_takeover": "complete_task_takeover",
+          "complete_tasks": "complete_task_takeover",
+          "implement_review": "implement_review"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "gate",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_human_review_task_takeover",
+        "stationContract": "persistence-actions",
+        "stationContractVersion": "1.0"
+      },
+      "implement_review": {
+        "allowedEffects": [],
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate",
+          "implement_review": "implement_review",
+          "review_response_gate": "review_response_gate"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "retryBound": 3,
+        "route": "route_current_node",
+        "stationContract": "sandbox-execution",
+        "stationContractVersion": "1.0"
+      },
+      "review_response_gate": {
+        "allowedEffects": [],
+        "branches": {
+          "__end__": "__end__",
+          "human_review_gate": "human_review_gate",
+          "implement_review": "implement_review"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "gate",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_review_response"
+      },
+      "run_qualitative_review": {
+        "allowedEffects": [],
+        "branches": {
+          "create_pr": "create_pr",
+          "escalate_blocked": "escalate_blocked",
+          "execute_task_changes": "execute_task_changes",
+          "run_qualitative_review": "run_qualitative_review"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "retryBound": 3,
+        "route": "route_after_qualitative_review",
+        "stationContract": "sandbox-execution",
+        "stationContractVersion": "1.0"
+      },
+      "setup_workspace": {
+        "allowedEffects": [],
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "execute_task_changes": "execute_task_changes"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "operation",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_after_workspace_setup"
+      },
+      "task_plan_approval_gate": {
+        "allowedEffects": [],
+        "branches": {
+          "__end__": "__end__",
+          "answer_question": "answer_question",
+          "regenerate_plan": "generate_plan",
+          "setup_workspace": "setup_workspace"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "gate",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_task_plan_approval",
+        "stationContract": "approval-policy",
+        "stationContractVersion": "1.0"
+      },
+      "teardown_workspace": {
+        "allowedEffects": [],
+        "branches": {
+          "human_review_gate": "human_review_gate",
+          "setup_workspace": "setup_workspace"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "operation",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_after_teardown"
+      },
+      "triage_check": {
+        "allowedEffects": [
+          "jira.*"
+        ],
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "generate_plan": "generate_plan",
+          "triage_check": "triage_check",
+          "triage_gate": "triage_gate"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "station",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "retryBound": 3,
+        "route": "route_after_triage_check",
+        "stationContract": "triage-evaluation",
+        "stationContractVersion": "1.0"
+      },
+      "triage_gate": {
+        "allowedEffects": [],
+        "branches": {
+          "__end__": "__end__",
+          "triage_check": "triage_check"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "kind": "gate",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_triage_gate"
+      }
+    }
+  }
+}
