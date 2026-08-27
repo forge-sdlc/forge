@@ -153,3 +153,47 @@ def test_station_history_is_projected_without_complete_checkpoint_state() -> Non
 
     assert model.station_attempts[0].station_name == "task-routing"
     assert model.station_attempts[0].status == "succeeded"
+
+
+def test_timeline_combines_durable_decisions_transitions_stations_and_effects() -> None:
+    model = project_execution(
+        {
+            "ticket_key": "FORGE-1",
+            "current_node": "generate_prd",
+            "command_decisions": [
+                {
+                    "decision_id": "decision-1",
+                    "decided_at": (NOW - timedelta(minutes=3)).isoformat(),
+                    "status": "accepted",
+                    "reason": "eligible signal",
+                    "command_type": "start",
+                }
+            ],
+            "transition_history": [
+                {
+                    "transition_id": "transition-1",
+                    "source": "entry",
+                    "target": "generate_prd",
+                    "occurred_at": (NOW - timedelta(minutes=2)).isoformat(),
+                }
+            ],
+            "station_history": [
+                {
+                    "station_name": "prd-generation",
+                    "invocation_id": "station-1",
+                    "attempt": 1,
+                    "status": "succeeded",
+                    "completed_at": (NOW - timedelta(minutes=1)).isoformat(),
+                }
+            ],
+        },
+        effects=[_effect()],
+        now=NOW,
+    )
+
+    assert [entry.kind for entry in model.timeline] == [
+        "command_decision",
+        "transition",
+        "station_attempt",
+        "effect",
+    ]

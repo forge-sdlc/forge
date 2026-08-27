@@ -17,6 +17,7 @@ from forge.read_models.models import (
     NextTransitionView,
     ObservationView,
     StationAttemptView,
+    TimelineEntry,
     WaitingView,
 )
 from forge.workflow.declarative.manifest import ProcessChangeImpact, ProcessManifest
@@ -71,6 +72,7 @@ def project_execution(
                 (*migration.missing_resume_mappings, *migration.notes) if migration else ()
             ),
         ),
+        timeline=_timeline(checkpoint, effects),
     )
 
 
@@ -183,3 +185,73 @@ def _datetime(value: Any) -> datetime | None:
     if isinstance(value, str) and value:
         return datetime.fromisoformat(value)
     return None
+
+
+def _timeline(
+    checkpoint: Mapping[str, Any], effects: Sequence[EffectRecord]
+) -> tuple[TimelineEntry, ...]:
+    entries: list[TimelineEntry] = []
+    for item in checkpoint.get("command_decisions") or []:
+        entries.append(
+            TimelineEntry(
+                event_id=str(item.get("decision_id") or item.get("command_id") or "command"),
+                kind="command_decision",
+                occurred_at=_datetime(item.get("decided_at")),
+                status=item.get("status"),
+                summary=str(item.get("reason") or "Command evaluated"),
+                details={
+                    key: value
+                    for key, value in {
+                        "command_id": item.get("command_id"),
+                        "command_type": item.get("command_type"),
+                        "observation_id": item.get("observation_id"),
+                    }.items()
+                    if value is not None
+                },
+            )
+        )
+    for item in checkpoint.get("transition_history") or []:
+        entries.append(
+            TimelineEntry(
+                event_id=str(item.get("transition_id") or "transition"),
+                kind="transition",
+                occurred_at=_datetime(item.get("occurred_at")),
+                status="committed",
+                summary=f"{item.get('source', 'unknown')} → {item.get('target', 'unknown')}",
+                details={"source": str(item.get("source")), "target": str(item.get("target"))},
+            )
+        )
+    for item in checkpoint.get("station_history") or []:
+        entries.append(
+            TimelineEntry(
+                event_id=str(item.get("invocation_id") or "station"),
+                kind="station_attempt",
+                occurred_at=_datetime(item.get("completed_at")),
+                status=str(item.get("status") or "unknown"),
+                summary=f"Station {item.get('station_name', 'unknown')} attempt {item.get('attempt', 1)}",
+                details={"reason": str(item["reason"])} if item.get("reason") else {},
+            )
+        )
+    for record in effects:
+        entries.append(
+            TimelineEntry(
+                event_id=record.command.effect_id,
+                kind="effect",
+                occurred_at=record.updated_at,
+                status=record.status.value,
+                summary=f"{record.command.operation} on {record.command.target.external_id}",
+                details={
+                    "attempt": record.attempt,
+                    "idempotency_key": record.command.idempotency_key,
+                    "replay_count": record.replay_count,
+                },
+            )
+        )
+    entries.sort(
+        key=lambda entry: (
+            entry.occurred_at or datetime.min.replace(tzinfo=UTC),
+            entry.kind,
+            entry.event_id,
+        )
+    )
+    return tuple(entries)

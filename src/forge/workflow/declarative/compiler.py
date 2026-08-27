@@ -9,6 +9,7 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
+from forge.domain import stable_identity
 from forge.workflow.declarative.capabilities import (
     KNOWN_EFFECT_CAPABILITIES,
     effect_capability_scope,
@@ -336,10 +337,28 @@ class DeclarativeWorkflowCompiler:
                 (result.get("last_error"), result.get("is_paused"), result.get("is_blocked"))
             ):
                 result = {**result, "current_node": "complete", "is_paused": False}
+            target = str(result.get("current_node") or node_name)
+            occurred_at = str(result.get("updated_at") or state.get("updated_at") or "")
+            transition = {
+                "transition_id": stable_identity(
+                    "workflow-transition",
+                    {
+                        "run_id": state.get("thread_id") or state.get("ticket_key"),
+                        "count": transitions,
+                        "source": node_name,
+                        "target": target,
+                    },
+                ),
+                "source": node_name,
+                "target": target,
+                "occurred_at": occurred_at,
+            }
+            history = list(state.get("transition_history") or [])
             return {
                 **result,
                 "workflow_transition_count": transitions,
                 "workflow_node_attempts": attempts,
+                "transition_history": [*history, transition],
             }
 
         run.__name__ = f"declarative_{node_name}"

@@ -430,6 +430,10 @@ class Settings(BaseSettings):
         default=False,
         description="Disable /docs, /redoc, and /openapi.json endpoints",
     )
+    forge_operator_token: SecretStr = Field(
+        default=SecretStr(""),
+        description="Bearer token required by workflow execution/operator APIs",
+    )
 
     @property
     def skills_install_dir(self) -> Path:

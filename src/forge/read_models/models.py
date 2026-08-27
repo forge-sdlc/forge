@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
+from pydantic import Field
+
 from forge.domain import JsonValue, VersionedDomainModel
 
 
@@ -70,6 +72,21 @@ class MigrationView(VersionedDomainModel):
     incompatibilities: tuple[str, ...] = ()
 
 
+class TimelineEntry(VersionedDomainModel):
+    event_id: str
+    kind: str
+    occurred_at: datetime | None = None
+    status: str | None = None
+    summary: str
+    details: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class TimelinePage(VersionedDomainModel):
+    items: tuple[TimelineEntry, ...]
+    next_cursor: int | None = None
+    total: int = 0
+
+
 class ExecutionReadModel(VersionedDomainModel):
     run_id: str
     ticket_key: str
@@ -83,3 +100,4 @@ class ExecutionReadModel(VersionedDomainModel):
     station_attempts: tuple[StationAttemptView, ...] = ()
     effects: tuple[EffectView, ...] = ()
     migration: MigrationView = MigrationView()
+    timeline: tuple[TimelineEntry, ...] = ()
