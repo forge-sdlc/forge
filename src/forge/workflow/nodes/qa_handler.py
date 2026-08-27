@@ -4,9 +4,14 @@ import contextlib
 import logging
 from datetime import UTC, datetime
 
-from forge.integrations.agents import ForgeAgent
 from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+    run_agent_operation_station,
+)
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.source_control import get_adapter, identity_for
 
@@ -87,7 +92,6 @@ async def answer_question(state: WorkflowState) -> WorkflowState:
     logger.info(f"Answering question for {ticket_key}: {question[:100]}...")
 
     jira = JiraClient()
-    agent = ForgeAgent()
 
     try:
         # Determine artifact type from current node
@@ -107,22 +111,31 @@ async def answer_question(state: WorkflowState) -> WorkflowState:
                 logger.warning(f"Could not fetch issue for Q&A: {ex}")
 
         # Generate answer using agent
-        answer = await agent.answer_question(
-            question=question,
-            artifact_content=artifact_content,
-            context={
-                "ticket_key": ticket_key,
-                "ticket_type": state.get("ticket_type", ""),
-                "current_node": state.get("current_node", ""),
-                "event_type": state.get("event_type", ""),
-                "event_source": state.get("context", {}).get("source", ""),
-                "retry_count": state.get("retry_count", 0),
-                "artifact_type": artifact_type,
-                "generation_context": generation_context,
-                "summary": summary,
-                "description": description,
-            },
+        outcome = await run_agent_operation_station(
+            project_agent_operation(
+                state,
+                AgentOperationInput(
+                    operation=AgentOperation.ANSWER_QUESTION,
+                    question=question,
+                    artifact_content=artifact_content,
+                    context={
+                        "ticket_key": ticket_key,
+                        "ticket_type": state.get("ticket_type", ""),
+                        "current_node": state.get("current_node", ""),
+                        "event_type": state.get("event_type", ""),
+                        "event_source": state.get("context", {}).get("source", ""),
+                        "retry_count": state.get("retry_count", 0),
+                        "artifact_type": artifact_type,
+                        "generation_context": generation_context,
+                        "summary": summary,
+                        "description": description,
+                    },
+                ),
+                discriminator=f"answer:{artifact_type}",
+            )
         )
+        assert outcome.output is not None
+        answer = outcome.output.text
 
         # Post answer to the right channel
         formatted_answer = f"*Q: {question}*\n\n{answer}"
@@ -175,7 +188,6 @@ async def answer_question(state: WorkflowState) -> WorkflowState:
         )
     finally:
         await jira.close()
-        await agent.close()
 
 
 def _determine_artifact_type(current_node: str) -> str:

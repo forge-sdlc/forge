@@ -14,6 +14,10 @@ from typing import Any
 from forge.domain import DomainModel, StationOutcome, StationRequest
 from forge.effects import EffectService
 from forge.workflow.stations.approval import ApprovalInput, run_approval_station
+from forge.workflow.stations.agent_operation import (
+    AgentOperationInput,
+    run_agent_operation_station,
+)
 from forge.workflow.stations.artifact_generation import (
     ArtifactGenerationInput,
     run_artifact_generation_station,
@@ -68,6 +72,11 @@ def create_builtin_station_registry() -> StationRegistry:
     registry = StationRegistry()
     registry.register(
         StationDefinition("approval-policy", "1.0", ApprovalInput, run_approval_station)
+    )
+    registry.register(
+        StationDefinition(
+            "agent-operation", "1.0", AgentOperationInput, run_agent_operation_station
+        )
     )
     registry.register(
         StationDefinition(

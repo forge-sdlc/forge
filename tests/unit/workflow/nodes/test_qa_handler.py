@@ -156,7 +156,7 @@ class TestAnswerQuestion:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -190,7 +190,7 @@ class TestAnswerQuestion:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -226,7 +226,7 @@ class TestAnswerQuestion:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -273,7 +273,7 @@ class TestAnswerQuestion:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -308,7 +308,7 @@ class TestAnswerQuestion:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -360,7 +360,7 @@ class TestAnswerQuestion:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -396,7 +396,7 @@ class TestAnswerQuestion:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -426,7 +426,7 @@ class TestAnswerQuestion:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):
@@ -463,7 +463,7 @@ class TestAnswerQuestion:
 
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent),
             patch("forge.workflow.nodes.qa_handler.get_adapter", return_value=(repo_ref, adapter)),
         ):
             await answer_question(state)
@@ -503,7 +503,7 @@ class TestAnswerQuestion:
 
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent),
             patch("forge.workflow.nodes.qa_handler.get_adapter", return_value=(repo_ref, adapter)),
         ):
             await answer_question(state)
@@ -532,7 +532,7 @@ class TestAnswerQuestion:
 
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent),
         ):
             await answer_question(state)
 
@@ -644,7 +644,7 @@ class TestAnswerQuestionBugGates:
 
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent),
         ):
             result = await answer_question(state)
 
@@ -676,7 +676,7 @@ class TestAnswerQuestionBugGates:
 
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent),
         ):
             result = await answer_question(state)
 
@@ -700,7 +700,7 @@ class TestAnswerQuestionBugGates:
 
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent),
         ):
             result = await answer_question(state)
 
@@ -730,7 +730,7 @@ class TestAnswerQuestionBugGates:
 
         with (
             patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent),
         ):
             result = await answer_question(state)
 

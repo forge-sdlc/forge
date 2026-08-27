@@ -106,7 +106,7 @@ class TestGeneratePlan:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
@@ -140,7 +140,7 @@ class TestGeneratePlan:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
@@ -158,7 +158,7 @@ class TestGeneratePlan:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             await generate_plan(base_task_state)
 
@@ -175,7 +175,7 @@ class TestGeneratePlan:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
@@ -204,7 +204,7 @@ class TestRegeneratePlanFlow:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(state)
 
@@ -229,7 +229,7 @@ class TestRegeneratePlanFlow:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
@@ -252,7 +252,7 @@ class TestRegeneratePlanFlow:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 

@@ -285,7 +285,7 @@ class TestQaHandlerTraceContext:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.qa_handler.ForgeAgent",
+                "forge.workflow.stations.agent_operation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):

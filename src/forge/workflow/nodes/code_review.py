@@ -11,11 +11,16 @@ from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.sandbox.runner import ContainerResult
 from forge.workflow.effect_runtime import JiraClient
+from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+    run_agent_operation_station,
+)
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
 from forge.workspace.git_ops import GitOperations
@@ -149,29 +154,31 @@ async def sync_pr_description(
                 current_description=current_body,
                 commit_log=commit_log,
             )
-            agent = ForgeAgent(get_settings())
-            try:
-                updated_body = await agent.run_task(
-                    task="sync-pr-description",
-                    policy_key="sync_pr_description",
-                    prompt=prompt,
-                    context={"repo": current_repo, "pr_number": pr_number},
-                    trace_context={
-                        "ticket_key": state.get("ticket_key", ""),
-                        "ticket_type": state.get("ticket_type", ""),
-                        "current_node": state.get("current_node", ""),
-                        "ci_status": state.get("ci_status", ""),
-                        "event_type": state.get("event_type", ""),
-                        "event_source": state.get("context", {}).get("source", ""),
-                        "retry_count": state.get("retry_count", 0),
-                    },
-                    include_tools=False,
+            outcome = await run_agent_operation_station(
+                project_agent_operation(
+                    state,
+                    AgentOperationInput(
+                        operation=AgentOperation.RUN_TASK,
+                        task="sync-pr-description",
+                        policy_key="sync_pr_description",
+                        prompt=prompt,
+                        context={"repo": current_repo, "pr_number": pr_number},
+                        trace_context={
+                            "ticket_key": state.get("ticket_key", ""),
+                            "ticket_type": state.get("ticket_type", ""),
+                            "current_node": state.get("current_node", ""),
+                            "ci_status": state.get("ci_status", ""),
+                            "event_type": state.get("event_type", ""),
+                            "event_source": state.get("context", {}).get("source", ""),
+                            "retry_count": state.get("retry_count", 0),
+                        },
+                        include_tools=False,
+                    ),
+                    discriminator=f"sync-pr-description:{current_repo}:{pr_number}:{attempt}",
                 )
-            finally:
-                await agent.close()
-
-            if updated_body:
-                updated_body = agent._strip_preamble(updated_body)
+            )
+            assert outcome.output is not None
+            updated_body = outcome.output.text
             if updated_body and updated_body.strip() != current_body.strip():
                 await adapter.update_change_request(repo_ref, identity, body=updated_body)
                 ticket_key = state.get("ticket_key", "")

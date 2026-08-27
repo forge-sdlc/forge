@@ -228,7 +228,7 @@ class TestSyncPrDescription:
                 "forge.workflow.nodes.code_review.get_adapter", return_value=(_repo_ref(), adapter)
             ),
             patch("forge.workflow.nodes.code_review.JiraClient", return_value=jira),
-            patch("forge.workflow.nodes.code_review.ForgeAgent", return_value=agent_mock),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent_mock),
             patch("forge.workflow.nodes.code_review.load_prompt", return_value="prompt"),
         ):
             await sync_pr_description(
@@ -262,7 +262,7 @@ class TestSyncPrDescription:
                 "forge.workflow.nodes.code_review.get_adapter", return_value=(_repo_ref(), adapter)
             ),
             patch("forge.workflow.nodes.code_review.JiraClient", return_value=jira),
-            patch("forge.workflow.nodes.code_review.ForgeAgent", return_value=agent_mock),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent_mock),
             patch("forge.workflow.nodes.code_review.load_prompt", return_value="prompt"),
         ):
             await sync_pr_description(
@@ -288,7 +288,7 @@ class TestSyncPrDescription:
                 "forge.workflow.nodes.code_review.get_adapter", return_value=(_repo_ref(), adapter)
             ),
             patch("forge.workflow.nodes.code_review.JiraClient", return_value=jira),
-            patch("forge.workflow.nodes.code_review.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
         ):
             await sync_pr_description(
                 state,
@@ -332,7 +332,7 @@ class TestSyncPrDescription:
                 "forge.workflow.nodes.code_review.get_adapter", return_value=(_repo_ref(), adapter)
             ),
             patch("forge.workflow.nodes.code_review.JiraClient", return_value=jira),
-            patch("forge.workflow.nodes.code_review.ForgeAgent", return_value=agent_mock),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent_mock),
             patch("forge.workflow.nodes.code_review.load_prompt", return_value="prompt"),
         ):
             await sync_pr_description(
@@ -361,7 +361,7 @@ class TestSyncPrDescription:
                 "forge.workflow.nodes.code_review.get_adapter", return_value=(_repo_ref(), adapter)
             ),
             patch("forge.workflow.nodes.code_review.JiraClient", return_value=jira),
-            patch("forge.workflow.nodes.code_review.ForgeAgent", return_value=agent_mock),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent_mock),
             patch("forge.workflow.nodes.code_review.load_prompt", return_value="prompt"),
         ):
             await sync_pr_description(
