@@ -47,6 +47,26 @@ class ProcessManifest(DomainModel):
     transitions: tuple[ProcessTransition, ...]
 
 
+class ProcessChangeClassification(StrEnum):
+    """Compatibility class assigned to a process-definition revision change.
+
+    The names intentionally mirror the governance vocabulary.  In particular,
+    ``compatible`` does not mean that an active checkpoint may silently switch
+    topology: :func:`compare_process_definitions` still requires an explicit
+    mapping for changes that can affect a checkpoint.
+    """
+
+    PATCH = "patch"
+    COMPATIBLE = "compatible"
+    MIGRATABLE = "migratable"
+    BREAKING = "breaking"
+
+
+# A few callers use the shorter terminology from the governance document.
+ChangeClassification = ProcessChangeClassification
+ProcessCompatibilityClass = ProcessChangeClassification
+
+
 class ProcessChangeImpact(DomainModel):
     workflow_name: str
     from_revision: int
@@ -57,6 +77,27 @@ class ProcessChangeImpact(DomainModel):
     missing_resume_mappings: tuple[str, ...] = ()
     compatible_for_in_flight: bool
     notes: tuple[str, ...] = Field(default_factory=tuple)
+    classification: ProcessChangeClassification = ProcessChangeClassification.PATCH
+    # These fields make the impact report useful to release tooling without
+    # making consumers parse free-form notes.  Names are node names unless
+    # otherwise stated, and all values are stable and sorted.
+    changed_transitions: tuple[str, ...] = ()
+    routing_changes: tuple[str, ...] = ()
+    outcome_changes: tuple[str, ...] = ()
+    station_contract_changes: tuple[str, ...] = ()
+    effect_capability_changes: tuple[str, ...] = ()
+    policy_changes: tuple[str, ...] = ()
+    join_changes: tuple[str, ...] = ()
+    concurrency_changes: tuple[str, ...] = ()
+    retry_changes: tuple[str, ...] = ()
+    state_profile_changed: bool = False
+    entry_changed: bool = False
+    same_revision_mutation: bool = False
+
+    @property
+    def compatibility_class(self) -> ProcessChangeClassification:
+        """Alias used by governance/reporting clients."""
+        return self.classification
 
 
 class ProcessMigrationClassification(StrEnum):
@@ -195,8 +236,8 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
                 kind=kind,
                 station_contract=binding[0] if binding else None,
                 station_contract_version=binding[1] if binding else None,
-                required_policies=step.required_policies,
-                allowed_effects=step.allowed_effects,
+                required_policies=tuple(sorted(step.required_policies)),
+                allowed_effects=tuple(sorted(step.allowed_effects)),
                 join=step.join,
                 max_concurrency=step.max_concurrency,
                 retry_bound=step.retry_bound,
@@ -214,6 +255,10 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
                 ProcessTransition(source=name, target=target, outcome=outcome)
                 for outcome, target in step.branches.items()
             )
+    # Mappings are semantically unordered.  Keep inspection and rendering
+    # stable when equivalent definitions use a different source ordering.
+    nodes.sort(key=lambda node: node.name)
+    transitions.sort(key=lambda edge: (edge.source, edge.target, edge.outcome or ""))
     return ProcessManifest(
         workflow_name=definition.metadata.name,
         revision=definition.metadata.revision,
@@ -228,7 +273,7 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
 def render_mermaid(manifest: ProcessManifest) -> str:
     """Render a deterministic flowchart from the canonical manifest."""
     lines = ["flowchart TD", f"    __start__([start]) --> {manifest.entry}"]
-    for node in manifest.nodes:
+    for node in sorted(manifest.nodes, key=lambda item: item.name):
         if node.kind is ProcessNodeKind.GATE:
             lines.append(f'    {node.name}{{"{node.name}"}}')
         elif node.kind is ProcessNodeKind.STATION:
@@ -236,7 +281,10 @@ def render_mermaid(manifest: ProcessManifest) -> str:
         else:
             lines.append(f'    {node.name}["{node.name}"]')
     lines.append("    __end__([end])")
-    for transition in manifest.transitions:
+    for transition in sorted(
+        manifest.transitions,
+        key=lambda edge: (edge.source, edge.target, edge.outcome or ""),
+    ):
         label = f"|{transition.outcome}|" if transition.outcome else ""
         lines.append(f"    {transition.source} -->{label} {transition.target}")
     return "\n".join(lines)
@@ -250,26 +298,181 @@ def compare_process_definitions(
         raise ValueError("Cannot compare definitions with different workflow names")
     old = previous.spec.steps
     new = current.spec.steps
-    added = tuple(sorted(set(new) - set(old)))
-    removed = tuple(sorted(set(old) - set(new)))
-    changed = tuple(sorted(name for name in set(old) & set(new) if old[name] != new[name]))
+    old_names = set(old)
+    new_names = set(new)
+    added = tuple(sorted(new_names - old_names))
+    removed = tuple(sorted(old_names - new_names))
+
+    def step_signature(step: Any) -> tuple[Any, ...]:
+        """Executable step fields, normalizing fields whose order is irrelevant."""
+        return (
+            step.next,
+            step.route,
+            tuple(sorted(step.branches.items())),
+            step.dynamic_route,
+            tuple(sorted(step.dynamic_targets)),
+            step.kind,
+            step.station_contract,
+            step.station_contract_version,
+            tuple(sorted(step.required_policies)),
+            tuple(sorted(step.allowed_effects)),
+            step.join,
+            step.max_concurrency,
+            step.retry_bound,
+        )
+
+    common = old_names & new_names
+    changed = tuple(
+        sorted(name for name in common if step_signature(old[name]) != step_signature(new[name]))
+    )
+
+    def transitions(steps: Mapping[str, Any]) -> dict[str, frozenset[tuple[str, str, str | None]]]:
+        result: dict[str, frozenset[tuple[str, str, str | None]]] = {}
+        for name, step in steps.items():
+            if step.next:
+                edges = {(name, step.next, None)}
+            elif step.dynamic_route:
+                edges = {(name, target, "dynamic") for target in step.dynamic_targets}
+            else:
+                edges = {(name, target, outcome) for outcome, target in step.branches.items()}
+            result[name] = frozenset(edges)
+        return result
+
+    old_transitions = transitions(old)
+    new_transitions = transitions(new)
+    changed_transitions = tuple(
+        sorted(name for name in common if old_transitions[name] != new_transitions[name])
+    )
+    routing_changes: list[str] = []
+    outcome_changes: list[str] = []
+    for name in changed_transitions:
+        old_edges = old_transitions[name]
+        new_edges = new_transitions[name]
+        old_outcomes = {outcome for _source, _target, outcome in old_edges}
+        new_outcomes = {outcome for _source, _target, outcome in new_edges}
+        if old_outcomes != new_outcomes:
+            outcome_changes.append(name)
+        if old_edges != new_edges:
+            routing_changes.append(name)
+
+    station_contract_changes = tuple(
+        sorted(
+            name
+            for name in common
+            if (old[name].station_contract, old[name].station_contract_version)
+            != (new[name].station_contract, new[name].station_contract_version)
+        )
+    )
+    effect_capability_changes = tuple(
+        sorted(name for name in common if set(old[name].allowed_effects) != set(new[name].allowed_effects))
+    )
+    policy_changes = tuple(
+        sorted(name for name in common if set(old[name].required_policies) != set(new[name].required_policies))
+    )
+    if set(previous.spec.mandatory_policies) != set(current.spec.mandatory_policies):
+        policy_changes = tuple(sorted(set(policy_changes) | {"<workflow>"}))
+    if set(previous.spec.extension_points) != set(current.spec.extension_points):
+        policy_changes = tuple(sorted(set(policy_changes) | {"<extensions>"}))
+    join_changes = tuple(sorted(name for name in common if old[name].join != new[name].join))
+    concurrency_changes = tuple(
+        sorted(name for name in common if old[name].max_concurrency != new[name].max_concurrency)
+    )
+    retry_changes = tuple(
+        sorted(name for name in common if old[name].retry_bound != new[name].retry_bound)
+    )
+
     mappings = current.spec.resume.from_revisions.get(previous.metadata.revision, {})
     missing = tuple(sorted(name for name in removed if name not in mappings))
-    notes = []
-    if (
-        current.metadata.revision <= previous.metadata.revision
+    notes: list[str] = []
+    state_profile_changed = previous.spec.state != current.spec.state
+    entry_changed = current.spec.entry != previous.spec.entry
+    same_revision_mutation = (
+        current.metadata.revision == previous.metadata.revision
         and current.digest != previous.digest
-    ):
-        notes.append("changed content must increment metadata.revision")
-    if previous.spec.state != current.spec.state:
-        notes.append("state profile changes cannot migrate in-flight instances")
-    if current.spec.entry != previous.spec.entry:
-        notes.append("entry changed; this affects new instances only")
-    compatible = (
-        not missing
-        and previous.spec.state == current.spec.state
-        and not any("must increment" in note for note in notes)
     )
+    rollback = current.metadata.revision < previous.metadata.revision
+    if same_revision_mutation:
+        notes.append("changed content must increment metadata.revision")
+        notes.append("same revision has different content (immutable revision mutation)")
+    if rollback:
+        notes.append("target revision is older than the source revision")
+    if state_profile_changed:
+        notes.append("state profile changes cannot migrate in-flight instances")
+    if entry_changed:
+        notes.append("entry changed; this affects new instances only")
+    if added:
+        notes.append(f"added nodes: {', '.join(added)}")
+    if removed:
+        notes.append(f"removed nodes: {', '.join(removed)}")
+    if missing:
+        notes.append(f"missing resume mappings: {', '.join(missing)}")
+    if routing_changes:
+        notes.append(f"routing changed on: {', '.join(routing_changes)}")
+    if outcome_changes:
+        notes.append(f"outcomes changed on: {', '.join(outcome_changes)}")
+    if station_contract_changes:
+        notes.append(f"station contract/version changed on: {', '.join(station_contract_changes)}")
+    if effect_capability_changes:
+        notes.append(f"effect capabilities changed on: {', '.join(effect_capability_changes)}")
+    if policy_changes:
+        notes.append(f"policies changed on: {', '.join(policy_changes)}")
+    if join_changes:
+        notes.append(f"join semantics changed on: {', '.join(join_changes)}")
+    if concurrency_changes:
+        notes.append(f"concurrency changed on: {', '.join(concurrency_changes)}")
+    if retry_changes:
+        notes.append(f"retry policy changed on: {', '.join(retry_changes)}")
+
+    # Fail closed for anything which can alter the meaning of a checkpoint.
+    severe = (
+        same_revision_mutation
+        or rollback
+        or state_profile_changed
+        or bool(station_contract_changes)
+        or bool(effect_capability_changes)
+        or bool(policy_changes)
+        or bool(join_changes)
+        or bool(concurrency_changes)
+        or bool(retry_changes)
+    )
+    removed_mapped = bool(removed) and not missing
+    if severe or missing:
+        classification = ProcessChangeClassification.BREAKING
+    elif removed_mapped:
+        classification = ProcessChangeClassification.MIGRATABLE
+    elif routing_changes:
+        # Retained outcomes are safe for newly-created instances, but there is
+        # no implicit checkpoint conversion for already-running instances.
+        old_outcome_removed = any(
+            {outcome for _s, _t, outcome in old_transitions[name]}
+            - {outcome for _s, _t, outcome in new_transitions[name]}
+            for name in changed_transitions
+        )
+        only_additive_outcomes = all(
+            old_transitions[name] <= new_transitions[name] for name in changed_transitions
+        )
+        classification = (
+            ProcessChangeClassification.BREAKING
+            if old_outcome_removed
+            else ProcessChangeClassification.COMPATIBLE
+            if only_additive_outcomes
+            else ProcessChangeClassification.MIGRATABLE
+        )
+    elif added or entry_changed:
+        classification = ProcessChangeClassification.COMPATIBLE
+    else:
+        classification = ProcessChangeClassification.PATCH
+
+    compatible = classification in {
+        ProcessChangeClassification.PATCH,
+        ProcessChangeClassification.COMPATIBLE,
+    }
+    if removed_mapped and not severe and not routing_changes:
+        compatible = True
+    if routing_changes or station_contract_changes or effect_capability_changes:
+        compatible = False
+    if state_profile_changed or same_revision_mutation or rollback or missing:
+        compatible = False
     return ProcessChangeImpact(
         workflow_name=current.metadata.name,
         from_revision=previous.metadata.revision,
@@ -280,6 +483,19 @@ def compare_process_definitions(
         missing_resume_mappings=missing,
         compatible_for_in_flight=compatible,
         notes=tuple(notes),
+        classification=classification,
+        changed_transitions=changed_transitions,
+        routing_changes=tuple(sorted(routing_changes)),
+        outcome_changes=tuple(sorted(outcome_changes)),
+        station_contract_changes=station_contract_changes,
+        effect_capability_changes=effect_capability_changes,
+        policy_changes=policy_changes,
+        join_changes=join_changes,
+        concurrency_changes=concurrency_changes,
+        retry_changes=retry_changes,
+        state_profile_changed=state_profile_changed,
+        entry_changed=entry_changed,
+        same_revision_mutation=same_revision_mutation,
     )
 
 
