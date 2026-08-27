@@ -16,6 +16,12 @@ JIRA_DESCRIPTION_OPERATION = "jira.description.update"
 JIRA_CUSTOM_FIELD_OPERATION = "jira.custom_field.update"
 JIRA_ATTACHMENT_REPLACE_OPERATION = "jira.attachment.replace"
 JIRA_STRUCTURED_COMMENT_OPERATION = "jira.structured_comment.create"
+JIRA_TRANSITION_OPERATION = "jira.issue.transition"
+JIRA_LABELS_ADD_OPERATION = "jira.labels.add"
+JIRA_LABELS_REMOVE_OPERATION = "jira.labels.remove"
+JIRA_ARCHIVE_OPERATION = "jira.issue.archive"
+JIRA_PROJECT_PROPERTY_SET_OPERATION = "jira.project_property.set"
+JIRA_PROJECT_PROPERTY_DELETE_OPERATION = "jira.project_property.delete"
 
 
 class JiraCommentExecutor:
@@ -99,6 +105,35 @@ class JiraMutationExecutor:
                     provider_reference = str(created.id)
                 else:
                     provider_reference = str(existing.id)
+            elif self.operation == JIRA_TRANSITION_OPERATION:
+                transition = str(command.payload["transition"])
+                issue = await jira.get_issue(issue_key)
+                if issue.status.lower() != transition.lower():
+                    await jira.transition_issue(issue_key, transition)
+            elif self.operation == JIRA_LABELS_ADD_OPERATION:
+                requested = [str(label) for label in command.payload["labels"]]
+                current = set(await jira.get_labels(issue_key))
+                missing = [label for label in requested if label not in current]
+                if missing:
+                    await jira.add_labels(issue_key, missing)
+            elif self.operation == JIRA_LABELS_REMOVE_OPERATION:
+                requested = [str(label) for label in command.payload["labels"]]
+                current = set(await jira.get_labels(issue_key))
+                present = [label for label in requested if label in current]
+                if present:
+                    await jira.remove_labels(issue_key, present)
+            elif self.operation == JIRA_ARCHIVE_OPERATION:
+                await jira.archive_issue(
+                    issue_key, archive_subtasks=bool(command.payload.get("archive_subtasks", True))
+                )
+            elif self.operation == JIRA_PROJECT_PROPERTY_SET_OPERATION:
+                await jira.set_project_property(
+                    issue_key,
+                    str(command.payload["property_key"]),
+                    command.payload["value"],
+                )
+            elif self.operation == JIRA_PROJECT_PROPERTY_DELETE_OPERATION:
+                await jira.delete_project_property(issue_key, str(command.payload["property_key"]))
             else:  # pragma: no cover - registry construction prevents this
                 raise ValueError(f"Unsupported Jira effect operation: {self.operation}")
             return EffectResult(
@@ -120,5 +155,11 @@ def register_jira_executors(registry: EffectExecutorRegistry) -> None:
         JIRA_CUSTOM_FIELD_OPERATION,
         JIRA_ATTACHMENT_REPLACE_OPERATION,
         JIRA_STRUCTURED_COMMENT_OPERATION,
+        JIRA_TRANSITION_OPERATION,
+        JIRA_LABELS_ADD_OPERATION,
+        JIRA_LABELS_REMOVE_OPERATION,
+        JIRA_ARCHIVE_OPERATION,
+        JIRA_PROJECT_PROPERTY_SET_OPERATION,
+        JIRA_PROJECT_PROPERTY_DELETE_OPERATION,
     ):
         registry.register(JiraMutationExecutor(operation))

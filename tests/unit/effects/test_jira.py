@@ -10,6 +10,8 @@ from forge.effects.jira import (
     JIRA_CUSTOM_FIELD_OPERATION,
     JIRA_DESCRIPTION_OPERATION,
     JIRA_LABEL_OPERATION,
+    JIRA_LABELS_ADD_OPERATION,
+    JIRA_TRANSITION_OPERATION,
     JiraCommentExecutor,
     JiraMutationExecutor,
 )
@@ -122,3 +124,36 @@ async def test_retry_after_crash_finds_provider_marker_without_duplicate() -> No
 
     jira.add_comment.assert_not_awaited()
     assert result.provider_reference == "comment-1"
+
+
+@pytest.mark.asyncio
+async def test_transition_recovers_when_target_status_was_already_reached() -> None:
+    jira = MagicMock()
+    jira.get_issue = AsyncMock(return_value=SimpleNamespace(status="Closed"))
+    jira.transition_issue = AsyncMock()
+    jira.close = AsyncMock()
+    command = _command().model_copy(
+        update={"operation": JIRA_TRANSITION_OPERATION, "payload": {"transition": "Closed"}}
+    )
+
+    await JiraMutationExecutor(JIRA_TRANSITION_OPERATION, lambda: jira).execute(command)
+
+    jira.transition_issue.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_add_labels_only_writes_missing_values() -> None:
+    jira = MagicMock()
+    jira.get_labels = AsyncMock(return_value=["existing"])
+    jira.add_labels = AsyncMock()
+    jira.close = AsyncMock()
+    command = _command().model_copy(
+        update={
+            "operation": JIRA_LABELS_ADD_OPERATION,
+            "payload": {"labels": ["existing", "new"]},
+        }
+    )
+
+    await JiraMutationExecutor(JIRA_LABELS_ADD_OPERATION, lambda: jira).execute(command)
+
+    jira.add_labels.assert_awaited_once_with("FORGE-1", ["new"])
