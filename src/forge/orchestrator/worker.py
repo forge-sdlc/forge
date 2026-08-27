@@ -33,8 +33,13 @@ from forge.integrations.source_control.registry import get_registry
 from forge.models.events import EventSource
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.checkpointer import get_checkpointer, get_ticket_from_pr_index
+from forge.orchestrator.event_adapters import (
+    EventAdapterRegistry,
+    create_default_event_adapter_registry,
+)
+from forge.orchestrator.event_adapters.source_control import extract_change_request_url
 from forge.queue.consumer import QueueConsumer
-from forge.queue.models import QueueMessage, normalized_event_from_dict
+from forge.queue.models import QueueMessage
 from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
@@ -187,6 +192,7 @@ class OrchestratorWorker:
         self,
         consumer_name: str | None = None,
         router: WorkflowRouter | None = None,
+        event_adapters: EventAdapterRegistry | None = None,
     ) -> None:
         """Initialize the worker.
 
@@ -201,6 +207,7 @@ class OrchestratorWorker:
             terminal_failure_handler=self._handle_terminal_failure,
         )
         self.router = router or create_default_router()
+        self.event_adapters = event_adapters or create_default_event_adapter_registry()
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
         self._compiled_workflows: dict[str, Any] = {}  # Cache compiled workflows by name
@@ -220,7 +227,7 @@ class OrchestratorWorker:
         """
         if message.normalized_event is None:
             return None
-        return normalized_event_from_dict(message.normalized_event)
+        return self.event_adapters.adapt(message).normalized_event
 
     async def _get_forge_github_login(self, repo_ref: RepositoryRef) -> str:
         """Resolve and cache the authenticated Forge identity for this connection."""
@@ -270,7 +277,7 @@ class OrchestratorWorker:
         Args:
             message: The queue message to process.
         """
-        await self._process_workflow(message)
+        await self._handle_event(message)
 
     async def _handle_source_control_event(self, message: QueueMessage) -> None:
         """Handle a source-control webhook event.
@@ -278,7 +285,12 @@ class OrchestratorWorker:
         Args:
             message: The queue message to process.
         """
-        if not message.ticket_key:
+        await self._handle_event(message)
+
+    async def _handle_event(self, message: QueueMessage) -> None:
+        """Handle any registered ingress source through its adapter."""
+        adapted = self.event_adapters.adapt(message)
+        if adapted.requires_ticket_correlation:
             message = await self._resolve_ticket_from_pr_index(message)
             if not message.ticket_key:
                 logger.info(
@@ -300,32 +312,8 @@ class OrchestratorWorker:
         Returns:
             Message with ticket_key populated if found, otherwise unchanged.
         """
-        payload = message.payload
-        repo = payload.get("repository", {}).get("full_name", "")
-        api_url = payload.get("review", {}).get("pull_request_url", "")
-        suite_prs = (
-            payload.get("check_suite", {}).get("pull_requests")
-            or payload.get("check_run", {}).get("pull_requests")
-            or []
-        )
-        pr_number = (
-            payload.get("pull_request", {}).get("number")
-            or payload.get("issue", {}).get("number")
-            or (suite_prs[0].get("number") if suite_prs else None)
-        )
-
-        pr_url = (
-            payload.get("pull_request", {}).get("html_url")
-            or payload.get("review", {}).get("html_url")
-            or (f"https://github.com/{repo}/pull/{pr_number}" if repo and pr_number else None)
-            or (
-                api_url.replace("https://api.github.com/repos/", "https://github.com/").replace(
-                    "/pulls/", "/pull/"
-                )
-                if api_url
-                else None
-            )
-        )
+        adapted = self.event_adapters.adapt(message)
+        pr_url = adapted.change_request_url or extract_change_request_url(message.payload)
 
         logger.debug(f"PR URL extracted for {message.event_id}: {pr_url!r}")
 
@@ -2264,27 +2252,9 @@ class OrchestratorWorker:
         Returns:
             TicketType enum value.
         """
-        if message.source == EventSource.JIRA:
-            issue_data = message.payload.get("issue", {})
-            fields = issue_data.get("fields", {})
-            issue_type = fields.get("issuetype", {})
-            ticket_type_str = issue_type.get("name", "Unknown")
-
-            # Child ticket events are re-routed to the parent Feature by the Jira
-            # webhook handler. The payload still carries the child's issue type,
-            # so fall through to UNKNOWN only when this message is from a child.
-            child_types = {"Epic", "Task", "Sub-task"}
-            if ticket_type_str in child_types and message.payload.get("source_ticket_key"):
-                return TicketType.UNKNOWN
-
-            # Map string to TicketType enum
-            try:
-                return TicketType(ticket_type_str)
-            except ValueError:
-                logger.warning(f"Unknown ticket type '{ticket_type_str}' for {message.ticket_key}")
-                return TicketType.UNKNOWN
-
-        return TicketType.UNKNOWN
+        if message.source != EventSource.JIRA:
+            return TicketType.UNKNOWN
+        return self.event_adapters.adapt(message).ticket_type
 
     def _get_compiled_workflow(self, workflow_instance: Any) -> Any:
         """Get or compile a workflow graph.
@@ -2384,11 +2354,10 @@ class OrchestratorWorker:
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, self._handle_shutdown)
 
-        # Register handlers
-        self.consumer.register_handler(EventSource.JIRA, self._handle_jira_event)
-        self.consumer.register_handler(
-            EventSource.SOURCE_CONTROL, self._handle_source_control_event
-        )
+        # Every registered source follows the same transport path. Adding an
+        # adapter does not require another worker branch.
+        for source in self.event_adapters.sources:
+            self.consumer.register_handler(source, self._handle_event)
 
         try:
             await self.consumer.start()
