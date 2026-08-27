@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from forge.domain import DomainModel, StationOutcome, StationRequest
-from forge.effects import EffectService
+from forge.effects import EffectRecord, EffectService
 from forge.workflow.stations.agent_operation import (
     AgentOperationInput,
     run_agent_operation_station,
@@ -123,21 +123,18 @@ def create_builtin_station_registry() -> StationRegistry:
     return registry
 
 
-async def invoke_station(
-    definition: StationDefinition,
-    request: StationRequest[Any],
-    *,
-    effect_service: EffectService | None = None,
-) -> StationOutcome[Any]:
-    """Validate, invoke, and durably complete required effects before returning."""
+def _validate_request(definition: StationDefinition, request: StationRequest[Any]) -> None:
     if request.contract_name != definition.name:
         raise ValueError("Station request contract name does not match registration")
     if request.contract_version != definition.contract_version:
         raise ValueError("Station request contract version is not supported")
     if not isinstance(request.input, definition.input_type):
         raise ValueError("Station request input does not match its registered contract")
-    candidate = definition.handler(request)
-    outcome = await candidate if inspect.isawaitable(candidate) else candidate
+
+
+def _validate_outcome(
+    request: StationRequest[Any], outcome: StationOutcome[Any]
+) -> None:
     if outcome.workflow != request.workflow or outcome.invocation != request.invocation:
         raise ValueError("Station outcome does not belong to its request")
     if (outcome.contract_name, outcome.contract_version) != (
@@ -145,14 +142,59 @@ async def invoke_station(
         request.contract_version,
     ):
         raise ValueError("Station outcome contract does not match its request")
+
+
+async def invoke_station(
+    definition: StationDefinition,
+    request: StationRequest[Any],
+    *,
+    effect_service: EffectService | None = None,
+    effect_records: list[EffectRecord] | None = None,
+) -> StationOutcome[Any]:
+    """Validate, invoke, and durably complete required effects before returning."""
+    _validate_request(definition, request)
+    candidate = definition.handler(request)
+    outcome = await candidate if inspect.isawaitable(candidate) else candidate
+    _validate_outcome(request, outcome)
     if outcome.requested_effects and effect_service is None:
         raise ValueError("Station requested effects but no durable effect service was supplied")
     for effect in outcome.requested_effects:
         if effect.workflow != request.workflow:
             raise ValueError("Station effect does not belong to its workflow")
         assert effect_service is not None
-        await effect_service.execute_required(effect)
+        record = await effect_service.execute_required(effect)
+        if effect_records is not None:
+            effect_records.append(record)
     return outcome
+
+
+def invoke_builtin_station_sync(request: StationRequest[Any]) -> StationOutcome[Any]:
+    """Run a synchronous built-in through the same contract validations."""
+    definition = create_builtin_station_registry().resolve(request.contract_name)
+    _validate_request(definition, request)
+    outcome = definition.handler(request)
+    if inspect.isawaitable(outcome):
+        raise ValueError("Asynchronous station requires invoke_builtin_station")
+    _validate_outcome(request, outcome)
+    if outcome.requested_effects:
+        raise ValueError("Effect-emitting station requires invoke_builtin_station")
+    return outcome
+
+
+async def invoke_builtin_station(
+    request: StationRequest[Any],
+    *,
+    effect_service: EffectService | None = None,
+    effect_records: list[EffectRecord] | None = None,
+) -> StationOutcome[Any]:
+    """Invoke a built-in station through the shared validated boundary."""
+    definition = create_builtin_station_registry().resolve(request.contract_name)
+    return await invoke_station(
+        definition,
+        request,
+        effect_service=effect_service,
+        effect_records=effect_records,
+    )
 
 
 async def run_serialized_async(

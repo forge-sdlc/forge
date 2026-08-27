@@ -10,8 +10,8 @@ from forge.workflow.projections.agent_operation import project_agent_operation
 from forge.workflow.stations.agent_operation import (
     AgentOperation,
     AgentOperationInput,
-    run_agent_operation_station,
 )
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.source_control import get_adapter, identity_for
 
@@ -111,7 +111,7 @@ async def answer_question(state: WorkflowState) -> WorkflowState:
                 logger.warning(f"Could not fetch issue for Q&A: {ex}")
 
         # Generate answer using agent
-        outcome = await run_agent_operation_station(
+        outcome = await invoke_builtin_station(
             project_agent_operation(
                 state,
                 AgentOperationInput(

@@ -15,6 +15,16 @@ from forge.workflow.task_takeover.graph import build_task_takeover_graph
 from tests.fixtures.workflow_states import make_workflow_state
 
 
+@pytest.fixture(autouse=True)
+def _stub_required_persistence():
+    """Keep node tests focused on routing instead of provider effect delivery."""
+    with patch(
+        "forge.workflow.nodes.human_review.execute_persistence_actions",
+        new_callable=AsyncMock,
+    ):
+        yield
+
+
 def _repo_ref(repo: str = "org/repo") -> RepositoryRef:
     return RepositoryRef(
         id=repo,

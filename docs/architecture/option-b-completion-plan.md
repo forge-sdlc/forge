@@ -89,7 +89,7 @@ Exit gate: replay after any crash cannot duplicate a logical external mutation, 
 
 ## Phase 4 — Station boundaries and graph reduction
 
-PR: #327. Status: partial.
+PR: #327. Status: complete.
 
 Purpose: isolate domain work in independently runnable stations while leaving coordination to the workflow layer.
 

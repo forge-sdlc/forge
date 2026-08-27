@@ -11,7 +11,8 @@ from forge.config import get_settings
 from forge.models.workflow import ForgeLabel
 from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.projections.triage import project_triage
-from forge.workflow.stations.triage import TriageKind, run_triage_station
+from forge.workflow.stations.runner import invoke_builtin_station
+from forge.workflow.stations.triage import TriageKind
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
@@ -84,7 +85,7 @@ async def triage_task(state: TaskTakeoverState) -> TaskTakeoverState:
         )
 
         # Step 3: Invoke task takeover triage prompt
-        outcome = await run_triage_station(
+        outcome = await invoke_builtin_station(
             project_triage(
                 state,
                 kind=TriageKind.TASK_TAKEOVER,

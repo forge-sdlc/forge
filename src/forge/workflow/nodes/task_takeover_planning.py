@@ -13,8 +13,8 @@ from forge.workflow.projections.agent_operation import project_agent_operation
 from forge.workflow.stations.agent_operation import (
     AgentOperation,
     AgentOperationInput,
-    run_agent_operation_station,
 )
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import set_paused, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
@@ -134,7 +134,7 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         # 3. Generate the plan directly with the planning agent. This mirrors
         # feature workflow planning and lets the agent use read-only repository
         # tools instead of requiring a cloned container workspace.
-        outcome = await run_agent_operation_station(
+        outcome = await invoke_builtin_station(
             project_agent_operation(
                 state,
                 AgentOperationInput(

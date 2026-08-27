@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from enum import StrEnum
 
 from pydantic import Field
@@ -68,7 +69,9 @@ async def run_agent_operation_station(
                 context=dict(value.context),
             )
     finally:
-        await agent.close()
+        close_result = agent.close()
+        if inspect.isawaitable(close_result):
+            await close_result
     if not text.strip():
         raise ValueError("Agent operation returned empty output")
     return StationOutcome[AgentOperationOutput](

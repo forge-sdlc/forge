@@ -24,8 +24,8 @@ from forge.workflow.projections.agent_operation import project_agent_operation
 from forge.workflow.stations.agent_operation import (
     AgentOperation,
     AgentOperationInput,
-    run_agent_operation_station,
 )
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
@@ -583,7 +583,7 @@ async def _generate_pr_body_with_agent(
         )
 
         # Run agent to generate PR body
-        outcome = await run_agent_operation_station(
+        outcome = await invoke_builtin_station(
             project_agent_operation(
                 state,
                 AgentOperationInput(

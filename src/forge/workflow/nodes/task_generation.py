@@ -15,12 +15,11 @@ from forge.workflow.projections.artifact_generation import project_artifact_gene
 from forge.workflow.stations.agent_operation import (
     AgentOperation,
     AgentOperationInput,
-    run_agent_operation_station,
 )
 from forge.workflow.stations.artifact_generation import (
     ArtifactKind,
-    run_artifact_generation_station,
 )
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.references import fetch_and_inject_references
@@ -317,7 +316,7 @@ async def _generate_tasks_for_epic(
             f"Please incorporate this feedback when creating the tasks."
         )
 
-    outcome = await run_agent_operation_station(
+    outcome = await invoke_builtin_station(
         project_agent_operation(
             state,
             AgentOperationInput(
@@ -829,7 +828,7 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         )
 
         # Regenerate description with feedback
-        outcome = await run_artifact_generation_station(
+        outcome = await invoke_builtin_station(
             project_artifact_generation(
                 state,
                 kind=ArtifactKind.TASK,

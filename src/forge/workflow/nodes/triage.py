@@ -13,7 +13,8 @@ from forge.models.workflow import ForgeLabel
 from forge.workflow.bug.state import BugState
 from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.projections.triage import project_triage
-from forge.workflow.stations.triage import TriageKind, run_triage_station
+from forge.workflow.stations.runner import invoke_builtin_station
+from forge.workflow.stations.triage import TriageKind
 from forge.workflow.utils import set_paused, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 
@@ -67,7 +68,7 @@ async def triage_check(state: BugState) -> BugState:
         comment_text = "\n\n".join(c.body for c in comments if c.body)
 
         # Step 3: Invoke triage prompt
-        outcome = await run_triage_station(
+        outcome = await invoke_builtin_station(
             project_triage(
                 state,
                 kind=TriageKind.BUG,

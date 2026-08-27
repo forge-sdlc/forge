@@ -1,6 +1,6 @@
 # Phase 4 implementation plan: contract-backed stations
 
-**Status:** In progress
+**Status:** Complete
 
 **Depends on:** Phase 1 station contracts, Phase 2 commands, and Phase 3 durable effects
 
@@ -25,13 +25,25 @@ checkpoint store, queue, or provider client.
    project/invoke/reduce code, run every station through the local runner, and enforce
    dependency rules preventing station imports of LangGraph, checkpoints and providers.
 
-## Current slice
+## Delivered boundary
 
-This PR starts slices 1–2 with repository task routing. Its station consumes only the
-ticket identity and repository-to-task mapping; its output contains no graph node name.
-The reducer alone maps that outcome into legacy checkpoint fields and topology, keeping
-existing checkpoints and graphs compatible while proving the intended boundary.
+PR #327 now routes the supported operation families through one registered, validated
+station runner: routing and aggregation, approvals, triage, artifact generation, agent
+operations, implementation input, sandbox execution, and persistence effects. The
+workflow layer projects typed requests and reduces typed outcomes; station handlers do
+not import LangGraph, queues, checkpoints, Jira, or source-control providers.
 
-The remaining node families are intentionally migrated in reviewable slices: moving
-every node at once would combine contract design, provider-effect migration, prompt
-behavior and checkpoint compatibility into one unsafe change.
+Human-review and post-merge persistence use required durable effects, so checkpoint
+progress fails closed when publication fails. Agent and sandbox execution no longer
+occur directly in graph nodes. Both synchronous pure stations and asynchronous stations
+receive the same request, outcome-ownership, contract-version, and effect validation.
+
+## Exit evidence
+
+- Every built-in station is registered in the standalone runner and accepts serialized
+  `StationRequest` fixtures without a graph or control plane.
+- Architecture tests reject provider/control-plane imports in stations, direct agent or
+  sandbox execution in graph nodes, and workflow calls that bypass the registered
+  station runner.
+- Feature, bug, task-takeover, multi-repository, review, gate, and status-transition
+  suites exercise the compatibility reducers and graph paths.

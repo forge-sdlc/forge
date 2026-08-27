@@ -18,10 +18,7 @@ from forge.workflow.reducers.task_routing import (
     reduce_repository_aggregation,
     reduce_task_routing,
 )
-from forge.workflow.stations.task_routing import (
-    run_repository_aggregation_station,
-    run_task_routing_station,
-)
+from forge.workflow.stations.runner import invoke_builtin_station_sync
 from forge.workflow.utils import update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -44,7 +41,7 @@ async def route_tasks_by_repo(state: WorkflowState) -> WorkflowState:
         Updated state ready for workspace setup.
     """
     request = project_task_routing(state)
-    outcome = run_task_routing_station(request)
+    outcome = invoke_builtin_station_sync(request)
     update = reduce_task_routing(state, request, outcome)
     if outcome.output is not None:
         logger.info(
@@ -180,7 +177,7 @@ def aggregate_parallel_results(states: list[WorkflowState]) -> WorkflowState:
 
     base_state = states[0]
     request = project_repository_aggregation(states)
-    outcome = run_repository_aggregation_station(request)
+    outcome = invoke_builtin_station_sync(request)
     update = reduce_repository_aggregation(base_state, request, outcome)
 
     logger.info(

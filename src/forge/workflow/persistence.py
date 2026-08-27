@@ -16,6 +16,7 @@ from forge.workflow.stations.persistence import (
     PersistenceAction,
     PersistenceInput,
 )
+from forge.workflow.stations.runner import invoke_builtin_station
 
 
 async def execute_persistence_actions(
@@ -34,8 +35,7 @@ async def execute_persistence_actions(
         requested_at=project_requested_at(state),
         input=PersistenceInput(actions=tuple(actions)),
     )
-    from forge.workflow.stations.persistence import run_persistence_station
-
-    outcome = run_persistence_station(request)
     service = effect_service or create_default_effect_service()
-    return tuple([await service.execute_required(effect) for effect in outcome.requested_effects])
+    records: list[EffectRecord] = []
+    await invoke_builtin_station(request, effect_service=service, effect_records=records)
+    return tuple(records)

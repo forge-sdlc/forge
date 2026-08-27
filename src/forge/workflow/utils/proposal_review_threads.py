@@ -11,8 +11,8 @@ from forge.workflow.projections.agent_operation import project_agent_operation
 from forge.workflow.stations.agent_operation import (
     AgentOperation,
     AgentOperationInput,
-    run_agent_operation_station,
 )
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.utils.review_decisions import reply_to_review_decisions
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ async def triage_proposal_review_threads(
         review_threads=rendered_threads,
     )
     try:
-        outcome = await run_agent_operation_station(
+        outcome = await invoke_builtin_station(
             project_agent_operation(
                 {"ticket_key": ticket_key},
                 AgentOperationInput(

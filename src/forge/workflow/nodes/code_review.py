@@ -20,8 +20,8 @@ from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.stations.agent_operation import (
     AgentOperation,
     AgentOperationInput,
-    run_agent_operation_station,
 )
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
 from forge.workspace.git_ops import GitOperations
@@ -158,7 +158,7 @@ async def sync_pr_description(
                 current_description=current_body,
                 commit_log=commit_log,
             )
-            outcome = await run_agent_operation_station(
+            outcome = await invoke_builtin_station(
                 project_agent_operation(
                     state,
                     AgentOperationInput(

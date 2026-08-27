@@ -25,8 +25,8 @@ from forge.workflow.nodes.proposal_pr import (
 from forge.workflow.projections.artifact_generation import project_artifact_generation
 from forge.workflow.stations.artifact_generation import (
     ArtifactKind,
-    run_artifact_generation_station,
 )
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.proposal_review_threads import reply_to_proposal_decisions
@@ -137,7 +137,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         prd_content = await fetch_and_inject_references(state, jira, prd_content)
 
         # Generate specification using the configured LLM backend - primary operation
-        outcome = await run_artifact_generation_station(
+        outcome = await invoke_builtin_station(
             project_artifact_generation(
                 state,
                 kind=ArtifactKind.SPEC,
@@ -252,7 +252,7 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         original_spec_with_refs = await fetch_and_inject_references(state, jira, original_spec)
 
         # Regenerate spec with feedback
-        outcome = await run_artifact_generation_station(
+        outcome = await invoke_builtin_station(
             project_artifact_generation(
                 state,
                 kind=ArtifactKind.SPEC,

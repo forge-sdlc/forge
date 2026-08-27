@@ -10,6 +10,7 @@ from forge.workflow.projections.common import (
     project_requested_at,
     project_workflow_identity,
 )
+from forge.workflow.stations.runner import StationDefinition, invoke_station
 from forge.workflow.stations.sandbox_execution import (
     CONTRACT_NAME,
     CONTRACT_VERSION,
@@ -35,7 +36,18 @@ async def execute_sandbox_station(
         requested_at=project_requested_at(state),
         input=value,
     )
-    outcome = await run_sandbox_execution_station(request, runner=runner)
+    async def handler(candidate: StationRequest[Any]):
+        return await run_sandbox_execution_station(candidate, runner=runner)
+
+    outcome = await invoke_station(
+        StationDefinition(
+            CONTRACT_NAME,
+            CONTRACT_VERSION,
+            SandboxExecutionInput,
+            handler,
+        ),
+        request,
+    )
     assert outcome.output is not None
     return as_container_result(outcome.output)
 

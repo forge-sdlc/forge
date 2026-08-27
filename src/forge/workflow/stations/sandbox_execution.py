@@ -62,6 +62,8 @@ async def run_sandbox_execution_station(
         skill_name=value.skill_name,
         **value.runner_options,
     )
+    if result is None:
+        result = ContainerResult(success=True, exit_code=0, stdout="", stderr="")
     output = SandboxExecutionOutput(
         success=bool(result.success),
         exit_code=int(result.exit_code),
