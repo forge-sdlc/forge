@@ -4,34 +4,13 @@ This module builds the LangGraph StateGraph for the Task Takeover workflow.
 """
 
 import logging
-from typing import Any
 
 from langgraph.graph import END, StateGraph
 
 from forge.models.workflow import ForgeLabel, JiraStatus
 from forge.workflow.effect_runtime import JiraClient
-from forge.workflow.gates.task_plan_approval import (
-    route_task_plan_approval,
-    task_plan_approval_gate,
-)
-from forge.workflow.node_contracts import contracted_node
 from forge.workflow.nodes import (
-    answer_question,
-    create_pull_request,
-    execute_task_changes,
-    generate_plan,
     route_human_review,
-    route_triage_gate,
-    run_qualitative_review,
-    setup_workspace,
-    teardown_and_route,
-    triage_gate,
-    triage_task,
-)
-from forge.workflow.post_pr import (
-    add_post_pr_edges,
-    add_post_pr_nodes,
-    route_after_pr_creation,
 )
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import resolve_shared_resume_node, update_state_timestamp
@@ -244,181 +223,9 @@ async def complete_task_takeover(state: TaskTakeoverState) -> TaskTakeoverState:
     )
 
 
-def build_task_takeover_graph() -> StateGraph[TaskTakeoverState, Any, Any]:
-    """Create the Task Takeover workflow graph.
+def build_task_takeover_graph() -> StateGraph:
+    """Build the governed graph from its versioned process definition."""
+    from forge.workflow.declarative.builtins import builtin_task_takeover_definition
+    from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler
 
-    Returns:
-        Configured StateGraph ready for compilation.
-    """
-    graph = StateGraph(TaskTakeoverState)
-
-    # Entry routing
-    graph.add_node("route_entry", lambda state: state)
-
-    # Nodes
-    graph.add_node("triage_check", triage_task)
-    graph.add_node("triage_gate", triage_gate)
-    graph.add_node("generate_plan", generate_plan)
-    graph.add_node("task_plan_approval_gate", task_plan_approval_gate)
-    graph.add_node("answer_question", answer_question)
-    graph.add_node("setup_workspace", contracted_node("setup_workspace", setup_workspace))
-    graph.add_node("execute_task_changes", execute_task_changes)
-    graph.add_node("run_qualitative_review", run_qualitative_review)
-    graph.add_node("create_pr", contracted_node("create_pr", create_pull_request))
-    graph.add_node("teardown_workspace", teardown_and_route)
-    graph.add_node("complete_task_takeover", complete_task_takeover)
-
-    # Post-PR nodes (CI/review) - shared across all workflows
-    add_post_pr_nodes(graph)
-
-    # Set entry point
-    graph.set_entry_point("route_entry")
-
-    # Entry routing edges
-    graph.add_conditional_edges(
-        "route_entry",
-        route_entry,
-        {
-            "triage_check": "triage_check",
-            "triage_gate": "triage_gate",
-            "generate_plan": "generate_plan",
-            "task_plan_approval_gate": "task_plan_approval_gate",
-            "setup_workspace": "setup_workspace",
-            "execute_task_changes": "execute_task_changes",
-            "run_qualitative_review": "run_qualitative_review",
-            "create_pr": "create_pr",
-            "teardown_workspace": "teardown_workspace",
-            "ci_evaluator": "ci_evaluator",
-            "attempt_ci_fix": "ci_evaluator",
-            "human_review_gate": "human_review_gate",
-            "implement_review": "implement_review",
-            "review_response_gate": "review_response_gate",
-            "rebase_pr": "rebase_pr",
-            "escalate_blocked": "escalate_blocked",
-            END: END,
-        },
-    )
-
-    # Triage flow
-    graph.add_conditional_edges(
-        "triage_check",
-        _route_after_triage_check,
-        {
-            "triage_check": "triage_check",
-            "triage_gate": "triage_gate",
-            "generate_plan": "generate_plan",
-            "escalate_blocked": "escalate_blocked",
-        },
-    )
-    graph.add_conditional_edges(
-        "triage_gate",
-        route_triage_gate,
-        {
-            END: END,
-            "triage_check": "triage_check",
-        },
-    )
-
-    # Planning flow
-    graph.add_conditional_edges(
-        "generate_plan",
-        _route_after_generate_plan,
-        {
-            "generate_plan": "generate_plan",
-            "task_plan_approval_gate": "task_plan_approval_gate",
-            "escalate_blocked": "escalate_blocked",
-        },
-    )
-    graph.add_conditional_edges(
-        "task_plan_approval_gate",
-        route_task_plan_approval,
-        {
-            "regenerate_plan": "generate_plan",
-            "answer_question": "answer_question",
-            "setup_workspace": "setup_workspace",
-            END: END,
-        },
-    )
-
-    # Execution flow
-    graph.add_conditional_edges(
-        "setup_workspace",
-        _route_after_workspace_setup,
-        {
-            "execute_task_changes": "execute_task_changes",
-            "escalate_blocked": "escalate_blocked",
-        },
-    )
-    graph.add_conditional_edges(
-        "execute_task_changes",
-        _route_after_execution,
-        {
-            "execute_task_changes": "execute_task_changes",
-            "run_qualitative_review": "run_qualitative_review",
-            "escalate_blocked": "escalate_blocked",
-        },
-    )
-    graph.add_conditional_edges(
-        "run_qualitative_review",
-        _route_after_qualitative_review,
-        {
-            "run_qualitative_review": "run_qualitative_review",
-            "execute_task_changes": "execute_task_changes",
-            "create_pr": "create_pr",
-            "escalate_blocked": "escalate_blocked",
-        },
-    )
-    graph.add_conditional_edges(
-        "create_pr",
-        route_after_pr_creation,
-        {
-            "teardown_workspace": "teardown_workspace",
-            "escalate_blocked": "escalate_blocked",
-        },
-    )
-    # Post-PR edges (CI/review) - shared across all workflows
-    add_post_pr_edges(
-        graph,
-        on_complete_node="complete_task_takeover",
-        human_review_routing_fn=_route_human_review_task_takeover,
-    )
-
-    graph.add_edge("complete_task_takeover", END)
-
-    # ── Rebase (merge conflict resolution, triggered by /forge rebase) ──
-    # Note: rebase_pr node is added by add_post_pr_nodes
-    graph.add_conditional_edges(
-        "rebase_pr",
-        lambda s: s.get("current_node", END),
-        {
-            "triage_gate": "triage_gate",
-            "generate_plan": "generate_plan",
-            "task_plan_approval_gate": "task_plan_approval_gate",
-            "setup_workspace": "setup_workspace",
-            "execute_task_changes": "execute_task_changes",
-            "run_qualitative_review": "run_qualitative_review",
-            "create_pr": "create_pr",
-            "teardown_workspace": "teardown_workspace",
-            "ci_evaluator": "ci_evaluator",
-            "attempt_ci_fix": "ci_evaluator",
-            "human_review_gate": "human_review_gate",
-            "implement_review": "implement_review",
-            "review_response_gate": "review_response_gate",
-            "complete_task_takeover": "complete_task_takeover",
-            "escalate_blocked": "escalate_blocked",
-            END: END,
-        },
-    )
-
-    # Q&A routing
-    graph.add_conditional_edges(
-        "answer_question",
-        _route_after_answer,
-        {
-            "task_plan_approval_gate": "task_plan_approval_gate",
-        },
-    )
-
-    graph.add_edge("escalate_blocked", END)
-
-    return graph
+    return DeclarativeWorkflowCompiler(builtin_task_takeover_definition()).build_graph()

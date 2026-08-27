@@ -26,7 +26,7 @@ class TaskTakeoverWorkflow(BaseWorkflow):
         return ticket_type in (TicketType.TASK, TicketType.EPIC) and "forge:managed" in labels
 
     def build_graph(self) -> StateGraph[Any]:
-        from forge.workflow.task_takeover.graph import build_task_takeover_graph
+        from forge.workflow.task_takeover.routing import build_task_takeover_graph
 
         return build_task_takeover_graph()
 

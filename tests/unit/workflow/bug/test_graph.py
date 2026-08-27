@@ -6,7 +6,7 @@ import pytest
 from langgraph.graph import END, START, StateGraph
 
 from forge.models.workflow import TicketType
-from forge.workflow.bug.graph import (
+from forge.workflow.bug.routing import (
     _answer_question_bug,
     _route_after_answer_bug,
     _route_after_decompose_plan,
@@ -44,7 +44,7 @@ async def test_answer_question_node_receives_bug_rca_artifact_fields():
     }
 
     with patch(
-        "forge.workflow.bug.graph.answer_question", new_callable=AsyncMock
+        "forge.workflow.bug.routing.answer_question", new_callable=AsyncMock
     ) as mock_answer:
         mock_answer.side_effect = lambda received: received
         await graph.compile().ainvoke(state)

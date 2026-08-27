@@ -89,7 +89,7 @@ class TestRoutingFunctions:
 class TestGraphCompilation:
     def test_feature_graph_compiles(self):
         """Feature graph builds without error after DRY refactor."""
-        from forge.workflow.feature.graph import build_feature_graph
+        from forge.workflow.feature.routing import build_feature_graph
 
         graph = build_feature_graph()
         compiled = graph.compile()
@@ -97,7 +97,7 @@ class TestGraphCompilation:
 
     def test_bug_graph_compiles(self):
         """Bug graph builds without error after DRY refactor."""
-        from forge.workflow.bug.graph import build_bug_graph
+        from forge.workflow.bug.routing import build_bug_graph
 
         graph = build_bug_graph()
         compiled = graph.compile()
@@ -105,7 +105,7 @@ class TestGraphCompilation:
 
     def test_task_takeover_graph_compiles(self):
         """Task takeover graph builds without error after DRY refactor."""
-        from forge.workflow.task_takeover.graph import build_task_takeover_graph
+        from forge.workflow.task_takeover.routing import build_task_takeover_graph
 
         graph = build_task_takeover_graph()
         compiled = graph.compile()

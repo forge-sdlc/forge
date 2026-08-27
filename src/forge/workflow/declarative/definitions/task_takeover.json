@@ -243,6 +243,39 @@
         "stationContract": "sandbox-execution",
         "stationContractVersion": "1.0"
       },
+      "rebase_pr": {
+        "allowedEffects": [
+          "jira.comment",
+          "source_control.commit",
+          "source_control.review"
+        ],
+        "branches": {
+          "__end__": "__end__",
+          "attempt_ci_fix": "ci_evaluator",
+          "ci_evaluator": "ci_evaluator",
+          "complete_task_takeover": "complete_task_takeover",
+          "create_pr": "create_pr",
+          "escalate_blocked": "escalate_blocked",
+          "execute_task_changes": "execute_task_changes",
+          "generate_plan": "generate_plan",
+          "human_review_gate": "human_review_gate",
+          "implement_review": "implement_review",
+          "review_response_gate": "review_response_gate",
+          "run_qualitative_review": "run_qualitative_review",
+          "setup_workspace": "setup_workspace",
+          "task_plan_approval_gate": "task_plan_approval_gate",
+          "teardown_workspace": "teardown_workspace",
+          "triage_gate": "triage_gate"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "externalEntry": true,
+        "kind": "operation",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_current_node"
+      },
       "review_response_gate": {
         "allowedEffects": [
           "jira.comment"

@@ -99,7 +99,7 @@ def get_state_profile(name: str) -> StateProfile:
     common_pauses = frozenset({"human_review_gate", "review_response_gate", "ci_evaluator"})
 
     if name == "feature":
-        from forge.workflow.feature.graph import (
+        from forge.workflow.feature.routing import (
             _route_after_answer,
             _route_after_epic_decomposition,
             _route_after_epic_regeneration,
@@ -251,7 +251,7 @@ def get_state_profile(name: str) -> StateProfile:
         )
 
     if name == "bug":
-        from forge.workflow.bug.graph import (
+        from forge.workflow.bug.routing import (
             _answer_question_bug,
             _implement_task_bug,
             _local_review_bug,
@@ -265,7 +265,7 @@ def get_state_profile(name: str) -> StateProfile:
             _route_after_regenerate_plan,
             _route_human_review_bug,
         )
-        from forge.workflow.bug.graph import (
+        from forge.workflow.bug.routing import (
             _route_after_workspace_setup as route_after_bug_workspace_setup,
         )
         from forge.workflow.bug.state import BugState, create_initial_bug_state
@@ -369,10 +369,10 @@ def get_state_profile(name: str) -> StateProfile:
             triage_task,
         )
         from forge.workflow.post_pr import route_after_pr_creation
-        from forge.workflow.task_takeover.graph import (
+        from forge.workflow.task_takeover.routing import (
             _route_after_answer as route_after_task_answer,
         )
-        from forge.workflow.task_takeover.graph import (
+        from forge.workflow.task_takeover.routing import (
             _route_after_execution,
             _route_after_generate_plan,
             _route_after_qualitative_review,
@@ -380,7 +380,7 @@ def get_state_profile(name: str) -> StateProfile:
             _route_human_review_task_takeover,
             complete_task_takeover,
         )
-        from forge.workflow.task_takeover.graph import (
+        from forge.workflow.task_takeover.routing import (
             _route_after_workspace_setup as route_after_task_workspace_setup,
         )
         from forge.workflow.task_takeover.state import (

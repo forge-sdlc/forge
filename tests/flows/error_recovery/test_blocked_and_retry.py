@@ -2,8 +2,8 @@
 
 
 from forge.models.workflow import TicketType
-from forge.workflow.bug.graph import route_entry
-from forge.workflow.feature.graph import route_by_ticket_type
+from forge.workflow.bug.routing import route_entry
+from forge.workflow.feature.routing import route_by_ticket_type
 from tests.fixtures.workflow_states import (
     make_workflow_state,
 )

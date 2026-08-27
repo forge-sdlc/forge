@@ -124,7 +124,7 @@ class DeclarativeWorkflowCompiler:
             raise WorkflowValidationError("at least one path must target '__end__'")
 
         reachable: set[str] = set()
-        stack = [spec.entry]
+        stack = [spec.entry, *(name for name, step in steps.items() if step.external_entry)]
         while stack:
             node = stack.pop()
             if node in reachable:

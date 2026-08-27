@@ -357,6 +357,40 @@
         ],
         "route": "route_rca_option"
       },
+      "rebase_pr": {
+        "allowedEffects": [
+          "jira.comment",
+          "source_control.commit",
+          "source_control.review"
+        ],
+        "branches": {
+          "__end__": "__end__",
+          "attempt_ci_fix": "ci_evaluator",
+          "ci_evaluator": "ci_evaluator",
+          "create_pr": "create_pr",
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate",
+          "implement_bug_fix": "implement_bug_fix",
+          "implement_review": "implement_review",
+          "local_review": "local_review",
+          "plan_approval_gate": "plan_approval_gate",
+          "post_merge_summary": "post_merge_summary",
+          "rca_option_gate": "rca_option_gate",
+          "review_response_gate": "review_response_gate",
+          "setup_workspace": "setup_workspace",
+          "teardown_workspace": "teardown_workspace",
+          "triage_gate": "triage_gate",
+          "update_documentation": "update_documentation"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "externalEntry": true,
+        "kind": "operation",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_current_node"
+      },
       "reflect_rca": {
         "allowedEffects": [
           "jira.comment"

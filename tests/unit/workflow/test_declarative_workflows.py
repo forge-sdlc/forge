@@ -66,7 +66,8 @@ def test_builtin_feature_golden_path_is_valid_and_inspectable() -> None:
     manifest = build_process_manifest(definition)
 
     assert definition.metadata.name == "feature"
-    assert len(manifest.nodes) == 32
+    assert len(manifest.nodes) == 33
+    assert any(node.name == "rebase_pr" and node.external_entry for node in manifest.nodes)
     assert any(node.name == "task_router" and node.station_contract for node in manifest.nodes)
     assert any(node.name == "prd_approval_gate" and node.kind == "gate" for node in manifest.nodes)
 
@@ -84,6 +85,9 @@ def test_every_supported_golden_path_uses_the_versioned_definition_compiler() ->
             "forge-contracts-v1" in step.required_policies
             for step in definition.spec.steps.values()
         )
+        rebase = definition.spec.steps["rebase_pr"]
+        assert rebase.external_entry is True
+        assert {"source_control.commit", "source_control.review"}.issubset(rebase.allowed_effects)
 
 
 def test_every_builtin_step_can_emit_audited_status_and_error_comments() -> None:

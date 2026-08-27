@@ -49,11 +49,27 @@ definitions block execution instead of silently falling back.
 
 ## Format
 
+The checked-in built-in definitions are canonical JSON because that is the exact artifact Forge
+pins and stores. They are not intended to be read as raw topology. Render one as Mermaid or as a
+compact process manifest instead:
+
+```bash
+forge workflow render src/forge/workflow/declarative/definitions/feature.json
+forge workflow render src/forge/workflow/declarative/definitions/feature.json --format json
+```
+
+Authors may use YAML, as in the example above; publishing converts it to canonical JSON. In either
+format, the fields that describe the process are `spec.entry` and `spec.steps`. Each step declares
+its type, allowed effects, and either a fixed `next` step or a named `route` with possible
+`branches`.
+
 - `metadata.name` is lowercase and becomes both the property and label suffix.
 - `metadata.revision` must increase whenever content changes.
 - `spec.state` is `feature`, `bug`, or `task_takeover` and controls the available node catalog.
 - Each step name is a canonical, registered Forge node. A step has either `next` or `route` with a
   complete branch map. Use `__end__` to stop the current invocation.
+- Set `externalEntry: true` only for a step entered by an explicit command rather than an ordinary
+  graph transition, such as `rebase_pr`.
 - Graphs may contain a cycle only when it crosses an approved human/CI pause boundary.
 - A new instance pins the selected definition's name, revision, digest, and canonical artifact.
   Publishing or activating a newer revision does not silently change an active instance.

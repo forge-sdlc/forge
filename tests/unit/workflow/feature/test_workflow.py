@@ -3,7 +3,7 @@
 from langgraph.graph import END
 
 from forge.models.workflow import TicketType
-from forge.workflow.feature.graph import (
+from forge.workflow.feature.routing import (
     _route_after_epic_regeneration,
     _route_after_epic_task_regeneration,
     _route_after_prd_regeneration,

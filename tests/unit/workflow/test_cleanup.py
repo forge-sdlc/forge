@@ -62,7 +62,7 @@ class TestRouteEntryCompleteness:
 
     def _route(self, node: str):
 
-        from forge.workflow.bug.graph import route_entry
+        from forge.workflow.bug.routing import route_entry
         return route_entry({"current_node": node})
 
     def test_all_new_pipeline_nodes_mapped(self):

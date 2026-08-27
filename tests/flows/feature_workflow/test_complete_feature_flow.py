@@ -4,7 +4,7 @@
 import pytest
 
 from forge.models.workflow import TicketType
-from forge.workflow.feature.graph import route_by_ticket_type
+from forge.workflow.feature.routing import route_by_ticket_type
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 from tests.fixtures.workflow_states import (
     STATE_COMPLETED,

@@ -421,6 +421,44 @@
         "stationContract": "approval-policy",
         "stationContractVersion": "1.0"
       },
+      "rebase_pr": {
+        "allowedEffects": [
+          "jira.comment",
+          "source_control.commit",
+          "source_control.review"
+        ],
+        "branches": {
+          "__end__": "__end__",
+          "aggregate_epic_status": "aggregate_epic_status",
+          "aggregate_feature_status": "aggregate_feature_status",
+          "attempt_ci_fix": "ci_evaluator",
+          "ci_evaluator": "ci_evaluator",
+          "complete_tasks": "complete_tasks",
+          "create_pr": "create_pr",
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate",
+          "implement_review": "implement_review",
+          "implement_task": "implement_task",
+          "local_review": "local_review",
+          "plan_approval_gate": "plan_approval_gate",
+          "prd_approval_gate": "prd_approval_gate",
+          "review_response_gate": "review_response_gate",
+          "setup_workspace": "setup_workspace",
+          "spec_approval_gate": "spec_approval_gate",
+          "task_approval_gate": "task_approval_gate",
+          "task_router": "task_router",
+          "teardown_workspace": "teardown_workspace",
+          "update_documentation": "update_documentation"
+        },
+        "dynamicRoute": false,
+        "dynamicTargets": [],
+        "externalEntry": true,
+        "kind": "operation",
+        "requiredPolicies": [
+          "forge-contracts-v1"
+        ],
+        "route": "route_current_node"
+      },
       "regenerate_all_epics": {
         "allowedEffects": [
           "jira.comment",

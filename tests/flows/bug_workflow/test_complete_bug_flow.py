@@ -6,7 +6,7 @@ import pytest
 from langgraph.graph import END
 
 from forge.models.workflow import TicketType
-from forge.workflow.bug.graph import (
+from forge.workflow.bug.routing import (
     _route_after_analyze_bug,
     _route_after_answer_bug,
     _route_after_implementation,
@@ -15,12 +15,12 @@ from forge.workflow.bug.graph import (
     _route_after_triage_check,
     _route_after_workspace_setup,
     _route_human_review_bug,
-    route_after_pr_creation,
     route_entry,
 )
 from forge.workflow.bug.state import create_initial_bug_state
 from forge.workflow.nodes.plan_bug_fix import route_plan_approval
 from forge.workflow.nodes.rca_option_gate import route_rca_option
+from forge.workflow.post_pr import route_after_pr_creation
 from tests.fixtures.workflow_states import (
     STATE_BUG_PLAN_PENDING,
     STATE_RCA_OPTION_PENDING,
@@ -405,7 +405,7 @@ class TestQualitativeRetryCapFlow:
 
     def test_qualitative_retry_count_two_routes_to_create_pr(self):
         """_route_after_local_review with qualitative_retry_count=2 → create_pr."""
-        from forge.workflow.bug.graph import _route_after_local_review
+        from forge.workflow.bug.routing import _route_after_local_review
 
         state = make_workflow_state(
             ticket_key="BUG-Q1",
@@ -418,7 +418,7 @@ class TestQualitativeRetryCapFlow:
 
     def test_symptom_only_first_retry_routes_to_implement(self):
         """_route_after_local_review with symptom_only + retry=0 → implement_bug_fix."""
-        from forge.workflow.bug.graph import _route_after_local_review
+        from forge.workflow.bug.routing import _route_after_local_review
 
         state = make_workflow_state(
             ticket_key="BUG-Q2",

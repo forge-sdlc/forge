@@ -23,7 +23,7 @@ class FeatureWorkflow(BaseWorkflow):
         return ticket_type in (TicketType.FEATURE, TicketType.STORY)
 
     def build_graph(self) -> StateGraph:
-        from forge.workflow.feature.graph import build_feature_graph
+        from forge.workflow.feature.routing import build_feature_graph
 
         return build_feature_graph()
 

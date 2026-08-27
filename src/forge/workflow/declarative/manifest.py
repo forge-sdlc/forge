@@ -35,6 +35,7 @@ class ProcessNode(DomainModel):
     join: str | None = None
     max_concurrency: int | None = None
     retry_bound: int | None = None
+    external_entry: bool = False
 
 
 class ProcessManifest(DomainModel):
@@ -241,6 +242,7 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
                 join=step.join,
                 max_concurrency=step.max_concurrency,
                 retry_bound=step.retry_bound,
+                external_entry=step.external_entry,
             )
         )
         if step.next:

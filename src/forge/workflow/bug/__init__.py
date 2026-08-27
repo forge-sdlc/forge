@@ -23,7 +23,7 @@ class BugWorkflow(BaseWorkflow):
         return ticket_type == TicketType.BUG
 
     def build_graph(self) -> StateGraph:
-        from forge.workflow.bug.graph import build_bug_graph
+        from forge.workflow.bug.routing import build_bug_graph
 
         return build_bug_graph()
 

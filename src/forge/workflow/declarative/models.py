@@ -13,7 +13,7 @@ WORKFLOW_PROPERTY_PREFIX = "forge.workflow."
 WORKFLOW_LABEL_PREFIX = "forge:workflow:"
 MAX_PROPERTY_BYTES = 32_768
 MAX_STEPS = 64
-MAX_BRANCHES = 16
+MAX_BRANCHES = 32
 MAX_TRANSITIONS = 500
 WORKFLOW_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,62}$")
 NODE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
@@ -50,6 +50,11 @@ class WorkflowStep(StrictModel):
     join: Literal["all", "any"] | None = None
     max_concurrency: int | None = Field(default=None, alias="maxConcurrency", ge=1, le=64)
     retry_bound: int | None = Field(default=None, alias="retryBound", ge=1, le=100)
+    external_entry: bool = Field(
+        default=False,
+        alias="externalEntry",
+        exclude_if=lambda value: not value,
+    )
 
     @model_validator(mode="after")
     def validate_transition(self) -> WorkflowStep:

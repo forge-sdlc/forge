@@ -6,7 +6,7 @@ import pytest
 from langgraph.graph import END, StateGraph
 
 from forge.models.workflow import TicketType
-from forge.workflow.task_takeover.graph import (
+from forge.workflow.task_takeover.routing import (
     _route_after_qualitative_review,
     _route_after_triage_check,
     build_task_takeover_graph,
