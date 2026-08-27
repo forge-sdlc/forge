@@ -45,10 +45,22 @@ def _approval_route(router: str, branches: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _artifact_route(router: str, branches: dict[str, str]) -> dict[str, Any]:
+    return _route(
+        router,
+        branches,
+        kind="station",
+        effects=JIRA_EFFECTS + SC_EFFECTS,
+    ) | {
+        "stationContract": "artifact-generation",
+        "stationContractVersion": "1.0",
+    }
+
+
 def builtin_feature_definition() -> WorkflowDefinition:
     """Return the immutable feature golden-path definition."""
     steps = {
-        "generate_prd": _route(
+        "generate_prd": _artifact_route(
             "route_after_generation",
             {"prd_approval_gate": "prd_approval_gate", "__end__": "__end__"},
         ),
@@ -61,11 +73,11 @@ def builtin_feature_definition() -> WorkflowDefinition:
                 "__end__": "__end__",
             },
         ),
-        "regenerate_prd": _route(
+        "regenerate_prd": _artifact_route(
             "route_after_prd_regeneration",
             {"prd_approval_gate": "prd_approval_gate", "__end__": "__end__"},
         ),
-        "generate_spec": _route(
+        "generate_spec": _artifact_route(
             "route_after_spec_generation",
             {"spec_approval_gate": "spec_approval_gate", "__end__": "__end__"},
         ),
@@ -78,11 +90,11 @@ def builtin_feature_definition() -> WorkflowDefinition:
                 "__end__": "__end__",
             },
         ),
-        "regenerate_spec": _route(
+        "regenerate_spec": _artifact_route(
             "route_after_spec_regeneration",
             {"spec_approval_gate": "spec_approval_gate", "__end__": "__end__"},
         ),
-        "decompose_epics": _route(
+        "decompose_epics": _artifact_route(
             "route_after_epic_decomposition",
             {"plan_approval_gate": "plan_approval_gate", "__end__": "__end__"},
         ),
@@ -96,11 +108,11 @@ def builtin_feature_definition() -> WorkflowDefinition:
                 "__end__": "__end__",
             },
         ),
-        "regenerate_all_epics": _route(
+        "regenerate_all_epics": _artifact_route(
             "route_after_epic_regeneration",
             {"plan_approval_gate": "plan_approval_gate", "__end__": "__end__"},
         ),
-        "update_single_epic": _route(
+        "update_single_epic": _artifact_route(
             "route_after_single_epic_update",
             {"plan_approval_gate": "plan_approval_gate", "__end__": "__end__"},
         ),
@@ -123,7 +135,7 @@ def builtin_feature_definition() -> WorkflowDefinition:
             "route_after_task_regeneration",
             {"task_approval_gate": "task_approval_gate", "__end__": "__end__"},
         ),
-        "update_single_task": _route(
+        "update_single_task": _artifact_route(
             "route_after_single_task_update",
             {"task_approval_gate": "task_approval_gate", "__end__": "__end__"},
         ),
