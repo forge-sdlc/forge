@@ -14,7 +14,10 @@ from langgraph.graph import END
 
 from forge.api.routes.metrics import record_approval, record_revision_requested
 from forge.workflow.feature.state import FeatureState as WorkflowState
-from forge.workflow.utils import set_paused
+from forge.workflow.projections.approval import project_approval
+from forge.workflow.reducers.approval import reduce_approval_gate
+from forge.workflow.stations.approval import ApprovalDisposition, run_approval_station
+from forge.workflow.utils import update_state_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,10 @@ def spec_approval_gate(state: WorkflowState) -> WorkflowState:
     ticket_key = state["ticket_key"]
     logger.info(f"Spec approval gate: pausing workflow for {ticket_key}")
 
-    return set_paused(state, "spec_approval_gate")
+    request = project_approval(state, "spec")
+    outcome = run_approval_station(request)
+    updates = reduce_approval_gate(state, request, outcome, "spec_approval_gate", "generate_spec")
+    return update_state_timestamp({**state, **updates})
 
 
 def route_spec_approval(state: WorkflowState) -> str:
@@ -48,32 +54,31 @@ def route_spec_approval(state: WorkflowState) -> str:
     Returns:
         Next node name or END.
     """
-    # Check if this is a question (Q&A mode) - check FIRST
-    if state.get("is_question") and state.get("feedback_comment"):
+    outcome = run_approval_station(project_approval(state, "spec"))
+    assert outcome.output is not None
+    disposition = outcome.output.disposition
+    if disposition is ApprovalDisposition.QUESTION:
         logger.info(f"Q&A mode: routing to answer_question for {state['ticket_key']}")
         return "answer_question"
 
     # YOLO mode: auto-approve without human input
-    if state.get("yolo_mode"):
+    if disposition is ApprovalDisposition.APPROVED:
         logger.info(f"YOLO mode: auto-approving spec for {state['ticket_key']}")
         record_approval("spec")
         return "decompose_epics"
 
     # Check if revision was requested
-    if state.get("revision_requested") and state.get("feedback_comment"):
+    if disposition is ApprovalDisposition.REVISION:
         logger.info(f"Spec revision requested for {state['ticket_key']}")
         record_revision_requested("spec")
         return "regenerate_spec"
 
     # Check if still paused - END and wait for approval webhook
-    if state.get("is_paused"):
+    if disposition is ApprovalDisposition.WAITING:
         logger.info(
             f"Spec approval gate: workflow paused for {state['ticket_key']}, "
             "waiting for approval webhook"
         )
         return END
 
-    # Spec approved, proceed to epic decomposition
-    logger.info(f"Spec approved for {state['ticket_key']}, proceeding to epic decomposition")
-    record_approval("spec")
-    return "decompose_epics"
+    return END

@@ -14,7 +14,10 @@ from langgraph.graph import END
 
 from forge.api.routes.metrics import record_approval, record_revision_requested
 from forge.workflow.feature.state import FeatureState as WorkflowState
-from forge.workflow.utils import set_paused
+from forge.workflow.projections.approval import project_approval
+from forge.workflow.reducers.approval import reduce_approval_gate
+from forge.workflow.stations.approval import ApprovalDisposition, run_approval_station
+from forge.workflow.utils import update_state_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -37,22 +40,12 @@ def plan_approval_gate(state: WorkflowState) -> WorkflowState:
     epic_keys = state.get("epic_keys", [])
     epic_count = len(epic_keys)
 
-    # Validate that we actually have epics to approve
-    if epic_count == 0:
-        logger.error(
-            f"Plan approval gate reached with 0 Epics for {ticket_key}. "
-            "This indicates epic decomposition failed. Routing back to retry."
-        )
-        return {
-            **state,
-            "last_error": "No Epics generated - decomposition may have failed",
-            "current_node": "decompose_epics",
-            "retry_count": state.get("retry_count", 0) + 1,
-        }
-
+    request = project_approval(state, "plan", item_count=epic_count)
+    outcome = run_approval_station(request)
+    updates = reduce_approval_gate(state, request, outcome, "plan_approval_gate", "decompose_epics")
     logger.info(f"Plan approval gate: pausing workflow for {ticket_key} ({epic_count} Epics)")
 
-    return set_paused(state, "plan_approval_gate")
+    return update_state_timestamp({**state, **updates})
 
 
 def route_plan_approval(state: WorkflowState) -> str:
@@ -64,42 +57,42 @@ def route_plan_approval(state: WorkflowState) -> str:
     Returns:
         Next node name or END.
     """
-    # Check if this is a question (Q&A mode) - check FIRST
-    if state.get("is_question") and state.get("feedback_comment"):
+    outcome = run_approval_station(
+        project_approval(state, "plan", item_count=len(state.get("epic_keys") or []))
+    )
+    assert outcome.output is not None
+    disposition = outcome.output.disposition
+    if disposition is ApprovalDisposition.QUESTION:
         logger.info(f"Q&A mode: routing to answer_question for {state['ticket_key']}")
         return "answer_question"
 
     # YOLO mode: auto-approve without human input
-    if state.get("yolo_mode"):
+    if disposition is ApprovalDisposition.APPROVED:
         logger.info(f"YOLO mode: auto-approving plan for {state['ticket_key']}")
         record_approval("plan")
         return "generate_tasks"
 
     # Check if revision requested
-    if state.get("revision_requested"):
-        feedback = state.get("feedback_comment", "")
-        current_epic = state.get("current_epic_key")
-
-        if current_epic:
+    if disposition is ApprovalDisposition.REVISION:
+        if outcome.output.revision_scope == "item":
             # Single Epic update
-            logger.info(f"Single Epic revision requested for {current_epic}")
+            logger.info(
+                "Single Epic revision requested for %s", state.get("current_epic_key")
+            )
             record_revision_requested("plan")
             return "update_single_epic"
-        elif feedback:
+        else:
             # Feature-level regeneration
             logger.info(f"Full Epic regeneration requested for {state['ticket_key']}")
             record_revision_requested("plan")
             return "regenerate_all_epics"
 
     # Check if still paused - END and wait for approval webhook
-    if state.get("is_paused"):
+    if disposition is ApprovalDisposition.WAITING:
         logger.info(
             f"Plan approval gate: workflow paused for {state['ticket_key']}, "
             "waiting for approval webhook"
         )
         return END
 
-    # All Epics approved, proceed to task generation
-    logger.info(f"Epics approved for {state['ticket_key']}, proceeding to task generation")
-    record_approval("plan")
-    return "generate_tasks"
+    return END
