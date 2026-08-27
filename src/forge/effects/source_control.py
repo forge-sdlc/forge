@@ -13,6 +13,7 @@ from forge.integrations.source_control.contracts import (
     ResolvedRepository,
     WriteTarget,
 )
+from forge.integrations.source_control.errors import NotFoundError
 from forge.integrations.source_control.registry import Registry, get_registry
 
 SC_BRANCH_CREATE_OPERATION = "source_control.branch.create"
@@ -52,13 +53,21 @@ class SourceControlMutationExecutor:
             )
             reference = str(command.payload["name"])
         elif self.operation == SC_FILE_PUT_OPERATION:
-            await adapter.put_file(
-                resolved.repo_ref,
-                str(command.payload["path"]),
-                str(command.payload["content"]),
-                str(command.payload["message"]),
-                str(command.payload["branch"]),
-            )
+            path = str(command.payload["path"])
+            content = str(command.payload["content"])
+            branch = str(command.payload["branch"])
+            try:
+                current_content = await adapter.get_file(resolved.repo_ref, path, branch)
+            except NotFoundError:
+                current_content = None
+            if current_content != content:
+                await adapter.put_file(
+                    resolved.repo_ref,
+                    path,
+                    content,
+                    str(command.payload["message"]),
+                    branch,
+                )
             reference = f"{command.payload['branch']}:{command.payload['path']}"
         elif self.operation == SC_CHANGE_REQUEST_CREATE_OPERATION:
             target = WriteTarget(**dict(command.payload["target"]))

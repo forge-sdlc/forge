@@ -7,6 +7,7 @@ from forge.effects.source_control import (
     SC_BRANCH_CREATE_OPERATION,
     SC_CHANGE_REQUEST_UPDATE_OPERATION,
     SC_COMMENT_CREATE_OPERATION,
+    SC_FILE_PUT_OPERATION,
     SourceControlMutationExecutor,
 )
 from forge.integrations.source_control.contracts import (
@@ -106,3 +107,25 @@ async def test_branch_and_change_request_mutations_use_provider_contract() -> No
         SC_CHANGE_REQUEST_UPDATE_OPERATION, lambda: registry
     ).execute(command)
     assert result.output["number"] == "17"
+
+
+@pytest.mark.asyncio
+async def test_file_effect_recovers_after_provider_success_before_acknowledgement() -> None:
+    command, registry, adapter = _fixture(
+        SC_FILE_PUT_OPERATION,
+        {
+            "path": "docs/plan.md",
+            "content": "same content",
+            "message": "Publish plan",
+            "branch": "forge/work",
+        },
+    )
+    adapter.get_file = AsyncMock(return_value="same content")
+    adapter.put_file = AsyncMock()
+
+    result = await SourceControlMutationExecutor(
+        SC_FILE_PUT_OPERATION, lambda: registry
+    ).execute(command)
+
+    adapter.put_file.assert_not_awaited()
+    assert result.provider_reference == "forge/work:docs/plan.md"
