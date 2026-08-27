@@ -43,7 +43,7 @@ class TestDecomposeEpicsRepoResolution:
         """decompose_epics passes forge.repos project property to the agent context."""
         with (
             patch("forge.workflow.nodes.epic_decomposition.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.epic_decomposition.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent,
             patch("forge.workflow.nodes.epic_decomposition.post_qa_summary_if_needed"),
         ):
             mock_jira = AsyncMock()
@@ -77,7 +77,7 @@ class TestDecomposeEpicsRepoResolution:
         """Repos from Feature labels are merged with forge.repos project property."""
         with (
             patch("forge.workflow.nodes.epic_decomposition.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.epic_decomposition.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent,
             patch("forge.workflow.nodes.epic_decomposition.post_qa_summary_if_needed"),
         ):
             mock_jira = AsyncMock()
@@ -113,7 +113,7 @@ class TestDecomposeEpicsRepoResolution:
         mock_settings.known_repos = []
         with (
             patch("forge.workflow.nodes.epic_decomposition.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.epic_decomposition.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent,
             patch("forge.workflow.nodes.epic_decomposition.post_qa_summary_if_needed"),
             patch("forge.workflow.nodes.epic_decomposition.get_settings", return_value=mock_settings),
         ):
@@ -151,7 +151,7 @@ class TestDecomposeEpicsRepoResolution:
         mock_settings.known_repos = []
         with (
             patch("forge.workflow.nodes.epic_decomposition.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.epic_decomposition.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent,
             patch("forge.workflow.nodes.epic_decomposition.post_qa_summary_if_needed"),
             patch("forge.workflow.nodes.epic_decomposition.get_settings", return_value=mock_settings),
         ):
@@ -194,7 +194,7 @@ class TestEpicRevisionState:
 
         with (
             patch("forge.workflow.nodes.epic_decomposition.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.epic_decomposition.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent,
             patch("forge.workflow.nodes.epic_decomposition.post_qa_summary_if_needed"),
         ):
             mock_jira = AsyncMock()
@@ -231,7 +231,7 @@ class TestEpicRevisionState:
 
         with (
             patch("forge.workflow.nodes.epic_decomposition.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.epic_decomposition.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.artifact_generation.ForgeAgent") as MockAgent,
             patch("forge.workflow.nodes.epic_decomposition.post_qa_summary_if_needed"),
         ):
             mock_jira = AsyncMock()

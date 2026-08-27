@@ -178,7 +178,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
             )
         )
         assert outcome.output is not None
-        prd_content = outcome.output.content
+        prd_content = str(outcome.output.content)
 
         # Publish PRD - either as GitHub PR or Jira update
         # Per-project opt-in: check forge.prd_proposals_repo project property
@@ -295,7 +295,7 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
             )
         )
         assert outcome.output is not None
-        new_prd = outcome.output.content
+        new_prd = str(outcome.output.content)
 
         # Publish revised PRD
         if state.get("prd_pr_number"):

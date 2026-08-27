@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from pydantic import Field
+
 from forge.domain import (
     DomainModel,
     JsonValue,
@@ -20,19 +22,20 @@ CONTRACT_VERSION = "1.0"
 class ArtifactKind(StrEnum):
     PRD = "prd"
     SPEC = "spec"
+    EPICS = "epics"
 
 
 class ArtifactGenerationInput(DomainModel):
     kind: ArtifactKind
     source_content: str
     ticket_key: str
-    context: dict[str, JsonValue] = {}
+    context: dict[str, JsonValue] = Field(default_factory=dict)
     feedback: str | None = None
 
 
 class ArtifactGenerationOutput(DomainModel):
     kind: ArtifactKind
-    content: str
+    content: JsonValue
 
 
 async def run_artifact_generation_station(
@@ -52,8 +55,10 @@ async def run_artifact_generation_station(
             )
         elif value.kind is ArtifactKind.PRD:
             content = await agent.generate_prd(value.source_content, dict(value.context))
-        else:
+        elif value.kind is ArtifactKind.SPEC:
             content = await agent.generate_spec(value.source_content, dict(value.context))
+        else:
+            content = await agent.generate_epics(value.source_content, dict(value.context))
     finally:
         await agent.close()
     return StationOutcome[ArtifactGenerationOutput](

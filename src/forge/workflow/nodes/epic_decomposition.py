@@ -4,11 +4,15 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import MissingProjectConfig
 from forge.models.workflow import ForgeLabel
 from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.projections.artifact_generation import project_artifact_generation
+from forge.workflow.stations.artifact_generation import (
+    ArtifactKind,
+    run_artifact_generation_station,
+)
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
@@ -60,7 +64,6 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
         await post_qa_summary_if_needed(ticket_key, qa_history, "spec")
 
     jira = JiraClient()
-    agent = ForgeAgent()
     epic_keys: list[str] = []
     jira_error = None
 
@@ -142,7 +145,18 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
         spec_content_with_refs = await fetch_and_inject_references(state, jira, spec_content)
 
         # Generate Epic breakdown using the configured LLM backend - primary operation
-        epics_data = await agent.generate_epics(spec_content_with_refs, context)
+        outcome = await run_artifact_generation_station(
+            project_artifact_generation(
+                state,
+                kind=ArtifactKind.EPICS,
+                source_content=spec_content_with_refs,
+                context=context,
+            )
+        )
+        assert outcome.output is not None
+        epics_data = outcome.output.content
+        if not isinstance(epics_data, list):
+            raise ValueError("Epic generation station returned a non-list result")
 
         if not epics_data:
             logger.warning(f"No Epics generated for {ticket_key}")
@@ -268,7 +282,6 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
         return result_state
     finally:
         await jira.close()
-        await agent.close()
 
 
 async def regenerate_all_epics(state: WorkflowState) -> WorkflowState:
@@ -344,8 +357,6 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
     logger.info(f"Updating Epic {epic_key} with feedback")
 
     jira = JiraClient()
-    agent = ForgeAgent()
-
     try:
         # Get current Epic description
         epic_issue = await jira.get_issue(epic_key)
@@ -354,19 +365,23 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
         original_plan_with_refs = await fetch_and_inject_references(state, jira, original_plan)
 
         # Regenerate plan with feedback
-        new_plan = await agent.regenerate_with_feedback(
-            original_content=original_plan_with_refs,
-            feedback=feedback,
-            content_type="epic",
-            ticket_key=ticket_key,
-            context={
-                "ticket_type": state.get("ticket_type", ""),
-                "current_node": state.get("current_node", ""),
-                "event_type": state.get("event_type", ""),
-                "event_source": state.get("context", {}).get("source", ""),
-                "retry_count": state.get("retry_count", 0),
-            },
+        outcome = await run_artifact_generation_station(
+            project_artifact_generation(
+                state,
+                kind=ArtifactKind.EPICS,
+                source_content=original_plan_with_refs,
+                feedback=feedback,
+                context={
+                    "ticket_type": state.get("ticket_type", ""),
+                    "current_node": state.get("current_node", ""),
+                    "event_type": state.get("event_type", ""),
+                    "event_source": state.get("context", {}).get("source", ""),
+                    "retry_count": state.get("retry_count", 0),
+                },
+            )
         )
+        assert outcome.output is not None
+        new_plan = str(outcome.output.content)
 
         # Update Epic description
         await jira.update_description(epic_key, new_plan)
@@ -401,7 +416,6 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await agent.close()
 
 
 def check_all_epics_approved(state: WorkflowState, epic_statuses: dict[str, str]) -> bool:

@@ -338,7 +338,7 @@ class TestEpicDecompositionTraceContext:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.epic_decomposition.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=mock_agent,
             ),
             patch("forge.workflow.nodes.epic_decomposition.post_qa_summary_if_needed"),
@@ -385,7 +385,7 @@ class TestEpicDecompositionTraceContext:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.epic_decomposition.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):

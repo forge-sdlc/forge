@@ -146,7 +146,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
             )
         )
         assert outcome.output is not None
-        spec_content = outcome.output.content
+        spec_content = str(outcome.output.content)
 
         # Publish spec — either as GitHub PR or Jira update
         proposals_repo = await _resolve_prd_proposals_repo(issue.project_key, jira)
@@ -268,7 +268,7 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
             )
         )
         assert outcome.output is not None
-        new_spec = outcome.output.content
+        new_spec = str(outcome.output.content)
 
         # Publish revised spec
         if state.get("spec_pr_number"):

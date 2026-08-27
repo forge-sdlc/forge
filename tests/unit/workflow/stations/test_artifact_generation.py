@@ -59,3 +59,16 @@ async def test_revision_is_a_station_operation() -> None:
     agent.regenerate_with_feedback.assert_awaited_once()
     assert outcome.output is not None
     assert outcome.output.content == "revised spec"
+
+
+@pytest.mark.asyncio
+async def test_epic_generation_preserves_structured_output() -> None:
+    agent = AsyncMock()
+    agent.generate_epics.return_value = [{"title": "API", "description": "Build it"}]
+    with patch(
+        "forge.workflow.stations.artifact_generation.ForgeAgent", return_value=agent
+    ):
+        outcome = await run_artifact_generation_station(_request(ArtifactKind.EPICS))
+
+    assert outcome.output is not None
+    assert outcome.output.content == [{"title": "API", "description": "Build it"}]
