@@ -19,6 +19,11 @@ class WorkflowCommandType(StrEnum):
     RETRY = "retry"
     CANCEL = "cancel"
     SYNCHRONIZE = "synchronize"
+    SKIP_GATE = "skip_gate"
+    UNSKIP_GATE = "unskip_gate"
+    REBASE = "rebase"
+    ENABLE_YOLO = "enable_yolo"
+    SELECT_OPTION = "select_option"
 
 
 class WorkflowCommand(VersionedDomainModel):

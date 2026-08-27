@@ -23,6 +23,7 @@ from forge.workflow.utils.comment_classifier import CommentType, classify_commen
 class CommandDecisionStatus(StrEnum):
     ACCEPTED = "accepted"
     IGNORED = "ignored"
+    INVALID = "invalid"
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,7 @@ def interpret_event(
     if message.source is EventSource.JIRA:
         signal = _jira_signal(message, state)
     else:
-        signal = _source_control_signal(adapted)
+        signal = _source_control_signal(adapted, state)
     if signal is None:
         return CommandDecision(CommandDecisionStatus.IGNORED, "no eligible workflow signal")
 
@@ -115,6 +116,18 @@ def _jira_signal(
         after = str(change.get("toString") or "").lower()
         if "forge:retry" in after and "forge:retry" not in before:
             return WorkflowCommandType.RETRY, {"stage": current_node}
+        if (
+            "forge:yolo" in after
+            and "forge:yolo" not in before
+            and current_node in {
+                "prd_approval_gate",
+                "spec_approval_gate",
+                "plan_approval_gate",
+                "task_plan_approval_gate",
+                "task_approval_gate",
+            }
+        ):
+            return WorkflowCommandType.ENABLE_YOLO, {"stage": current_node}
         if "approved" in after and "pending" in before:
             stage = next(
                 (name for name in ("prd", "spec", "plan", "task") if f"{name}-approved" in after),
@@ -133,6 +146,14 @@ def _jira_signal(
 
     comment = message.payload.get("comment", {}).get("body", "")
     if isinstance(comment, str) and comment.strip():
+        if current_node == "rca_option_gate":
+            option_match = re.search(r">option\s+(\d+)", comment, re.IGNORECASE)
+            if option_match:
+                option = int(option_match.group(1))
+                option_count = len(state.get("rca_options", []))
+                if not 1 <= option <= option_count:
+                    return None
+                return WorkflowCommandType.SELECT_OPTION, {"option": option}
         classification = classify_comment(comment)
         if classification is CommentType.FEEDBACK:
             return WorkflowCommandType.REJECT, {
@@ -149,12 +170,41 @@ def _jira_signal(
 
 def _source_control_signal(
     adapted: AdaptedEvent,
+    state: Mapping[str, Any],
 ) -> tuple[WorkflowCommandType, dict[str, Any]] | None:
     event = adapted.normalized_event
     if event is None:
         return None
     if event.change_request and event.change_request.state is ChangeRequestState.MERGED:
         return WorkflowCommandType.APPROVE, {"reason": "change_request_merged"}
+    if event.kind is EventKind.COMMENT_CREATED and event.comment is not None:
+        comment = event.comment
+        if comment.path is None:
+            body = comment.body.strip()
+            lowered = body.lower()
+            current_node = str(state.get("current_node") or "")
+            for prefix, command_type in (
+                ("/forge skip-gate", WorkflowCommandType.SKIP_GATE),
+                ("/forge unskip-gate", WorkflowCommandType.UNSKIP_GATE),
+            ):
+                if lowered.startswith(prefix):
+                    check_name = body[len(prefix) :].strip()
+                    if current_node not in {
+                        "ci_evaluator",
+                        "attempt_ci_fix",
+                        "human_review_gate",
+                    } or not check_name:
+                        return None
+                    return command_type, {
+                        "check_name": check_name,
+                        "stage": current_node,
+                        "sender": event.actor.login,
+                    }
+            if lowered.startswith("/forge rebase") and state.get("current_pr_number"):
+                return WorkflowCommandType.REBASE, {
+                    "return_stage": current_node,
+                    "sender": event.actor.login,
+                }
     if event.kind is EventKind.CHECK_UPDATED:
         return WorkflowCommandType.SYNCHRONIZE, {"subject": "checks"}
     if event.kind in {EventKind.REVIEW_SUBMITTED, EventKind.COMMENT_CREATED}:

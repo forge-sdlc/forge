@@ -18,6 +18,7 @@ from forge.api.routes.metrics import (
     record_workflow_started,
 )
 from forge.config import get_settings
+from forge.domain import WorkflowCommandType
 from forge.integrations.github.comment_signature import is_self_comment
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
@@ -646,6 +647,7 @@ class OrchestratorWorker:
         """
         adapted_event = self.event_adapters.adapt(message)
         command_decision = interpret_event(message, adapted_event, current_state)
+        workflow_command = command_decision.command
         if command_decision.command is not None:
             logger.debug(
                 "Interpreted %s as %s command %s",
@@ -783,20 +785,18 @@ class OrchestratorWorker:
             and event_obj.comment is not None
             and event_obj.comment.path is None
         ):
-            gh_comment_body = (event_obj.comment.body or "").strip()
-            repo_full = event_obj.repo_ref.namespace
             native_id = (
                 event_obj.change_request.identity.native_id if event_obj.change_request else None
             )
             pr_number = int(native_id) if native_id is not None else None
             sender = event_obj.actor.login
 
-            skip_prefix = "/forge skip-gate"
-            unskip_prefix = "/forge unskip-gate"
-
-            if gh_comment_body.lower().startswith(skip_prefix.lower()):
-                check_name = gh_comment_body[len(skip_prefix) :].strip()
-                if current_node in _CI_STAGES and check_name:
+            if (
+                workflow_command is not None
+                and workflow_command.command_type is WorkflowCommandType.SKIP_GATE
+            ):
+                check_name = str(workflow_command.arguments["check_name"])
+                if current_node in _CI_STAGES:
                     skipped = list(current_state.get("ci_skipped_checks", []))
                     if check_name not in skipped:
                         skipped.append(check_name)
@@ -817,9 +817,12 @@ class OrchestratorWorker:
                     }
                 return current_state
 
-            elif gh_comment_body.lower().startswith(unskip_prefix.lower()):
-                check_name = gh_comment_body[len(unskip_prefix) :].strip()
-                if current_node in _CI_STAGES and check_name:
+            elif (
+                workflow_command is not None
+                and workflow_command.command_type is WorkflowCommandType.UNSKIP_GATE
+            ):
+                check_name = str(workflow_command.arguments["check_name"])
+                if current_node in _CI_STAGES:
                     skipped = [
                         s for s in current_state.get("ci_skipped_checks", []) if s != check_name
                     ]
@@ -840,14 +843,10 @@ class OrchestratorWorker:
                     }
                 return current_state
 
-            rebase_prefix = "/forge rebase"
-            if gh_comment_body.lower().startswith(rebase_prefix.lower()):
-                if not current_state.get("current_pr_number"):
-                    logger.warning(
-                        f"Ignoring /forge rebase for {message.ticket_key}: no PR in state"
-                    )
-                    return current_state
-
+            if (
+                workflow_command is not None
+                and workflow_command.command_type is WorkflowCommandType.REBASE
+            ):
                 logger.info(f"Detected /forge rebase for {message.ticket_key}")
                 await self._post_rebase_feedback(
                     ticket_key=message.ticket_key,
