@@ -123,6 +123,9 @@ class BaseState(TypedDict, total=False):
     # Message history
     messages: Annotated[list[Any], add_messages]
     context: dict[str, Any]
+    # Durable ingress audit trail. Entries are provider-neutral command decisions,
+    # bounded by the worker to keep checkpoint growth predictable.
+    command_decisions: list[dict[str, Any]]
 
     # Declarative workflow identity. Built-in workflows leave these unset.
     workflow_name: str

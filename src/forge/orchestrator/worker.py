@@ -35,9 +35,12 @@ from forge.models.events import EventSource
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.checkpointer import get_checkpointer, get_ticket_from_pr_index
 from forge.orchestrator.event_adapters import (
+    AdaptedEvent,
+    CommandDecision,
     EventAdapterRegistry,
     create_default_event_adapter_registry,
     interpret_event,
+    record_command_decision,
 )
 from forge.orchestrator.event_adapters.source_control import extract_change_request_url
 from forge.queue.consumer import QueueConsumer
@@ -512,7 +515,21 @@ class OrchestratorWorker:
 
             if should_resume:
                 # Resume workflow - check for approval/rejection signals
-                updated_values = await self._handle_resume_event(message, existing_state.values)
+                adapted_event = self.event_adapters.adapt(message)
+                command_decision = interpret_event(message, adapted_event, existing_state.values)
+                updated_values = await self._handle_resume_event(
+                    message,
+                    existing_state.values,
+                    adapted_event=adapted_event,
+                    command_decision=command_decision,
+                )
+                state_changed = updated_values is not existing_state.values
+                updated_values = record_command_decision(
+                    updated_values,
+                    message=message,
+                    adapted=adapted_event,
+                    decision=command_decision,
+                )
 
                 # _handle_resume_event returns early (unchanged current_node) when
                 # the workflow is at a terminal state without an explicit retry signal.
@@ -540,7 +557,8 @@ class OrchestratorWorker:
                 # Without this guard, nodes in needs_fresh_invoke (e.g. human_review_gate)
                 # would be re-invoked with is_paused=True and immediately re-pause,
                 # producing a misleading "Resuming workflow" log with no real effect.
-                if updated_values is existing_state.values:
+                if not state_changed:
+                    await compiled_workflow.aupdate_state(config, updated_values)
                     return
 
                 logger.info(f"Resuming workflow for {ticket_key}")
@@ -632,7 +650,12 @@ class OrchestratorWorker:
             raise  # Let consumer handle retry logic
 
     async def _handle_resume_event(
-        self, message: QueueMessage, current_state: dict[str, Any]
+        self,
+        message: QueueMessage,
+        current_state: dict[str, Any],
+        *,
+        adapted_event: AdaptedEvent | None = None,
+        command_decision: CommandDecision | None = None,
     ) -> dict[str, Any]:
         """Handle a resume event for a paused workflow.
 
@@ -645,8 +668,10 @@ class OrchestratorWorker:
         Returns:
             Updated state for workflow resumption.
         """
-        adapted_event = self.event_adapters.adapt(message)
-        command_decision = interpret_event(message, adapted_event, current_state)
+        adapted_event = adapted_event or self.event_adapters.adapt(message)
+        command_decision = command_decision or interpret_event(
+            message, adapted_event, current_state
+        )
         workflow_command = command_decision.command
         if command_decision.command is not None:
             logger.debug(

@@ -17,6 +17,7 @@ from forge.orchestrator.event_adapters import (
     CommandDecisionStatus,
     create_default_event_adapter_registry,
     interpret_event,
+    record_command_decision,
 )
 from forge.queue.models import QueueMessage, normalized_event_to_dict
 
@@ -198,3 +199,28 @@ def test_source_control_control_comment_becomes_explicit_command() -> None:
     assert decision.command is not None
     assert decision.command.command_type is WorkflowCommandType.SKIP_GATE
     assert decision.command.arguments["check_name"] == "lint"
+
+
+def test_command_decision_records_are_json_safe_bounded_and_idempotent() -> None:
+    message = _message({"comment": {"body": "informational"}})
+    adapted = create_default_event_adapter_registry().adapt(message)
+    decision = interpret_event(message, adapted, STATE)
+
+    first = record_command_decision(STATE, message=message, adapted=adapted, decision=decision)
+    duplicate = record_command_decision(
+        first, message=message, adapted=adapted, decision=decision
+    )
+
+    assert duplicate == first
+    assert first["command_decisions"] == [
+        {
+            "decision_id": first["command_decisions"][0]["decision_id"],
+            "decided_at": NOW.isoformat(),
+            "event_id": "jira-1",
+            "observation_id": adapted.observation.observation_id,
+            "status": "ignored",
+            "reason": "no eligible workflow signal",
+            "command_id": None,
+            "command_type": None,
+        }
+    ]

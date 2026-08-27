@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -1147,7 +1147,7 @@ class TestEnsureSkillsIntegration:
 
         fake_compiled.aupdate_state.assert_not_awaited()
         fake_compiled.ainvoke.assert_awaited_once_with(
-            retry_cleared_state,
+            {**retry_cleared_state, "command_decisions": ANY},
             config={"configurable": {"thread_id": "TEST-123"}},
         )
 
@@ -1176,6 +1176,7 @@ class TestEnsureSkillsIntegration:
         expected_invoked_state = {
             **retry_cleared_state,
             "context": {},
+            "command_decisions": ANY,
         }
 
         fake_workflow = MagicMock()

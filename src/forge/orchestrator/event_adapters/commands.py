@@ -33,6 +33,41 @@ class CommandDecision:
     command: WorkflowCommand | None = None
 
 
+def record_command_decision(
+    state: Mapping[str, Any],
+    *,
+    message: IngressMessage,
+    adapted: AdaptedEvent,
+    decision: CommandDecision,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Append one idempotent, JSON-safe command decision to checkpoint state."""
+    command = decision.command
+    decision_id = stable_identity(
+        "command-decision",
+        {
+            "event_id": message.event_id,
+            "observation_id": adapted.observation.observation_id,
+            "command_id": command.command_id if command else None,
+            "status": decision.status.value,
+        },
+    )
+    existing = list(state.get("command_decisions", []))
+    if any(item.get("decision_id") == decision_id for item in existing):
+        return dict(state)
+    record = {
+        "decision_id": decision_id,
+        "decided_at": message.timestamp.isoformat(),
+        "event_id": message.event_id,
+        "observation_id": adapted.observation.observation_id,
+        "status": decision.status.value,
+        "reason": decision.reason,
+        "command_id": command.command_id if command else None,
+        "command_type": command.command_type.value if command else None,
+    }
+    return {**state, "command_decisions": [*existing, record][-limit:]}
+
+
 _NODE_APPROVAL_STAGE = {
     "prd_approval_gate": "prd",
     "generate_prd": "prd",

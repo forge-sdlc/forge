@@ -4,6 +4,7 @@ from forge.orchestrator.event_adapters.commands import (
     CommandDecision,
     CommandDecisionStatus,
     interpret_event,
+    record_command_decision,
 )
 from forge.orchestrator.event_adapters.registry import (
     AdaptedEvent,
@@ -18,4 +19,5 @@ __all__ = [
     "EventAdapterRegistry",
     "create_default_event_adapter_registry",
     "interpret_event",
+    "record_command_decision",
 ]
