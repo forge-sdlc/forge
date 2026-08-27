@@ -27,6 +27,7 @@ from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.proposal_review_threads import reply_to_proposal_decisions
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,8 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
             "retry_count": state.get("retry_count", 0),
         }
 
+        prd_content = await fetch_and_inject_references(state, jira, prd_content)
+
         # Generate specification using the configured LLM backend - primary operation
         spec_content = await agent.generate_spec(prd_content, context)
 
@@ -186,7 +189,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                 "spec_content": spec_content,
                 "generation_context": generation_context,
                 "current_node": "spec_approval_gate",
-                "last_error": f"Spec publish pending: {jira_error}" if jira_error else None,
+                "last_error": (f"Spec publish pending: {jira_error}" if jira_error else None),
             }
         )
         if spec_pr_result:
@@ -233,9 +236,11 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
     agent = ForgeAgent()
 
     try:
+        original_spec_with_refs = await fetch_and_inject_references(state, jira, original_spec)
+
         # Regenerate spec with feedback
         new_spec = await agent.regenerate_with_feedback(
-            original_content=original_spec,
+            original_content=original_spec_with_refs,
             feedback=feedback,
             content_type="spec",
             ticket_key=ticket_key,
@@ -307,12 +312,14 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         if state.get("automated_review_revision_pending"):
             automated_review_revision_count += 1
         proposal_review_decisions = [
-            {
-                **decision,
-                "status": "addressed",
-            }
-            if decision.get("disposition") in ("accept", "uncertain")
-            else decision
+            (
+                {
+                    **decision,
+                    "status": "addressed",
+                }
+                if decision.get("disposition") in ("accept", "uncertain")
+                else decision
+            )
             for decision in state.get("proposal_review_decisions", [])
         ]
 

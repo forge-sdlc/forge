@@ -11,6 +11,7 @@ from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
+from forge.workflow.utils.references import fetch_and_inject_references
 from forge.workflow.utils.repo_resolution import get_effective_repos
 
 logger = logging.getLogger(__name__)
@@ -136,8 +137,10 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
             "feedback": state.get("feedback_comment", ""),
         }
 
+        spec_content_with_refs = await fetch_and_inject_references(state, jira, spec_content)
+
         # Generate Epic breakdown using the configured LLM backend - primary operation
-        epics_data = await agent.generate_epics(spec_content, context)
+        epics_data = await agent.generate_epics(spec_content_with_refs, context)
 
         if not epics_data:
             logger.warning(f"No Epics generated for {ticket_key}")
@@ -338,9 +341,11 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
         epic_issue = await jira.get_issue(epic_key)
         original_plan = epic_issue.description or ""
 
+        original_plan_with_refs = await fetch_and_inject_references(state, jira, original_plan)
+
         # Regenerate plan with feedback
         new_plan = await agent.regenerate_with_feedback(
-            original_content=original_plan,
+            original_content=original_plan_with_refs,
             feedback=feedback,
             content_type="epic",
             ticket_key=ticket_key,

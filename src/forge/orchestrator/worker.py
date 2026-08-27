@@ -39,6 +39,7 @@ from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
 from forge.workflow.nodes.error_handler import notify_error
+from forge.workflow.nodes.workspace_setup import teardown_workspace
 from forge.workflow.pr_state import (
     activate_pull_request_for_event,
     all_pull_requests_merged,
@@ -131,6 +132,19 @@ async def _report_new_workflow_error(result: dict, error_before_invoke: str | No
         result["last_error"],
         result.get("current_node", "unknown"),
     )
+
+
+async def _cleanup_terminal_workspace(result: dict[str, Any]) -> dict[str, Any]:
+    """Remove a workspace recreated after the normal post-PR teardown."""
+    if result.get("current_node") != "complete" or not result.get("workspace_path"):
+        return result
+
+    cleaned = await teardown_workspace(result)
+    return {
+        **cleaned,
+        "current_node": "complete",
+        "is_paused": False,
+    }
 
 
 _PRD_GATE_NODES = ("prd_approval_gate", "generate_prd", "regenerate_prd")
@@ -550,6 +564,11 @@ class OrchestratorWorker:
 
                 # Run the workflow from the beginning
                 result = await compiled_workflow.ainvoke(state, config=config)
+
+            cleaned_result = await _cleanup_terminal_workspace(result)
+            if cleaned_result != result:
+                await compiled_workflow.aupdate_state(config, cleaned_result)
+                result = cleaned_result
 
             # Nodes continue to use scalar PR fields as a compatibility view.
             # Persist that view back into the selected per-repository record
@@ -1528,10 +1547,7 @@ class OrchestratorWorker:
             and event_obj.kind == EventKind.REVIEW_SUBMITTED
             and event_obj.review is not None
             and (current_node in _REVIEW_GATES or targets_implementation_pr)
-            and (
-                current_state.get("is_paused", True)
-                or current_state.get("pending_ci_event")
-            )
+            and (current_state.get("is_paused", True) or current_state.get("pending_ci_event"))
         ):
             review = event_obj.review
             sender_login = review.author
@@ -2261,7 +2277,9 @@ class OrchestratorWorker:
 
     async def start(self) -> None:
         """Start the worker and begin processing events."""
-        logger.info(f"Starting orchestrator worker: {self.consumer_name}")
+        from forge.utils.logging import log_startup_banner
+
+        log_startup_banner("Queue Worker")
 
         # Start Prometheus metrics HTTP server
         if self.settings.worker_metrics_enabled:

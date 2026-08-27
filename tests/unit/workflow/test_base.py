@@ -147,7 +147,7 @@ class TestBaseWorkflow:
                 from forge.workflow.base import BaseState
                 return BaseState
 
-            def matches(self, ticket_type, labels, event):
+            def matches(self, _ticket_type, _labels, _event):
                 return True
 
             def build_graph(self):

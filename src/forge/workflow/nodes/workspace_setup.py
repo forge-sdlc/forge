@@ -22,6 +22,7 @@ from forge.workflow.utils.jira_status import (
 from forge.workflow.utils.source_control import get_adapter
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.guardrails import GuardrailsLoader
+from forge.workspace.handoff import materialize_handoff
 from forge.workspace.manager import Workspace, WorkspaceManager
 
 WorkflowState = dict[str, Any]
@@ -46,7 +47,7 @@ def _remove_workspace_backup(path: Path) -> None:
     """Remove a replaced workspace, tolerating short-lived filesystem races."""
     for attempt in range(1, _BACKUP_CLEANUP_ATTEMPTS + 1):
         try:
-            shutil.rmtree(path)
+            WorkspaceManager.remove_path(path)
             return
         except FileNotFoundError:
             return
@@ -63,6 +64,7 @@ async def _recreate_workspace_from_fork(
     branch_name: str,
     fork_owner: str,
     fork_repo: str,
+    state: WorkflowState,
     stale_workspace_path: str | None = None,
 ) -> tuple[str, GitOperations]:
     if not branch_name or not current_repo:
@@ -142,6 +144,7 @@ async def _recreate_workspace_from_fork(
     git.workspace.path = target_path
     git.workspace_recreated = True
     write_workspace_identity(target_path, ticket_key=ticket_key, repo_name=current_repo)
+    materialize_handoff(target_path, current_repo, state)
     logger.info(f"Workspace recreated at {target_path} for {ticket_key}")
     return str(target_path), git
 
@@ -203,6 +206,7 @@ async def prepare_workspace(
                 branch_name=branch_name,
                 fork_owner=fork_owner,
                 fork_repo=fork_repo,
+                state=state,
                 stale_workspace_path=workspace_path,
             )
         return workspace_path, git
@@ -214,6 +218,7 @@ async def prepare_workspace(
         branch_name=branch_name,
         fork_owner=fork_owner,
         fork_repo=fork_repo,
+        state=state,
     )
 
 
@@ -338,9 +343,22 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         await set_implementing_label(jira_client, ticket_key)
 
         # Transition task tickets to In Progress if present
-        task_keys = state.get("task_keys", [])
+        task_keys = state.get("task_keys") or []
         if task_keys:
             await transition_tasks_to_in_progress(jira_client, task_keys)
+
+        # Transition epic tickets to In Progress if present
+        epic_keys = state.get("epic_keys") or []
+        if epic_keys:
+            await transition_tasks_to_in_progress(jira_client, epic_keys)
+
+        # Transition parent Epic if present
+        try:
+            feature_issue = await jira_client.get_issue(ticket_key)
+            if feature_issue.parent_key:
+                await transition_tasks_to_in_progress(jira_client, [feature_issue.parent_key])
+        except Exception as e:
+            logger.warning(f"Failed to fetch issue {ticket_key} or transition its parent Epic: {e}")
     finally:
         await jira_client.close()
 
@@ -411,6 +429,7 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
             repo_name=current_repo,
         )
+        materialize_handoff(workspace.path, current_repo, state)
 
         # Keep Forge handoff files local to this clone without modifying the
         # target repository's tracked .gitignore.

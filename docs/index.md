@@ -42,6 +42,7 @@ graph TD
 
 ## Quick Links
 
+- [Product Roadmap](roadmap.md) — Where Forge is going and how major capabilities fit together
 - [Getting Started](getting-started.md) — Set up Forge in 10 minutes
 - [Feature Workflow](guide/feature-workflow.md) — How features flow through Forge
 - [Bug Workflow](guide/bug-workflow.md) — How bug diagnosis and implementation flow through Forge

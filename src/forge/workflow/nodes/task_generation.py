@@ -12,6 +12,7 @@ from forge.prompts import load_prompt
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
+from forge.workflow.utils.references import fetch_and_inject_references
 from forge.workflow.utils.repo_resolution import get_effective_default_repo
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,8 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
     spec_content = state.get("spec_content", "")
 
     try:
+        spec_content = await fetch_and_inject_references(state, jira, spec_content)
+
         # Get project key from parent Feature
         parent_issue = await jira.get_issue(ticket_key)
         project_key = parent_issue.project_key
@@ -230,7 +233,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                     "current_task_key": None,
                     "current_epic_key": None,
                     "current_node": "task_approval_gate",
-                    "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
+                    "last_error": (f"Partial Jira failure: {jira_error}" if jira_error else None),
                 }
             )
         else:
@@ -628,6 +631,8 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
 
         spec_content = state.get("spec_content", "")
 
+        spec_content = await fetch_and_inject_references(state, jira, spec_content)
+
         tasks_data = await _generate_tasks_for_epic(
             agent,
             epic_plan,
@@ -751,7 +756,7 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 "revision_requested": False,
                 "current_epic_key": None,
                 "current_node": "task_approval_gate",
-                "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
+                "last_error": (f"Partial Jira failure: {jira_error}" if jira_error else None),
             }
         )
 
@@ -801,9 +806,13 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         task_issue = await jira.get_issue(task_key)
         original_description = task_issue.description or ""
 
+        original_description_with_refs = await fetch_and_inject_references(
+            state, jira, original_description
+        )
+
         # Regenerate description with feedback
         new_description = await agent.regenerate_with_feedback(
-            original_content=original_description,
+            original_content=original_description_with_refs,
             feedback=feedback,
             content_type="task",
             ticket_key=ticket_key,

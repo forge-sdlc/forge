@@ -54,6 +54,7 @@ class TestFeatureState:
         assert state["ticket_key"] == "TEST-123"
         assert state["prd_content"] == ""
         assert state["epic_keys"] == []
+        assert state["handoffs"] == {}
 
 
 class TestQAStateFields:
@@ -95,6 +96,7 @@ class TestQAStateFields:
         assert state["qa_history"] == []
         assert state["generation_context"] == {}
         assert state["is_question"] is False
+        assert state["handoffs"] == {}
 
     def test_bug_state_has_qa_history(self):
         """BugState includes qa_history field."""

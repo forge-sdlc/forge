@@ -21,6 +21,7 @@ from forge.workflow.utils.review_decisions import (
     reply_to_review_decisions,
 )
 from forge.workflow.utils.source_control import get_adapter, identity_for
+from forge.workspace.handoff import capture_handoff
 
 logger = logging.getLogger(__name__)
 
@@ -60,21 +61,55 @@ def route_review_response(state: WorkflowState) -> str:
     return "human_review_gate"
 
 
+def _thread_is_settled(
+    thread: dict[str, Any],
+    disposition: str | None,
+    bot_login: str,
+    prefix: str | None,
+) -> bool:
+    """A thread needs no further analysis until something new happens in it.
+
+    Accepted/ignored threads are settled permanently. Contested/clarified
+    threads are settled only while Forge's own reply is still the last word —
+    once a human comments after it, the thread is live again.
+    """
+    if disposition in ("accept", "ignore"):
+        return True
+    if disposition not in ("contest", "clarify"):
+        return False
+    if not bot_login:
+        # An unresolved identity must never coincidentally match an empty
+        # author (e.g. a deleted account) — fail toward re-analysis.
+        return False
+    comments = sorted(thread.get("comments", []), key=lambda c: c.get("created_at") or "")
+    if not comments:
+        return False
+    last_comment = comments[-1]
+    sender_login = last_comment.get("author", "")
+    comment_body = last_comment.get("body", "")
+    return sender_login.casefold() == bot_login.casefold() or bool(
+        prefix and comment_body.startswith(prefix)
+    )
+
+
 async def _fetch_pr_review_comments(
     current_repo: str,
     pr_number: int,
     review_body: str,
-    processed_thread_ids: set[str] | None = None,
+    review_comments: list[dict[str, Any]] | set[str] | None = None,
 ) -> str:
     """Fetch all PR review comments and format them for the analysis container.
 
     Combines the review summary body with all inline review comments so the
-    analysis agent has the full picture.
+    analysis agent has the full picture. Threads already settled (accepted,
+    ignored, or contested with no human reply since Forge's own response) are
+    excluded so the analysis agent isn't re-fed the same resolved feedback.
 
     Args:
         current_repo: Repository identifier (owner/repo or repos.yaml id).
         pr_number: PR number.
         review_body: The review summary body from the webhook.
+        review_comments: Prior per-thread decisions from earlier review cycles.
 
     Returns:
         Formatted markdown string of all review feedback.
@@ -87,7 +122,7 @@ async def _fetch_pr_review_comments(
         logger.warning(f"Could not fetch inline review comments: {e}")
         reviews = []
 
-    processed_thread_ids = processed_thread_ids or set()
+    processed_thread_ids = review_comments if isinstance(review_comments, set) else set()
     threads: list[dict[str, Any]] = [
         {
             "thread_id": review.id,
@@ -108,6 +143,32 @@ async def _fetch_pr_review_comments(
         lines.append(review_body.strip())
         lines.append("\n")
 
+    prior_decisions = review_comments if isinstance(review_comments, list) else []
+    dispositions_by_thread = {
+        item["thread_id"]: item.get("disposition")
+        for item in prior_decisions
+        if item.get("thread_id")
+    }
+
+    bot_login = ""
+    if any(
+        dispositions_by_thread.get(thread["thread_id"]) in ("contest", "clarify")
+        for thread in threads
+    ):
+        try:
+            repo_ref, adapter = get_adapter(current_repo)
+            bot_login = (await adapter.get_authenticated_identity(repo_ref)).login
+        except Exception as e:
+            logger.warning(f"Could not resolve Forge's bot login: {e}")
+
+    prefix = get_settings().forge_bot_comment_prefix
+    threads = [
+        thread
+        for thread in threads
+        if not _thread_is_settled(
+            thread, dispositions_by_thread.get(thread["thread_id"]), bot_login, prefix
+        )
+    ]
     if threads:
         lines.append("## Unresolved Review Threads\n")
         for thread in threads:
@@ -151,10 +212,16 @@ async def _reply_to_review_threads(
     *, current_repo: str, pr_number: int | None, decisions: list[dict[str, Any]]
 ) -> None:
     """Post decision responses in their originating GitHub review threads."""
+    # skip_addressed is defense-in-depth, not the primary guard: decisions here
+    # are freshly parsed from review-decisions.json each cycle and never carry
+    # a prior "addressed" status, so _thread_is_settled (which keeps a settled
+    # thread out of the analysis input entirely) is what actually prevents
+    # re-posting today.
     await reply_to_review_decisions(
         current_repo=current_repo,
         pr_number=pr_number,
         decisions=decisions,
+        skip_addressed=True,
     )
 
 
@@ -188,6 +255,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
     logger.info(f"Implementing PR review feedback for {ticket_key}")
 
     settings = get_settings()
+    fix_started = False
 
     try:
         try:
@@ -214,11 +282,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             current_repo=current_repo,
             pr_number=pr_number or 0,
             review_body=feedback_comment,
-            processed_thread_ids={
-                item["thread_id"]
-                for item in state.get("review_comments", [])
-                if item.get("disposition") in ("accept", "ignore") and item.get("thread_id")
-            },
+            review_comments=state.get("review_comments", []),
         )
 
         # Write all review comments to a file so the container can read them
@@ -265,7 +329,6 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             pr_number=pr_number,
             decisions=response_decisions,
         )
-
         # Backward-compatible fallback if an older analysis prompt writes only
         # the legacy objections file. New analysis never blocks accepted work.
         objections_path = Path(workspace_path) / _REVIEW_OBJECTIONS_FILE
@@ -292,6 +355,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             fix_prompt = load_prompt("implement-review-fix", ticket_key=ticket_key)
 
             runner = ContainerRunner(settings)
+            fix_started = True
             result = await runner.run(
                 workspace_path=Path(workspace_path),
                 task_summary=f"Implement PR review plan for {ticket_key}",
@@ -304,6 +368,9 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
                 skill_name="implement-review",
             )
             state = merge_review_exhaustion(state, result, ticket_key, "implement_review_fix")
+
+            state = capture_handoff(workspace_path, current_repo, f"{ticket_key}-review-fix", state)
+            fix_started = False
 
             # Commit any uncommitted changes the container left
             if git.has_uncommitted_changes():
@@ -386,6 +453,8 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"implement_review failed for {ticket_key}: {e}")
+        if fix_started and workspace_path:
+            state = capture_handoff(workspace_path, current_repo, f"{ticket_key}-review-fix", state)
         return {
             **state,
             "last_error": str(e),

@@ -113,34 +113,39 @@ class WorkspaceManager:
         workspace_id = f"{workspace.ticket_key}:{workspace.repo_name}"
 
         if workspace.path.exists():
-            podman = shutil.which("podman")
-            if podman:
-                try:
-                    result = subprocess.run(
-                        [podman, "unshare", "rm", "-rf", str(workspace.path)],
-                        check=False,
-                    )
-                except OSError as exc:
-                    logger.warning(
-                        "podman unshare failed for %s, falling back to shutil: %s",
-                        workspace.path,
-                        exc,
-                    )
-                    shutil.rmtree(workspace.path)
-                else:
-                    if result.returncode != 0:
-                        logger.warning(
-                            "podman unshare failed for %s, falling back to shutil",
-                            workspace.path,
-                        )
-                        shutil.rmtree(workspace.path)
-            else:
-                shutil.rmtree(workspace.path)
+            self.remove_path(workspace.path)
             logger.info(f"Destroyed workspace: {workspace}")
 
         workspace.is_active = False
-        if workspace_id in self._workspaces:
+        if self._workspaces.get(workspace_id) is workspace:
             del self._workspaces[workspace_id]
+
+    @staticmethod
+    def remove_path(path: Path) -> None:
+        """Remove a workspace tree, including files owned by sandbox containers."""
+        podman = shutil.which("podman")
+        if podman:
+            try:
+                result = subprocess.run(
+                    [podman, "unshare", "rm", "-rf", str(path)],
+                    check=False,
+                    timeout=60,
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                logger.warning(
+                    "podman unshare failed for %s, falling back to shutil: %s",
+                    path,
+                    exc,
+                )
+            else:
+                if result.returncode == 0 and not path.exists():
+                    return
+                logger.warning(
+                    "podman unshare failed to remove %s, falling back to shutil",
+                    path,
+                )
+
+        shutil.rmtree(path)
 
     def destroy_all_for_ticket(self, ticket_key: str) -> int:
         """Destroy all workspaces for a ticket.

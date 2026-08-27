@@ -39,6 +39,7 @@ class TestTaskTakeoverWorkflow:
         assert state["ticket_key"] == "TASK-123"
         assert state["ticket_type"] == TicketType.TASK
         assert state["current_node"] == "start"
+        assert state["handoffs"] == {}
 
     def test_matches_standalone_managed_task_and_epic(self):
         """matches returns True for managed standalone Task and Epic tickets."""

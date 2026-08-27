@@ -7,7 +7,6 @@ test_review_arriving_during_in_flight_ci_cycle_is_not_dropped in
 tests/unit/orchestrator/test_worker.py.
 """
 
-import pytest
 from langgraph.graph import END
 
 

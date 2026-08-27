@@ -18,6 +18,7 @@ def _make_state(
     tasks_by_repo=None,
     implemented_tasks=None,
     retry_count=0,
+    handoffs=None,
 ):
     return {
         "ticket_key": ticket_key,
@@ -32,6 +33,7 @@ def _make_state(
         "task_keys": [current_task_key] if current_task_key else [],
         "tasks_by_repo": tasks_by_repo or {current_repo: [current_task_key]},
         "implemented_tasks": implemented_tasks or [],
+        "handoffs": handoffs or {},
         "context": {"branch_name": "forge/BUG-123", "guardrails": ""},
         "fork_owner": "forge-bot",
         "fork_repo": "backend",
@@ -253,6 +255,58 @@ class TestImplementationNodeRouting:
         assert result["current_node"] == "implement_task"
         assert result["last_error"] == "container failed"
         assert result["retry_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_container_failure_checkpoints_partial_handoff(self, tmp_path):
+        """A returned container failure preserves its blocker handoff for another worker."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        state = _make_state(workspace_path=str(tmp_path), handoffs={})
+        mock_jira = _make_mock_jira()
+        container_result = MagicMock(success=False, error_message="container failed")
+
+        async def run_with_partial_handoff(**_kwargs):
+            forge_dir = tmp_path / ".forge"
+            forge_dir.mkdir()
+            (forge_dir / "handoff.md").write_text("Partial work; blocked by failing test")
+            return container_result
+
+        runner = MagicMock(run=run_with_partial_handoff)
+        with (
+            patch("forge.workflow.nodes.implementation.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.nodes.implementation.ContainerRunner", return_value=runner),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+        ):
+            result = await implement_task(state)
+
+        assert result["last_error"] == "container failed"
+        assert result["handoffs"]["acme/backend"]["content"].startswith("Partial work")
+        assert result["handoffs"]["acme/backend"]["task_key"] == "TASK-456"
+
+    @pytest.mark.asyncio
+    async def test_runner_exception_checkpoints_handoff_written_before_crash(self, tmp_path):
+        """A runner exception still captures a handoff already flushed to the workspace."""
+        from forge.workflow.nodes.implementation import implement_task
+
+        state = _make_state(workspace_path=str(tmp_path), handoffs={})
+        mock_jira = _make_mock_jira()
+
+        async def run_then_raise(**_kwargs):
+            forge_dir = tmp_path / ".forge"
+            forge_dir.mkdir()
+            (forge_dir / "handoff.md").write_text("Timed out after partial implementation")
+            raise TimeoutError("container timed out")
+
+        runner = MagicMock(run=run_then_raise)
+        with (
+            patch("forge.workflow.nodes.implementation.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.nodes.implementation.ContainerRunner", return_value=runner),
+            patch("forge.workflow.nodes.implementation.get_settings"),
+        ):
+            result = await implement_task(state)
+
+        assert result["last_error"] == "container timed out"
+        assert result["handoffs"]["acme/backend"]["content"].startswith("Timed out")
 
     @pytest.mark.asyncio
     async def test_successful_implementation_is_pushed_before_checkpoint(self) -> None:

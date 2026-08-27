@@ -29,6 +29,7 @@ class TestDestroyWorkspace:
         mock_run.assert_called_once_with(
             ["/usr/bin/podman", "unshare", "rm", "-rf", str(ws.path)],
             check=False,
+            timeout=60,
         )
         assert not ws.is_active
 
@@ -90,3 +91,22 @@ class TestDestroyWorkspace:
 
         assert not ws.is_active
         assert "T-1:org/repo" not in manager._workspaces
+
+    def test_destroying_superseded_workspace_keeps_current_registry_entry(self, tmp_path):
+        old = _workspace(tmp_path)
+        current = Workspace(
+            path=tmp_path / "current",
+            repo_name=old.repo_name,
+            branch_name=old.branch_name,
+            ticket_key=old.ticket_key,
+        )
+        manager = WorkspaceManager()
+        manager._workspaces["T-1:org/repo"] = current
+
+        with (
+            patch("forge.workspace.manager.shutil.which", return_value=None),
+            patch("forge.workspace.manager.shutil.rmtree"),
+        ):
+            manager.destroy_workspace(old)
+
+        assert manager.get_workspace("T-1", "org/repo") is current

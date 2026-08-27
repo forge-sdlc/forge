@@ -720,3 +720,171 @@ class TestCLIConfigErrorHandling:
             assert "Warning: Project property 'forge.repos' is malformed" in err
             # Under FORGE_REQUIRE_PROJECT_CONFIG=True, degrades to [required / missing]
             assert "forge.repos:" in out and "[required / missing]" in out
+
+
+class TestCLIReferencesConfig:
+    @pytest.mark.asyncio
+    async def test_cmd_project_setup_add_references(self, capsys) -> None:
+        """Adding references via --add-reference and --ref-description writes correctly to Jira."""
+        with patch("forge.integrations.jira.client.JiraClient") as mock_jira_cls:
+            mock_jira = MagicMock()
+            mock_jira.get_project_references = AsyncMock(return_value=[])
+            mock_jira.set_project_references = AsyncMock()
+            mock_jira.close = AsyncMock()
+            mock_jira_cls.return_value = mock_jira
+
+            class Args:
+                project_key = "MYPROJ"
+                repo = None
+                default_repo = None
+                prd_proposals_repo = None
+                prd_proposals_path = None
+                skills_config = None
+                add_skill = None
+                remove_skill = None
+                list_skills = False
+                add_reference = ["https://example.com/ref1", "https://example.com/ref2"]
+                ref_description = ["Desc 1", "Desc 2"]
+                remove_reference = None
+                list_references = True
+
+            code = await cmd_project_setup(Args())
+            assert code == 0
+
+            # Verify set_project_references was called with fully normalized URLs
+            mock_jira.set_project_references.assert_called_once_with(
+                "MYPROJ",
+                [
+                    {"url": "https://example.com/ref1", "description": "Desc 1"},
+                    {"url": "https://example.com/ref2", "description": "Desc 2"},
+                ],
+            )
+
+            out, err = capsys.readouterr()
+            assert "forge.references" in out
+            assert "https://example.com/ref1 - Desc 1" in out
+            assert "https://example.com/ref2 - Desc 2" in out
+
+    @pytest.mark.asyncio
+    async def test_cmd_project_setup_mismatched_description_count(self, capsys) -> None:
+        """Mismatched description and reference counts returns code 1 and prints an error."""
+
+        # Scenario 1: description provided, but no add_reference
+        class Args1:
+            project_key = "MYPROJ"
+            repo = None
+            default_repo = None
+            prd_proposals_repo = None
+            prd_proposals_path = None
+            skills_config = None
+            add_skill = None
+            remove_skill = None
+            list_skills = False
+            add_reference = None
+            ref_description = ["Desc 1"]
+            remove_reference = None
+            list_references = False
+
+        code = await cmd_project_setup(Args1())
+        assert code == 1
+        out, err = capsys.readouterr()
+        assert "Error: --ref-description requires matching number of --add-reference items." in err
+
+        # Scenario 2: mismatched lengths
+        class Args2:
+            project_key = "MYPROJ"
+            repo = None
+            default_repo = None
+            prd_proposals_repo = None
+            prd_proposals_path = None
+            skills_config = None
+            add_skill = None
+            remove_skill = None
+            list_skills = False
+            add_reference = ["https://example.com/ref1"]
+            ref_description = ["Desc 1", "Desc 2"]
+            remove_reference = None
+            list_references = False
+
+        code = await cmd_project_setup(Args2())
+        assert code == 1
+        out, err = capsys.readouterr()
+        assert "Error: --ref-description requires matching number of --add-reference items." in err
+
+    @pytest.mark.asyncio
+    async def test_cmd_project_setup_remove_references(self, capsys) -> None:
+        """Removing references via --remove-reference removes them correctly."""
+        with patch("forge.integrations.jira.client.JiraClient") as mock_jira_cls:
+            mock_jira = MagicMock()
+            mock_jira.get_project_references = AsyncMock(
+                return_value=[
+                    {"url": "https://example.com/ref1", "description": "Desc 1"},
+                    {"url": "https://example.com/ref2", "description": "Desc 2"},
+                ]
+            )
+            mock_jira.set_project_references = AsyncMock()
+            mock_jira.close = AsyncMock()
+            mock_jira_cls.return_value = mock_jira
+
+            class Args:
+                project_key = "MYPROJ"
+                repo = None
+                default_repo = None
+                prd_proposals_repo = None
+                prd_proposals_path = None
+                skills_config = None
+                add_skill = None
+                remove_skill = None
+                list_skills = False
+                add_reference = None
+                ref_description = None
+                remove_reference = ["https://example.com/ref1"]
+                list_references = True
+
+            code = await cmd_project_setup(Args())
+            assert code == 0
+
+            # Verify set_project_references was called without the removed URL
+            mock_jira.set_project_references.assert_called_once_with(
+                "MYPROJ",
+                [
+                    {"url": "https://example.com/ref2", "description": "Desc 2"},
+                ],
+            )
+
+            out, err = capsys.readouterr()
+            assert "https://example.com/ref2 - Desc 2" in out
+            assert "https://example.com/ref1" not in out
+
+    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.setup_logging")
+    def test_cli_parser_registers_references(self, _mock_setup_logging, mock_cmd):
+        """Verify argparse parser registers --add-reference, --ref-description, --description, --remove-reference, and --list-references."""
+        mock_cmd.return_value = 0
+        code = main(
+            [
+                "project-setup",
+                "myproj",
+                "--add-reference",
+                "https://example.com/ref1",
+                "--ref-description",
+                "Desc 1",
+                "--add-reference",
+                "https://example.com/ref2",
+                "--description",
+                "Desc 2",
+                "--remove-reference",
+                "https://example.com/ref3",
+                "--list-references",
+            ]
+        )
+        assert code == 0
+        mock_cmd.assert_called_once()
+        args = mock_cmd.call_args[0][0]
+        assert args.add_reference == [
+            "https://example.com/ref1",
+            "https://example.com/ref2",
+        ]
+        assert args.ref_description == ["Desc 1", "Desc 2"]
+        assert args.remove_reference == ["https://example.com/ref3"]
+        assert args.list_references is True

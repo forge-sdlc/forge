@@ -28,7 +28,9 @@ from forge.workflow.nodes.git_persistence import (
 from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
+from forge.workflow.utils.references import fetch_and_inject_references
 from forge.workspace.git_ops import GitOperations
+from forge.workspace.handoff import capture_handoff
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
     current_task = state.get("current_task_key")
     task_keys = state.get("task_keys", [])
     implementation_node = _implementation_node_name(state)
+    current_repo = state.get("current_repo", "")
+    container_started = False
     recorded_workspace = state.get("workspace_path")
     local_workspace_survived = bool(recorded_workspace and Path(recorded_workspace).exists())
 
@@ -195,12 +199,14 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             guardrails=guardrails,
         )
 
+        full_description = await fetch_and_inject_references(state, jira, full_description)
+
         # Run implementation in container sandbox
         runner = ContainerRunner(settings)
 
-        current_repo = state.get("current_repo", "")
         # Copy list to avoid mutation after passing to runner
         implemented_tasks = list(state.get("implemented_tasks", []))
+        container_started = True
         result = await runner.run(
             workspace_path=Path(workspace_path),
             task_summary=task_summary,
@@ -221,6 +227,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
         # Collect review exhaustion data (if auto-review ran and exhausted)
         state = merge_review_exhaustion(state, result, current_task, "implement_task")
+        state = capture_handoff(workspace_path, current_repo, current_task, state)
+        container_started = False
 
         if result.success:
             logger.info(f"Container completed successfully for {current_task}")
@@ -276,6 +284,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Implementation failed for {current_task}: {e}")
+        if container_started:
+            state = capture_handoff(workspace_path, current_repo, current_task or ticket_key, state)
         return {
             **state,
             "last_error": str(e),

@@ -592,6 +592,8 @@ def _save_conversation_history(
                     "role": getattr(msg, "type", "unknown"),
                     "content": getattr(msg, "content", str(msg)),
                     "tool_calls": getattr(msg, "tool_calls", None),
+                    "status": getattr(msg, "status", None),
+                    "response_metadata": getattr(msg, "response_metadata", None),
                 }
                 for msg in messages
             ],

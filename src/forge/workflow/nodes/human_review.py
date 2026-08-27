@@ -135,12 +135,14 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
     logger.info(f"Completing {len(implemented_tasks)} Tasks for {ticket_key}")
 
     jira = JiraClient()
+    jira_completed_tasks: list[str] = []
 
     try:
         for task_key in implemented_tasks:
             try:
                 # Transition to Closed status and remove forge workflow labels
                 await jira.transition_issue(task_key, JiraStatus.CLOSED.value)
+                jira_completed_tasks.append(task_key)
                 await jira.set_workflow_label(task_key, ForgeLabel.TASK_REVIEW_APPROVED)
                 logger.info(f"Task {task_key} marked as Done")
             except Exception as e:
@@ -150,6 +152,7 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
             {
                 **state,
                 "tasks_completed": True,
+                "jira_completed_tasks": jira_completed_tasks,
                 "current_node": "aggregate_epic_status",
                 "ci_fix_attempt": 0,
             }
@@ -177,8 +180,9 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
         Updated state with Epic aggregation.
     """
     ticket_key = state["ticket_key"]
-    epic_keys = state.get("epic_keys", [])
-    implemented_tasks = state.get("implemented_tasks", [])
+    epic_keys = state.get("epic_keys") or []
+    implemented_tasks = state.get("implemented_tasks") or []
+    jira_completed_tasks = state.get("jira_completed_tasks") or []
 
     logger.info(f"Aggregating Epic status for {ticket_key}")
 
@@ -193,7 +197,9 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
         for epic_key in epic_keys:
             # Check if all Tasks under this Epic are done
             # In practice, would query Jira for child issues
-            epic_done = await _check_epic_completion(jira, epic_key)
+            epic_done = await _check_epic_completion(
+                jira, epic_key, completed_keys=set(jira_completed_tasks)
+            )
 
             if epic_done:
                 # Transition Epic to Closed status
@@ -241,6 +247,8 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         Updated state with Feature completed.
     """
     ticket_key = state["ticket_key"]
+    epic_keys = state.get("epic_keys") or []
+    jira_completed_tasks = state.get("jira_completed_tasks") or []
 
     logger.info(f"Aggregating Feature status for {ticket_key}")
 
@@ -250,6 +258,37 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         # Transition Feature to Closed status
         await jira.transition_issue(ticket_key, JiraStatus.CLOSED.value)
         logger.info(f"Feature {ticket_key} marked as Done")
+
+        # Transition parent Epic if present
+        try:
+            feature_issue = await jira.get_issue(ticket_key)
+            if feature_issue.parent_key:
+                # The parent Epic's children are usually sibling Features/Stories,
+                # but hierarchies vary (flat projects can nest tasks/epics directly
+                # under it). Union every key we just closed — tasks, decomposed
+                # epics, and this Feature — so Jira search-index lag on any of them
+                # cannot make the parent look incomplete. _check_epic_completion
+                # only matches keys that are actually children of the parent.
+                completed_keys = set(jira_completed_tasks) | set(epic_keys) | {ticket_key}
+                parent_epic_done = await _check_epic_completion(
+                    jira,
+                    feature_issue.parent_key,
+                    completed_keys=completed_keys,
+                    # This Feature is always a child of the parent, so an empty
+                    # result means the JQL missed the hierarchy (config mismatch),
+                    # not a childless Epic. Don't close on that ambiguity.
+                    treat_empty_as_complete=False,
+                )
+                if parent_epic_done:
+                    await jira.transition_issue(feature_issue.parent_key, JiraStatus.CLOSED.value)
+                    logger.info(f"Transitioned parent Epic {feature_issue.parent_key} to Closed")
+                else:
+                    logger.info(
+                        f"Parent Epic {feature_issue.parent_key} has remaining incomplete child tickets. "
+                        "Skipping transition to Closed."
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to fetch issue {ticket_key} or transition its parent Epic: {e}")
 
         # Add completion comment
         await post_status_comment(
@@ -278,12 +317,23 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         await jira.close()
 
 
-async def _check_epic_completion(jira: JiraClient, epic_key: str) -> bool:
+async def _check_epic_completion(
+    jira: JiraClient,
+    epic_key: str,
+    completed_keys: set[str] | None = None,
+    treat_empty_as_complete: bool = True,
+) -> bool:
     """Check if all Tasks under an Epic are done.
 
     Args:
         jira: Jira client.
         epic_key: Epic to check.
+        completed_keys: Optional set of issue keys to assume are already completed/done.
+        treat_empty_as_complete: When True (default), an Epic with no discovered
+            children is considered complete. Pass False when the caller knows the
+            Epic must have children (e.g. a parent Epic of the current Feature),
+            so an empty result — which signals a query/config mismatch rather than
+            a childless Epic — does not trigger a premature transition to Closed.
 
     Returns:
         True if all Tasks are done.
@@ -292,12 +342,24 @@ async def _check_epic_completion(jira: JiraClient, epic_key: str) -> bool:
         children = await jira.get_epic_children(epic_key)
 
         if not children:
-            # Edge case: Epic with no Tasks is considered complete
-            logger.warning(f"Epic {epic_key} has no child Tasks - treating as complete")
-            return True
+            if treat_empty_as_complete:
+                # Edge case: Epic with no Tasks is considered complete
+                logger.warning(f"Epic {epic_key} has no child Tasks - treating as complete")
+                return True
+            logger.warning(
+                f"Epic {epic_key} returned no child tickets from Jira; not treating as "
+                "complete (expected at least one child — possible query/config mismatch)"
+            )
+            return False
 
         done_statuses = {"Done", "Closed", "Resolved"}
-        incomplete = [child for child in children if child.status not in done_statuses]
+        completed_set = {k.upper() for k in completed_keys} if completed_keys else set()
+        incomplete = [
+            child
+            for child in children
+            if child.status not in done_statuses
+            and not (completed_set and child.key.upper() in completed_set)
+        ]
 
         if incomplete:
             logger.info(

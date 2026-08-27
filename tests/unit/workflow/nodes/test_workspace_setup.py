@@ -715,7 +715,7 @@ class TestPrepareWorkspaceRecovery:
                 side_effect=[old_git, new_git],
             ),
             patch(
-                "forge.workflow.nodes.workspace_setup.shutil.rmtree",
+                "forge.workflow.nodes.workspace_setup.WorkspaceManager.remove_path",
                 side_effect=transient_rmtree,
             ),
             patch("forge.workflow.nodes.workspace_setup.time.sleep") as sleep,
@@ -759,7 +759,7 @@ class TestPrepareWorkspaceRecovery:
                 side_effect=[old_git, new_git],
             ),
             patch(
-                "forge.workflow.nodes.workspace_setup.shutil.rmtree",
+                "forge.workflow.nodes.workspace_setup.WorkspaceManager.remove_path",
                 side_effect=persistent_rmtree,
             ),
             patch("forge.workflow.nodes.workspace_setup.time.sleep"),

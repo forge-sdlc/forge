@@ -43,7 +43,7 @@ def configure_tracing(
     resource = Resource.create(
         {
             "service.name": service_name,
-            "service.version": "0.1.0",
+            "service.version": "1.0.0",
             "deployment.environment": settings.log_level.lower(),
         }
     )

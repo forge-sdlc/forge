@@ -23,7 +23,7 @@ This directory contains proposals for new Forge features and enhancements.
 | Title | Status | Author |
 |-------|--------|--------|
 | [Q&A Mode for Generated Artifacts](qa-mode-for-generated-artifacts.md) | Implemented | eshulman2 |
-| [Workflow Status Updates in Jira](workflow-status-updates-in-jira.md) | Draft | eshulman2 |
+| [Workflow Status Updates in Jira](workflow-status-updates-in-jira.md) | Implemented | eshulman2 |
 | [Retryable Blocked State via forge:retry](retryable-blocked-state.md) | Implemented | eshulman2 |
 | [Dynamic Skill Loading by Jira Project](dynamic-skill-loading.md) | Implemented | eshulman2 |
 | [CI Gate Skip via Comment Command](ci-gate-skip-command.md) | Implemented | eshulman2 |

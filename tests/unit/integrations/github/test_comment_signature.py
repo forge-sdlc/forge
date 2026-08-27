@@ -2,7 +2,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from forge.integrations.github.comment_signature import is_self_comment, prepend_bot_prefix
+from forge.integrations.github.comment_signature import (
+    is_self_comment,
+    prepend_bot_prefix,
+    resolve_bot_login,
+)
 
 
 def test_prepend_bot_prefix_empty_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -232,3 +236,19 @@ def test_is_self_comment_sc004_sender_username_bot_suffix() -> None:
     assert is_self_comment("my-app[BOT]", "Hello", "my-app", "some-prefix") is True
     assert is_self_comment("forge-bot[bot]", "Some text", "forge-bot", None) is True
     assert is_self_comment("github-actions[bot]", "Any comment body", "github-actions", "") is True
+
+
+async def test_resolve_bot_login_returns_authenticated_login() -> None:
+    class FakeGitHubClient:
+        async def get_authenticated_user(self) -> dict:
+            return {"login": "forge-bot"}
+
+    assert await resolve_bot_login(FakeGitHubClient()) == "forge-bot"
+
+
+async def test_resolve_bot_login_returns_empty_string_when_login_missing() -> None:
+    class FakeGitHubClient:
+        async def get_authenticated_user(self) -> dict:
+            return {}
+
+    assert await resolve_bot_login(FakeGitHubClient()) == ""

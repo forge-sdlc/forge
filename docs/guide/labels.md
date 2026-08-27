@@ -65,3 +65,22 @@ Standalone Tasks and Epics can be processed with the standard `forge:managed` la
 
 !!! warning "Don't remove `forge:managed`"
     Removing `forge:managed` won't stop an in-progress workflow. It only prevents new workflows from starting on the ticket.
+
+## Automatic Jira Status Transitions
+
+While Forge primarily tracks internal state using workflow labels (to remain compatible with any Jira configuration), it also automatically transitions actual Jira issue statuses at key workflow milestones.
+
+Forge utilizes the standard Jira workflow statuses (`In Progress` and `Closed`) to transition tickets as they move through implementation and delivery:
+
+### ⚙️ Workspace Setup & Implementation Start
+When workspace setup begins and code implementation starts, Forge automatically transitions the following issues to **`In Progress`**:
+* **Tasks:** Any decomposed task tickets associated with the workflow.
+* **Epics:** Any decomposed epic tickets associated with the workflow.
+* **Parent Epic:** If the Feature or Bug ticket is linked to a parent Epic, that parent Epic is also automatically transitioned to **`In Progress`** (errors are gracefully caught and suppressed if the status transition is restricted in your project).
+
+### ✅ Completion & Merge
+When implementation is complete and the pull requests are successfully merged:
+* **Tasks:** Associated task sub-tickets are transitioned to **`Closed`**.
+* **Epics:** Associated epic sub-tickets are transitioned to **`Closed`** once all of their underlying tasks are completed.
+* **Feature:** The main Feature ticket is transitioned to **`Closed`**.
+* **Parent Epic:** The parent Epic of the Feature/Bug is automatically transitioned to **`Closed`** once all child tickets are merged and completed.

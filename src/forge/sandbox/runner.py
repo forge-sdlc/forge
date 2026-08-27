@@ -66,6 +66,80 @@ EXIT_SUCCESS = 0
 EXIT_TASK_FAILED = 1
 EXIT_TESTS_FAILED = 2
 EXIT_CONFIG_ERROR = 3
+CONTAINER_HEARTBEAT_INTERVAL_SECONDS = 60
+
+
+def _contains_error_result(value: Any) -> bool:
+    """Return whether nested tool output contains an explicit error result."""
+    if isinstance(value, dict):
+        if value.get("result") == "error" or value.get("status") == "error":
+            return True
+        return any(_contains_error_result(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_error_result(item) for item in value)
+    return False
+
+
+def _extract_agent_transcript_errors(
+    workspace_path: Path,
+    task_key: str,
+    max_assistant_turns: int = 3,
+) -> tuple[Path | None, list[str]]:
+    """Extract bounded error context from a task's persisted agent history."""
+    transcript_path = workspace_path / ".forge" / "history" / f"{task_key}.json"
+    if not transcript_path.is_file():
+        return None, []
+
+    try:
+        data = json.loads(transcript_path.read_text())
+        messages = data.get("messages", [])
+        if not isinstance(messages, list):
+            raise ValueError("'messages' must be a list")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        logger.warning(f"Could not parse agent transcript {transcript_path}: {exc}")
+        return transcript_path, []
+
+    assistant_indices = [
+        index
+        for index, message in enumerate(messages)
+        if isinstance(message, dict) and message.get("role") in {"ai", "assistant"}
+    ]
+    start = (
+        assistant_indices[-max_assistant_turns]
+        if len(assistant_indices) >= max_assistant_turns
+        else 0
+    )
+
+    errors: list[str] = []
+    refusal_markers = ("i cannot", "i can't", "i am unable", "i'm unable")
+    for message in messages[start:]:
+        if not isinstance(message, dict):
+            continue
+
+        role = str(message.get("role", "unknown"))
+        content = message.get("content", "")
+        content_text = content if isinstance(content, str) else json.dumps(content, default=str)
+        metadata = message.get("response_metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        stop_reason = metadata.get("stop_reason") or metadata.get("finish_reason")
+
+        signal: str | None = None
+        if stop_reason in {"max_tokens", "length"}:
+            signal = f"stopped with {stop_reason}"
+        elif role in {"tool", "function"} and (
+            message.get("status") == "error" or _contains_error_result(content)
+        ):
+            signal = "tool returned an error"
+        elif role in {"ai", "assistant"} and any(
+            marker in content_text.lower() for marker in refusal_markers
+        ):
+            signal = "assistant refusal"
+
+        if signal:
+            excerpt = " ".join(content_text.split())[:1000]
+            errors.append(f"{signal} ({role}): {excerpt}")
+
+    return transcript_path, errors
 
 
 @dataclass
@@ -637,6 +711,8 @@ class ContainerRunner:
         stderr_str: str,
         collected_cycles: list[ReviewCycleData],
         container_name: str,
+        transcript_path: Path | None = None,
+        transcript_errors: list[str] | None = None,
     ) -> ContainerResult:
         """Map container exit code to a ContainerResult.
 
@@ -649,6 +725,8 @@ class ContainerRunner:
             stderr_str: Decoded container stderr.
             collected_cycles: Review cycles collected during execution.
             container_name: Container name for log messages.
+            transcript_path: Persisted agent transcript, when available.
+            transcript_errors: Error signals extracted from recent transcript turns.
 
         Returns:
             ContainerResult reflecting the exit status.
@@ -662,6 +740,10 @@ class ContainerRunner:
                 logger.info(f"Container stderr:\n{stderr_str}")
             if stdout_str:
                 logger.debug(f"Container stdout:\n{stdout_str}")
+            if transcript_path:
+                logger.error(f"Agent transcript: {transcript_path}")
+            for error_context in transcript_errors or []:
+                logger.error(f"Agent transcript error context: {error_context}")
             if self.settings.container_keep:
                 message = (
                     f"Container kept for debugging (FORGE_CONTAINER_KEEP=true): {container_name}"
@@ -703,6 +785,27 @@ class ContainerRunner:
                 stderr=stderr_str,
                 error_message=f"Task failed with exit code {exit_code}",
                 review_cycles=collected_cycles,
+            )
+
+    @staticmethod
+    async def _log_container_heartbeat(
+        container_name: str,
+        timeout_seconds: int,
+    ) -> None:
+        """Log periodic progress while a container execution is running."""
+        loop = asyncio.get_running_loop()
+        started_at = loop.time()
+
+        while True:
+            await asyncio.sleep(CONTAINER_HEARTBEAT_INTERVAL_SECONDS)
+            elapsed = int(loop.time() - started_at)
+            remaining = max(0, timeout_seconds - elapsed)
+            logger.info(
+                "Container %s still running (%ss elapsed, %ss remaining of %ss timeout)",
+                container_name,
+                elapsed,
+                remaining,
+                timeout_seconds,
             )
 
     async def run(
@@ -800,10 +903,18 @@ class ContainerRunner:
                 collected_cycles,
             )
 
+            heartbeat_task = asyncio.create_task(
+                self._log_container_heartbeat(container_name, config.timeout_seconds)
+            )
             try:
-                exec_result = await self._driver.execute(spec)
-            except asyncio.CancelledError:
-                raise
+                try:
+                    exec_result = await self._driver.execute(spec)
+                except asyncio.CancelledError:
+                    raise
+                finally:
+                    heartbeat_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await heartbeat_task
             finally:
                 await self._finalize_review_polling(
                     poller,
@@ -816,12 +927,19 @@ class ContainerRunner:
                     collected_cycles,
                 )
 
+            transcript_path, transcript_errors = _extract_agent_transcript_errors(
+                workspace_path,
+                task_key or "UNKNOWN",
+            )
+
             return self._build_container_result(
                 exec_result.exit_code,
                 exec_result.stdout,
                 exec_result.stderr,
                 collected_cycles,
                 container_name,
+                transcript_path,
+                transcript_errors,
             )
 
         finally:

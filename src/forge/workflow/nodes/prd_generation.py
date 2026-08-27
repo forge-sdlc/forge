@@ -21,6 +21,7 @@ from forge.workflow.nodes.proposal_pr import (
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.proposal_review_threads import reply_to_proposal_decisions
+from forge.workflow.utils.references import fetch_and_inject_references
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +147,8 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
                 "current_node": "generate_prd",
             }
 
+        raw_requirements = await fetch_and_inject_references(state, jira, raw_requirements)
+
         # Build context from issue metadata
         context: dict[str, Any] = {
             "ticket_key": ticket_key,
@@ -209,7 +212,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
                 "prd_content": prd_content,
                 "generation_context": generation_context,
                 "current_node": "prd_approval_gate",
-                "last_error": f"PRD publish pending: {jira_error}" if jira_error else None,
+                "last_error": (f"PRD publish pending: {jira_error}" if jira_error else None),
             }
         )
         if prd_pr_result:
@@ -260,9 +263,11 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
     agent = ForgeAgent()
 
     try:
+        original_prd_with_refs = await fetch_and_inject_references(state, jira, original_prd)
+
         # Regenerate PRD with feedback
         new_prd = await agent.regenerate_with_feedback(
-            original_content=original_prd,
+            original_content=original_prd_with_refs,
             feedback=feedback,
             content_type="prd",
             ticket_key=ticket_key,
@@ -316,12 +321,14 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
         if state.get("automated_review_revision_pending"):
             automated_review_revision_count += 1
         proposal_review_decisions = [
-            {
-                **decision,
-                "status": "addressed",
-            }
-            if decision.get("disposition") in ("accept", "uncertain")
-            else decision
+            (
+                {
+                    **decision,
+                    "status": "addressed",
+                }
+                if decision.get("disposition") in ("accept", "uncertain")
+                else decision
+            )
             for decision in state.get("proposal_review_decisions", [])
         ]
 

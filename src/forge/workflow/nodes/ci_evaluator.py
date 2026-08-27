@@ -33,6 +33,7 @@ from forge.workflow.utils.jira_status import (
 )
 from forge.workflow.utils.source_control import get_adapter, identity_for
 from forge.workspace.git_ops import GitOperations
+from forge.workspace.handoff import capture_handoff
 from forge.workspace.manager import Workspace
 
 logger = logging.getLogger(__name__)
@@ -296,6 +297,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     ci_fix_max = state.get("ci_fix_max_attempts", 5)
 
     jira = JiraClient()
+    fix_started = False
     try:
         message = (
             f"🔧 CI checks failed. Analyzing failure attribution ({ci_fix_attempt}/{ci_fix_max})."
@@ -443,6 +445,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         logger.info(f"Phase 2: Applying fixes for {ticket_key}")
         fix_prompt = load_prompt("fix-ci", fix_plan=fix_plan)
         runner = ContainerRunner(settings)
+        fix_started = True
         result = await runner.run(
             workspace_path=Path(workspace_path),
             task_summary=f"Apply CI fix plan (attempt {ci_fix_attempt})",
@@ -509,6 +512,14 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 attempt=ci_fix_attempt,
             )
 
+        state = capture_handoff(
+            workspace_path,
+            state.get("current_repo", ""),
+            f"{ticket_key}-ci-fix-{ci_fix_attempt}",
+            state,
+        )
+        fix_started = False
+
         return update_state_timestamp(
             {
                 **state,
@@ -520,6 +531,13 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"CI fix failed for {ticket_key}: {e}")
+        if fix_started:
+            state = capture_handoff(
+                workspace_path,
+                state.get("current_repo", ""),
+                f"{ticket_key}-ci-fix-{ci_fix_attempt}",
+                state,
+            )
         return {
             **state,
             "last_error": str(e),

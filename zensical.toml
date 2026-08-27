@@ -9,12 +9,18 @@ edit_uri = "edit/main/docs/"
 nav = [
   {"Home" = "index.md"},
   {"Getting Started" = "getting-started.md"},
+  {"Product Roadmap" = "roadmap.md"},
   {"User Guide" = [
     {"Feature Workflow" = "guide/feature-workflow.md"},
     {"Bug Workflow" = "guide/bug-workflow.md"},
     {"Task Workflow" = "guide/task-workflow.md"},
+    {"Auto-Review" = "guide/auto-review.md"},
     {"Jira Labels" = "guide/labels.md"},
     {"PR Commands" = "guide/pr-commands.md"},
+    {"Skill Testing & Evaluation" = [
+      {"Testing Skills Locally" = "dev/test-skill.md"},
+      {"Skill Evaluation" = "dev/skill-evaluation.md"},
+    ]},
   ]},
   {"Developer Guide" = [
     {"Overview" = "developer-guide.md"},
@@ -26,6 +32,10 @@ nav = [
     ]},
     {"Local Setup" = "dev/setup.md"},
     {"Testing" = "dev/testing.md"},
+    {"Skill Testing & Evaluation" = [
+      {"Testing Skills Locally" = "dev/test-skill.md"},
+      {"Skill Evaluation" = "dev/skill-evaluation.md"},
+    ]},
     {"Contributing" = "dev/contributing.md"},
   ]},
   {"Skills" = [
@@ -37,6 +47,7 @@ nav = [
     {"API Endpoints" = "reference/api.md"},
     {"Configuration" = "reference/config.md"},
     {"Proposals" = "reference/proposals.md"},
+    {"review.md Schema" = "reference/review-md-schema.md"},
   ]},
 ]
 
