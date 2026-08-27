@@ -1,6 +1,6 @@
 # Phase 2 implementation plan: event interpretation outside the worker
 
-**Status:** In progress
+**Status:** Complete
 
 **Depends on:** Phase 1 domain contracts
 
@@ -46,3 +46,21 @@ testable adapters.
 - Invalid or irrelevant commands have inspectable reasons.
 - The worker contains no Jira/GitHub payload-shape interpretation.
 - Existing event/resume characterization suites remain behaviorally equivalent.
+
+## Completion evidence
+
+- `OrchestratorWorker` contains no `message.payload` or raw payload-shape reads; an
+  architecture test enforces that boundary.
+- Jira and source-control adapters normalize ingress without Redis, LangGraph, or
+  provider clients, with an architecture test enforcing their dependency direction.
+- Approval, rejection, retry, cancel, synchronize, rebase, gate override, YOLO, and
+  option-selection signals produce stable, versioned commands.
+- Command decisions are validated and durably retain accepted, ignored, duplicate,
+  stale, and invalid outcomes in checkpoint state.
+- Exceptional command application uses a registered handler layer. Provider review
+  reads, proposal replies, and automated-review analysis use an injected enrichment
+  service rather than worker-owned clients.
+- Worker size fell from 2,518 to 2,173 lines while removing 534 legacy lines; remaining
+  size is station/effect migration work owned by later phases.
+- CI-equivalent verification on 2026-08-27: 2,837 unit/workflow/contract/flow tests and
+  88 non-quarantined integration tests passed; Ruff lint and format checks passed.
