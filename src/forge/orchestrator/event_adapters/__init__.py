@@ -1,5 +1,10 @@
 """Registered ingress adapters for provider-independent workflow evidence."""
 
+from forge.orchestrator.event_adapters.commands import (
+    CommandDecision,
+    CommandDecisionStatus,
+    interpret_event,
+)
 from forge.orchestrator.event_adapters.registry import (
     AdaptedEvent,
     EventAdapterRegistry,
@@ -8,6 +13,9 @@ from forge.orchestrator.event_adapters.registry import (
 
 __all__ = [
     "AdaptedEvent",
+    "CommandDecision",
+    "CommandDecisionStatus",
     "EventAdapterRegistry",
     "create_default_event_adapter_registry",
+    "interpret_event",
 ]

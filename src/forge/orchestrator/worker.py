@@ -36,6 +36,7 @@ from forge.orchestrator.checkpointer import get_checkpointer, get_ticket_from_pr
 from forge.orchestrator.event_adapters import (
     EventAdapterRegistry,
     create_default_event_adapter_registry,
+    interpret_event,
 )
 from forge.orchestrator.event_adapters.source_control import extract_change_request_url
 from forge.queue.consumer import QueueConsumer
@@ -643,6 +644,22 @@ class OrchestratorWorker:
         Returns:
             Updated state for workflow resumption.
         """
+        adapted_event = self.event_adapters.adapt(message)
+        command_decision = interpret_event(message, adapted_event, current_state)
+        if command_decision.command is not None:
+            logger.debug(
+                "Interpreted %s as %s command %s",
+                message.event_id,
+                command_decision.command.command_type.value,
+                command_decision.command.command_id,
+            )
+        else:
+            logger.debug(
+                "No workflow command derived from %s: %s",
+                message.event_id,
+                command_decision.reason,
+            )
+
         payload = message.payload
         event_obj = self._deserialize_event(message)
         current_state = activate_pull_request_for_event(current_state, event_obj)
