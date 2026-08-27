@@ -27,3 +27,9 @@ This PR implements slices 1–3 on top of the existing strict declarative workfl
 It introduces no second executable definition: JSON inspection, Mermaid rendering,
 LangGraph compilation and revision comparison all consume the same canonical
 `WorkflowDefinition` and digest.
+
+The governance and rollout requirements for these definitions are specified in the
+[Workflow-definition governance policy](phase-5-workflow-definition-governance.md). The
+policy covers golden paths, custom definitions, ownership and review, mandatory contracts,
+effect capabilities, immutable publication/activation, compatibility, migration, and
+operational evidence.
