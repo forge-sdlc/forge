@@ -15,6 +15,7 @@ JIRA_LABEL_OPERATION = "jira.label.set"
 JIRA_DESCRIPTION_OPERATION = "jira.description.update"
 JIRA_CUSTOM_FIELD_OPERATION = "jira.custom_field.update"
 JIRA_ATTACHMENT_REPLACE_OPERATION = "jira.attachment.replace"
+JIRA_STRUCTURED_COMMENT_OPERATION = "jira.structured_comment.create"
 
 
 class JiraCommentExecutor:
@@ -84,6 +85,20 @@ class JiraMutationExecutor:
                     content_type=str(command.payload.get("content_type", "text/plain")),
                 )
                 provider_reference = str(getattr(created, "id", filename))
+            elif self.operation == JIRA_STRUCTURED_COMMENT_OPERATION:
+                marker = f"forge-effect:{command.idempotency_key}"
+                comments = await jira.get_comments(issue_key)
+                existing = next((comment for comment in comments if marker in comment.body), None)
+                if existing is None:
+                    created = await jira.add_structured_comment(
+                        issue_key,
+                        str(command.payload["title"]),
+                        f"{command.payload['content']}\n\n{{{marker}}}",
+                        comment_type=str(command.payload["comment_type"]),
+                    )
+                    provider_reference = str(created.id)
+                else:
+                    provider_reference = str(existing.id)
             else:  # pragma: no cover - registry construction prevents this
                 raise ValueError(f"Unsupported Jira effect operation: {self.operation}")
             return EffectResult(
@@ -104,5 +119,6 @@ def register_jira_executors(registry: EffectExecutorRegistry) -> None:
         JIRA_DESCRIPTION_OPERATION,
         JIRA_CUSTOM_FIELD_OPERATION,
         JIRA_ATTACHMENT_REPLACE_OPERATION,
+        JIRA_STRUCTURED_COMMENT_OPERATION,
     ):
         registry.register(JiraMutationExecutor(operation))

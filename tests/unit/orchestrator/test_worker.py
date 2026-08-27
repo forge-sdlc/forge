@@ -43,6 +43,7 @@ def durable_effect_service_mock():
     """Keep worker unit tests infrastructure-free at the durable-effect boundary."""
     service = MagicMock()
     service.submit = AsyncMock()
+    service.execute_required = AsyncMock()
     service.run_forever = AsyncMock()
     with patch("forge.orchestrator.worker.create_default_effect_service", return_value=service):
         yield service

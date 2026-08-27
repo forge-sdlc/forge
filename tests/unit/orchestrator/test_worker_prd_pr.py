@@ -236,6 +236,7 @@ def worker():
         w = OrchestratorWorker.__new__(OrchestratorWorker)
         w._post_terminal_error_comment = AsyncMock()
         w._post_resume_ack_comment = AsyncMock()
+        w.effect_service = MagicMock(execute_required=AsyncMock())
         w._forge_github_logins = {}
         return w
 
@@ -322,6 +323,7 @@ class TestHandlePrdPrMerge:
         state = _prd_gate_state(
             automated_review_revision_count=3,
             automated_review_revision_pending=True,
+            prd_content="# PRD",
         )
 
         with patch("forge.orchestrator.worker.JiraClient") as MockJira:
@@ -335,7 +337,12 @@ class TestHandlePrdPrMerge:
         assert result["is_paused"] is False
         assert result["automated_review_revision_count"] == 0
         assert result["automated_review_revision_pending"] is False
-        mock_jira.set_workflow_label.assert_called_once()
+        commands = [call.args[0] for call in worker.effect_service.execute_required.await_args_list]
+        assert [command.operation for command in commands] == [
+            "jira.label.set",
+            "jira.description.update",
+        ]
+        mock_jira.set_workflow_label.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_pr_close_without_merge_is_ignored(self, worker):

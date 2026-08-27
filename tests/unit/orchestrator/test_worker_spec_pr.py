@@ -236,6 +236,7 @@ def worker():
         w = OrchestratorWorker.__new__(OrchestratorWorker)
         w._post_terminal_error_comment = AsyncMock()
         w._post_resume_ack_comment = AsyncMock()
+        w.effect_service = MagicMock(execute_required=AsyncMock())
         w._forge_github_logins = {}
         return w
 
@@ -272,12 +273,17 @@ class TestHandleSpecPrMerge:
             result = await worker._handle_resume_event(msg, state)
 
         assert result["is_paused"] is False
-        mock_jira.set_workflow_label.assert_called_once()
-        mock_jira.update_custom_field.assert_called_once_with(
-            "TEST-123",
-            "customfield_12345",
-            "# Spec",
-        )
+        commands = [call.args[0] for call in worker.effect_service.execute_required.await_args_list]
+        assert [command.operation for command in commands] == [
+            "jira.label.set",
+            "jira.custom_field.update",
+        ]
+        assert commands[1].payload == {
+            "field": "customfield_12345",
+            "value": "# Spec",
+        }
+        mock_jira.set_workflow_label.assert_not_called()
+        mock_jira.update_custom_field.assert_not_called()
         mock_jira.add_structured_comment.assert_not_called()
         mock_jira.add_attachment.assert_not_called()
 

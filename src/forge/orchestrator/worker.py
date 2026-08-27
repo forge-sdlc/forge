@@ -26,6 +26,13 @@ from forge.domain import (
     stable_identity,
 )
 from forge.effects import EffectService, create_default_effect_service
+from forge.effects.jira import (
+    JIRA_ATTACHMENT_REPLACE_OPERATION,
+    JIRA_CUSTOM_FIELD_OPERATION,
+    JIRA_DESCRIPTION_OPERATION,
+    JIRA_LABEL_OPERATION,
+    JIRA_STRUCTURED_COMMENT_OPERATION,
+)
 from forge.integrations.github.comment_signature import is_self_comment
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
@@ -242,6 +249,46 @@ class OrchestratorWorker:
             service = create_default_effect_service()
             self.effect_service = service
         return service
+
+    async def _execute_required_jira_effect(
+        self,
+        *,
+        ticket_key: str,
+        state: dict[str, Any],
+        event_id: str,
+        operation: str,
+        payload: dict[str, JsonValue],
+        logical_action: str,
+    ) -> None:
+        identity_parts: dict[str, JsonValue] = {
+            "run_id": ticket_key,
+            "event_id": event_id,
+            "operation": operation,
+            "logical_action": logical_action,
+            "target": ticket_key,
+        }
+        effect_id = stable_identity("effect", identity_parts)
+        await self._durable_effect_service().execute_required(
+            EffectCommand(
+                effect_id=effect_id,
+                idempotency_key=effect_id,
+                workflow=WorkflowIdentity(
+                    run_id=str(state.get("thread_id") or ticket_key),
+                    workflow_name=str(
+                        state.get("workflow_name") or state.get("ticket_type") or "legacy"
+                    ),
+                    definition_revision=int(
+                        state.get("workflow_definition_revision")
+                        or state.get("workflow_revision")
+                        or 1
+                    ),
+                    definition_digest=state.get("workflow_definition_digest"),
+                ),
+                operation=operation,
+                target=ResourceIdentity(resource_type="issue", external_id=ticket_key),
+                payload=payload,
+            )
+        )
 
     def _deserialize_event(self, message: QueueMessage) -> NormalizedEvent | None:
         """Reconstruct the typed NormalizedEvent a source-control message carries.
@@ -1052,17 +1099,25 @@ class OrchestratorWorker:
                 is_approved = True
                 pr_merged = True
                 logger.info(f"PRD PR merged for {message.ticket_key}")
-                jira = JiraClient()
-                try:
-                    await jira.set_workflow_label(message.ticket_key, ForgeLabel.PRD_APPROVED)
-                    prd_content = current_state.get("prd_content", "")
-                    if prd_content:
-                        await jira.update_description(message.ticket_key, prd_content)
-                        logger.info(
-                            f"Copied approved PRD to Jira description for {message.ticket_key}"
-                        )
-                finally:
-                    await jira.close()
+                await self._execute_required_jira_effect(
+                    ticket_key=message.ticket_key,
+                    state=current_state,
+                    event_id=message.event_id,
+                    operation=JIRA_LABEL_OPERATION,
+                    payload={"label": ForgeLabel.PRD_APPROVED.value},
+                    logical_action="approve-prd",
+                )
+                prd_content = current_state.get("prd_content", "")
+                if prd_content:
+                    await self._execute_required_jira_effect(
+                        ticket_key=message.ticket_key,
+                        state=current_state,
+                        event_id=message.event_id,
+                        operation=JIRA_DESCRIPTION_OPERATION,
+                        payload={"description": prd_content},
+                        logical_action="publish-approved-prd",
+                    )
+                    logger.info(f"Copied approved PRD to Jira description for {message.ticket_key}")
 
             elif (
                 event_obj is not None
@@ -1165,47 +1220,48 @@ class OrchestratorWorker:
                 is_approved = True
                 pr_merged = True
                 logger.info(f"Spec PR merged for {message.ticket_key}")
-                jira = JiraClient()
-                try:
-                    await jira.set_workflow_label(message.ticket_key, ForgeLabel.SPEC_APPROVED)
-                    spec_content = current_state.get("spec_content", "")
-                    if spec_content:
-                        settings = get_settings()
-                        if settings.jira_store_in_comments:
-                            await jira.add_structured_comment(
-                                message.ticket_key,
-                                "Technical Specification (Approved)",
-                                spec_content,
-                                comment_type="spec",
-                            )
-                        elif settings.jira_spec_custom_field:
-                            await jira.update_custom_field(
-                                message.ticket_key,
-                                settings.jira_spec_custom_field,
-                                spec_content,
-                            )
-                        else:
-                            old_filename = f"{message.ticket_key}-spec.md"
-                            deleted = await jira.delete_attachments_by_name(
-                                message.ticket_key, old_filename
-                            )
-                            if deleted:
-                                logger.info(
-                                    f"Deleted {deleted} old spec attachment(s) for "
-                                    f"{message.ticket_key}"
-                                )
-                            await jira.add_attachment(
-                                message.ticket_key,
-                                filename=old_filename,
-                                content=spec_content,
-                                content_type="text/markdown",
-                            )
-                        logger.info(
-                            f"Copied approved spec to configured Jira storage for "
-                            f"{message.ticket_key}"
-                        )
-                finally:
-                    await jira.close()
+                await self._execute_required_jira_effect(
+                    ticket_key=message.ticket_key,
+                    state=current_state,
+                    event_id=message.event_id,
+                    operation=JIRA_LABEL_OPERATION,
+                    payload={"label": ForgeLabel.SPEC_APPROVED.value},
+                    logical_action="approve-spec",
+                )
+                spec_content = current_state.get("spec_content", "")
+                if spec_content:
+                    settings = get_settings()
+                    if settings.jira_store_in_comments:
+                        operation = JIRA_STRUCTURED_COMMENT_OPERATION
+                        effect_payload: dict[str, JsonValue] = {
+                            "title": "Technical Specification (Approved)",
+                            "content": spec_content,
+                            "comment_type": "spec",
+                        }
+                    elif settings.jira_spec_custom_field:
+                        operation = JIRA_CUSTOM_FIELD_OPERATION
+                        effect_payload = {
+                            "field": settings.jira_spec_custom_field,
+                            "value": spec_content,
+                        }
+                    else:
+                        operation = JIRA_ATTACHMENT_REPLACE_OPERATION
+                        effect_payload = {
+                            "filename": f"{message.ticket_key}-spec.md",
+                            "content": spec_content,
+                            "content_type": "text/markdown",
+                        }
+                    await self._execute_required_jira_effect(
+                        ticket_key=message.ticket_key,
+                        state=current_state,
+                        event_id=message.event_id,
+                        operation=operation,
+                        payload=effect_payload,
+                        logical_action="publish-approved-spec",
+                    )
+                    logger.info(
+                        f"Copied approved spec to configured Jira storage for {message.ticket_key}"
+                    )
 
             elif (
                 event_obj is not None
