@@ -9,7 +9,10 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
-from forge.workflow.declarative.capabilities import effect_capability_scope
+from forge.workflow.declarative.capabilities import (
+    KNOWN_EFFECT_CAPABILITIES,
+    effect_capability_scope,
+)
 from forge.workflow.declarative.catalog import get_state_profile
 from forge.workflow.declarative.models import MAX_TRANSITIONS, WorkflowDefinition
 from forge.workflow.preconditions import NodeContract, with_preconditions
@@ -17,9 +20,6 @@ from forge.workflow.preconditions import NodeContract, with_preconditions
 
 class WorkflowValidationError(ValueError):
     """A workflow is syntactically valid but unsafe or impossible to compile."""
-
-
-KNOWN_EFFECT_CAPABILITIES = frozenset({"jira.*", "source_control.*"})
 
 
 class DeclarativeWorkflowCompiler:

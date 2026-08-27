@@ -21,7 +21,13 @@
     "steps": {
       "answer_question": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {
           "task_plan_approval_gate": "task_plan_approval_gate"
@@ -74,7 +80,13 @@
       },
       "complete_task_takeover": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {},
         "dynamicRoute": false,
@@ -87,7 +99,10 @@
       },
       "create_pr": {
         "allowedEffects": [
-          "source_control.*"
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
@@ -105,7 +120,13 @@
       },
       "escalate_blocked": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {},
         "dynamicRoute": false,
@@ -154,7 +175,13 @@
       },
       "human_review_gate": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {
           "__end__": "__end__",
@@ -274,7 +301,13 @@
       },
       "triage_check": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {
           "escalate_blocked": "escalate_blocked",

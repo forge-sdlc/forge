@@ -72,7 +72,7 @@ def test_unknown_governance_capabilities_are_rejected(field, value, message) -> 
 def test_unknown_effect_capability_is_rejected() -> None:
     definition = builtin_feature_definition()
     steps = definition.canonical_dict()["spec"]["steps"]
-    steps["generate_prd"]["allowedEffects"] = ["shell.*"]
+    steps["generate_prd"]["allowedEffects"] = ["shell.execute"]
     candidate = _replace(definition, steps=steps)
 
     with pytest.raises(WorkflowValidationError, match="unknown effect capability"):
@@ -146,13 +146,13 @@ async def test_compiled_step_enforces_effect_capabilities_at_runtime() -> None:
         emit_jira_effect,
         "allowed",
         terminal=False,
-        allowed_effects=("jira.*",),
+        allowed_effects=("jira.comment",),
     )
     denied = DeclarativeWorkflowCompiler._guarded_node(
         emit_jira_effect,
         "denied",
         terminal=False,
-        allowed_effects=("source_control.*",),
+        allowed_effects=("source_control.review",),
     )
 
     await allowed({})

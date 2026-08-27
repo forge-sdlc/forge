@@ -21,7 +21,13 @@
     "steps": {
       "aggregate_epic_status": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {},
         "dynamicRoute": false,
@@ -34,7 +40,13 @@
       },
       "aggregate_feature_status": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {},
         "dynamicRoute": false,
@@ -101,7 +113,13 @@
       },
       "complete_tasks": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {},
         "dynamicRoute": false,
@@ -130,8 +148,17 @@
       },
       "decompose_epics": {
         "allowedEffects": [
-          "jira.*",
-          "source_control.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -149,7 +176,13 @@
       },
       "escalate_blocked": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {},
         "dynamicRoute": false,
@@ -162,8 +195,17 @@
       },
       "generate_prd": {
         "allowedEffects": [
-          "jira.*",
-          "source_control.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -181,8 +223,17 @@
       },
       "generate_spec": {
         "allowedEffects": [
-          "jira.*",
-          "source_control.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -216,7 +267,13 @@
       },
       "human_review_gate": {
         "allowedEffects": [
-          "jira.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status"
         ],
         "branches": {
           "__end__": "__end__",
@@ -328,8 +385,17 @@
       },
       "regenerate_all_epics": {
         "allowedEffects": [
-          "jira.*",
-          "source_control.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -379,8 +445,17 @@
       },
       "regenerate_prd": {
         "allowedEffects": [
-          "jira.*",
-          "source_control.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -398,8 +473,17 @@
       },
       "regenerate_spec": {
         "allowedEffects": [
-          "jira.*",
-          "source_control.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -527,8 +611,17 @@
       },
       "update_single_epic": {
         "allowedEffects": [
-          "jira.*",
-          "source_control.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
@@ -546,8 +639,17 @@
       },
       "update_single_task": {
         "allowedEffects": [
-          "jira.*",
-          "source_control.*"
+          "jira.comment",
+          "jira.issue_content",
+          "jira.issue_lifecycle",
+          "jira.issue_structure",
+          "jira.labels",
+          "jira.project_configuration",
+          "jira.status",
+          "source_control.branch",
+          "source_control.commit",
+          "source_control.pull_request",
+          "source_control.review"
         ],
         "branches": {
           "__end__": "__end__",
