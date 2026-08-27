@@ -2,7 +2,6 @@
 
 import json
 import logging
-import re
 from typing import Any
 
 from forge.api.routes.metrics import record_proposal_review_decision
@@ -20,27 +19,17 @@ logger = logging.getLogger(__name__)
 _DISPOSITIONS = {"accept", "reply", "uncertain", "ignore"}
 
 
-def parse_proposal_thread_decisions(
-    output: str, threads: list[dict[str, Any]]
+def normalize_proposal_thread_decisions(
+    output: list[dict[str, Any]], threads: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Parse decisions and conservatively accept missing or malformed items."""
+    """Match validated decisions to source threads and fill missing decisions safely."""
     expected = {
         thread["thread_id"]: thread
         for thread in threads
         if thread.get("thread_id") and thread.get("comments")
     }
-    match = re.search(r"\[.*\]", output, re.DOTALL)
-    parsed: list[Any] = []
-    if match:
-        try:
-            value = json.loads(match.group(0))
-            if isinstance(value, list):
-                parsed = value
-        except json.JSONDecodeError:
-            pass
-
     decisions: dict[str, dict[str, Any]] = {}
-    for item in parsed:
+    for item in output:
         if not isinstance(item, dict) or item.get("thread_id") not in expected:
             continue
         disposition = item.get("disposition")
@@ -94,16 +83,20 @@ async def triage_proposal_review_threads(
                     prompt=prompt,
                     context={"ticket_key": ticket_key},
                     include_tools=False,
+                    response_schema="proposal_review_triage",
                 ),
                 discriminator=f"proposal-review:{artifact_type}",
             )
         )
         assert outcome.output is not None
-        output = outcome.output.text
+        structured = outcome.output.structured
+        if not isinstance(structured, dict) or not isinstance(structured.get("decisions"), list):
+            raise ValueError("Proposal review triage returned no structured decisions")
+        output = structured["decisions"]
     except Exception as exc:
         logger.warning("Proposal thread triage failed for %s: %s", ticket_key, exc)
-        output = ""
-    decisions = parse_proposal_thread_decisions(output, threads)
+        output = []
+    decisions = normalize_proposal_thread_decisions(output, threads)
     for decision in decisions:
         record_proposal_review_decision(artifact_type.lower(), decision["disposition"])
         logger.info(

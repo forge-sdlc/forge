@@ -49,6 +49,20 @@ def test_create_model_uses_vertex_backend_for_gemini():
     )
 
 
+def test_create_model_uses_vertex_backend_for_anthropic():
+    agent = _model_agent("vertex-ai", "claude-sonnet-4-6")
+
+    with patch("forge.integrations.agents.agent.ChatAnthropicVertex") as model_class:
+        agent._create_model()
+
+    model_class.assert_called_once_with(
+        model_name="claude-sonnet-4-6",
+        project="project",
+        location="global",
+        max_tokens=16384,
+    )
+
+
 def test_create_model_uses_anthropic_backend():
     agent = _model_agent("anthropic", "claude-sonnet-4-6")
 

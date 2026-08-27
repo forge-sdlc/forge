@@ -9,6 +9,7 @@ from forge.workflow.stations.triage import (
     CONTRACT_VERSION,
     TriageInput,
     TriageKind,
+    TriageOutput,
     run_triage_station,
 )
 
@@ -37,7 +38,7 @@ def _request(kind: TriageKind) -> StationRequest[TriageInput]:
 @pytest.mark.asyncio
 async def test_sufficient_result_is_typed() -> None:
     agent = AsyncMock()
-    agent.run_task.return_value = "sufficient"
+    agent.run_structured_task.return_value = TriageOutput(sufficient=True)
     with patch("forge.workflow.stations.triage.ForgeAgent", return_value=agent):
         outcome = await run_triage_station(_request(TriageKind.BUG))
 
@@ -47,14 +48,13 @@ async def test_sufficient_result_is_typed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_fields_and_malformed_output_are_normalized() -> None:
+async def test_missing_fields_are_returned_as_typed_output() -> None:
     agent = AsyncMock()
-    agent.run_task.side_effect = ['```json\n["steps", "logs"]\n```', "not json"]
+    agent.run_structured_task.return_value = TriageOutput(
+        sufficient=False, missing_fields=("steps", "logs")
+    )
     with patch("forge.workflow.stations.triage.ForgeAgent", return_value=agent):
         parsed = await run_triage_station(_request(TriageKind.TASK_TAKEOVER))
-        fallback = await run_triage_station(_request(TriageKind.TASK_TAKEOVER))
 
     assert parsed.output is not None
     assert parsed.output.missing_fields == ("steps", "logs")
-    assert fallback.output is not None
-    assert "additional context about the task" in fallback.output.missing_fields[0]

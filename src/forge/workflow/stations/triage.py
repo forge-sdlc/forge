@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from enum import StrEnum
 
 from forge.domain import DomainModel, StationOutcome, StationOutcomeStatus, StationRequest
@@ -40,9 +39,10 @@ async def run_triage_station(
     policy_key = "bug_triage" if value.kind is TriageKind.BUG else "task_takeover_triage"
     agent = ForgeAgent()
     try:
-        raw_result = await agent.run_task(
+        output = await agent.run_structured_task(
             task=task_name,
             policy_key=policy_key,
+            response_schema=TriageOutput,
             prompt=load_prompt(
                 prompt_name,
                 summary=value.summary,
@@ -53,27 +53,6 @@ async def run_triage_station(
         )
     finally:
         await agent.close()
-
-    stripped = raw_result.strip()
-    if stripped.lower() == "sufficient":
-        output = TriageOutput(sufficient=True)
-    else:
-        candidate = stripped
-        if candidate.startswith("```"):
-            candidate = "\n".join(
-                line for line in candidate.splitlines() if not line.startswith("```")
-            ).strip()
-        try:
-            parsed = json.loads(candidate)
-            if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
-                raise ValueError("Expected a list of strings")
-            missing = tuple(parsed)
-        except (json.JSONDecodeError, ValueError):
-            subject = "bug" if value.kind is TriageKind.BUG else "task"
-            missing = (
-                f"(could not determine — please provide additional context about the {subject})",
-            )
-        output = TriageOutput(sufficient=False, missing_fields=missing)
 
     return StationOutcome[TriageOutput](
         workflow=request.workflow,

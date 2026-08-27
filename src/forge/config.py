@@ -346,7 +346,7 @@ class Settings(BaseSettings):
             "allowed_models": list(dict.fromkeys([self.llm_model, self.container_model])),
             # Legacy Forge agents already rely on provider tool calling. This
             # implicit connection is not exposed to Jira project overrides.
-            "capabilities": ["tools"],
+            "capabilities": ["structured_output", "tools"],
         }
         if self.llm_backend == "vertex-ai":
             connection.update(

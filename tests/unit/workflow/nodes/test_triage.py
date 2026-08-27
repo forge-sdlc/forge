@@ -6,6 +6,7 @@ import pytest
 
 from forge.models.workflow import ForgeLabel
 from forge.workflow.bug.state import create_initial_bug_state
+from forge.workflow.stations.triage import TriageOutput
 
 
 def make_bug_state(**overrides):
@@ -68,7 +69,7 @@ def mock_jira():
 def mock_agent_sufficient():
     """ForgeAgent that returns 'sufficient' for the triage prompt."""
     agent = MagicMock()
-    agent.run_task = AsyncMock(return_value="sufficient")
+    agent.run_structured_task = AsyncMock(return_value=TriageOutput(sufficient=True))
     agent.close = AsyncMock()
     return agent
 
@@ -77,8 +78,10 @@ def mock_agent_sufficient():
 def mock_agent_missing_fields():
     """ForgeAgent that returns a JSON list of missing fields."""
     agent = MagicMock()
-    agent.run_task = AsyncMock(
-        return_value='["steps_to_reproduce", "environment"]'
+    agent.run_structured_task = AsyncMock(
+        return_value=TriageOutput(
+            sufficient=False, missing_fields=("steps_to_reproduce", "environment")
+        )
     )
     agent.close = AsyncMock()
     return agent
@@ -95,9 +98,7 @@ class TestTriageCheckSufficientTicket:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -114,9 +115,7 @@ class TestTriageCheckSufficientTicket:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -133,9 +132,7 @@ class TestTriageCheckSufficientTicket:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -156,13 +153,13 @@ class TestTriageCheckSufficientTicket:
         mock_jira.add_comment = AsyncMock(
             side_effect=lambda *_a, **_k: call_order.append("comment")
         )
-        mock_agent_sufficient.run_task = AsyncMock(
-            side_effect=lambda *_a, **_k: call_order.append("agent") or "sufficient"
+        mock_agent_sufficient.run_structured_task = AsyncMock(
+            side_effect=lambda *_a, **_k: (
+                call_order.append("agent") or TriageOutput(sufficient=True)
+            )
         )
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -185,9 +182,7 @@ class TestTriageCheckSufficientTicket:
             triage_missing_fields=["steps_to_reproduce"],
         )
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -207,9 +202,7 @@ class TestTriageCheckSufficientTicket:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -235,9 +228,7 @@ class TestTriageCheckMissingFields:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
@@ -254,9 +245,7 @@ class TestTriageCheckMissingFields:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
@@ -274,9 +263,7 @@ class TestTriageCheckMissingFields:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
@@ -287,10 +274,7 @@ class TestTriageCheckMissingFields:
         assert mock_jira.add_comment.call_count >= 2
         last_comment = mock_jira.add_comment.call_args_list[-1].args[1]
         assert "starting with `!`" in last_comment
-        assert (
-            "steps_to_reproduce" in last_comment
-            or "steps to reproduce" in last_comment.lower()
-        )
+        assert "steps_to_reproduce" in last_comment or "steps to reproduce" in last_comment.lower()
 
     @pytest.mark.asyncio
     async def test_triage_pending_label_set(
@@ -300,9 +284,7 @@ class TestTriageCheckMissingFields:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
@@ -321,9 +303,7 @@ class TestTriageCheckMissingFields:
         from forge.workflow.nodes.triage import triage_check
 
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
@@ -337,9 +317,7 @@ class TestTriageCheckResume:
     """triage_check re-evaluates on resume after reporter updates ticket."""
 
     @pytest.mark.asyncio
-    async def test_resume_with_complete_ticket_passes(
-        self, mock_jira, mock_agent_sufficient
-    ):
+    async def test_resume_with_complete_ticket_passes(self, mock_jira, mock_agent_sufficient):
         """On resume, if ticket now has all fields, triage_passed=True."""
         from forge.workflow.nodes.triage import triage_check
 
@@ -350,9 +328,7 @@ class TestTriageCheckResume:
             triage_missing_fields=["steps_to_reproduce"],
         )
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -378,9 +354,7 @@ class TestTriageCheckResume:
             is_question=True,
         )
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -396,9 +370,7 @@ class TestTriageCheckResume:
         assert result["feedback_comment"] is None
 
     @pytest.mark.asyncio
-    async def test_resume_still_missing_reposts_comment(
-        self, mock_jira, mock_agent_missing_fields
-    ):
+    async def test_resume_still_missing_reposts_comment(self, mock_jira, mock_agent_missing_fields):
         """On resume, still-missing fields cause a fresh targeted comment."""
         from forge.workflow.nodes.triage import triage_check
 
@@ -409,9 +381,7 @@ class TestTriageCheckResume:
             triage_missing_fields=["steps_to_reproduce"],
         )
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
@@ -427,9 +397,7 @@ class TestTriageCheckErrorHandling:
     """triage_check retries on failure and escalates after 3 failures."""
 
     @pytest.mark.asyncio
-    async def test_failure_increments_retry_count(
-        self, incomplete_ticket_state, mock_jira
-    ):
+    async def test_failure_increments_retry_count(self, incomplete_ticket_state, mock_jira):
         """Node failure increments retry_count."""
         from forge.workflow.nodes.triage import triage_check
 
@@ -438,20 +406,14 @@ class TestTriageCheckErrorHandling:
         mock_agent.close = AsyncMock()
         incomplete_ticket_state["retry_count"] = 1
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
-            patch(
-                "forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent),
         ):
             result = await triage_check(incomplete_ticket_state)
         assert result["retry_count"] == 2
 
     @pytest.mark.asyncio
-    async def test_after_3_failures_escalates_blocked(
-        self, incomplete_ticket_state, mock_jira
-    ):
+    async def test_after_3_failures_escalates_blocked(self, incomplete_ticket_state, mock_jira):
         """After 3 consecutive failures (retry_count already at max), routes to escalate_blocked."""
         from forge.workflow.nodes.triage import triage_check
 
@@ -460,12 +422,8 @@ class TestTriageCheckErrorHandling:
         mock_agent.close = AsyncMock()
         incomplete_ticket_state["retry_count"] = 3
         with (
-            patch(
-                "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
-            ),
-            patch(
-                "forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent
-            ),
+            patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent),
         ):
             result = await triage_check(incomplete_ticket_state)
         assert result["current_node"] == "escalate_blocked"

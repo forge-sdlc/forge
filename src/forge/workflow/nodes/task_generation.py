@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import re
 from typing import Any
 
 from forge.integrations.jira.client import MissingProjectConfig
@@ -325,13 +324,17 @@ async def _generate_tasks_for_epic(
                 policy_key="generate_tasks",
                 prompt=prompt,
                 context=context,
+                response_schema="generate_tasks",
             ),
             discriminator=f"generate-tasks:{epic_summary}",
         )
     )
     assert outcome.output is not None
 
-    return _parse_tasks_response(outcome.output.text)
+    structured = outcome.output.structured
+    if not isinstance(structured, dict) or not isinstance(structured.get("tasks"), list):
+        raise ValueError("Task generation returned no structured tasks")
+    return [dict(task) for task in structured["tasks"]]
 
 
 def _format_sibling_epics(sibling_epics: list[dict[str, str]] | None) -> str:
@@ -389,75 +392,6 @@ def _format_existing_tasks(existing_tasks: list[dict[str, str]] | None) -> str:
         lines.append("")
 
     return "\n".join(lines)
-
-
-def _parse_tasks_response(response: str) -> list[dict[str, str]]:
-    """Parse Task generation response into structured data.
-
-    Args:
-        response: Raw response from the configured LLM backend.
-
-    Returns:
-        List of Task dicts.
-    """
-    tasks = []
-    current_task: dict[str, str] = {}
-    current_section = None
-    section_lines: list[str] = []
-
-    for line in response.split("\n"):
-        stripped = line.strip()
-
-        if stripped.startswith("---"):
-            # Save previous task if exists
-            if current_task.get("summary"):
-                if current_section == "description":
-                    current_task["description"] = "\n".join(section_lines).strip()
-                elif current_section == "acceptance_criteria":
-                    # Append acceptance criteria to description
-                    criteria = "\n".join(section_lines).strip()
-                    current_task["description"] = (
-                        current_task.get("description", "")
-                        + "\n\nAcceptance Criteria:\n"
-                        + criteria
-                    ).strip()
-                tasks.append(current_task)
-                current_task = {}
-                section_lines = []
-            continue
-
-        if stripped.startswith("TASK:"):
-            current_task["summary"] = stripped[5:].strip()
-            current_section = "summary"
-        elif stripped.startswith("REPO:"):
-            repo = stripped[5:].strip().lower()
-            # Clean up repo name
-            repo = re.sub(r"[^a-z0-9/._-]", "", repo)
-            current_task["repo"] = repo if repo else "unknown"
-        elif stripped.startswith("DESCRIPTION:"):
-            current_section = "description"
-            section_lines = []
-        elif stripped.startswith("ACCEPTANCE_CRITERIA:"):
-            # Save description first
-            if current_section == "description":
-                current_task["description"] = "\n".join(section_lines).strip()
-            current_section = "acceptance_criteria"
-            section_lines = []
-        elif current_section in ("description", "acceptance_criteria"):
-            section_lines.append(line)
-
-    # Don't forget the last task
-    if current_task.get("summary"):
-        if current_section == "description":
-            current_task["description"] = "\n".join(section_lines).strip()
-        elif current_section == "acceptance_criteria":
-            criteria = "\n".join(section_lines).strip()
-            current_task["description"] = (
-                current_task.get("description", "") + "\n\nAcceptance Criteria:\n" + criteria
-            ).strip()
-        tasks.append(current_task)
-
-    return tasks
 
 
 def extract_repo_from_labels(labels: list[str]) -> str:

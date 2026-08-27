@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.models.workflow import ForgeLabel
+from forge.workflow.stations.triage import TriageOutput
 from forge.workflow.task_takeover.state import (
     TaskTakeoverState,
     create_initial_task_takeover_state,
@@ -60,7 +61,7 @@ def mock_jira() -> MagicMock:
 def mock_agent_sufficient() -> MagicMock:
     """ForgeAgent that returns 'sufficient' for the triage prompt."""
     agent = MagicMock()
-    agent.run_task = AsyncMock(return_value="sufficient")
+    agent.run_structured_task = AsyncMock(return_value=TriageOutput(sufficient=True))
     agent.close = AsyncMock()
     return agent
 
@@ -69,8 +70,10 @@ def mock_agent_sufficient() -> MagicMock:
 def mock_agent_missing_fields() -> MagicMock:
     """ForgeAgent that returns a JSON list of missing fields."""
     agent = MagicMock()
-    agent.run_task = AsyncMock(
-        return_value='["Problem Statement", "Acceptance Criteria"]'
+    agent.run_structured_task = AsyncMock(
+        return_value=TriageOutput(
+            sufficient=False, missing_fields=("Problem Statement", "Acceptance Criteria")
+        )
     )
     agent.close = AsyncMock()
     return agent
@@ -90,9 +93,7 @@ class TestTriageTaskSufficientTicket:
         from forge.workflow.nodes.task_takeover_triage import triage_task
 
         with (
-            patch(
-                "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -122,17 +123,15 @@ class TestTriageTaskSufficientTicket:
             call_order.append("comment")
             return MagicMock()
 
-        async def mock_run_task(*_args: Any, **_kwargs: Any) -> str:
+        async def mock_run_task(*_args: Any, **_kwargs: Any) -> TriageOutput:
             call_order.append("agent")
-            return "sufficient"
+            return TriageOutput(sufficient=True)
 
         mock_jira.add_comment.side_effect = mock_comment
-        mock_agent_sufficient.run_task.side_effect = mock_run_task
+        mock_agent_sufficient.run_structured_task.side_effect = mock_run_task
 
         with (
-            patch(
-                "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -154,9 +153,7 @@ class TestTriageTaskSufficientTicket:
         from forge.workflow.nodes.task_takeover_triage import triage_task
 
         with (
-            patch(
-                "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -188,9 +185,7 @@ class TestTriageTaskSufficientTicket:
         }
 
         with (
-            patch(
-                "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -223,9 +218,7 @@ class TestTriageTaskSufficientTicket:
         mock_jira.get_project_default_repo = AsyncMock(return_value="openshift/installer")
 
         with (
-            patch(
-                "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
@@ -252,9 +245,7 @@ class TestTriageTaskMissingFields:
         from forge.workflow.nodes.task_takeover_triage import triage_task
 
         with (
-            patch(
-                "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
@@ -280,9 +271,7 @@ class TestTriageTaskMissingFields:
         from forge.workflow.nodes.task_takeover_triage import triage_task
 
         with (
-            patch(
-                "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
             patch(
                 "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
@@ -310,9 +299,7 @@ class TestTriageTaskErrorHandling:
 
         state = make_task_state(retry_count=3)
         with (
-            patch(
-                "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
-            ),
+            patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
         ):
             result = await triage_task(state)
 

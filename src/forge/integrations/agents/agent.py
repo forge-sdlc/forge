@@ -13,12 +13,14 @@ import uuid
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
+from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from langchain_anthropic import ChatAnthropic
 from langgraph.checkpoint.memory import MemorySaver
+from pydantic import BaseModel
 
 # Optional MCP support
 try:
@@ -31,6 +33,7 @@ except ImportError:
     HAS_MCP = False
 
 from forge.config import Settings, get_settings
+from forge.integrations.agents.structured_outputs import EpicDecomposition
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
 from forge.integrations.langfuse.fields import resolve_trace_fields
 from forge.model_policy import resolve_model_target_for_project
@@ -66,6 +69,7 @@ MCP_CONFIG_PATHS = [
 ]
 
 logger = logging.getLogger(__name__)
+StructuredResponseT = TypeVar("StructuredResponseT", bound=BaseModel)
 
 _TRACE_FIELD_KEYS = frozenset(
     {
@@ -485,6 +489,7 @@ class ForgeAgent:
         include_tools: bool = True,
         ticket_key: str | None = None,
         model_target: ResolvedModelTarget | None = None,
+        response_format: Any | None = None,
     ) -> Any:
         """Create a Deep Agent instance with configured skills and MCP tools.
 
@@ -528,6 +533,7 @@ class ForgeAgent:
             system_prompt=system_prompt,
             checkpointer=self._checkpointer,
             tools=mcp_tools if mcp_tools else None,
+            response_format=response_format,
         )
 
         return agent
@@ -648,7 +654,8 @@ class ForgeAgent:
         tags: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
         model_target: ResolvedModelTarget | None = None,
-    ) -> str:
+        response_schema: type[StructuredResponseT] | None = None,
+    ) -> str | StructuredResponseT:
         """Run the agent with the given prompt.
 
         Implements exponential backoff retry for rate limit errors.
@@ -667,11 +674,13 @@ class ForgeAgent:
             Agent response text.
         """
         # Use async version to load MCP tools
+        response_format = ProviderStrategy(response_schema) if response_schema else None
         agent = await self._create_agent_async(
             system_prompt=system_prompt,
             include_tools=include_tools,
             ticket_key=ticket_key,
             model_target=model_target,
+            response_format=response_format,
         )
 
         # Generate unique thread ID for this conversation
@@ -706,6 +715,8 @@ class ForgeAgent:
             metadata=langfuse_ctx_params.get("metadata"),
         ):
             last_error: Exception | None = None
+            structured_result: StructuredResponseT | None = None
+            used_tool_fallback = False
             for attempt in range(self.MAX_RETRIES):
                 try:
                     result = await agent.ainvoke(
@@ -714,9 +725,34 @@ class ForgeAgent:
                         },
                         config=config,
                     )
+                    if response_schema is not None:
+                        if not isinstance(result, dict) or "structured_response" not in result:
+                            raise ValueError(
+                                f"Structured output for {response_schema.__name__} "
+                                "was not returned by the model"
+                            )
+                        structured_result = response_schema.model_validate(
+                            result["structured_response"]
+                        )
                     break  # Success, exit retry loop
                 except Exception as e:
                     last_error = e
+                    if response_schema is not None and not used_tool_fallback:
+                        logger.warning(
+                            "Native structured output failed for %s; retrying with validated "
+                            "tool strategy: %s",
+                            response_schema.__name__,
+                            e,
+                        )
+                        agent = await self._create_agent_async(
+                            system_prompt=system_prompt,
+                            include_tools=include_tools,
+                            ticket_key=ticket_key,
+                            model_target=model_target,
+                            response_format=ToolStrategy(response_schema),
+                        )
+                        used_tool_fallback = True
+                        continue
                     if self._is_transient_error(e) and attempt < self.MAX_RETRIES - 1:
                         # Calculate backoff delay
                         explicit_delay = self._extract_retry_delay(e)
@@ -736,6 +772,11 @@ class ForgeAgent:
                 # All retries exhausted
                 if last_error:
                     raise last_error
+
+        if response_schema is not None:
+            if structured_result is None:
+                raise ValueError(f"No valid structured output for {response_schema.__name__}")
+            return structured_result
 
         # Extract response text from messages
         # Deep Agents returns LangChain message objects, not dicts
@@ -791,7 +832,8 @@ class ForgeAgent:
         trace_context: dict[str, Any] | None = None,
         include_tools: bool = True,
         policy_key: str | None = None,
-    ) -> str:
+        response_schema: type[StructuredResponseT] | None = None,
+    ) -> str | StructuredResponseT:
         """Run a task, letting the agent choose the best approach.
 
         Deep Agents discovers skills automatically from the configured paths
@@ -883,11 +925,29 @@ class ForgeAgent:
             tags=trace_tags or None,
             metadata=trace_metadata or None,
             model_target=model_target,
+            response_schema=response_schema,
         )
         observe_agent_duration(task_type=task, duration=time.monotonic() - _start)
 
-        logger.info(f"Task '{task}' completed ({len(result)} chars)")
+        result_size = len(result) if isinstance(result, str) else len(result.model_dump_json())
+        logger.info(f"Task '{task}' completed ({result_size} chars)")
         return result
+
+    async def run_structured_task(
+        self,
+        task: str,
+        prompt: str,
+        response_schema: type[StructuredResponseT],
+        **kwargs: Any,
+    ) -> StructuredResponseT:
+        """Run the complete tool loop and validate its final response against a schema."""
+        result = await self.run_task(
+            task,
+            prompt,
+            response_schema=response_schema,
+            **kwargs,
+        )
+        return cast(StructuredResponseT, result)
 
     def _load_mcp_config(self) -> dict[str, Any]:
         """Load MCP server configuration from JSON file.
@@ -1139,9 +1199,10 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
             )
 
         logger.info("Generating Epics using Deep Agents with skill")
-        result = await self.run_task(
+        result = await self.run_structured_task(
             task="decompose-epics",
             policy_key="decompose_epics",
+            response_schema=EpicDecomposition,
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
@@ -1152,7 +1213,10 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
             trace_context=_forward_trace_fields(context),
         )
 
-        epics = self._parse_epics_response(result)
+        epics = [
+            {"summary": epic.summary, "plan": epic.plan, "repo": epic.repository}
+            for epic in result.epics
+        ]
         logger.info(f"Generated {len(epics)} Epics")
         return epics
 
@@ -1208,55 +1272,6 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         result = self._strip_preamble(result)
         logger.info(f"Regenerated {content_type} ({len(result)} chars)")
         return result
-
-    @staticmethod
-    def _parse_epics_response(response: str) -> list[dict[str, str]]:
-        """Parse the Epic generation response into structured data.
-
-        Args:
-            response: Raw response from agent.
-
-        Returns:
-            List of Epic dicts with 'summary', 'plan', and 'repo'.
-        """
-        import re
-
-        epics = []
-        current_epic: dict[str, str] = {}
-        current_section = None
-        plan_lines: list[str] = []
-
-        for line in response.split("\n"):
-            stripped = line.strip()
-
-            if stripped.startswith("---"):
-                if current_epic.get("summary"):
-                    current_epic["plan"] = "\n".join(plan_lines).strip()
-                    epics.append(current_epic)
-                    current_epic = {}
-                    plan_lines = []
-                continue
-
-            if stripped.startswith("EPIC:"):
-                current_epic["summary"] = stripped[5:].strip()
-                current_section = "summary"
-            elif stripped.startswith("REPO:"):
-                # Extract repo (owner/name format)
-                repo = stripped[5:].strip()
-                # Clean up any extra text
-                repo = re.sub(r"[^a-zA-Z0-9/_-]", "", repo)
-                if "/" in repo:
-                    current_epic["repo"] = repo
-            elif stripped.startswith("PLAN:"):
-                current_section = "plan"
-            elif current_section == "plan":
-                plan_lines.append(line)
-
-        if current_epic.get("summary"):
-            current_epic["plan"] = "\n".join(plan_lines).strip()
-            epics.append(current_epic)
-
-        return epics
 
     async def answer_question(
         self,

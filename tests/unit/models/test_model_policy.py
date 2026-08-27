@@ -18,7 +18,7 @@ def resolver() -> ModelPolicyResolver:
                 "backend": "vertex-ai",
                 "project": "prod",
                 "allowed_models": ["gemini-pro", "gemini-flash"],
-                "capabilities": ["tools"],
+                "capabilities": ["structured_output", "tools"],
             },
             "locked": {
                 "backend": "anthropic",
@@ -105,13 +105,11 @@ def test_stage_capabilities_cannot_be_weakened_by_project_policy() -> None:
 
 
 def test_tool_requirements_cover_every_agentic_stage() -> None:
-    tool_free = {
-        "automated_review_triage",
+    assert set(REQUIRED_CAPABILITIES_BY_POLICY_KEY) == set(KNOWN_MODEL_POLICY_KEYS) - {
         "generate_pr_description",
-        "proposal_review_triage",
         "sync_pr_description",
     }
-    assert set(REQUIRED_CAPABILITIES_BY_POLICY_KEY) == set(KNOWN_MODEL_POLICY_KEYS) - tool_free
+    assert REQUIRED_CAPABILITIES_BY_POLICY_KEY["automated_review_triage"] == {"structured_output"}
 
 
 def test_project_output_token_limit_is_bounded(resolver: ModelPolicyResolver) -> None:

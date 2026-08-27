@@ -1,6 +1,5 @@
 """Unit and integration tests for Task Takeover triage."""
 
-import json
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,6 +7,7 @@ import pytest
 
 from forge.models.workflow import ForgeLabel
 from forge.workflow.nodes.task_takeover_triage import triage_task
+from forge.workflow.stations.triage import TriageOutput
 from forge.workflow.task_takeover.state import (
     TaskTakeoverState,
     create_initial_task_takeover_state,
@@ -41,7 +41,7 @@ def mock_jira() -> MagicMock:
 @pytest.fixture
 def mock_agent() -> MagicMock:
     agent = MagicMock()
-    agent.run_task = AsyncMock()
+    agent.run_structured_task = AsyncMock()
     agent.close = AsyncMock()
     return agent
 
@@ -53,7 +53,7 @@ async def test_complete_ticket_passes_triage(
 ) -> None:
     """Verify that a complete ticket passes triage and moves to planning."""
     state = make_task_state(current_node="start")
-    mock_agent.run_task.return_value = "sufficient"
+    mock_agent.run_structured_task.return_value = TriageOutput(sufficient=True)
 
     with (
         patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
@@ -99,11 +99,6 @@ async def test_complete_ticket_passes_triage(
             ["Problem Statement", "Proposed Solution/Approach", "Acceptance Criteria"],
             ["Problem Statement", "Proposed Solution/Approach", "Acceptance Criteria"],
         ),
-        # Malformed/Unexpected output fallback
-        (
-            "not-a-list",
-            ["(could not determine — please provide additional context about the task)"],
-        ),
     ],
 )
 async def test_incomplete_ticket_triage_permutations(
@@ -116,9 +111,9 @@ async def test_incomplete_ticket_triage_permutations(
     state = make_task_state(current_node="start")
 
     if isinstance(missing_fields, list):
-        mock_agent.run_task.return_value = json.dumps(missing_fields)
-    else:
-        mock_agent.run_task.return_value = missing_fields
+        mock_agent.run_structured_task.return_value = TriageOutput(
+            sufficient=False, missing_fields=tuple(missing_fields)
+        )
 
     with (
         patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
