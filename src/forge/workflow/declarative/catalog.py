@@ -18,6 +18,7 @@ class StateProfile:
     routers: dict[str, Any]
     pause_nodes: frozenset[str]
     contracts: dict[str, NodeContract] = field(default_factory=dict)
+    station_bindings: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
 def _common_nodes() -> dict[str, Callable[..., Any]]:
@@ -183,6 +184,7 @@ def get_state_profile(name: str) -> StateProfile:
             routers,
             pauses,
             contracts_for(nodes),
+            {"task_router": ("task-routing", "1.0")},
         )
 
     if name == "bug":

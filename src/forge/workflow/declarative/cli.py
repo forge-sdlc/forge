@@ -11,6 +11,11 @@ import yaml  # type: ignore[import-untyped]
 from forge.integrations.jira.client import JiraClient
 from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler
 from forge.workflow.declarative.loader import load_workflow_file, load_workflow_value
+from forge.workflow.declarative.manifest import (
+    build_process_manifest,
+    compare_process_definitions,
+    render_mermaid,
+)
 from forge.workflow.declarative.models import WORKFLOW_PROPERTY_PREFIX
 
 
@@ -34,6 +39,28 @@ async def cmd_workflow(args: Any) -> int:
         if args.json:
             print(json.dumps(definition.canonical_dict(), indent=2))
         return 0
+
+    if action == "render":
+        try:
+            definition = load_workflow_file(args.file)
+            manifest = build_process_manifest(definition)
+        except Exception as exc:
+            return _print_error(exc)
+        if args.format == "json":
+            print(manifest.model_dump_json(indent=2))
+        else:
+            print(render_mermaid(manifest))
+        return 0
+
+    if action == "diff":
+        try:
+            previous = load_workflow_file(args.previous)
+            current = load_workflow_file(args.current)
+            impact = compare_process_definitions(previous, current)
+        except Exception as exc:
+            return _print_error(exc)
+        print(impact.model_dump_json(indent=2))
+        return 0 if impact.compatible_for_in_flight else 2
 
     jira = JiraClient()
     try:

@@ -1701,6 +1701,18 @@ def main(argv: list[str] | None = None) -> int:
     workflow_validate.add_argument("file")
     workflow_validate.add_argument("--json", action="store_true", help="Print canonical JSON")
 
+    workflow_render = workflow_subparsers.add_parser(
+        "render", help="Render a validated workflow process manifest"
+    )
+    workflow_render.add_argument("file")
+    workflow_render.add_argument("--format", choices=("mermaid", "json"), default="mermaid")
+
+    workflow_diff = workflow_subparsers.add_parser(
+        "diff", help="Report structural and in-flight impact between revisions"
+    )
+    workflow_diff.add_argument("previous")
+    workflow_diff.add_argument("current")
+
     workflow_publish = workflow_subparsers.add_parser("publish", help="Publish a YAML workflow")
     workflow_publish.add_argument("project_key")
     workflow_publish.add_argument("file")

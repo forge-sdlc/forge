@@ -13,6 +13,12 @@ from forge.workflow.declarative.compiler import (
     WorkflowValidationError,
 )
 from forge.workflow.declarative.loader import load_workflow_value
+from forge.workflow.declarative.manifest import (
+    ProcessNodeKind,
+    build_process_manifest,
+    compare_process_definitions,
+    render_mermaid,
+)
 from forge.workflow.declarative.models import WORKFLOW_PROPERTY_PREFIX
 from forge.workflow.declarative.resolver import (
     load_project_workflow,
@@ -74,6 +80,69 @@ def test_compiles_allowlisted_node() -> None:
 
     assert "generate_prd" in graph.nodes
     assert "_forge_entry" in graph.nodes
+
+
+def test_process_manifest_exposes_stations_gates_and_transitions() -> None:
+    value = definition_value(
+        steps={
+            "task_router": {"next": "prd_approval_gate"},
+            "prd_approval_gate": {
+                "route": "route_prd_approval",
+                "branches": {"revise": "task_router", "approved": "__end__"},
+            },
+        }
+    )
+    value["spec"]["entry"] = "task_router"
+
+    manifest = build_process_manifest(load_workflow_value(value))
+
+    nodes = {node.name: node for node in manifest.nodes}
+    assert nodes["task_router"].kind is ProcessNodeKind.STATION
+    assert nodes["task_router"].station_contract == "task-routing"
+    assert nodes["prd_approval_gate"].kind is ProcessNodeKind.GATE
+    assert any(
+        edge.source == "prd_approval_gate"
+        and edge.outcome == "approved"
+        and edge.target == "__end__"
+        for edge in manifest.transitions
+    )
+    assert manifest.digest == load_workflow_value(value).digest
+
+
+def test_mermaid_uses_same_manifest_and_labels_routes() -> None:
+    manifest = build_process_manifest(load_workflow_value(definition_value()))
+
+    rendered = render_mermaid(manifest)
+
+    assert rendered.startswith("flowchart TD")
+    assert "__start__([start]) --> generate_prd" in rendered
+    assert "generate_prd --> __end__" in rendered
+
+
+def test_revision_diff_reports_missing_resume_mapping() -> None:
+    previous = load_workflow_value(definition_value(revision=1))
+    current_value = definition_value(revision=2, steps={"generate_spec": {"next": "__end__"}})
+    current_value["spec"]["entry"] = "generate_spec"
+    current = load_workflow_value(current_value)
+
+    impact = compare_process_definitions(previous, current)
+
+    assert impact.removed_nodes == ("generate_prd",)
+    assert impact.added_nodes == ("generate_spec",)
+    assert impact.missing_resume_mappings == ("generate_prd",)
+    assert impact.compatible_for_in_flight is False
+
+
+def test_revision_diff_accepts_explicit_resume_mapping() -> None:
+    previous = load_workflow_value(definition_value(revision=1))
+    current_value = definition_value(revision=2, steps={"generate_spec": {"next": "__end__"}})
+    current_value["spec"]["entry"] = "generate_spec"
+    current_value["spec"]["resume"] = {"fromRevisions": {"1": {"generate_prd": "generate_spec"}}}
+
+    impact = compare_process_definitions(previous, load_workflow_value(current_value))
+
+    assert impact.missing_resume_mappings == ()
+    assert impact.compatible_for_in_flight is True
 
 
 @pytest.mark.asyncio
@@ -334,3 +403,65 @@ spec:
     assert value["apiVersion"] == "forge/v1"
     assert value["metadata"]["revision"] == 1
     jira.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cli_render_does_not_require_jira(tmp_path, capsys) -> None:
+    source = tmp_path / "workflow.yaml"
+    source.write_text(
+        """apiVersion: forge/v1
+kind: Workflow
+metadata:
+  name: short-feature
+  revision: 1
+spec:
+  state: feature
+  entry: generate_prd
+  steps:
+    generate_prd:
+      next: __end__
+""",
+        encoding="utf-8",
+    )
+
+    result = await cmd_workflow(
+        Namespace(workflow_command="render", file=str(source), format="mermaid")
+    )
+
+    assert result == 0
+    assert "flowchart TD" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_cli_diff_returns_nonzero_for_unsafe_in_flight_change(tmp_path, capsys) -> None:
+    previous = tmp_path / "previous.yaml"
+    current = tmp_path / "current.yaml"
+    previous.write_text(
+        """apiVersion: forge/v1
+kind: Workflow
+metadata: {name: short-feature, revision: 1}
+spec:
+  state: feature
+  entry: generate_prd
+  steps: {generate_prd: {next: __end__}}
+""",
+        encoding="utf-8",
+    )
+    current.write_text(
+        """apiVersion: forge/v1
+kind: Workflow
+metadata: {name: short-feature, revision: 2}
+spec:
+  state: feature
+  entry: generate_spec
+  steps: {generate_spec: {next: __end__}}
+""",
+        encoding="utf-8",
+    )
+
+    result = await cmd_workflow(
+        Namespace(workflow_command="diff", previous=str(previous), current=str(current))
+    )
+
+    assert result == 2
+    assert '"missing_resume_mappings"' in capsys.readouterr().out
