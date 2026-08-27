@@ -72,7 +72,7 @@ class TestTaskRevisionState:
 
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch("forge.workflow.nodes.task_generation.post_status_comment"),
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
@@ -114,7 +114,7 @@ class TestTaskRevisionState:
 
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch("forge.workflow.nodes.task_generation.post_status_comment"),
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
@@ -152,10 +152,10 @@ class TestFeedbackThreading:
         """When context contains feedback, it appears in the prompt sent to the agent."""
         captured_prompts = []
 
-        async def fake_run_task(task, prompt, context, policy_key=None):
+        async def fake_run_task(task, prompt, context, policy_key=None, **_kwargs):
             _ = (task, context, policy_key)
             captured_prompts.append(prompt)
-            return ""  # empty → _parse_tasks_response returns []
+            return "[]"
 
         mock_agent = MagicMock()
         mock_agent.run_task = fake_run_task
@@ -170,12 +170,15 @@ class TestFeedbackThreading:
             "feedback": "Please split the auth task into two separate tasks.",
         }
 
-        await _generate_tasks_for_epic(
-            agent=mock_agent,
-            epic_plan="Implement authentication.",
-            epic_summary="Auth Epic",
-            context=context,
-        )
+        mock_agent._strip_preamble.return_value = "[]"
+        mock_agent.close = AsyncMock()
+        with patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent):
+            await _generate_tasks_for_epic(
+                state={"ticket_key": "TEST-1"},
+                epic_plan="Implement authentication.",
+                epic_summary="Auth Epic",
+                context=context,
+            )
 
         assert captured_prompts, "run_task was never called"
         assert "Revision Feedback" in captured_prompts[0]
@@ -186,10 +189,10 @@ class TestFeedbackThreading:
         """When context has no feedback, the prompt has no Revision Feedback section."""
         captured_prompts = []
 
-        async def fake_run_task(task, prompt, context, policy_key=None):
+        async def fake_run_task(task, prompt, context, policy_key=None, **_kwargs):
             _ = (task, context, policy_key)
             captured_prompts.append(prompt)
-            return ""
+            return "[]"
 
         mock_agent = MagicMock()
         mock_agent.run_task = fake_run_task
@@ -203,12 +206,15 @@ class TestFeedbackThreading:
             "epic_repo": "acme/backend",
         }
 
-        await _generate_tasks_for_epic(
-            agent=mock_agent,
-            epic_plan="Implement authentication.",
-            epic_summary="Auth Epic",
-            context=context,
-        )
+        mock_agent._strip_preamble.return_value = "[]"
+        mock_agent.close = AsyncMock()
+        with patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent):
+            await _generate_tasks_for_epic(
+                state={"ticket_key": "TEST-1"},
+                epic_plan="Implement authentication.",
+                epic_summary="Auth Epic",
+                context=context,
+            )
 
         assert "Revision Feedback" not in captured_prompts[0]
 
@@ -289,7 +295,7 @@ class TestRegenerateEpicTasks:
         """Only tasks parented to current_epic_key are archived."""
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
                 new_callable=AsyncMock,
@@ -331,7 +337,7 @@ class TestRegenerateEpicTasks:
         """Tasks from other epics remain in task_keys after regeneration."""
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
                 new_callable=AsyncMock,
@@ -369,7 +375,7 @@ class TestRegenerateEpicTasks:
         """State flags are cleared after successful regeneration."""
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
                 new_callable=AsyncMock,
@@ -412,7 +418,7 @@ class TestRegenerateEpicTasks:
 
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
                 side_effect=fake_generate,
@@ -444,7 +450,7 @@ class TestRegenerateEpicTasks:
         """Empty replacement generation leaves existing epic tasks intact and returns an error state."""
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
                 new_callable=AsyncMock,
@@ -485,7 +491,7 @@ class TestRegenerateEpicTasks:
         """Partial replacement creation must not archive existing epic tasks."""
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
                 new_callable=AsyncMock,
@@ -533,7 +539,7 @@ class TestRegenerateEpicTasks:
         """An exception in regenerate_epic_tasks must clear revision flags so task_approval_gate returns END."""
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
         ):
             mock_jira = AsyncMock()
             MockJira.return_value = mock_jira
@@ -554,7 +560,7 @@ class TestRegenerateEpicTasks:
 
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient") as MockJira,
-            patch("forge.workflow.nodes.task_generation.ForgeAgent") as MockAgent,
+            patch("forge.workflow.stations.agent_operation.ForgeAgent") as MockAgent,
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
                 new_callable=AsyncMock,

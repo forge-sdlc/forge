@@ -5,13 +5,18 @@ import logging
 import re
 from typing import Any
 
-from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import MissingProjectConfig
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.projections.agent_operation import project_agent_operation
 from forge.workflow.projections.artifact_generation import project_artifact_generation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+    run_agent_operation_station,
+)
 from forge.workflow.stations.artifact_generation import (
     ArtifactKind,
     run_artifact_generation_station,
@@ -54,7 +59,6 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
     logger.info(f"Generating Tasks for {len(epic_keys)} Epics on {ticket_key}")
 
     jira = JiraClient()
-    agent = ForgeAgent()
 
     await post_status_comment(
         jira,
@@ -135,7 +139,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
             # Generate Tasks using Deep Agents - primary operation
             tasks_data = await _generate_tasks_for_epic(
-                agent,
+                state,
                 epic_plan,
                 epic_summary,
                 context,
@@ -271,7 +275,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
 
 async def _generate_tasks_for_epic(
-    agent: ForgeAgent,
+    state: WorkflowState,
     epic_plan: str,
     epic_summary: str,
     context: dict[str, Any],
@@ -282,7 +286,7 @@ async def _generate_tasks_for_epic(
     """Generate Tasks for a single Epic.
 
     Args:
-        agent: Deep Agent client.
+        state: Workflow checkpoint used only to derive stable station identity.
         epic_plan: Epic implementation plan.
         epic_summary: Epic title/summary.
         context: Additional context.
@@ -313,14 +317,22 @@ async def _generate_tasks_for_epic(
             f"Please incorporate this feedback when creating the tasks."
         )
 
-    result = await agent.run_task(
-        task="generate-tasks",
-        policy_key="generate_tasks",
-        prompt=prompt,
-        context=context,
+    outcome = await run_agent_operation_station(
+        project_agent_operation(
+            state,
+            AgentOperationInput(
+                operation=AgentOperation.RUN_TASK,
+                task="generate-tasks",
+                policy_key="generate_tasks",
+                prompt=prompt,
+                context=context,
+            ),
+            discriminator=f"generate-tasks:{epic_summary}",
+        )
     )
+    assert outcome.output is not None
 
-    return _parse_tasks_response(result)
+    return _parse_tasks_response(outcome.output.text)
 
 
 def _format_sibling_epics(sibling_epics: list[dict[str, str]] | None) -> str:
@@ -547,7 +559,6 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
     logger.info(f"Regenerating tasks for Epic {epic_key} on {ticket_key} with feedback")
 
     jira = JiraClient()
-    agent = ForgeAgent()
 
     try:
         # Identify which tasks belong to this epic (fetched concurrently)
@@ -642,7 +653,7 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
         spec_content = await fetch_and_inject_references(state, jira, spec_content)
 
         tasks_data = await _generate_tasks_for_epic(
-            agent,
+            state,
             epic_plan,
             epic_summary,
             context,
@@ -783,7 +794,6 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await agent.close()
 
 
 async def update_single_task(state: WorkflowState) -> WorkflowState:
