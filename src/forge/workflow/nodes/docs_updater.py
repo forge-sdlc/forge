@@ -7,6 +7,7 @@ from forge.config import get_settings
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.source_control import get_adapter
 from forge.workspace.git_ops import GitOperations
@@ -53,7 +54,10 @@ async def update_documentation(state: WorkflowState) -> WorkflowState:
 
     try:
         runner = ContainerRunner(settings)
-        result = await runner.run(
+        result = await execute_sandbox_kwargs(
+            state,
+            runner=runner,
+            discriminator="docs_updater",
             workspace_path=Path(workspace_path),
             task_summary="Update stale documentation",
             task_description=task_description,

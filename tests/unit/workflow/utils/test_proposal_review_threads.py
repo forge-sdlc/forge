@@ -81,9 +81,11 @@ async def test_triage_records_each_decision_for_monitoring() -> None:
             '"feedback":"","response":"No.","reason":"Invalid"}]'
         )
     )
+    agent._strip_preamble.side_effect = lambda value: value
+    agent.close = AsyncMock()
 
     with (
-        patch("forge.integrations.agents.agent.ForgeAgent", return_value=agent),
+        patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         patch(
             "forge.workflow.utils.proposal_review_threads.record_proposal_review_decision"
         ) as record,

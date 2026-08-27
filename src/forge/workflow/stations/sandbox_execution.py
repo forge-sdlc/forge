@@ -63,13 +63,15 @@ async def run_sandbox_execution_station(
         **value.runner_options,
     )
     output = SandboxExecutionOutput(
-        success=result.success,
-        exit_code=result.exit_code,
-        stdout=result.stdout,
-        stderr=result.stderr,
-        tests_passed=result.tests_passed,
-        error_message=result.error_message,
-        review_cycles=tuple(asdict(cycle) for cycle in result.review_cycles),
+        success=bool(result.success),
+        exit_code=int(result.exit_code),
+        stdout=result.stdout if isinstance(result.stdout, str) else str(result.stdout),
+        stderr=result.stderr if isinstance(result.stderr, str) else str(result.stderr),
+        tests_passed=result.tests_passed if isinstance(result.tests_passed, bool) else None,
+        error_message=result.error_message if isinstance(result.error_message, str) else None,
+        review_cycles=tuple(
+            asdict(cycle) for cycle in result.review_cycles if hasattr(cycle, "cycle")
+        ),
     )
     return StationOutcome[SandboxExecutionOutput](
         workflow=request.workflow,
@@ -83,7 +85,7 @@ async def run_sandbox_execution_station(
         ),
         completed_at=request.requested_at,
         output=output,
-        reason=result.error_message,
+        reason=output.error_message,
     )
 
 

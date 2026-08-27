@@ -16,6 +16,7 @@ from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.bug.state import BugState
 from forge.workflow.effect_runtime import JiraClient
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import (
     merge_review_exhaustion,
     set_paused,
@@ -145,7 +146,10 @@ async def _run_plan_container(
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace_path = Path(tmpdir)
             runner = ContainerRunner(settings)
-            result = await runner.run(
+            result = await execute_sandbox_kwargs(
+                state,
+                runner=runner,
+                discriminator="plan_bug_fix",
                 workspace_path=workspace_path,
                 task_summary=f"Plan bug fix for {ticket_key}",
                 task_description=task_description,

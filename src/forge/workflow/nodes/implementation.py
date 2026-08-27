@@ -26,6 +26,7 @@ from forge.workflow.nodes.git_persistence import (
     use_fork_remote,
 )
 from forge.workflow.nodes.workspace_setup import prepare_workspace
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.references import fetch_and_inject_references
@@ -207,7 +208,10 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         # Copy list to avoid mutation after passing to runner
         implemented_tasks = list(state.get("implemented_tasks", []))
         container_started = True
-        result = await runner.run(
+        result = await execute_sandbox_kwargs(
+            state,
+            runner=runner,
+            discriminator="implementation",
             workspace_path=Path(workspace_path),
             task_summary=task_summary,
             task_description=full_description,

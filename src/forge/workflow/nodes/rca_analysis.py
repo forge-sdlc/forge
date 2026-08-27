@@ -12,6 +12,7 @@ from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.bug.state import BugState
 from forge.workflow.effect_runtime import JiraClient
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.repo_resolution import ensure_repo_labels, get_effective_repos
@@ -107,7 +108,10 @@ async def analyze_bug(state: BugState) -> BugState:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace_path = Path(tmpdir)
             runner = ContainerRunner(settings)
-            result = await runner.run(
+            result = await execute_sandbox_kwargs(
+                state,
+                runner=runner,
+                discriminator="rca_analysis",
                 workspace_path=workspace_path,
                 task_summary=f"RCA analysis for {ticket_key}",
                 task_description=task_description,
@@ -264,7 +268,10 @@ async def reflect_rca(state: BugState) -> BugState:
             workspace_path = Path(tmpdir)
             runner = ContainerRunner(settings)
             task_key = f"{ticket_key}-reflect"
-            result = await runner.run(
+            result = await execute_sandbox_kwargs(
+                state,
+                runner=runner,
+                discriminator="rca_analysis",
                 workspace_path=workspace_path,
                 task_summary=f"RCA reflection for {ticket_key}",
                 task_description=task_description,

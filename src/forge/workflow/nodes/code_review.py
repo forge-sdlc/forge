@@ -16,6 +16,7 @@ from forge.sandbox import ContainerRunner
 from forge.sandbox.runner import ContainerResult
 from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.stations.agent_operation import (
     AgentOperation,
     AgentOperationInput,
@@ -68,7 +69,10 @@ async def run_post_change_review(
         )
 
         runner = ContainerRunner(settings)
-        result = await runner.run(
+        result = await execute_sandbox_kwargs(
+            {"ticket_key": ticket_key},
+            runner=runner,
+            discriminator=f"code-review:{label}",
             workspace_path=Path(workspace_path),
             task_summary=f"Post-{label} code review",
             task_description=task_description,

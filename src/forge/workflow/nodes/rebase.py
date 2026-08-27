@@ -23,6 +23,7 @@ from forge.workflow.nodes.workspace_setup import (
     get_workspace_manager,
     write_workspace_identity,
 )
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
@@ -181,7 +182,10 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         )
 
         runner = ContainerRunner(settings)
-        result = await runner.run(
+        result = await execute_sandbox_kwargs(
+            state,
+            runner=runner,
+            discriminator="rebase",
             workspace_path=workspace.path,
             task_summary=f"Resolve merge conflicts with main for {ticket_key}",
             task_description=prompt,

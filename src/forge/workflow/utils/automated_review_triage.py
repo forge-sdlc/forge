@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from forge.prompts import load_prompt
+from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+    run_agent_operation_station,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +77,6 @@ async def triage_automated_review(
     ticket_key: str,
 ) -> AutomatedReviewDecision:
     """Ask a tool-free agent whether an automated review is still blocking."""
-    # Keep the comparatively heavy agent integration out of webhook worker imports.
-    from forge.integrations.agents.agent import ForgeAgent
-
     prompt = load_prompt(
         "triage-automated-review",
         artifact_type=artifact_type,
@@ -83,13 +86,22 @@ async def triage_automated_review(
         review_content=review_content,
     )
     try:
-        output = await ForgeAgent().run_task(
-            task="triage-automated-review",
-            policy_key="automated_review_triage",
-            prompt=prompt,
-            context={"ticket_key": ticket_key},
-            include_tools=False,
+        outcome = await run_agent_operation_station(
+            project_agent_operation(
+                {"ticket_key": ticket_key},
+                AgentOperationInput(
+                    operation=AgentOperation.RUN_TASK,
+                    task="triage-automated-review",
+                    policy_key="automated_review_triage",
+                    prompt=prompt,
+                    context={"ticket_key": ticket_key},
+                    include_tools=False,
+                ),
+                discriminator=f"automated-review:{artifact_type}:{review_author}",
+            )
         )
+        assert outcome.output is not None
+        output = outcome.output.text
     except Exception as exc:
         logger.warning("Automated review triage failed for %s: %s", ticket_key, exc)
         return AutomatedReviewDecision("uncertain", reason=f"Triage failed: {exc}")

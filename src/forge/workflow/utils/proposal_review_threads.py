@@ -7,6 +7,12 @@ from typing import Any
 
 from forge.api.routes.metrics import record_proposal_review_decision
 from forge.prompts import load_prompt
+from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+    run_agent_operation_station,
+)
 from forge.workflow.utils.review_decisions import reply_to_review_decisions
 
 logger = logging.getLogger(__name__)
@@ -70,8 +76,6 @@ async def triage_proposal_review_threads(
     *, artifact_type: str, artifact_content: str, threads: list[dict[str, Any]], ticket_key: str
 ) -> list[dict[str, Any]]:
     """Classify proposal review threads in one tool-free agent invocation."""
-    from forge.integrations.agents.agent import ForgeAgent
-
     rendered_threads = json.dumps(threads, indent=2)
     prompt = load_prompt(
         "triage-proposal-review-threads",
@@ -80,13 +84,22 @@ async def triage_proposal_review_threads(
         review_threads=rendered_threads,
     )
     try:
-        output = await ForgeAgent().run_task(
-            task="triage-proposal-review-threads",
-            policy_key="proposal_review_triage",
-            prompt=prompt,
-            context={"ticket_key": ticket_key},
-            include_tools=False,
+        outcome = await run_agent_operation_station(
+            project_agent_operation(
+                {"ticket_key": ticket_key},
+                AgentOperationInput(
+                    operation=AgentOperation.RUN_TASK,
+                    task="triage-proposal-review-threads",
+                    policy_key="proposal_review_triage",
+                    prompt=prompt,
+                    context={"ticket_key": ticket_key},
+                    include_tools=False,
+                ),
+                discriminator=f"proposal-review:{artifact_type}",
+            )
         )
+        assert outcome.output is not None
+        output = outcome.output.text
     except Exception as exc:
         logger.warning("Proposal thread triage failed for %s: %s", ticket_key, exc)
         output = ""
