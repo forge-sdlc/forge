@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
 from forge.integrations.source_control.contracts import (
     ChangeRequest,
     RepositoryRef,
@@ -21,6 +20,12 @@ from forge.workflow.effect_runtime import JiraClient, push_repository
 from forge.workflow.nodes.code_review import sync_pr_description
 from forge.workflow.nodes.post_merge_summary import _extract_impact
 from forge.workflow.pr_state import save_active_pull_request
+from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+    run_agent_operation_station,
+)
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
@@ -578,31 +583,38 @@ async def _generate_pr_body_with_agent(
         )
 
         # Run agent to generate PR body
-        agent = ForgeAgent(settings)
-        result = await agent.run_task(
-            task="generate-pr-body",
-            policy_key="generate_pr_description",
-            prompt=prompt,
-            context={
-                "ticket_key": ticket_key,
-                "task_count": len(implemented_tasks),
-            },
-            trace_context={
-                "ticket_key": ticket_key,
-                "ticket_type": state.get("ticket_type", ""),
-                "current_node": state.get("current_node", ""),
-                "repo": current_repo,
-                "pr_number": state.get("current_pr_number", ""),
-                "ci_status": state.get("ci_status", ""),
-                "event_type": state.get("event_type", ""),
-                "event_source": state.get("context", {}).get("source", ""),
-                "retry_count": state.get("retry_count", 0),
-            },
-            include_tools=False,  # No tools needed for text generation
+        outcome = await run_agent_operation_station(
+            project_agent_operation(
+                state,
+                AgentOperationInput(
+                    operation=AgentOperation.RUN_TASK,
+                    task="generate-pr-body",
+                    policy_key="generate_pr_description",
+                    prompt=prompt,
+                    context={
+                        "ticket_key": ticket_key,
+                        "task_count": len(implemented_tasks),
+                    },
+                    trace_context={
+                        "ticket_key": ticket_key,
+                        "ticket_type": state.get("ticket_type", ""),
+                        "current_node": state.get("current_node", ""),
+                        "repo": current_repo,
+                        "pr_number": state.get("current_pr_number", ""),
+                        "ci_status": state.get("ci_status", ""),
+                        "event_type": state.get("event_type", ""),
+                        "event_source": state.get("context", {}).get("source", ""),
+                        "retry_count": state.get("retry_count", 0),
+                    },
+                    include_tools=False,
+                ),
+                discriminator=f"generate-pr-body:{current_repo}",
+            )
         )
+        assert outcome.output is not None
+        result = outcome.output.text
 
         if result and len(result) > 100:
-            result = agent._strip_preamble(result)
             logger.info(f"Generated PR body with agent ({len(result)} chars)")
             return result
         else:
