@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 from forge.integrations.jira.models import JiraIssue
 from forge.workflow.base import ArtifactRef, WorkUnit
+from forge.workflow.planning_state import (
+    artifact_is_current,
+    content_digest,
+    planning_artifacts,
+)
 
 ArtifactKind = Literal["task", "epic_plan", "plan", "spec", "rca", "prd", "ticket"]
 
@@ -63,7 +67,7 @@ class ResolvedImplementationInput:
 
 
 def _digest(content: str) -> str:
-    return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
+    return content_digest(content)
 
 
 def _repo_labels(issue: JiraIssue) -> set[str]:
@@ -83,21 +87,6 @@ def _issue_artifact(kind: ArtifactKind, issue: JiraIssue, repository: str) -> Ar
         "content": content,
         "digest": _digest(content),
         "repository": repository,
-    }
-
-
-def _state_artifact(kind: ArtifactKind, field: str, content: Any) -> ArtifactRef | None:
-    if not isinstance(content, str) or not content.strip():
-        return None
-    normalized = content.strip()
-    digest = _digest(normalized)
-    return {
-        "id": f"state:{field}:{digest[7:19]}",
-        "kind": kind,
-        "source": field,
-        "content": normalized,
-        "digest": digest,
-        "repository": None,
     }
 
 
@@ -127,6 +116,15 @@ def _task_candidates(state: Mapping[str, Any], repository: str) -> list[str]:
     for key in mapped.get(repository, []):
         if isinstance(key, str) and key not in implemented and key not in candidates:
             candidates.append(key)
+    for unit in state.get("work_units") or []:
+        if (
+            unit.get("kind") == "task"
+            and unit.get("repository") == repository
+            and unit.get("status") in {"pending", "active"}
+        ):
+            key = unit.get("jira_key") or unit.get("key") or unit.get("id")
+            if isinstance(key, str) and key not in implemented and key not in candidates:
+                candidates.append(key)
     ticket_type = state.get("ticket_type")
     ticket_type_name = getattr(ticket_type, "value", ticket_type)
     ticket_key = state.get("ticket_key")
@@ -149,13 +147,24 @@ async def resolve_implementation_input(
     repository Epic plan, plan, spec, RCA, PRD, then the root ticket. Lower-level
     available artifacts are retained as ordered context rather than discarded.
     """
-    repository = state.get("current_repo")
+    repository = state.get("current_repository") or state.get("current_repo")
     if not isinstance(repository, str) or not repository.strip():
         raise ValueError("current_repo is required to resolve implementation input")
     repository = repository.strip()
 
     artifacts: list[ArtifactRef] = []
     summaries: dict[str, str] = {}
+    stale_tasks = [
+        unit.get("id")
+        for unit in state.get("work_units") or []
+        if unit.get("kind") == "task"
+        and unit.get("repository") == repository
+        and unit.get("status") == "stale"
+    ]
+    if stale_tasks:
+        raise ValueError(
+            f"Repository {repository} has Tasks derived from stale planning: {stale_tasks}"
+        )
     task_keys = _task_candidates(state, repository)
     repository_tasks = (state.get("tasks_by_repo") or {}).get(repository, [])
     if repository_tasks and not task_keys:
@@ -183,16 +192,21 @@ async def resolve_implementation_input(
             artifacts.append(artifact)
             summaries[artifact["id"]] = issue.summary
 
-    state_fields: tuple[tuple[ArtifactKind, str], ...] = (
-        ("plan", "plan_content"),
-        ("spec", "spec_content"),
-        ("rca", "rca_content"),
-        ("prd", "prd_content"),
+    existing_ids = {artifact.get("id") for artifact in artifacts}
+    rank = {"task": 0, "epic_plan": 1, "plan": 2, "spec": 3, "rca": 4, "prd": 5, "ticket": 6}
+    layered = sorted(
+        planning_artifacts(state),
+        key=lambda artifact: rank.get(str(artifact.get("kind")), 99),
     )
-    for kind, field in state_fields:
-        state_artifact = _state_artifact(kind, field, state.get(field))
-        if state_artifact:
-            artifacts.append(state_artifact)
+    for artifact in layered:
+        if artifact.get("id") in existing_ids or not artifact_is_current(artifact):
+            continue
+        artifact_repo = artifact.get("repository")
+        if artifact_repo not in {None, repository}:
+            continue
+        if artifact.get("content"):
+            artifacts.append(artifact)
+            existing_ids.add(artifact.get("id"))
 
     ticket_key = state.get("ticket_key")
     if isinstance(ticket_key, str) and ticket_key and ticket_key not in task_keys[:1]:
@@ -207,11 +221,10 @@ async def resolve_implementation_input(
         raise ValueError(f"No implementation artifact is available for repository {repository}")
 
     primary = artifacts[0]
-    jira_key = (
-        primary["source"]
-        if primary["source"] not in {"plan_content", "spec_content", "rca_content", "prd_content"}
-        else None
-    )
+    jira_key = primary.get("jira_key")
+    if not jira_key and primary.get("kind") in {"task", "epic_plan", "ticket"}:
+        source = primary.get("source")
+        jira_key = source if isinstance(source, str) else None
     work_id = jira_key or f"internal:{repository}:{primary['kind']}:{primary['digest'][7:19]}"
     completed_ids = set(state.get("implemented_tasks") or [])
     completed_ids.update(
@@ -228,6 +241,7 @@ async def resolve_implementation_input(
         "repository": repository,
         "status": "pending",
         "source_artifact_ids": [primary["id"]],
+        "context_artifact_ids": [artifact["id"] for artifact in artifacts[1:]],
     }
     return ResolvedImplementationInput(
         work_unit=work_unit,

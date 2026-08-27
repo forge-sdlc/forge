@@ -241,3 +241,102 @@ async def test_completed_internal_work_unit_is_not_rerun():
             },
             jira,
         )
+
+
+@pytest.mark.asyncio
+async def test_normalized_approved_plan_is_selected_and_ancestors_are_context():
+    jira = jira_with(issue("ROOT-1", "root", labels=["repo:acme/api"]))
+    result = await resolve_implementation_input(
+        {
+            "ticket_key": "ROOT-1",
+            "current_repository": "acme/api",
+            "artifacts": [
+                {
+                    "id": "prd:1",
+                    "kind": "prd",
+                    "content": "requirements",
+                    "digest": "sha256:prd",
+                    "approved_digest": "sha256:prd",
+                    "status": "approved",
+                },
+                {
+                    "id": "spec:1",
+                    "kind": "spec",
+                    "content": "design",
+                    "digest": "sha256:spec",
+                    "approved_digest": "sha256:spec",
+                    "status": "approved",
+                },
+                {
+                    "id": "plan:1",
+                    "kind": "plan",
+                    "content": "implementation steps",
+                    "digest": "sha256:plan",
+                    "approved_digest": "sha256:plan",
+                    "status": "approved",
+                },
+            ],
+        },
+        jira,
+    )
+
+    assert result.work_unit["kind"] == "plan"
+    assert result.work_unit["source_artifact_ids"] == ["plan:1"]
+    assert result.work_unit["context_artifact_ids"] == [
+        "spec:1",
+        "prd:1",
+        "jira:ROOT-1:ticket",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_unapproved_and_stale_artifacts_are_not_implementation_input():
+    jira = jira_with(issue("ROOT-1", "root", labels=["repo:acme/api"]))
+    result = await resolve_implementation_input(
+        {
+            "ticket_key": "ROOT-1",
+            "current_repo": "acme/api",
+            "artifacts": [
+                {
+                    "id": "plan:1",
+                    "kind": "plan",
+                    "content": "changed plan",
+                    "digest": "sha256:new",
+                    "approved_digest": "sha256:old",
+                    "status": "approved",
+                },
+                {
+                    "id": "spec:1",
+                    "kind": "spec",
+                    "content": "stale design",
+                    "digest": "sha256:spec",
+                    "approved_digest": "sha256:spec",
+                    "status": "stale",
+                },
+            ],
+        },
+        jira,
+    )
+
+    assert result.work_unit["kind"] == "ticket"
+
+
+@pytest.mark.asyncio
+async def test_stale_task_blocks_broader_artifact_fallback():
+    with pytest.raises(ValueError, match="Tasks derived from stale planning"):
+        await resolve_implementation_input(
+            {
+                "ticket_key": "ROOT-1",
+                "current_repo": "acme/api",
+                "plan_content": "must not be selected",
+                "work_units": [
+                    {
+                        "id": "TASK-1",
+                        "kind": "task",
+                        "repository": "acme/api",
+                        "status": "stale",
+                    }
+                ],
+            },
+            AsyncMock(),
+        )

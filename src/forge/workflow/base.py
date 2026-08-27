@@ -31,6 +31,14 @@ class ArtifactRef(TypedDict, total=False):
     jira_key: str | None
     summary: str | None
     provenance: dict[str, Any]
+    revision: int
+    status: str
+    approved_digest: str | None
+    input_artifact_ids: list[str]
+    parent_artifact_id: str | None
+    child_artifact_ids: list[str]
+    derived_work_unit_ids: list[str]
+    created_by_node: str
 
 
 class WorkUnit(TypedDict, total=False):
@@ -49,7 +57,41 @@ class WorkUnit(TypedDict, total=False):
     instructions: str
     source_digest: str
     source_artifact_ids: list[str]
+    context_artifact_ids: list[str]
+    dependency_work_unit_ids: list[str]
     provenance: dict[str, Any]
+
+
+class RepositoryRef(TypedDict, total=False):
+    """Repository scope and traversal status for a workflow."""
+
+    name: str
+    source: str
+    status: str
+    work_unit_ids: list[str]
+    provenance: dict[str, Any]
+
+
+class ValidationResult(TypedDict, total=False):
+    """Durable validation evidence for one repository/work unit."""
+
+    id: str
+    repository: str
+    work_unit_id: str | None
+    kind: str
+    status: str
+    summary: str
+    evidence: dict[str, Any]
+
+
+class PublicationRef(TypedDict, total=False):
+    """Durable commit/push/pull-request outcome for a repository."""
+
+    repository: str
+    commit_sha: str | None
+    branch: str | None
+    pr_url: str | None
+    status: str
 
 
 class BaseState(TypedDict, total=False):
@@ -103,6 +145,11 @@ class BaseState(TypedDict, total=False):
     work_units: list[WorkUnit]
     current_work_unit_id: str | None
     work_resolution: dict[str, Any]
+    repositories: list[RepositoryRef]
+    current_repository: str | None
+    validations: list[ValidationResult]
+    publications: list[PublicationRef]
+    node_outcome: str | None
 
 
 class HandoffState(TypedDict):

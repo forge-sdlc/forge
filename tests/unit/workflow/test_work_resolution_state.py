@@ -14,6 +14,11 @@ def test_normalized_fields_are_optional_for_legacy_checkpoints() -> None:
     assert "work_units" in optional
     assert "current_work_unit_id" in optional
     assert "work_resolution" in optional
+    assert "repositories" in optional
+    assert "current_repository" in optional
+    assert "validations" in optional
+    assert "publications" in optional
+    assert "node_outcome" in optional
 
 
 def test_workflow_initial_states_have_independent_normalized_defaults() -> None:
@@ -31,14 +36,25 @@ def test_workflow_initial_states_have_independent_normalized_defaults() -> None:
         assert first["work_units"] == []
         assert first["current_work_unit_id"] is None
         assert first["work_resolution"] == {}
+        assert first["repositories"] == []
+        assert first["current_repository"] is None
+        assert first["validations"] == []
+        assert first["publications"] == []
+        assert first["node_outcome"] is None
 
         first["artifacts"].append({"id": "AISOS-1", "kind": "task"})
         first["work_units"].append({"id": "task:AISOS-1", "kind": "jira_task"})
         first["work_resolution"]["source"] = "task"
+        first["repositories"].append({"name": "acme/api"})
+        first["validations"].append({"id": "validation:1"})
+        first["publications"].append({"repository": "acme/api"})
 
         assert second["artifacts"] == []
         assert second["work_units"] == []
         assert second["work_resolution"] == {}
+        assert second["repositories"] == []
+        assert second["validations"] == []
+        assert second["publications"] == []
 
 
 def test_normalized_defaults_can_be_restored_from_checkpoint_values() -> None:

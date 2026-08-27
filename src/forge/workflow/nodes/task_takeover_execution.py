@@ -22,6 +22,7 @@ from forge.workflow.nodes.git_persistence import (
     use_fork_remote,
 )
 from forge.workflow.nodes.workspace_setup import prepare_workspace
+from forge.workflow.planning_state import repository_compatibility_update
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.references import fetch_and_inject_references
@@ -39,8 +40,9 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
     Returns:
         Updated TaskTakeoverState.
     """
+    state = cast(TaskTakeoverState, {**state, **repository_compatibility_update(state)})
     ticket_key = state["ticket_key"]
-    current_repo = state.get("current_repo") or ""
+    current_repo = state.get("current_repository") or ""
     current_task = state.get("current_task_key") or ticket_key
     container_started = False
     recorded_workspace = state.get("workspace_path")

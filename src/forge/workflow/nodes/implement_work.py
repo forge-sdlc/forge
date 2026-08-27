@@ -23,6 +23,7 @@ from forge.workflow.nodes.git_persistence import (
     push_to_fork_with_retry,
 )
 from forge.workflow.nodes.workspace_setup import prepare_workspace
+from forge.workflow.planning_state import repository_compatibility_update
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.references import fetch_and_inject_references
@@ -33,7 +34,8 @@ logger = logging.getLogger(__name__)
 async def implement_work(state: dict[str, Any]) -> dict[str, Any]:
     """Implement the most specific repository-scoped work that is available."""
     ticket_key = state["ticket_key"]
-    current_repo = state.get("current_repo") or ""
+    state = {**state, **repository_compatibility_update(state)}
+    current_repo = state.get("current_repository") or ""
     node_name = "implement_work"
     jira = JiraClient(get_settings())
     container_started = False
