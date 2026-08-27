@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - main
+      - integration/dev-to-main
+      - prototype/declarative-workflows
 
 jobs:
   helm-lint:
