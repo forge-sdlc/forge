@@ -698,7 +698,6 @@ class OrchestratorWorker:
 
         is_approved = False
         is_rejected = False
-        is_retry = False
         is_question = False
         is_ci_webhook = False
         pr_merged = False
@@ -717,28 +716,42 @@ class OrchestratorWorker:
             application = handlers.apply(workflow_command, current_state)
             if application is not None:
                 feedback_request = application.feedback
-                if feedback_request is not None and event_obj is not None:
-                    native_id = (
-                        event_obj.change_request.identity.native_id
-                        if event_obj.change_request
-                        else None
-                    )
-                    pr_number = int(native_id) if native_id is not None else None
-                    if feedback_request.kind is FeedbackKind.SKIP_GATE:
+                if feedback_request is not None:
+                    if feedback_request.kind is FeedbackKind.SKIP_GATE and event_obj is not None:
+                        native_id = (
+                            event_obj.change_request.identity.native_id
+                            if event_obj.change_request
+                            else None
+                        )
                         await self._post_skip_gate_feedback(
                             ticket_key=message.ticket_key,
                             repo_ref=event_obj.repo_ref,
-                            pr_number=pr_number,
+                            pr_number=int(native_id) if native_id is not None else None,
                             check_name=str(feedback_request.arguments["check_name"]),
                             sender=str(feedback_request.arguments.get("sender") or ""),
                             action=str(feedback_request.arguments["action"]),
                         )
-                    elif feedback_request.kind is FeedbackKind.REBASE:
+                    elif feedback_request.kind is FeedbackKind.REBASE and event_obj is not None:
+                        native_id = (
+                            event_obj.change_request.identity.native_id
+                            if event_obj.change_request
+                            else None
+                        )
                         await self._post_rebase_feedback(
                             ticket_key=message.ticket_key,
                             repo_ref=event_obj.repo_ref,
-                            pr_number=pr_number,
+                            pr_number=int(native_id) if native_id is not None else None,
                             sender=str(feedback_request.arguments.get("sender") or ""),
+                        )
+                    elif feedback_request.kind is FeedbackKind.RETRY_ACKNOWLEDGEMENT:
+                        await self._post_retry_acknowledgement(
+                            message.ticket_key,
+                            str(feedback_request.arguments["stage"]),
+                        )
+                    elif feedback_request.kind is FeedbackKind.TERMINAL_ERROR:
+                        await self._post_terminal_error_comment(
+                            message.ticket_key,
+                            str(feedback_request.arguments["message"]),
                         )
                 return application.state
 
@@ -834,11 +847,6 @@ class OrchestratorWorker:
             to_labels = change.get("toString", "")
             from_labels = change.get("fromString", "")
 
-            # Check for retry label - triggers retry of current stage
-            if "forge:retry" in to_labels.lower() and "forge:retry" not in from_labels.lower():
-                is_retry = True
-                logger.info(f"Detected retry signal via forge:retry label for {current_node}")
-
             # Check for approval labels - but only if it matches the current stage
             if "approved" in to_labels.lower() and "pending" in from_labels.lower():
                 # Validate the approval matches the workflow stage
@@ -883,7 +891,7 @@ class OrchestratorWorker:
 
         # Fallback: check current labels on the ticket when changelog-based
         # detection missed the approval (e.g. user changed labels in two steps).
-        if not is_approved and not is_rejected and not is_retry:
+        if not is_approved and not is_rejected:
             current_labels = payload.get("issue", {}).get("fields", {}).get("labels", [])
             current_labels_lower = [lbl.lower() for lbl in current_labels]
             gate_to_approved_label = {
@@ -1654,100 +1662,7 @@ class OrchestratorWorker:
         terminal_states = ("complete",)
         is_terminal = current_node in terminal_states
 
-        if is_retry:
-            if is_terminal:
-                logger.info(
-                    f"Ignoring forge:retry for {message.ticket_key} - workflow already complete"
-                )
-                await self._post_terminal_error_comment(
-                    message.ticket_key,
-                    "Workflow is already complete — nothing to retry.",
-                )
-                return current_state
-
-            # At approval gates with no error, retry means "regenerate" not "advance".
-            # Set revision_requested=True so route_*_approval routes to regeneration,
-            # not to the approved path (which fires when is_paused=False and no revision).
-            approval_gates = {
-                "prd_approval_gate",
-                "spec_approval_gate",
-                "plan_approval_gate",
-                "task_approval_gate",
-                "plan_approval_gate_bug",
-                "task_plan_approval_gate",
-            }
-            prev_error = current_state.get("last_error")
-            is_paused_at_gate = current_state.get("is_paused") and current_node in approval_gates
-            if current_node == "triage_gate":
-                logger.info("Retry at triage_gate — re-running triage_check")
-                updated_state["is_paused"] = False
-                updated_state["is_blocked"] = False
-                updated_state["last_error"] = None
-                updated_state["auto_retry_cap_notified"] = False
-                updated_state["retry_count"] = 0
-                updated_state["current_node"] = "triage_check"
-                updated_state["context"] = {
-                    **updated_state.get("context", {}),
-                    "force_fresh_invoke": True,
-                }
-            elif current_node == "review_response_gate":
-                logger.info(
-                    f"Retry at review_response_gate — transitioning back to human_review_gate "
-                    f"and clearing review state for {message.ticket_key}"
-                )
-                updated_state["is_paused"] = False
-                updated_state["is_blocked"] = False
-                updated_state["last_error"] = None
-                updated_state["auto_retry_cap_notified"] = False
-                updated_state["revision_requested"] = False
-                updated_state["feedback_comment"] = None
-                updated_state["contested_comments"] = []
-                updated_state["retry_count"] = 0
-                updated_state["current_node"] = "human_review_gate"
-                updated_state["context"] = {
-                    **updated_state.get("context", {}),
-                    "force_fresh_invoke": True,
-                }
-            elif is_paused_at_gate:
-                logger.info(
-                    f"Retry at approval gate {current_node} — triggering regeneration "
-                    f"via revision request"
-                )
-                updated_state["is_paused"] = False
-                updated_state["is_blocked"] = False
-                updated_state["last_error"] = None
-                updated_state["auto_retry_cap_notified"] = False
-                updated_state["revision_requested"] = True
-                updated_state["feedback_comment"] = "Regeneration requested via retry."
-                updated_state["retry_count"] = 0
-                updated_state["current_epic_key"] = None
-                updated_state["current_task_key"] = None
-                # current_node remains the gate so the graph can correctly route out of it
-            else:
-                safe_prev_error = redact_secrets(prev_error) if prev_error else None
-                logger.info(
-                    f"Retry requested for {message.ticket_key} at {current_node} "
-                    f"(clearing error: {safe_prev_error[:100] if safe_prev_error else 'none'})"
-                )
-                updated_state["is_paused"] = False
-                updated_state["is_blocked"] = False
-                updated_state["last_error"] = None
-                updated_state["auto_retry_cap_notified"] = False
-                updated_state["revision_requested"] = False
-                updated_state["feedback_comment"] = None
-                updated_state["retry_count"] = 0
-                updated_state["ci_fix_attempt"] = 0
-                updated_state["context"] = {
-                    **updated_state.get("context", {}),
-                    "force_fresh_invoke": True,
-                }
-                # Keep current_node — workflow resumes from the node that failed
-
-            await self._post_retry_acknowledgement(
-                message.ticket_key,
-                updated_state.get("current_node", current_node),
-            )
-        elif is_ci_webhook:
+        if is_ci_webhook:
             # GitHub CI event — unpause the gate and let ci_evaluator check the results
             updated_state["is_paused"] = False
 

@@ -57,3 +57,20 @@ def test_select_option_validates_against_authoritative_state() -> None:
     assert valid is not None
     assert valid.state["selected_fix_approach"] == "b"
     assert invalid is None
+
+
+def test_retry_at_gate_requests_regeneration() -> None:
+    application = create_default_command_handler_registry().apply(
+        _command(WorkflowCommandType.RETRY, stage="spec_approval_gate"),
+        {
+            "current_node": "spec_approval_gate",
+            "is_paused": True,
+            "last_error": "old",
+        },
+    )
+
+    assert application is not None
+    assert application.state["revision_requested"] is True
+    assert application.state["last_error"] is None
+    assert application.feedback is not None
+    assert application.feedback.kind is FeedbackKind.RETRY_ACKNOWLEDGEMENT

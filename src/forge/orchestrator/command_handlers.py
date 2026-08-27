@@ -13,6 +13,8 @@ from forge.domain import WorkflowCommand, WorkflowCommandType
 class FeedbackKind(StrEnum):
     SKIP_GATE = "skip_gate"
     REBASE = "rebase"
+    RETRY_ACKNOWLEDGEMENT = "retry_acknowledgement"
+    TERMINAL_ERROR = "terminal_error"
 
 
 @dataclass(frozen=True)
@@ -142,6 +144,75 @@ def _apply_select_option(
     )
 
 
+def _apply_retry(
+    _command: WorkflowCommand, state: Mapping[str, Any]
+) -> CommandApplication:
+    current_node = str(state.get("current_node") or "")
+    if current_node == "complete":
+        return CommandApplication(
+            state=dict(state),
+            feedback=FeedbackRequest(
+                FeedbackKind.TERMINAL_ERROR,
+                {"message": "Workflow is already complete — nothing to retry."},
+            ),
+        )
+
+    updated = {
+        **state,
+        "is_paused": False,
+        "is_blocked": False,
+        "last_error": None,
+        "auto_retry_cap_notified": False,
+        "retry_count": 0,
+    }
+    approval_gates = {
+        "prd_approval_gate",
+        "spec_approval_gate",
+        "plan_approval_gate",
+        "task_approval_gate",
+        "plan_approval_gate_bug",
+        "task_plan_approval_gate",
+    }
+    if current_node == "triage_gate":
+        updated["current_node"] = "triage_check"
+        updated["context"] = {**state.get("context", {}), "force_fresh_invoke": True}
+    elif current_node == "review_response_gate":
+        updated.update(
+            {
+                "revision_requested": False,
+                "feedback_comment": None,
+                "contested_comments": [],
+                "current_node": "human_review_gate",
+                "context": {**state.get("context", {}), "force_fresh_invoke": True},
+            }
+        )
+    elif state.get("is_paused") and current_node in approval_gates:
+        updated.update(
+            {
+                "revision_requested": True,
+                "feedback_comment": "Regeneration requested via retry.",
+                "current_epic_key": None,
+                "current_task_key": None,
+            }
+        )
+    else:
+        updated.update(
+            {
+                "revision_requested": False,
+                "feedback_comment": None,
+                "ci_fix_attempt": 0,
+                "context": {**state.get("context", {}), "force_fresh_invoke": True},
+            }
+        )
+    return CommandApplication(
+        state=updated,
+        feedback=FeedbackRequest(
+            FeedbackKind.RETRY_ACKNOWLEDGEMENT,
+            {"stage": updated.get("current_node", current_node)},
+        ),
+    )
+
+
 def create_default_command_handler_registry() -> CommandHandlerRegistry:
     registry = CommandHandlerRegistry()
     registry.register(WorkflowCommandType.SKIP_GATE, _apply_skip_gate)
@@ -149,4 +220,5 @@ def create_default_command_handler_registry() -> CommandHandlerRegistry:
     registry.register(WorkflowCommandType.REBASE, _apply_rebase)
     registry.register(WorkflowCommandType.ENABLE_YOLO, _apply_yolo)
     registry.register(WorkflowCommandType.SELECT_OPTION, _apply_select_option)
+    registry.register(WorkflowCommandType.RETRY, _apply_retry)
     return registry
