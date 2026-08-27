@@ -32,6 +32,7 @@ class ProcessNode(DomainModel):
     allowed_effects: tuple[str, ...] = ()
     join: str | None = None
     max_concurrency: int | None = None
+    retry_bound: int | None = None
 
 
 class ProcessManifest(DomainModel):
@@ -85,11 +86,17 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
                 allowed_effects=step.allowed_effects,
                 join=step.join,
                 max_concurrency=step.max_concurrency,
+                retry_bound=step.retry_bound,
             )
         )
         if step.next:
             transitions.append(ProcessTransition(source=name, target=step.next))
-        elif not step.dynamic_route:
+        elif step.dynamic_route:
+            transitions.extend(
+                ProcessTransition(source=name, target=target, outcome="dynamic")
+                for target in step.dynamic_targets
+            )
+        else:
             transitions.extend(
                 ProcessTransition(source=name, target=target, outcome=outcome)
                 for outcome, target in step.branches.items()

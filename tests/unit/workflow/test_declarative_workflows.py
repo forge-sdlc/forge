@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from forge.orchestrator.worker import OrchestratorWorker
+from forge.workflow.declarative.builtins import builtin_feature_definition
 from forge.workflow.declarative.cli import cmd_workflow
 from forge.workflow.declarative.compiler import (
     DeclarativeWorkflowCompiler,
@@ -55,6 +56,17 @@ def test_loads_strict_definition_and_computes_stable_digest() -> None:
 
     assert first.digest == second.digest
     assert first.property_key == f"{WORKFLOW_PROPERTY_PREFIX}short-feature"
+
+
+def test_builtin_feature_golden_path_is_valid_and_inspectable() -> None:
+    definition = builtin_feature_definition()
+    DeclarativeWorkflowCompiler(definition).validate()
+    manifest = build_process_manifest(definition)
+
+    assert definition.metadata.name == "feature"
+    assert len(manifest.nodes) == 32
+    assert any(node.name == "task_router" and node.station_contract for node in manifest.nodes)
+    assert any(node.name == "prd_approval_gate" and node.kind == "gate" for node in manifest.nodes)
 
 
 @pytest.mark.asyncio

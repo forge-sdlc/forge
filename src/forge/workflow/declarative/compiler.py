@@ -42,7 +42,13 @@ class DeclarativeWorkflowCompiler:
                     f"router '{step.route}' on '{node_name}' is not registered for state "
                     f"'{spec.state}'"
                 )
-            targets = [step.next] if step.next else list(step.branches.values())
+            targets = (
+                [step.next]
+                if step.next
+                else list(step.dynamic_targets)
+                if step.dynamic_route
+                else list(step.branches.values())
+            )
             for target in targets:
                 if target == "__end__":
                     has_terminal = True
@@ -83,7 +89,11 @@ class DeclarativeWorkflowCompiler:
             raise WorkflowValidationError(f"unreachable node '{sorted(unreachable)[0]}'")
 
         # A cycle is safe only if removing pause/bounded-boundary nodes breaks it.
-        unguarded = set(steps) - set(self.profile.pause_nodes)
+        unguarded = {
+            name
+            for name, step in steps.items()
+            if name not in self.profile.pause_nodes and step.kind != "gate" and not step.retry_bound
+        }
         colors: dict[str, int] = {}
 
         def visit(node: str) -> None:

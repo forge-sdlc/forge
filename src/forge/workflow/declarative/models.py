@@ -41,6 +41,7 @@ class WorkflowStep(StrictModel):
     route: str | None = None
     branches: dict[str, str] = Field(default_factory=dict)
     dynamic_route: bool = Field(default=False, alias="dynamicRoute")
+    dynamic_targets: tuple[str, ...] = Field(default=(), alias="dynamicTargets")
     kind: Literal["station", "gate", "operation"] | None = None
     station_contract: str | None = Field(default=None, alias="stationContract")
     station_contract_version: str | None = Field(default=None, alias="stationContractVersion")
@@ -48,6 +49,7 @@ class WorkflowStep(StrictModel):
     allowed_effects: tuple[str, ...] = Field(default=(), alias="allowedEffects")
     join: Literal["all", "any"] | None = None
     max_concurrency: int | None = Field(default=None, alias="maxConcurrency", ge=1, le=64)
+    retry_bound: int | None = Field(default=None, alias="retryBound", ge=1, le=100)
 
     @model_validator(mode="after")
     def validate_transition(self) -> WorkflowStep:
@@ -57,8 +59,10 @@ class WorkflowStep(StrictModel):
             raise ValueError("branches are only valid with 'route'")
         if self.route and not self.branches and not self.dynamic_route:
             raise ValueError("a routed step requires non-empty branches")
-        if self.dynamic_route and (not self.route or self.branches):
+        if self.dynamic_route and (not self.route or self.branches or not self.dynamic_targets):
             raise ValueError("dynamicRoute requires a route and cannot declare static branches")
+        if not self.dynamic_route and self.dynamic_targets:
+            raise ValueError("dynamicTargets are only valid with dynamicRoute")
         if len(self.branches) > MAX_BRANCHES:
             raise ValueError(f"a routed step may have at most {MAX_BRANCHES} branches")
         if self.kind == "station" and not (self.station_contract and self.station_contract_version):

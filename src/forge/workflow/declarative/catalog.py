@@ -122,6 +122,7 @@ def get_state_profile(name: str) -> StateProfile:
             regenerate_epic_tasks,
             update_single_task,
         )
+        from forge.workflow.nodes.task_router import route_tasks_parallel
         from forge.workflow.post_pr import route_after_pr_creation
 
         nodes: dict[str, Any] = {
@@ -170,6 +171,7 @@ def get_state_profile(name: str) -> StateProfile:
             "route_prd_approval": route_prd_approval,
             "route_spec_approval": route_spec_approval,
             "route_task_approval": route_task_approval,
+            "route_tasks_parallel": route_tasks_parallel,
         }
         pauses = common_pauses | {
             "plan_approval_gate",
