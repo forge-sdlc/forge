@@ -184,6 +184,55 @@ class DeclarativeWorkflowCompiler:
             raise WorkflowValidationError(
                 f"publication omits mandatory gate '{sorted(missing_nodes)[0]}'"
             )
+        for node_name, binding in self.profile.station_bindings.items():
+            step = self.definition.spec.steps.get(node_name)
+            if step is None:
+                continue
+            declared = (step.station_contract, step.station_contract_version)
+            if declared != binding:
+                raise WorkflowValidationError(
+                    f"published step '{node_name}' must declare station contract {binding}"
+                )
+        self._validate_golden_route_contracts()
+
+    def _validate_golden_route_contracts(self) -> None:
+        """Keep custom routing within the reviewed golden-path outcome contract."""
+        from forge.workflow.declarative.builtins import (
+            builtin_bug_definition,
+            builtin_feature_definition,
+            builtin_task_takeover_definition,
+        )
+
+        factories = {
+            "feature": builtin_feature_definition,
+            "bug": builtin_bug_definition,
+            "task_takeover": builtin_task_takeover_definition,
+        }
+        golden = factories[self.definition.spec.state]()
+        extensions = set(self.definition.spec.extension_points)
+        for node_name, step in self.definition.spec.steps.items():
+            expected = golden.spec.steps.get(node_name)
+            if expected is None or not expected.route or step.route != expected.route:
+                continue
+            expected_outcomes = (
+                set(expected.dynamic_targets)
+                if expected.dynamic_route
+                else set(expected.branches)
+            )
+            declared_outcomes = (
+                set(step.dynamic_targets) if step.dynamic_route else set(step.branches)
+            )
+            missing = expected_outcomes - declared_outcomes
+            if missing:
+                raise WorkflowValidationError(
+                    f"step '{node_name}' omits router outcome '{sorted(missing)[0]}'"
+                )
+            extra = declared_outcomes - expected_outcomes
+            if extra and "routing-branches" not in extensions:
+                raise WorkflowValidationError(
+                    f"step '{node_name}' adds outcome '{sorted(extra)[0]}' without the "
+                    "routing-branches extension"
+                )
 
     def build_graph(self) -> StateGraph[Any]:
         self.validate()

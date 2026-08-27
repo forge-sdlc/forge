@@ -107,6 +107,16 @@ def test_dynamic_routes_require_an_explicit_concurrency_limit() -> None:
         WorkflowDefinition.model_validate(definition)
 
 
+def test_publication_validates_complete_router_outcome_contract() -> None:
+    definition = builtin_feature_definition()
+    steps = definition.canonical_dict()["spec"]["steps"]
+    del steps["prd_approval_gate"]["branches"]["answer_question"]
+    candidate = _replace(definition, steps=steps)
+
+    with pytest.raises(WorkflowValidationError, match="omits router outcome 'answer_question'"):
+        DeclarativeWorkflowCompiler(candidate).validate_for_publication()
+
+
 @pytest.mark.asyncio
 async def test_retry_bound_blocks_before_reinvoking_station() -> None:
     operation = AsyncMock(return_value={"current_node": "work"})
