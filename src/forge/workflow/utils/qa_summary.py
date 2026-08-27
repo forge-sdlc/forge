@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from forge.integrations.jira.client import JiraClient
+from forge.workflow.effect_runtime import JiraClient
 
 logger = logging.getLogger(__name__)
 

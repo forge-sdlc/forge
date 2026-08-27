@@ -10,7 +10,6 @@ import contextlib
 import logging
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
     ChangeRequestIdentity,
     RepositoryRef,
@@ -18,6 +17,7 @@ from forge.integrations.source_control.contracts import (
 )
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
+from forge.workflow.effect_runtime import JiraClient, push_repository
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.workspace_setup import (
     get_workspace_manager,
@@ -126,10 +126,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
 
             # Clean merge — push it
             logger.info(f"{ticket_key}: clean merge with main, pushing")
-            if use_fork:
-                git.push_to_fork(force=True)
-            else:
-                git.push(force=True, check_conflicts=False)
+            await push_repository(git, use_fork=use_fork, force=True, check_conflicts=False)
 
             await adapter.create_comment(
                 repo_ref,
@@ -240,10 +237,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
             git.stage_all()
             git.commit(f"[{ticket_key}] merge: resolve conflicts with main")
 
-        if use_fork:
-            git.push_to_fork(force=True)
-        else:
-            git.push(force=True, check_conflicts=False)
+        await push_repository(git, use_fork=use_fork, force=True, check_conflicts=False)
         logger.info(f"{ticket_key}: conflicts resolved and pushed")
 
         await adapter.create_comment(

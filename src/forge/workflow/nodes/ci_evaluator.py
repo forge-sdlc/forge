@@ -9,7 +9,6 @@ from typing import Any
 
 from forge.api.routes.metrics import record_ci_fix_attempt
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
     CheckConclusion,
     CheckRun,
@@ -21,6 +20,7 @@ from forge.integrations.source_control.errors import NotFoundError
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
+from forge.workflow.effect_runtime import JiraClient, push_repository
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_description
 from forge.workflow.nodes.error_handler import notify_error
@@ -496,11 +496,9 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             )
             if review_result is not None:
                 state = merge_review_exhaustion(state, review_result, ticket_key, "code_review")
-            if fork_owner and fork_repo:
-                git.push_to_fork(force=False)
-            else:
+            if not (fork_owner and fork_repo):
                 logger.warning("Fork info not in state — pushing to origin instead")
-                git.push(force=False)
+            await push_repository(git, use_fork=bool(fork_owner and fork_repo))
             logger.info(f"CI fix pushed for {ticket_key} (attempt {ci_fix_attempt})")
             record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="pushed")
 

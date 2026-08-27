@@ -233,7 +233,9 @@ class TestPostSkipGateFeedback:
     @pytest.mark.asyncio
     async def test_posts_github_reply_and_jira_comment(self):
         """Posts a GitHub PR comment and a Jira audit comment."""
-        worker = OrchestratorWorker(consumer_name="test")
+        effects = MagicMock()
+        effects.execute_required = AsyncMock()
+        worker = OrchestratorWorker(consumer_name="test", effect_service=effects)
 
         repo_ref = RepositoryRef(
             id="org/repo",
@@ -243,32 +245,22 @@ class TestPostSkipGateFeedback:
             default_branch="main",
             change_request_mode="fork",
         )
-        mock_adapter = AsyncMock()
-
-        mock_jira = MagicMock()
-        mock_jira.add_comment = AsyncMock()
-        mock_jira.close = AsyncMock()
-
-        with (
-            patch("forge.orchestrator.worker.get_adapter", return_value=(repo_ref, mock_adapter)),
-            patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira),
-        ):
-            await worker._post_skip_gate_feedback(
-                ticket_key="TEST-123",
-                repo_ref=repo_ref,
-                pr_number=42,
-                check_name="epoxy",
-                sender="eshulman2",
-                action="skip",
-            )
-
-        mock_adapter.create_comment.assert_called_once()
-        mock_jira.add_comment.assert_called_once()
+        await worker._post_skip_gate_feedback(
+            ticket_key="TEST-123",
+            repo_ref=repo_ref,
+            pr_number=42,
+            check_name="epoxy",
+            sender="eshulman2",
+            action="skip",
+        )
+        assert effects.execute_required.await_count == 2
 
     @pytest.mark.asyncio
     async def test_unskip_posts_different_message(self):
         """Unskip action produces a different confirmation message."""
-        worker = OrchestratorWorker(consumer_name="test")
+        effects = MagicMock()
+        effects.execute_required = AsyncMock()
+        worker = OrchestratorWorker(consumer_name="test", effect_service=effects)
 
         repo_ref = RepositoryRef(
             id="org/repo",
@@ -278,26 +270,15 @@ class TestPostSkipGateFeedback:
             default_branch="main",
             change_request_mode="fork",
         )
-        mock_adapter = AsyncMock()
-
-        mock_jira = MagicMock()
-        mock_jira.add_comment = AsyncMock()
-        mock_jira.close = AsyncMock()
-
-        with (
-            patch("forge.orchestrator.worker.get_adapter", return_value=(repo_ref, mock_adapter)),
-            patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira),
-        ):
-            await worker._post_skip_gate_feedback(
-                ticket_key="TEST-123",
-                repo_ref=repo_ref,
-                pr_number=42,
-                check_name="epoxy",
-                sender="eshulman2",
-                action="unskip",
-            )
-
-        comment = mock_adapter.create_comment.call_args[0][2]
+        await worker._post_skip_gate_feedback(
+            ticket_key="TEST-123",
+            repo_ref=repo_ref,
+            pr_number=42,
+            check_name="epoxy",
+            sender="eshulman2",
+            action="unskip",
+        )
+        comment = effects.execute_required.await_args_list[0].args[0].payload["body"]
         assert "unskip" in comment.lower() or "removed" in comment.lower()
 
 

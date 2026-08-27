@@ -7,11 +7,11 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import (
-    JiraClient,
     artifact_interaction_options,
     pr_interaction_options,
 )
 from forge.models.workflow import ForgeLabel
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.prd_generation import (
     _normalize_proposals_path,

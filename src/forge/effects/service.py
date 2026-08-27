@@ -7,6 +7,11 @@ import contextlib
 import logging
 from datetime import UTC, datetime, timedelta
 
+from forge.api.routes.metrics import (
+    record_effect_attempt,
+    record_effect_replay,
+    record_effect_result,
+)
 from forge.domain import EffectCommand, EffectResult, EffectResultStatus
 from forge.effects.executors import EffectExecutorRegistry
 from forge.effects.journal import EffectJournal
@@ -73,6 +78,7 @@ class EffectService:
 
     async def _execute(self, record: EffectRecord) -> EffectRecord:
         command = record.command
+        record_effect_attempt(command.operation)
         try:
             executor = self.executors.resolve(command.operation)
             result = await executor.execute(command)
@@ -92,10 +98,14 @@ class EffectService:
             and record.attempt < self.max_attempts
         ):
             delay = self.base_retry_delay * (2 ** (record.attempt - 1))
-            return await self.journal.retry(result, delay)
+            retried = await self.journal.retry(result, delay)
+            record_effect_result(command.operation, retried.status.value)
+            return retried
         if result.status is EffectResultStatus.RETRYABLE_FAILURE:
             result = result.model_copy(update={"status": EffectResultStatus.TERMINAL_FAILURE})
-        return await self.journal.complete(result)
+        completed = await self.journal.complete(result)
+        record_effect_result(command.operation, completed.status.value)
+        return completed
 
     def _failure_status(self, exc: Exception, attempt: int) -> EffectResultStatus:
         if isinstance(exc, (ConflictError, ValueError, KeyError)):
@@ -110,7 +120,9 @@ class EffectService:
 
     async def replay(self, idempotency_key: str) -> EffectRecord:
         """Explicitly reschedule a terminal effect while retaining its history."""
-        return await self.journal.replay(idempotency_key)
+        replayed = await self.journal.replay(idempotency_key)
+        record_effect_replay(replayed.command.operation)
+        return replayed
 
     async def purge_terminal_before(self, cutoff: datetime) -> int:
         """Apply the operator-selected terminal-record retention cutoff."""

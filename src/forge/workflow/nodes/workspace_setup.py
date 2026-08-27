@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.nodes.git_persistence import push_to_fork_with_retry
 from forge.workflow.planning_state import repository_compatibility_update
 from forge.workflow.utils import update_state_timestamp

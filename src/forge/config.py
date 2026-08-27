@@ -602,6 +602,13 @@ class Settings(BaseSettings):
         default=True,
         description="Enable Prometheus metrics endpoint in worker",
     )
+    effect_operator_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Bearer token for durable-effect inspection and replay endpoints. "
+            "The endpoints remain disabled when unset."
+        ),
+    )
 
     # OpenTelemetry Configuration
     otlp_endpoint: str = Field(

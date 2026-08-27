@@ -4,10 +4,11 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any
 
-from forge.integrations.jira.client import JiraClient, pr_interaction_options
+from forge.integrations.jira.client import pr_interaction_options
 from forge.integrations.source_control.errors import NotFoundError
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.checkpointer import set_pr_ticket_index
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
 

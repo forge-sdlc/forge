@@ -6,11 +6,12 @@ import tempfile
 from pathlib import Path
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient, MissingProjectConfig
+from forge.integrations.jira.client import MissingProjectConfig
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.bug.state import BugState
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.repo_resolution import ensure_repo_labels, get_effective_repos

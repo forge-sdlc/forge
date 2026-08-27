@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any, cast
 
 from forge.domain import EffectCommand, EffectResult, EffectResultStatus
 from forge.effects.executors import EffectExecutorRegistry
@@ -37,14 +39,28 @@ class SourceControlMutationExecutor:
 
     async def execute(self, command: EffectCommand) -> EffectResult:
         resolved = self._registry_factory().resolve(
-            command.target.namespace or command.target.external_id
+            str(
+                command.payload.get("_repository_id")
+                or command.target.namespace
+                or command.target.external_id
+            )
         )
+        target_namespace = command.payload.get("_target_namespace")
+        if target_namespace:
+            resolved = replace(
+                resolved,
+                repo_ref=replace(
+                    resolved.repo_ref,
+                    id=str(target_namespace),
+                    namespace=str(target_namespace),
+                ),
+            )
         adapter = resolved.adapter
         if adapter is None:
             raise RuntimeError(f"No adapter registered for {resolved.repo_ref.provider}")
 
         reference: str | None = command.target.external_id
-        output = {}
+        output: dict[str, Any] = {}
         if self.operation == SC_BRANCH_CREATE_OPERATION:
             await adapter.create_branch(
                 resolved.repo_ref,
@@ -70,7 +86,7 @@ class SourceControlMutationExecutor:
                 )
             reference = f"{command.payload['branch']}:{command.payload['path']}"
         elif self.operation == SC_CHANGE_REQUEST_CREATE_OPERATION:
-            target = WriteTarget(**dict(command.payload["target"]))
+            target = WriteTarget(**cast(dict[str, Any], command.payload["target"]))
             change = await adapter.create_change_request(
                 resolved.repo_ref,
                 target,
@@ -96,9 +112,7 @@ class SourceControlMutationExecutor:
             elif self.operation in {SC_COMMENT_CREATE_OPERATION, SC_COMMENT_REPLY_OPERATION}:
                 marker = f"forge-effect:{command.idempotency_key}"
                 if self.operation == SC_COMMENT_REPLY_OPERATION:
-                    threads = await adapter.get_review_thread_comments(
-                        resolved.repo_ref, identity
-                    )
+                    threads = await adapter.get_review_thread_comments(resolved.repo_ref, identity)
                     comments = [comment for thread in threads for comment in thread.comments]
                 else:
                     comments = await adapter.get_change_request_comments(

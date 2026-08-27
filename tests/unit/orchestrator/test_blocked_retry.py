@@ -1,6 +1,6 @@
 """Unit tests for blocked-state and forge:retry worker behaviour."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -233,44 +233,28 @@ class TestRetryHandlerClearsBlockedState:
     @pytest.mark.asyncio
     async def test_retry_acknowledgement_failure_does_not_raise(self, worker):
         """Jira acknowledgement failures must not block workflow resumption."""
-        jira = MagicMock()
-        jira.close = AsyncMock()
-        with (
-            patch("forge.orchestrator.worker.JiraClient", return_value=jira),
-            patch(
-                "forge.orchestrator.worker.post_status_comment",
-                new=AsyncMock(side_effect=RuntimeError("Jira unavailable")),
-            ),
-        ):
-            await OrchestratorWorker._post_retry_acknowledgement(
-                worker, "TEST-123", "execute_task_changes"
-            )
-
-        jira.close.assert_awaited_once()
+        worker.effect_service = MagicMock()
+        worker.effect_service.execute_required = AsyncMock(
+            side_effect=RuntimeError("Jira unavailable")
+        )
+        await OrchestratorWorker._post_retry_acknowledgement(
+            worker, "TEST-123", "execute_task_changes"
+        )
+        worker.effect_service.execute_required.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_retry_acknowledgement_names_resumed_node(self, worker):
         """The Jira acknowledgement tells the user where Forge resumed."""
-        jira = MagicMock()
-        jira.close = AsyncMock()
-        with (
-            patch("forge.orchestrator.worker.JiraClient", return_value=jira),
-            patch(
-                "forge.orchestrator.worker.post_status_comment",
-                new_callable=AsyncMock,
-            ) as post_comment,
-        ):
-            await OrchestratorWorker._post_retry_acknowledgement(
-                worker, "TEST-123", "execute_task_changes"
-            )
-
-        post_comment.assert_awaited_once_with(
-            jira,
-            "TEST-123",
-            "Forge accepted the `forge:retry` request and is resuming "
-            "the workflow from `execute_task_changes`.",
+        worker.effect_service = MagicMock()
+        worker.effect_service.execute_required = AsyncMock()
+        await OrchestratorWorker._post_retry_acknowledgement(
+            worker, "TEST-123", "execute_task_changes"
         )
-        jira.close.assert_awaited_once()
+        command = worker.effect_service.execute_required.await_args.args[0]
+        assert command.payload["body"] == (
+            "Forge accepted the `forge:retry` request and is resuming "
+            "the workflow from `execute_task_changes`."
+        )
 
 
 class TestRetryOnStuckNonTerminalNode:

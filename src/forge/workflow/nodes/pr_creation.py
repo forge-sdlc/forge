@@ -8,7 +8,6 @@ from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
-from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
     ChangeRequest,
     RepositoryRef,
@@ -18,6 +17,7 @@ from forge.integrations.source_control.contracts import (
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.checkpointer import set_pr_ticket_index
 from forge.prompts import load_prompt
+from forge.workflow.effect_runtime import JiraClient, push_repository
 from forge.workflow.nodes.code_review import sync_pr_description
 from forge.workflow.nodes.post_merge_summary import _extract_impact
 from forge.workflow.pr_state import save_active_pull_request
@@ -192,10 +192,7 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
 
         # Push branch to the write target: the fork in fork mode, origin in
         # direct mode (direct-mode repos have no "fork" remote to push to).
-        if target.fork_owner and target.fork_repo:
-            git.push_to_fork()
-        else:
-            git.push(force=False)
+        await push_repository(git, use_fork=bool(target.fork_owner and target.fork_repo))
 
         # Build PR title — fetch live summary from Jira as source of truth
         ticket_summary = ""

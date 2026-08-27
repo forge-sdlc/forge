@@ -148,6 +148,24 @@ REVIEW_DURATION = Histogram(
     buckets=[1, 5, 10, 30, 60, 120, 300, 600],  # Same as AGENT_DURATION
 )
 
+EFFECT_ATTEMPTS = Counter(
+    "forge_effect_attempts_total",
+    "Durable external effect attempts",
+    ["operation"],
+)
+
+EFFECT_RESULTS = Counter(
+    "forge_effect_results_total",
+    "Durable external effect results",
+    ["operation", "status"],
+)
+
+EFFECT_REPLAYS = Counter(
+    "forge_effect_replays_total",
+    "Operator-requested durable effect replays",
+    ["operation"],
+)
+
 
 @router.get("/metrics")
 async def metrics() -> Response:
@@ -226,6 +244,18 @@ def record_approval(stage: str) -> None:
 def record_revision_requested(stage: str) -> None:
     """Record a revision request for a stage (prd, spec, plan)."""
     REVISIONS_REQUESTED.labels(stage=stage).inc()
+
+
+def record_effect_attempt(operation: str) -> None:
+    EFFECT_ATTEMPTS.labels(operation=operation).inc()
+
+
+def record_effect_result(operation: str, status: str) -> None:
+    EFFECT_RESULTS.labels(operation=operation, status=status).inc()
+
+
+def record_effect_replay(operation: str) -> None:
+    EFFECT_REPLAYS.labels(operation=operation).inc()
 
 
 def record_proposal_review_decision(artifact_type: str, disposition: str) -> None:

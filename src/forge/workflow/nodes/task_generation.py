@@ -6,9 +6,10 @@ import re
 from typing import Any
 
 from forge.integrations.agents import ForgeAgent
-from forge.integrations.jira.client import JiraClient, MissingProjectConfig
+from forge.integrations.jira.client import MissingProjectConfig
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment

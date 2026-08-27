@@ -879,7 +879,7 @@ class JiraClient:
     async def set_workflow_label(
         self,
         issue_key: str,
-        new_label: ForgeLabel,
+        new_label: ForgeLabel | str,
         remove_prefix: str = "forge:",
     ) -> None:
         """Set a workflow label, removing other forge: labels.
@@ -892,6 +892,8 @@ class JiraClient:
             new_label: The new workflow label to set.
             remove_prefix: Prefix of labels to remove (default: "forge:").
         """
+        label_value = new_label.value if isinstance(new_label, ForgeLabel) else new_label
+
         # Get current labels
         current_labels = await self.get_labels(issue_key)
 
@@ -900,7 +902,7 @@ class JiraClient:
             label
             for label in current_labels
             if label.startswith(remove_prefix)
-            and label != new_label.value
+            and label != label_value
             and label != ForgeLabel.FORGE_MANAGED.value
             and label != "forge:managed:task"
             and label != "forge:managed:task-takeover"
@@ -913,7 +915,7 @@ class JiraClient:
         operations: list[dict[str, str]] = []
         for label in labels_to_remove:
             operations.append({"remove": label})
-        operations.append({"add": new_label.value})
+        operations.append({"add": label_value})
 
         # Ensure forge:managed is set
         if ForgeLabel.FORGE_MANAGED.value not in current_labels:
@@ -926,7 +928,7 @@ class JiraClient:
         )
         response.raise_for_status()
         logger.info(
-            f"Set workflow label {new_label.value} on {issue_key} (removed: {labels_to_remove})"
+            f"Set workflow label {label_value} on {issue_key} (removed: {labels_to_remove})"
         )
 
     async def add_structured_comment(

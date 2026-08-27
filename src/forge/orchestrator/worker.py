@@ -75,6 +75,7 @@ from forge.workflow.declarative.resolver import (
     selected_workflow_name,
 )
 from forge.workflow.declarative.workflow import DeclarativeWorkflow
+from forge.workflow.effect_runtime import bind_effect_runtime
 from forge.workflow.nodes.error_handler import notify_error
 from forge.workflow.nodes.workspace_setup import teardown_workspace
 from forge.workflow.pr_state import (
@@ -251,6 +252,27 @@ class OrchestratorWorker:
             service = create_default_effect_service()
             self.effect_service = service
         return service
+
+    async def _invoke_workflow(
+        self,
+        compiled_workflow: Any,
+        invocation_input: dict[str, Any] | None,
+        *,
+        config: dict[str, Any],
+        ticket_key: str,
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Invoke graph code with the durable effect port bound to this run."""
+        identity = WorkflowIdentity(
+            run_id=str(state.get("thread_id") or ticket_key),
+            workflow_name=str(state.get("workflow_name") or state.get("ticket_type") or "legacy"),
+            definition_revision=int(
+                state.get("workflow_definition_revision") or state.get("workflow_revision") or 1
+            ),
+            definition_digest=state.get("workflow_definition_digest"),
+        )
+        with bind_effect_runtime(self._durable_effect_service(), identity):
+            return await compiled_workflow.ainvoke(invocation_input, config=config)
 
     async def _execute_required_jira_effect(
         self,
@@ -714,11 +736,23 @@ class OrchestratorWorker:
                         f"{'Retrying' if was_errored else 'Re-invoking'} workflow "
                         f"from {updated_values.get('current_node')}"
                     )
-                    result = await compiled_workflow.ainvoke(updated_values, config=config)
+                    result = await self._invoke_workflow(
+                        compiled_workflow,
+                        updated_values,
+                        config=config,
+                        ticket_key=ticket_key,
+                        state=updated_values,
+                    )
                 else:
                     # For normal resume (paused at approval gate): update state and continue
                     await compiled_workflow.aupdate_state(config, updated_values)
-                    result = await compiled_workflow.ainvoke(None, config=config)
+                    result = await self._invoke_workflow(
+                        compiled_workflow,
+                        None,
+                        config=config,
+                        ticket_key=ticket_key,
+                        state=updated_values,
+                    )
             else:
                 error_before_invoke = None
 
@@ -731,7 +765,13 @@ class OrchestratorWorker:
                 record_workflow_started(ticket_type=ticket_type_str)
 
                 # Run the workflow from the beginning
-                result = await compiled_workflow.ainvoke(state, config=config)
+                result = await self._invoke_workflow(
+                    compiled_workflow,
+                    state,
+                    config=config,
+                    ticket_key=ticket_key,
+                    state=state,
+                )
 
             cleaned_result = await _cleanup_terminal_workspace(result)
             if cleaned_result != result:
@@ -2283,7 +2323,15 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
     if isinstance(workflow_instance, DeclarativeWorkflow):
         config["recursion_limit"] = 100
 
-    result = await compiled_workflow.ainvoke(initial_state, config=config)
+    effect_service = create_default_effect_service()
+    identity = WorkflowIdentity(
+        run_id=ticket_key,
+        workflow_name=str(initial_state.get("workflow_name") or ticket_type_str),
+        definition_revision=int(initial_state.get("workflow_definition_revision") or 1),
+        definition_digest=initial_state.get("workflow_definition_digest"),
+    )
+    with bind_effect_runtime(effect_service, identity):
+        result = await compiled_workflow.ainvoke(initial_state, config=config)
     logger.info(f"Workflow completed: {result.get('current_node')}")
     return result
 

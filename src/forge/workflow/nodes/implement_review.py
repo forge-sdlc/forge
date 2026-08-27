@@ -8,9 +8,9 @@ from typing import Any
 from langgraph.graph import END
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
+from forge.workflow.effect_runtime import JiraClient, push_repository
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_description
 from forge.workflow.nodes.workspace_setup import prepare_workspace
@@ -402,10 +402,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             if review_result is not None:
                 state = merge_review_exhaustion(state, review_result, ticket_key, "code_review")
 
-            if fork_owner and fork_repo:
-                git.push_to_fork(force=False)
-            else:
-                git.push(force=False)
+            await push_repository(git, use_fork=bool(fork_owner and fork_repo))
             logger.info(f"Review implementation pushed for {ticket_key}")
 
             await sync_pr_description(

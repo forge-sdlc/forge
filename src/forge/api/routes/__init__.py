@@ -7,7 +7,9 @@ from forge.api.routes.metrics import router as metrics_router
 
 __all__ = [
     "github_router",
+    "effects_router",
     "health_router",
     "jira_router",
     "metrics_router",
 ]
+from forge.api.routes.effects import router as effects_router

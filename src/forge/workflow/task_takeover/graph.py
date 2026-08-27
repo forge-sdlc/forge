@@ -8,8 +8,8 @@ from typing import Any
 
 from langgraph.graph import END, StateGraph
 
-from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel, JiraStatus
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.gates.task_plan_approval import (
     route_task_plan_approval,
     task_plan_approval_gate,

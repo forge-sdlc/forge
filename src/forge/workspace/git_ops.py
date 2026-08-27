@@ -321,6 +321,13 @@ class GitOperations:
         result = self._run_git("ls-remote", "--heads", "--", remote, branch_name, check=False)
         return bool(result.stdout.strip())
 
+    def get_remote_branch_sha(self, branch_name: str, remote: str = "origin") -> str | None:
+        """Return the remote branch SHA without changing local repository state."""
+        result = self._run_git("ls-remote", "--heads", "--", remote, branch_name, check=False)
+        if result.returncode != 0 or not result.stdout.strip():
+            return None
+        return result.stdout.split()[0]
+
     def check_for_conflicts(self, target_branch: str = "main") -> tuple[bool, list[str]]:
         """Check if pushing would cause conflicts with remote.
 

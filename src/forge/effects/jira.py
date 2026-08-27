@@ -4,17 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 from forge.domain import EffectCommand, EffectResult, EffectResultStatus
 from forge.effects.executors import EffectExecutorRegistry
 from forge.integrations.jira.client import JiraClient
-from forge.workflow.utils.jira_status import format_status_comment
 
 JIRA_COMMENT_OPERATION = "jira.comment.create"
 JIRA_LABEL_OPERATION = "jira.label.set"
 JIRA_DESCRIPTION_OPERATION = "jira.description.update"
 JIRA_CUSTOM_FIELD_OPERATION = "jira.custom_field.update"
 JIRA_ATTACHMENT_REPLACE_OPERATION = "jira.attachment.replace"
+JIRA_ATTACHMENT_ADD_OPERATION = "jira.attachment.add"
+JIRA_ATTACHMENT_DELETE_BY_NAME_OPERATION = "jira.attachment.delete_by_name"
 JIRA_STRUCTURED_COMMENT_OPERATION = "jira.structured_comment.create"
 JIRA_TRANSITION_OPERATION = "jira.issue.transition"
 JIRA_LABELS_ADD_OPERATION = "jira.labels.add"
@@ -26,6 +28,8 @@ JIRA_TASK_CREATE_OPERATION = "jira.task.create"
 JIRA_EPIC_CREATE_OPERATION = "jira.epic.create"
 JIRA_ISSUE_LINK_CREATE_OPERATION = "jira.issue_link.create"
 JIRA_REMOTE_LINK_CREATE_OPERATION = "jira.remote_link.create"
+JIRA_ERROR_COMMENT_OPERATION = "jira.error_comment.create"
+JIRA_MODEL_POLICY_ERROR_COMMENT_OPERATION = "jira.model_policy_error_comment.create"
 
 
 class JiraCommentExecutor:
@@ -38,7 +42,7 @@ class JiraCommentExecutor:
         issue_key = command.target.external_id
         body = str(command.payload["body"])
         marker = f"forge-effect:{command.idempotency_key}"
-        rendered = f"{format_status_comment(body)}\n\n{{{marker}}}"
+        rendered = f"{body}\n\n{{{marker}}}"
         jira = self._client_factory()
         try:
             comments = await jira.get_comments(issue_key)
@@ -74,6 +78,7 @@ class JiraMutationExecutor:
         issue_key = command.target.external_id
         jira = self._client_factory()
         provider_reference: str | None = issue_key
+        output: dict[str, Any] = {}
         try:
             if self.operation == JIRA_LABEL_OPERATION:
                 await jira.set_workflow_label(issue_key, str(command.payload["label"]))
@@ -88,25 +93,39 @@ class JiraMutationExecutor:
             elif self.operation == JIRA_ATTACHMENT_REPLACE_OPERATION:
                 filename = str(command.payload["filename"])
                 await jira.delete_attachments_by_name(issue_key, filename)
-                created = await jira.add_attachment(
+                replacement = await jira.add_attachment(
                     issue_key,
                     filename=filename,
                     content=str(command.payload["content"]),
                     content_type=str(command.payload.get("content_type", "text/plain")),
                 )
-                provider_reference = str(getattr(created, "id", filename))
+                provider_reference = _provider_id(replacement, filename)
+            elif self.operation == JIRA_ATTACHMENT_ADD_OPERATION:
+                attachment = await jira.add_attachment(
+                    issue_key,
+                    filename=str(command.payload["filename"]),
+                    content=str(command.payload["content"]),
+                    content_type=str(command.payload.get("content_type", "text/markdown")),
+                )
+                provider_reference = _provider_id(attachment, str(command.payload["filename"]))
+                output = dict(attachment) if isinstance(attachment, dict) else {}
+            elif self.operation == JIRA_ATTACHMENT_DELETE_BY_NAME_OPERATION:
+                deleted = await jira.delete_attachments_by_name(
+                    issue_key, str(command.payload["filename"])
+                )
+                output = {"deleted": deleted}
             elif self.operation == JIRA_STRUCTURED_COMMENT_OPERATION:
                 marker = f"forge-effect:{command.idempotency_key}"
                 comments = await jira.get_comments(issue_key)
                 existing = next((comment for comment in comments if marker in comment.body), None)
                 if existing is None:
-                    created = await jira.add_structured_comment(
+                    structured_comment = await jira.add_structured_comment(
                         issue_key,
                         str(command.payload["title"]),
                         f"{command.payload['content']}\n\n{{{marker}}}",
                         comment_type=str(command.payload["comment_type"]),
                     )
-                    provider_reference = str(created.id)
+                    provider_reference = str(structured_comment.id)
                 else:
                     provider_reference = str(existing.id)
             elif self.operation == JIRA_TRANSITION_OPERATION:
@@ -115,13 +134,13 @@ class JiraMutationExecutor:
                 if issue.status.lower() != transition.lower():
                     await jira.transition_issue(issue_key, transition)
             elif self.operation == JIRA_LABELS_ADD_OPERATION:
-                requested = [str(label) for label in command.payload["labels"]]
+                requested = _string_list(command.payload["labels"])
                 current = set(await jira.get_labels(issue_key))
                 missing = [label for label in requested if label not in current]
                 if missing:
                     await jira.add_labels(issue_key, missing)
             elif self.operation == JIRA_LABELS_REMOVE_OPERATION:
-                requested = [str(label) for label in command.payload["labels"]]
+                requested = _string_list(command.payload["labels"])
                 current = set(await jira.get_labels(issue_key))
                 present = [label for label in requested if label in current]
                 if present:
@@ -140,19 +159,17 @@ class JiraMutationExecutor:
                 await jira.delete_project_property(issue_key, str(command.payload["property_key"]))
             elif self.operation in {JIRA_TASK_CREATE_OPERATION, JIRA_EPIC_CREATE_OPERATION}:
                 marker = _creation_marker(command.idempotency_key)
-                existing = await jira.search_issues(
+                existing_issues = await jira.search_issues(
                     f'project = "{command.payload["project_key"]}" AND labels = "{marker}"',
                     fields=["summary", "labels"],
                     max_results=2,
                 )
-                if len(existing) > 1:
-                    raise RuntimeError(
-                        f"Creation marker {marker} resolves to multiple Jira issues"
-                    )
-                if existing:
-                    provider_reference = existing[0].key
+                if len(existing_issues) > 1:
+                    raise RuntimeError(f"Creation marker {marker} resolves to multiple Jira issues")
+                if existing_issues:
+                    provider_reference = existing_issues[0].key
                 else:
-                    labels = [str(label) for label in command.payload.get("labels", [])]
+                    labels = _string_list(command.payload.get("labels", []))
                     labels.append(marker)
                     if self.operation == JIRA_TASK_CREATE_OPERATION:
                         provider_reference = await jira.create_task(
@@ -190,10 +207,44 @@ class JiraMutationExecutor:
             elif self.operation == JIRA_REMOTE_LINK_CREATE_OPERATION:
                 url = str(command.payload["url"])
                 title = str(command.payload["title"])
-                links = await jira.get_remote_links(issue_key)
-                if not any(link.get("url") == url for link in links):
+                remote_links = await jira.get_remote_links(issue_key)
+                if not any(link.get("url") == url for link in remote_links):
                     await jira.create_remote_link(issue_key, url, title)
                 provider_reference = url
+            elif self.operation == JIRA_ERROR_COMMENT_OPERATION:
+                marker = f"forge-effect:{command.idempotency_key}"
+                comments = await jira.get_comments(issue_key)
+                existing = next((comment for comment in comments if marker in comment.body), None)
+                if existing is None:
+                    error_comment = await jira.add_error_comment(
+                        issue_key,
+                        f"{command.payload['error_message']}\n\n{{{marker}}}",
+                        str(command.payload["node_name"]),
+                        mention_account_ids=[
+                            *_string_list(command.payload.get("mention_account_ids", []))
+                        ],
+                    )
+                    provider_reference = str(error_comment.id)
+                else:
+                    provider_reference = str(existing.id)
+            elif self.operation == JIRA_MODEL_POLICY_ERROR_COMMENT_OPERATION:
+                marker = f"forge-effect:{command.idempotency_key}"
+                comments = await jira.get_comments(issue_key)
+                existing = next((comment for comment in comments if marker in comment.body), None)
+                if existing is None:
+                    policy_comment = await jira.add_model_policy_error_comment(
+                        issue_key,
+                        str(command.payload["node_name"]),
+                        f"{command.payload['problem']}\n\n{{{marker}}}",
+                        str(command.payload["available_connections"]),
+                        str(command.payload["fix_command"]),
+                        mention_account_ids=[
+                            *_string_list(command.payload.get("mention_account_ids", []))
+                        ],
+                    )
+                    provider_reference = str(policy_comment.id)
+                else:
+                    provider_reference = str(existing.id)
             else:  # pragma: no cover - registry construction prevents this
                 raise ValueError(f"Unsupported Jira effect operation: {self.operation}")
             return EffectResult(
@@ -202,6 +253,7 @@ class JiraMutationExecutor:
                 status=EffectResultStatus.SUCCEEDED,
                 completed_at=datetime.now(UTC),
                 provider_reference=provider_reference,
+                output=output,
             )
         finally:
             await jira.close()
@@ -214,6 +266,8 @@ def register_jira_executors(registry: EffectExecutorRegistry) -> None:
         JIRA_DESCRIPTION_OPERATION,
         JIRA_CUSTOM_FIELD_OPERATION,
         JIRA_ATTACHMENT_REPLACE_OPERATION,
+        JIRA_ATTACHMENT_ADD_OPERATION,
+        JIRA_ATTACHMENT_DELETE_BY_NAME_OPERATION,
         JIRA_STRUCTURED_COMMENT_OPERATION,
         JIRA_TRANSITION_OPERATION,
         JIRA_LABELS_ADD_OPERATION,
@@ -225,6 +279,8 @@ def register_jira_executors(registry: EffectExecutorRegistry) -> None:
         JIRA_EPIC_CREATE_OPERATION,
         JIRA_ISSUE_LINK_CREATE_OPERATION,
         JIRA_REMOTE_LINK_CREATE_OPERATION,
+        JIRA_ERROR_COMMENT_OPERATION,
+        JIRA_MODEL_POLICY_ERROR_COMMENT_OPERATION,
     ):
         registry.register(JiraMutationExecutor(operation))
 
@@ -237,3 +293,15 @@ def _creation_marker(idempotency_key: str) -> str:
 
 def _optional_string(value: object) -> str | None:
     return str(value) if value is not None else None
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError("Expected a list")
+    return [str(item) for item in value]
+
+
+def _provider_id(value: object, fallback: str) -> str:
+    if isinstance(value, dict):
+        return str(value.get("id") or fallback)
+    return str(getattr(value, "id", fallback))

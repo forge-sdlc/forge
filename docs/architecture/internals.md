@@ -18,7 +18,10 @@ Gateway and Worker communicate only through Redis and can be deployed on separat
 
 **Idempotency:** A `DeduplicationService` exists but is not yet wired into the webhook routes. Branch creation and label operations are naturally idempotent; Jira comment posting is not.
 
-**Consistency caveat:** Checkpoint writes and external side effects (Jira comments, GitHub PRs) are not transactional. A crash between a side effect and its checkpoint write can cause duplicate actions on retry.
+**Consistency boundary:** Workflow mutations are persisted as stable effect intents before
+provider execution. Provider-specific recovery evidence and idempotent ref updates close
+the crash window between provider success and checkpoint acknowledgement. Workflow state
+and effect state remain separate durable records, joined by the workflow run identity.
 
 ## Failure and Recovery
 

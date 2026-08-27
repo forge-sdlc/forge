@@ -54,7 +54,7 @@ Exit gate: all new control-plane boundaries can be expressed with Phase 1 contra
 
 ## Phase 2 — Event interpretation and authoritative commands
 
-PR: #325. Status: partial.
+PR: #325. Status: complete.
 
 Purpose: make provider events inputs to pure interpretation, not direct selectors of graph nodes.
 
@@ -71,7 +71,7 @@ Exit gate: no provider event directly chooses a workflow node; every event produ
 
 ## Phase 3 — Durable effects
 
-PR: #326. Status: partial.
+PR: #326. Status: complete.
 
 Purpose: make every external mutation recoverable, idempotent, and observable across crashes.
 

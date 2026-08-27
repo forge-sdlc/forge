@@ -14,6 +14,7 @@ from forge.integrations.source_control.contracts import (
 )
 from forge.integrations.source_control.errors import NotFoundError
 from forge.integrations.source_control.registry import get_registry
+from forge.workflow.effect_runtime import SourceControlAdapter
 
 
 def resolve_repository(
@@ -37,7 +38,7 @@ def get_adapter(identifier: str) -> tuple[RepositoryRef, SourceControlProvider]:
             f"'{identifier}' resolved to provider '{resolved.repo_ref.provider}' "
             "with no registered adapter"
         )
-    return resolved.repo_ref, resolved.adapter
+    return resolved.repo_ref, SourceControlAdapter(resolved)
 
 
 def identity_for(repo_ref: RepositoryRef, native_id: str | int | None) -> ChangeRequestIdentity:

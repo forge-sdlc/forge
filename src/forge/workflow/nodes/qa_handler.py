@@ -5,7 +5,7 @@ import logging
 from datetime import UTC, datetime
 
 from forge.integrations.agents import ForgeAgent
-from forge.integrations.jira.client import JiraClient
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.source_control import get_adapter, identity_for

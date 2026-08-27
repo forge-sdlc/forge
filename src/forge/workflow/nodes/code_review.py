@@ -12,10 +12,10 @@ from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
-from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.sandbox.runner import ContainerResult
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
 from forge.workspace.git_ops import GitOperations

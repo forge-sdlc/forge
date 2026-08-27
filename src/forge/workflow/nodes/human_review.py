@@ -5,8 +5,8 @@ from typing import Any
 
 from langgraph.graph import END
 
-from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel, JiraStatus
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import (
