@@ -67,10 +67,12 @@ class WorkflowStep(StrictModel):
             raise ValueError(f"a routed step may have at most {MAX_BRANCHES} branches")
         if self.kind == "station" and not (self.station_contract and self.station_contract_version):
             raise ValueError("station steps require stationContract and stationContractVersion")
-        if self.kind not in {None, "station"} and (
+        if self.kind not in {None, "station", "gate"} and (
             self.station_contract or self.station_contract_version
         ):
             raise ValueError("station contract fields are only valid for station steps")
+        if bool(self.station_contract) != bool(self.station_contract_version):
+            raise ValueError("stationContract and stationContractVersion must be declared together")
         if self.max_concurrency is not None and not self.dynamic_route:
             raise ValueError("maxConcurrency is only valid for dynamic routing")
         return self

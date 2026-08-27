@@ -186,7 +186,13 @@ def get_state_profile(name: str) -> StateProfile:
             routers,
             pauses,
             contracts_for(nodes),
-            {"task_router": ("task-routing", "1.0")},
+            {
+                "task_router": ("task-routing", "1.0"),
+                "prd_approval_gate": ("approval-policy", "1.0"),
+                "spec_approval_gate": ("approval-policy", "1.0"),
+                "plan_approval_gate": ("approval-policy", "1.0"),
+                "task_approval_gate": ("approval-policy", "1.0"),
+            },
         )
 
     if name == "bug":
@@ -270,6 +276,7 @@ def get_state_profile(name: str) -> StateProfile:
             routers,
             pauses,
             contracts_for(nodes),
+            {"plan_approval_gate": ("approval-policy", "1.0")},
         )
 
     if name == "task_takeover":
@@ -335,6 +342,7 @@ def get_state_profile(name: str) -> StateProfile:
             routers,
             pauses,
             contracts_for(nodes),
+            {"task_plan_approval_gate": ("approval-policy", "1.0")},
         )
 
     raise ValueError(f"unknown state profile: {name}")

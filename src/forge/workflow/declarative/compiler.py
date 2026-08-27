@@ -65,7 +65,7 @@ class DeclarativeWorkflowCompiler:
                 raise WorkflowValidationError(
                     f"step '{node_name}' omits mandatory policy '{sorted(missing_policies)[0]}'"
                 )
-            if step.kind == "station":
+            if step.station_contract:
                 binding = self.profile.station_bindings.get(node_name)
                 declared = (step.station_contract, step.station_contract_version)
                 if binding != declared:

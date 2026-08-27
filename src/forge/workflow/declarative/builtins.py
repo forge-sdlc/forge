@@ -38,6 +38,13 @@ def _route(
     }
 
 
+def _approval_route(router: str, branches: dict[str, str]) -> dict[str, Any]:
+    return _route(router, branches, kind="gate") | {
+        "stationContract": "approval-policy",
+        "stationContractVersion": "1.0",
+    }
+
+
 def builtin_feature_definition() -> WorkflowDefinition:
     """Return the immutable feature golden-path definition."""
     steps = {
@@ -45,7 +52,7 @@ def builtin_feature_definition() -> WorkflowDefinition:
             "route_after_generation",
             {"prd_approval_gate": "prd_approval_gate", "__end__": "__end__"},
         ),
-        "prd_approval_gate": _route(
+        "prd_approval_gate": _approval_route(
             "route_prd_approval",
             {
                 "generate_spec": "generate_spec",
@@ -53,7 +60,6 @@ def builtin_feature_definition() -> WorkflowDefinition:
                 "answer_question": "answer_question",
                 "__end__": "__end__",
             },
-            kind="gate",
         ),
         "regenerate_prd": _route(
             "route_after_prd_regeneration",
@@ -63,7 +69,7 @@ def builtin_feature_definition() -> WorkflowDefinition:
             "route_after_spec_generation",
             {"spec_approval_gate": "spec_approval_gate", "__end__": "__end__"},
         ),
-        "spec_approval_gate": _route(
+        "spec_approval_gate": _approval_route(
             "route_spec_approval",
             {
                 "decompose_epics": "decompose_epics",
@@ -71,7 +77,6 @@ def builtin_feature_definition() -> WorkflowDefinition:
                 "answer_question": "answer_question",
                 "__end__": "__end__",
             },
-            kind="gate",
         ),
         "regenerate_spec": _route(
             "route_after_spec_regeneration",
@@ -81,7 +86,7 @@ def builtin_feature_definition() -> WorkflowDefinition:
             "route_after_epic_decomposition",
             {"plan_approval_gate": "plan_approval_gate", "__end__": "__end__"},
         ),
-        "plan_approval_gate": _route(
+        "plan_approval_gate": _approval_route(
             "route_plan_approval",
             {
                 "generate_tasks": "generate_tasks",
@@ -90,7 +95,6 @@ def builtin_feature_definition() -> WorkflowDefinition:
                 "answer_question": "answer_question",
                 "__end__": "__end__",
             },
-            kind="gate",
         ),
         "regenerate_all_epics": _route(
             "route_after_epic_regeneration",
@@ -104,7 +108,7 @@ def builtin_feature_definition() -> WorkflowDefinition:
             "route_after_task_generation",
             {"task_approval_gate": "task_approval_gate", "__end__": "__end__"},
         ),
-        "task_approval_gate": _route(
+        "task_approval_gate": _approval_route(
             "route_task_approval",
             {
                 "task_router": "task_router",
@@ -114,7 +118,6 @@ def builtin_feature_definition() -> WorkflowDefinition:
                 "answer_question": "answer_question",
                 "__end__": "__end__",
             },
-            kind="gate",
         ),
         "regenerate_all_tasks": _route(
             "route_after_task_regeneration",
@@ -334,7 +337,7 @@ def builtin_bug_definition() -> WorkflowDefinition:
             },
         )
         | {"retryBound": 3},
-        "plan_approval_gate": _route(
+        "plan_approval_gate": _approval_route(
             "route_plan_approval",
             {
                 "decompose_plan": "decompose_plan",
@@ -342,7 +345,6 @@ def builtin_bug_definition() -> WorkflowDefinition:
                 "answer_question": "answer_question",
                 "__end__": "__end__",
             },
-            kind="gate",
         ),
         "regenerate_plan": _route(
             "route_after_regenerate_plan",
@@ -527,7 +529,7 @@ def builtin_task_takeover_definition() -> WorkflowDefinition:
             },
         )
         | {"retryBound": 3},
-        "task_plan_approval_gate": _route(
+        "task_plan_approval_gate": _approval_route(
             "route_task_plan_approval",
             {
                 "regenerate_plan": "generate_plan",
@@ -535,7 +537,6 @@ def builtin_task_takeover_definition() -> WorkflowDefinition:
                 "setup_workspace": "setup_workspace",
                 "__end__": "__end__",
             },
-            kind="gate",
         ),
         "answer_question": _route(
             "route_after_answer",
