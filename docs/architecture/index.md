@@ -10,7 +10,4 @@ For workflow details, see the [Feature](../guide/feature-workflow.md), [Bug](../
 | [System and components](overview.md) | Control-plane structure and component responsibilities |
 | [Runtime internals](internals.md) | State authority, reconciliation, stations, effects, and security |
 | [Reference](reference.md) | Architectural decisions, known limitations, workflow lifecycles |
-| [Workflow governance](phase-5-workflow-definition-governance.md) | Definition ownership, compatibility, activation, and migration |
-| [Observation contract](phase-6-observation-contract.md) | Shared webhook/poller identity and ordering contract |
-| [Reconciliation contract](phase-6-reconciliation-contract.md) | Convergence and drift-handling behavior |
 | [Structured model output](structured-output.md) | Typed model responses and provider fallback behavior |

@@ -46,8 +46,7 @@ Forge ships immutable, versioned golden-path definitions for Feature/Story, Bug,
 Task/Epic workflows. Project administrators can publish constrained definitions composed only from
 registered nodes, routes, gates, stations, and effect capabilities. Definitions cannot execute
 arbitrary Python or weaken mandatory policies. See
-[Declarative workflows](../reference/declarative-workflows.md) and
-[Workflow-definition governance](phase-5-workflow-definition-governance.md).
+[Declarative workflows](../reference/declarative-workflows.md).
 
 ## Model execution
 
