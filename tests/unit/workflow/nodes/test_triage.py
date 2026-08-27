@@ -99,7 +99,7 @@ class TestTriageCheckSufficientTicket:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -118,7 +118,7 @@ class TestTriageCheckSufficientTicket:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -137,7 +137,7 @@ class TestTriageCheckSufficientTicket:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -164,7 +164,7 @@ class TestTriageCheckSufficientTicket:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -189,7 +189,7 @@ class TestTriageCheckSufficientTicket:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -211,7 +211,7 @@ class TestTriageCheckSufficientTicket:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -239,7 +239,7 @@ class TestTriageCheckMissingFields:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
             ),
         ):
@@ -258,7 +258,7 @@ class TestTriageCheckMissingFields:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
             ),
         ):
@@ -278,7 +278,7 @@ class TestTriageCheckMissingFields:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
             ),
         ):
@@ -304,7 +304,7 @@ class TestTriageCheckMissingFields:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
             ),
         ):
@@ -325,7 +325,7 @@ class TestTriageCheckMissingFields:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
             ),
         ):
@@ -354,7 +354,7 @@ class TestTriageCheckResume:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -382,7 +382,7 @@ class TestTriageCheckResume:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -413,7 +413,7 @@ class TestTriageCheckResume:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
             ),
         ):
@@ -442,7 +442,7 @@ class TestTriageCheckErrorHandling:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent", return_value=mock_agent
+                "forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent
             ),
         ):
             result = await triage_check(incomplete_ticket_state)
@@ -464,7 +464,7 @@ class TestTriageCheckErrorHandling:
                 "forge.workflow.nodes.triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.triage.ForgeAgent", return_value=mock_agent
+                "forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent
             ),
         ):
             result = await triage_check(incomplete_ticket_state)

@@ -4,15 +4,14 @@ Evaluates whether a Task or Epic ticket contains sufficient actionable detail
 before starting plan generation.
 """
 
-import json
 import logging
 from typing import cast
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
 from forge.models.workflow import ForgeLabel
-from forge.prompts import load_prompt
 from forge.workflow.effect_runtime import JiraClient
+from forge.workflow.projections.triage import project_triage
+from forge.workflow.stations.triage import TriageKind, run_triage_station
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
@@ -52,7 +51,6 @@ async def triage_task(state: TaskTakeoverState) -> TaskTakeoverState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    agent = ForgeAgent(settings)
 
     try:
         if retry_count >= _MAX_RETRIES:
@@ -86,22 +84,19 @@ async def triage_task(state: TaskTakeoverState) -> TaskTakeoverState:
         )
 
         # Step 3: Invoke task takeover triage prompt
-        user_prompt = load_prompt(
-            "task-takeover-triage",
-            summary=issue.summary or "",
-            description=issue.description or "",
-            comments=comment_text,
+        outcome = await run_triage_station(
+            project_triage(
+                state,
+                kind=TriageKind.TASK_TAKEOVER,
+                summary=issue.summary or "",
+                description=issue.description or "",
+                comments=comment_text,
+            )
         )
-        raw_result = await agent.run_task(
-            task="task-takeover-triage",
-            policy_key="task_takeover_triage",
-            prompt=user_prompt,
-            context={"ticket_key": ticket_key},
-        )
+        assert outcome.output is not None
 
         # Step 4: Parse result
-        result_stripped = raw_result.strip()
-        if result_stripped.lower() == "sufficient":
+        if outcome.output.sufficient:
             if current_repo and "/" in current_repo:
                 await ensure_repo_labels(
                     jira,
@@ -139,19 +134,7 @@ async def triage_task(state: TaskTakeoverState) -> TaskTakeoverState:
 
         # Step 5: Missing fields path
         # Strip markdown code fences that LLMs sometimes add despite instructions
-        json_candidate = result_stripped
-        if json_candidate.startswith("```"):
-            lines = json_candidate.splitlines()
-            json_candidate = "\n".join(line for line in lines if not line.startswith("```")).strip()
-        try:
-            missing_fields = json.loads(json_candidate)
-            if not isinstance(missing_fields, list):
-                raise ValueError("Expected a list")
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("Unexpected triage output for %s: %r", ticket_key, result_stripped)
-            missing_fields = [
-                "(could not determine — please provide additional context about the task)"
-            ]
+        missing_fields = list(outcome.output.missing_fields)
 
         fields_listed = "\n".join(f"- {f}" for f in missing_fields)
         await post_status_comment(
@@ -192,4 +175,3 @@ async def triage_task(state: TaskTakeoverState) -> TaskTakeoverState:
         )
     finally:
         await jira.close()
-        await agent.close()

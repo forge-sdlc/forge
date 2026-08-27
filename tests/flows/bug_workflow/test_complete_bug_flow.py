@@ -287,7 +287,7 @@ class TestTriageLoopFlow:
 
         with (
             patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.triage.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent),
         ):
             result = await triage_check(state)
 
@@ -322,7 +322,7 @@ class TestTriageLoopFlow:
 
         with (
             patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.triage.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent),
         ):
             result = await triage_check(state)
 

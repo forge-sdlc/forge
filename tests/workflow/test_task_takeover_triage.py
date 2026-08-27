@@ -57,7 +57,7 @@ async def test_complete_ticket_passes_triage(
 
     with (
         patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
-        patch("forge.workflow.nodes.task_takeover_triage.ForgeAgent", return_value=mock_agent),
+        patch("forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent),
     ):
         result = await triage_task(state)
 
@@ -122,7 +122,7 @@ async def test_incomplete_ticket_triage_permutations(
 
     with (
         patch("forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira),
-        patch("forge.workflow.nodes.task_takeover_triage.ForgeAgent", return_value=mock_agent),
+        patch("forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent),
     ):
         result = await triage_task(state)
 

@@ -94,7 +94,7 @@ class TestTriageTaskSufficientTicket:
                 "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -134,7 +134,7 @@ class TestTriageTaskSufficientTicket:
                 "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -158,7 +158,7 @@ class TestTriageTaskSufficientTicket:
                 "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -192,7 +192,7 @@ class TestTriageTaskSufficientTicket:
                 "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -227,7 +227,7 @@ class TestTriageTaskSufficientTicket:
                 "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_sufficient,
             ),
         ):
@@ -256,7 +256,7 @@ class TestTriageTaskMissingFields:
                 "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
             ),
         ):
@@ -284,7 +284,7 @@ class TestTriageTaskMissingFields:
                 "forge.workflow.nodes.task_takeover_triage.JiraClient", return_value=mock_jira
             ),
             patch(
-                "forge.workflow.nodes.task_takeover_triage.ForgeAgent",
+                "forge.workflow.stations.triage.ForgeAgent",
                 return_value=mock_agent_missing_fields,
             ),
         ):

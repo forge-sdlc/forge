@@ -28,6 +28,7 @@ from forge.workflow.stations.task_routing import (
     run_repository_aggregation_station,
     run_task_routing_station,
 )
+from forge.workflow.stations.triage import TriageInput, run_triage_station
 
 StationHandler = Callable[
     [StationRequest[Any]], StationOutcome[Any] | Awaitable[StationOutcome[Any]]
@@ -83,6 +84,9 @@ def create_builtin_station_registry() -> StationRegistry:
     )
     registry.register(
         StationDefinition("task-routing", "1.0", TaskRoutingInput, run_task_routing_station)
+    )
+    registry.register(
+        StationDefinition("triage-evaluation", "1.0", TriageInput, run_triage_station)
     )
     registry.register(
         StationDefinition(
