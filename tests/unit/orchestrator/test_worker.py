@@ -113,27 +113,22 @@ async def test_report_new_workflow_error_skips_non_reportable_errors(
 async def test_terminal_error_comment_uses_markdown_code_block():
     """Terminal errors use markup supported by the Markdown-to-ADF converter."""
     worker = OrchestratorWorker.__new__(OrchestratorWorker)
-    jira = MagicMock()
-    jira.close = AsyncMock()
+    worker._execute_required_comment = AsyncMock()
 
-    with (
-        patch("forge.integrations.jira.client.JiraClient", return_value=jira),
-        patch(
-            "forge.orchestrator.worker.post_status_comment", new_callable=AsyncMock
-        ) as post_comment,
-    ):
+    with patch.object(worker, "_execute_required_comment") as post_comment:
         await worker._post_terminal_error_comment(
             "TEST-123", "Object of type set is not JSON serializable"
         )
 
     post_comment.assert_awaited_once_with(
-        jira,
         "TEST-123",
         "**Forge workflow stopped with error:**\n\n"
         "```\nObject of type set is not JSON serializable\n```\n\n"
         "To retry the workflow, add the label `forge:retry` to this ticket.",
+        logical_action=(
+            "terminal-workflow-error:Object of type set is not JSON serializable"
+        ),
     )
-    jira.close.assert_awaited_once()
 
 
 def _multi_repo_pr_state() -> dict:
@@ -314,7 +309,9 @@ async def test_multi_repo_review_selects_earlier_pr() -> None:
 
 
 @pytest.mark.asyncio
-async def test_terminal_failure_posts_sanitized_recovery_comment():
+async def test_terminal_failure_posts_sanitized_recovery_comment(
+    durable_effect_service_mock,
+):
     worker = OrchestratorWorker(consumer_name="test-worker")
     message = QueueMessage(
         message_id="1-0",
@@ -323,27 +320,21 @@ async def test_terminal_failure_posts_sanitized_recovery_comment():
         event_type="issue_updated",
         ticket_key="TEST-123",
     )
-    jira = AsyncMock()
-    jira.get_comments = AsyncMock(return_value=[])
+    await worker._handle_terminal_failure(
+        message,
+        "clone https://ghp_abcdefghijklmnopqrstuvwxyz123456@github.com/acme/repo failed",
+    )
 
-    with patch("forge.orchestrator.worker.JiraClient", return_value=jira):
-        await worker._handle_terminal_failure(
-            message,
-            "clone https://ghp_abcdefghijklmnopqrstuvwxyz123456@github.com/acme/repo failed",
-        )
-
-    jira.add_error_comment.assert_awaited_once()
-    kwargs = jira.add_error_comment.await_args.kwargs
-    assert kwargs["issue_key"] == "TEST-123"
-    assert "[REDACTED]" in kwargs["error_message"]
-    assert "ghp_" not in kwargs["error_message"]
-    assert "Event/correlation ID: evt-terminal-1" in kwargs["error_message"]
-    assert "Recovery:" in kwargs["error_message"]
-    jira.close.assert_awaited_once()
+    command = durable_effect_service_mock.execute_required.await_args.args[0]
+    assert command.target.external_id == "TEST-123"
+    assert "[REDACTED]" in command.payload["body"]
+    assert "ghp_" not in command.payload["body"]
+    assert "Event/correlation ID: evt-terminal-1" in command.payload["body"]
+    assert "Recovery:" in command.payload["body"]
 
 
 @pytest.mark.asyncio
-async def test_terminal_failure_skips_existing_event_comment():
+async def test_terminal_failure_uses_stable_effect_identity(durable_effect_service_mock):
     worker = OrchestratorWorker(consumer_name="test-worker")
     message = QueueMessage(
         message_id="1-0",
@@ -352,16 +343,12 @@ async def test_terminal_failure_skips_existing_event_comment():
         event_type="issue_updated",
         ticket_key="TEST-123",
     )
-    jira = AsyncMock()
-    jira.get_comments = AsyncMock(
-        return_value=[MagicMock(body="Event/correlation ID: evt-terminal-1")]
-    )
+    await worker._handle_terminal_failure(message, "failed")
+    await worker._handle_terminal_failure(message, "failed")
 
-    with patch("forge.orchestrator.worker.JiraClient", return_value=jira):
-        await worker._handle_terminal_failure(message, "failed")
-
-    jira.add_error_comment.assert_not_awaited()
-    jira.close.assert_awaited_once()
+    commands = [call.args[0] for call in durable_effect_service_mock.execute_required.await_args_list]
+    assert len(commands) == 2
+    assert commands[0].effect_id == commands[1].effect_id
 
 
 class TestQuestionDetection:

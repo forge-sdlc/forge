@@ -11,7 +11,9 @@ from forge.queue.models import QueueMessage
 
 @pytest.fixture
 def worker() -> OrchestratorWorker:
-    return OrchestratorWorker(consumer_name="test-worker")
+    instance = OrchestratorWorker(consumer_name="test-worker")
+    instance.effect_service = AsyncMock()
+    return instance
 
 
 def _make_option_message(comment_body: str) -> QueueMessage:
@@ -97,15 +99,10 @@ class TestOptionNDetection:
         """>option 5 when only 2 options → clarifying comment posted."""
         message = _make_option_message(">option 5")
         state = _make_rca_gate_state()
-        mock_jira = AsyncMock()
-        mock_jira.add_comment = AsyncMock()
-        mock_jira.close = AsyncMock()
+        await worker._handle_resume_event(message, state)
 
-        with patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira):
-            await worker._handle_resume_event(message, state)
-
-        mock_jira.add_comment.assert_called_once()
-        comment_text = mock_jira.add_comment.call_args[0][1]
+        command = worker.effect_service.execute_required.await_args.args[0]
+        comment_text = command.payload["body"]
         assert "option" in comment_text.lower() and ("1" in comment_text and "2" in comment_text)
 
     @pytest.mark.asyncio
@@ -113,12 +110,7 @@ class TestOptionNDetection:
         """>option 5 when only 2 options → selected_fix_option remains None."""
         message = _make_option_message(">option 5")
         state = _make_rca_gate_state()
-        mock_jira = AsyncMock()
-        mock_jira.add_comment = AsyncMock()
-        mock_jira.close = AsyncMock()
-
-        with patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira):
-            result = await worker._handle_resume_event(message, state)
+        result = await worker._handle_resume_event(message, state)
 
         assert result["selected_fix_option"] is None
         assert result is state  # Should return current_state unchanged

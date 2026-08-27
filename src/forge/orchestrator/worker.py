@@ -28,11 +28,13 @@ from forge.domain import (
 from forge.effects import EffectService, create_default_effect_service
 from forge.effects.jira import (
     JIRA_ATTACHMENT_REPLACE_OPERATION,
+    JIRA_COMMENT_OPERATION,
     JIRA_CUSTOM_FIELD_OPERATION,
     JIRA_DESCRIPTION_OPERATION,
     JIRA_LABEL_OPERATION,
     JIRA_STRUCTURED_COMMENT_OPERATION,
 )
+from forge.effects.source_control import SC_COMMENT_CREATE_OPERATION
 from forge.integrations.github.comment_signature import is_self_comment
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
@@ -85,12 +87,12 @@ from forge.workflow.pr_state import (
 from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
-from forge.workflow.utils.jira_status import post_status_comment
+from forge.workflow.utils.jira_status import post_status_comment  # noqa: F401
 from forge.workflow.utils.review_decisions import (
     decision_matches_comment,
     merge_review_decisions,
 )
-from forge.workflow.utils.source_control import get_adapter, identity_for
+from forge.workflow.utils.source_control import get_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -290,6 +292,59 @@ class OrchestratorWorker:
             )
         )
 
+    async def _execute_required_comment(
+        self,
+        ticket_key: str,
+        body: str,
+        *,
+        logical_action: str,
+        discriminator: str = "",
+    ) -> None:
+        await self._execute_required_jira_effect(
+            ticket_key=ticket_key,
+            state={},
+            event_id=discriminator,
+            operation=JIRA_COMMENT_OPERATION,
+            payload={"body": body},
+            logical_action=logical_action,
+        )
+
+    async def _execute_required_source_comment(
+        self,
+        repo_ref: RepositoryRef,
+        pr_number: int,
+        body: str,
+        *,
+        ticket_key: str,
+        logical_action: str,
+    ) -> None:
+        identity = {
+            "run_id": ticket_key,
+            "operation": SC_COMMENT_CREATE_OPERATION,
+            "repository": repo_ref.namespace,
+            "pull_request": pr_number,
+            "logical_action": logical_action,
+        }
+        effect_id = stable_identity("effect", identity)
+        await self._durable_effect_service().execute_required(
+            EffectCommand(
+                effect_id=effect_id,
+                idempotency_key=effect_id,
+                workflow=WorkflowIdentity(
+                    run_id=ticket_key,
+                    workflow_name="legacy",
+                    definition_revision=1,
+                ),
+                operation=SC_COMMENT_CREATE_OPERATION,
+                target=ResourceIdentity(
+                    resource_type="change_request",
+                    external_id=str(pr_number),
+                    namespace=repo_ref.namespace,
+                ),
+                payload={"body": body},
+            )
+        )
+
     def _deserialize_event(self, message: QueueMessage) -> NormalizedEvent | None:
         """Reconstruct the typed NormalizedEvent a source-control message carries.
 
@@ -316,34 +371,25 @@ class OrchestratorWorker:
 
     async def _handle_terminal_failure(self, message: QueueMessage, error: str) -> None:
         """Post one Jira comment after queue retries are exhausted."""
-        jira = JiraClient()
         event_marker = f"Event/correlation ID: {message.event_id}"
-        try:
-            comments = await jira.get_comments(message.ticket_key)
-            if any(event_marker in comment.body for comment in comments):
-                logger.info(
-                    f"Terminal failure notification already exists for event {message.event_id}"
-                )
-                return
-
-            safe_error = redact_secrets(error)
-            if len(safe_error) > 500:
-                safe_error = f"{safe_error[:500]}..."
-            details = (
-                f"{safe_error}\n\n"
-                f"Ticket: {message.ticket_key}\n"
-                f"{event_marker}\n"
-                "Recovery: inspect the dead-letter entry, resolve the root cause, "
-                "then requeue the event."
-            )
-            await jira.add_error_comment(
-                issue_key=message.ticket_key,
-                error_message=details,
-                node_name="queue execution (retries exhausted)",
-            )
-            logger.info(f"Posted terminal queue failure notification to {message.ticket_key}")
-        finally:
-            await jira.close()
+        safe_error = redact_secrets(error)
+        if len(safe_error) > 500:
+            safe_error = f"{safe_error[:500]}..."
+        details = (
+            "**Forge error in queue execution (retries exhausted):**\n\n"
+            f"{safe_error}\n\n"
+            f"Ticket: {message.ticket_key}\n"
+            f"{event_marker}\n"
+            "Recovery: inspect the dead-letter entry, resolve the root cause, "
+            "then requeue the event."
+        )
+        await self._execute_required_comment(
+            message.ticket_key,
+            details,
+            logical_action="terminal-queue-failure",
+            discriminator=message.event_id,
+        )
+        logger.info(f"Posted terminal queue failure notification to {message.ticket_key}")
 
     async def _handle_jira_event(self, message: QueueMessage) -> None:
         """Handle a Jira webhook event.
@@ -841,15 +887,12 @@ class OrchestratorWorker:
                         )
                     elif feedback_request.kind is FeedbackKind.OPTION_RANGE:
                         maximum = int(feedback_request.arguments["maximum"])
-                        jira = JiraClient()
-                        try:
-                            await post_status_comment(
-                                jira,
-                                message.ticket_key,
-                                f"Please reply with >option N where N is between 1 and {maximum}.",
-                            )
-                        finally:
-                            await jira.close()
+                        await self._execute_required_comment(
+                            message.ticket_key,
+                            f"Please reply with >option N where N is between 1 and {maximum}.",
+                            logical_action="invalid-option-range",
+                            discriminator=message.event_id,
+                        )
                 return application.state
 
         # An inline reply at the review-response gate applies only to its thread.
@@ -1801,40 +1844,44 @@ class OrchestratorWorker:
             action: "skip" or "unskip".
         """
         try:
-            _, adapter = get_adapter(repo_ref.namespace)
-            jira = JiraClient()
-            try:
-                if action == "skip":
-                    gh_comment = (
-                        f"✅ CI gate skipped by @{sender}\n\n"
-                        f"The following check will be treated as passing for this PR:\n"
-                        f"- `{check_name}`\n\n"
-                        f"All other CI checks still apply. "
-                        f"Re-evaluating CI status now."
-                    )
-                    jira_comment = (
-                        f"CI gate skipped on GitHub PR by {sender}:\n"
-                        f"- `{check_name}`\n\n"
-                        f"Skipped via `/forge skip-gate` on PR #{pr_number}. "
-                        f"Review accordingly."
-                    )
-                else:
-                    gh_comment = (
-                        f"CI gate skip removed by @{sender}\n\n"
-                        f"`{check_name}` will be re-evaluated on the next CI run."
-                    )
-                    jira_comment = (
-                        f"CI gate skip removed on GitHub PR by {sender}:\n"
-                        f"- `{check_name}`\n\n"
-                        f"Check will be re-evaluated on the next CI run."
-                    )
+            if action == "skip":
+                gh_comment = (
+                    f"✅ CI gate skipped by @{sender}\n\n"
+                    f"The following check will be treated as passing for this PR:\n"
+                    f"- `{check_name}`\n\n"
+                    f"All other CI checks still apply. "
+                    f"Re-evaluating CI status now."
+                )
+                jira_comment = (
+                    f"CI gate skipped on GitHub PR by {sender}:\n"
+                    f"- `{check_name}`\n\n"
+                    f"Skipped via `/forge skip-gate` on PR #{pr_number}. "
+                    f"Review accordingly."
+                )
+            else:
+                gh_comment = (
+                    f"CI gate skip removed by @{sender}\n\n"
+                    f"`{check_name}` will be re-evaluated on the next CI run."
+                )
+                jira_comment = (
+                    f"CI gate skip removed on GitHub PR by {sender}:\n"
+                    f"- `{check_name}`\n\n"
+                    f"Check will be re-evaluated on the next CI run."
+                )
 
-                if pr_number:
-                    identity = identity_for(repo_ref, pr_number)
-                    await adapter.create_comment(repo_ref, identity, gh_comment)
-                await post_status_comment(jira, ticket_key, jira_comment)
-            finally:
-                await jira.close()
+            if pr_number:
+                await self._execute_required_source_comment(
+                    repo_ref,
+                    pr_number,
+                    gh_comment,
+                    ticket_key=ticket_key,
+                    logical_action=f"ci-gate-{action}:{check_name}",
+                )
+            await self._execute_required_comment(
+                ticket_key,
+                jira_comment,
+                logical_action=f"ci-gate-{action}:{repo_ref.namespace}:{pr_number}:{check_name}",
+            )
         except Exception as e:
             logger.warning(f"Failed to post skip-gate feedback: {e}")
 
@@ -1847,23 +1894,25 @@ class OrchestratorWorker:
     ) -> None:
         """Post feedback for a /forge rebase command."""
         try:
-            _, adapter = get_adapter(repo_ref.namespace)
-            jira = JiraClient()
-            try:
-                gh_comment = (
-                    f"Rebase triggered by @{sender}\n\n"
-                    f"Merging `main` into the PR branch and resolving any conflicts. "
-                    f"This may take a few minutes."
+            gh_comment = (
+                f"Rebase triggered by @{sender}\n\n"
+                f"Merging `main` into the PR branch and resolving any conflicts. "
+                f"This may take a few minutes."
+            )
+            jira_comment = f"Rebase triggered via `/forge rebase` on PR #{pr_number} by {sender}."
+            if pr_number:
+                await self._execute_required_source_comment(
+                    repo_ref,
+                    pr_number,
+                    gh_comment,
+                    ticket_key=ticket_key,
+                    logical_action="rebase-acknowledgement",
                 )
-                jira_comment = (
-                    f"Rebase triggered via `/forge rebase` on PR #{pr_number} by {sender}."
-                )
-                if pr_number:
-                    identity = identity_for(repo_ref, pr_number)
-                    await adapter.create_comment(repo_ref, identity, gh_comment)
-                await post_status_comment(jira, ticket_key, jira_comment)
-            finally:
-                await jira.close()
+            await self._execute_required_comment(
+                ticket_key,
+                jira_comment,
+                logical_action=f"rebase-acknowledgement:{repo_ref.namespace}:{pr_number}",
+            )
         except Exception as e:
             logger.warning(f"Failed to post rebase feedback: {e}")
 
@@ -1874,10 +1923,7 @@ class OrchestratorWorker:
             ticket_key: The Jira ticket key.
             error: The error message.
         """
-        from forge.integrations.jira.client import JiraClient
-
         try:
-            jira = JiraClient()
             safe_error = redact_secrets(error) if error else "Unknown error"
             error_preview = safe_error[:200]
             comment = (
@@ -1885,27 +1931,30 @@ class OrchestratorWorker:
                 f"```\n{error_preview}\n```\n\n"
                 f"To retry the workflow, add the label `forge:retry` to this ticket."
             )
-            await post_status_comment(jira, ticket_key, comment)
-            await jira.close()
+            await self._execute_required_comment(
+                ticket_key,
+                comment,
+                logical_action=f"terminal-workflow-error:{error_preview}",
+            )
             logger.info(f"Posted terminal error comment to {ticket_key}")
         except Exception as e:
             logger.warning(f"Failed to post terminal error comment to {ticket_key}: {e}")
 
     async def _post_retry_acknowledgement(self, ticket_key: str, node: str) -> None:
         """Acknowledge an accepted retry without blocking workflow resumption."""
-        jira = JiraClient()
         try:
             comment = (
                 f"Forge accepted the `forge:retry` request and is resuming "
                 f"the workflow from `{node}`."
             )
-            await post_status_comment(jira, ticket_key, comment)
+            await self._execute_required_comment(
+                ticket_key,
+                comment,
+                logical_action=f"retry-acknowledgement:{node}",
+            )
             logger.info(f"Posted retry acknowledgement to {ticket_key}")
         except Exception as e:
             logger.warning(f"Failed to post retry acknowledgement to {ticket_key}: {e}")
-        finally:
-            with contextlib.suppress(Exception):
-                await jira.close()
 
     async def _find_workflow_by_state(self, ticket_key: str) -> tuple[Any, Any]:
         """Find a workflow that has existing checkpoint state for the given ticket.
@@ -1998,19 +2047,16 @@ class OrchestratorWorker:
         self, ticket_key: str, error: str
     ) -> None:
         """Fail closed with an actionable, redacted Jira comment."""
-        jira = JiraClient()
         try:
-            await jira.add_error_comment(
-                issue_key=ticket_key,
-                error_message=redact_secrets(error)[:1000],
-                node_name="custom workflow configuration",
+            await self._execute_required_comment(
+                ticket_key,
+                f"**Forge custom workflow configuration error:**\n\n{redact_secrets(error)[:1000]}",
+                logical_action=f"custom-workflow-configuration:{error}",
             )
         except Exception:
             logger.warning(
                 "Could not report custom workflow error for %s", ticket_key, exc_info=True
             )
-        finally:
-            await jira.close()
 
     def _extract_ticket_type(self, message: QueueMessage) -> TicketType:
         """Extract ticket type from queue message.
