@@ -99,7 +99,7 @@ def interpret_event(
 ) -> CommandDecision:
     """Derive one idempotent command without selecting or mutating a graph node."""
     if message.source is EventSource.JIRA:
-        signal = _jira_signal(message, state)
+        signal = _jira_signal(message, adapted, state)
     else:
         signal = _source_control_signal(adapted, state)
     if signal is None:
@@ -138,7 +138,7 @@ def _workflow_identity(message: IngressMessage, state: Mapping[str, Any]) -> Wor
 
 
 def _jira_signal(
-    message: IngressMessage, state: Mapping[str, Any]
+    message: IngressMessage, adapted: AdaptedEvent, state: Mapping[str, Any]
 ) -> tuple[WorkflowCommandType, dict[str, Any]] | None:
     current_node = str(state.get("current_node") or "")
     changes = [
@@ -150,7 +150,10 @@ def _jira_signal(
         before = str(change.get("fromString") or "").lower()
         after = str(change.get("toString") or "").lower()
         if "forge:retry" in after and "forge:retry" not in before:
-            return WorkflowCommandType.RETRY, {"stage": current_node}
+            return WorkflowCommandType.RETRY, {
+                "stage": current_node,
+                "source_system": "jira",
+            }
         if (
             "forge:yolo" in after
             and "forge:yolo" not in before
@@ -162,14 +165,20 @@ def _jira_signal(
                 "task_approval_gate",
             }
         ):
-            return WorkflowCommandType.ENABLE_YOLO, {"stage": current_node}
+            return WorkflowCommandType.ENABLE_YOLO, {
+                "stage": current_node,
+                "source_system": "jira",
+            }
         if "approved" in after and "pending" in before:
             stage = next(
                 (name for name in ("prd", "spec", "plan", "task") if f"{name}-approved" in after),
                 None,
             )
             if stage and _NODE_APPROVAL_STAGE.get(current_node) == stage:
-                return WorkflowCommandType.APPROVE, {"stage": stage}
+                return WorkflowCommandType.APPROVE, {
+                    "stage": stage,
+                    "source_system": "jira",
+                }
 
     labels = {
         str(label).lower()
@@ -177,30 +186,51 @@ def _jira_signal(
     }
     approved_label = _GATE_APPROVED_LABEL.get(current_node)
     if approved_label and approved_label in labels:
-        return WorkflowCommandType.APPROVE, {"stage": _NODE_APPROVAL_STAGE[current_node]}
+        return WorkflowCommandType.APPROVE, {
+            "stage": _NODE_APPROVAL_STAGE[current_node],
+            "source_system": "jira",
+        }
 
-    comment = message.payload.get("comment", {}).get("body", "")
+    if current_node in _PRD_GATE_NODES and state.get("prd_pr_number"):
+        return None
+    if current_node in _SPEC_GATE_NODES and state.get("spec_pr_number"):
+        return None
+    comment = adapted.observation.facts.get("comment_text", "")
     if isinstance(comment, str) and comment.strip():
         if current_node == "rca_option_gate":
             option_match = re.search(r">option\s+(\d+)", comment, re.IGNORECASE)
             if option_match:
                 option = int(option_match.group(1))
-                option_count = len(state.get("rca_options", []))
-                if not 1 <= option <= option_count:
-                    return None
-                return WorkflowCommandType.SELECT_OPTION, {"option": option}
+                return WorkflowCommandType.SELECT_OPTION, {
+                    "option": option,
+                    "source_system": "jira",
+                }
+        source_ticket_key = adapted.observation.facts.get("source_ticket_key")
+        issue = adapted.observation.facts.get("issue", {})
+        issue_fields = issue.get("fields", {}) if isinstance(issue, dict) else {}
+        issue_type = issue_fields.get("issuetype", {}).get("name", "")
+        common = {
+            "stage": current_node,
+            "source_system": "jira",
+            "source_ticket_key": str(source_ticket_key or "") or None,
+            "source_ticket_type": str(issue_type).lower() or None,
+        }
         classification = classify_comment(comment)
         if classification is CommentType.FEEDBACK:
             return WorkflowCommandType.REJECT, {
+                **common,
                 "feedback": re.sub(r"^\s*!\s*", "", comment),
-                "stage": current_node,
             }
         if classification is CommentType.QUESTION:
             return WorkflowCommandType.RESUME, {
+                **common,
                 "question": comment,
-                "stage": current_node,
             }
     return None
+
+
+_PRD_GATE_NODES = {"prd_approval_gate", "generate_prd", "regenerate_prd"}
+_SPEC_GATE_NODES = {"spec_approval_gate", "generate_spec", "regenerate_spec"}
 
 
 def _source_control_signal(

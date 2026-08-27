@@ -56,7 +56,10 @@ def test_select_option_validates_against_authoritative_state() -> None:
 
     assert valid is not None
     assert valid.state["selected_fix_approach"] == "b"
-    assert invalid is None
+    assert invalid is not None
+    assert invalid.state == {"current_node": "rca_option_gate", "rca_options": ["a", "b"]}
+    assert invalid.feedback is not None
+    assert invalid.feedback.kind is FeedbackKind.OPTION_RANGE
 
 
 def test_retry_at_gate_requests_regeneration() -> None:
@@ -74,3 +77,34 @@ def test_retry_at_gate_requests_regeneration() -> None:
     assert application.state["last_error"] is None
     assert application.feedback is not None
     assert application.feedback.kind is FeedbackKind.RETRY_ACKNOWLEDGEMENT
+
+
+def test_jira_feedback_application_targets_known_child() -> None:
+    application = create_default_command_handler_registry().apply(
+        _command(
+            WorkflowCommandType.REJECT,
+            source_system="jira",
+            feedback="revise it",
+            source_ticket_key="TASK-2",
+        ),
+        {
+            "current_node": "task_approval_gate",
+            "task_keys": ["TASK-2"],
+            "epic_keys": ["EPIC-1"],
+        },
+    )
+
+    assert application is not None
+    assert application.state["revision_requested"] is True
+    assert application.state["current_task_key"] == "TASK-2"
+    assert application.feedback is not None
+    assert application.feedback.kind is FeedbackKind.RESUME_ACKNOWLEDGEMENT
+
+
+def test_source_control_approval_is_left_for_enrichment_handler() -> None:
+    application = create_default_command_handler_registry().apply(
+        _command(WorkflowCommandType.APPROVE, reason="change_request_merged"),
+        {"current_node": "human_review_gate"},
+    )
+
+    assert application is None

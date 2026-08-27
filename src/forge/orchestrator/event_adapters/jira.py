@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from forge.domain import Observation, ObservationSource, ResourceIdentity, stable_identity
 from forge.models.events import EventSource
@@ -10,6 +11,21 @@ from forge.models.workflow import TicketType
 from forge.orchestrator.event_adapters.contracts import AdaptedEvent, IngressMessage
 
 logger = logging.getLogger(__name__)
+
+
+def _comment_text(value: Any) -> str:
+    """Flatten Jira text or ADF into provider-independent comment evidence."""
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, dict):
+        return ""
+    own_text = value.get("text")
+    parts = [own_text] if isinstance(own_text, str) else []
+    for child in value.get("content", []):
+        text = _comment_text(child)
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
 
 
 class JiraEventAdapter:
@@ -43,6 +59,10 @@ class JiraEventAdapter:
                 "issue": issue,
                 "changelog": message.payload.get("changelog", {}),
                 "comment": message.payload.get("comment"),
+                "comment_text": _comment_text(
+                    message.payload.get("comment", {}).get("body", "")
+                ),
+                "source_ticket_key": message.payload.get("source_ticket_key"),
             },
             correlation={"workflow_ticket_key": message.ticket_key},
         )

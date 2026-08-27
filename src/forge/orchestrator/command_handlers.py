@@ -15,6 +15,8 @@ class FeedbackKind(StrEnum):
     REBASE = "rebase"
     RETRY_ACKNOWLEDGEMENT = "retry_acknowledgement"
     TERMINAL_ERROR = "terminal_error"
+    RESUME_ACKNOWLEDGEMENT = "resume_acknowledgement"
+    OPTION_RANGE = "option_range"
 
 
 @dataclass(frozen=True)
@@ -130,7 +132,12 @@ def _apply_select_option(
     option = command.arguments.get("option")
     options = list(state.get("rca_options", []))
     if not isinstance(option, int) or not 1 <= option <= len(options):
-        return None
+        return CommandApplication(
+            state=dict(state),
+            feedback=FeedbackRequest(
+                FeedbackKind.OPTION_RANGE, {"maximum": len(options)}
+            ),
+        )
     return CommandApplication(
         state={
             **state,
@@ -213,6 +220,93 @@ def _apply_retry(
     )
 
 
+def _apply_approval(
+    command: WorkflowCommand, state: Mapping[str, Any]
+) -> CommandApplication | None:
+    if command.arguments.get("source_system") != "jira":
+        return None
+    return CommandApplication(
+        state={
+            **state,
+            "is_paused": False,
+            "revision_requested": False,
+            "feedback_comment": None,
+            "last_error": None,
+        }
+    )
+
+
+def _source_ticket(command: WorkflowCommand, state: Mapping[str, Any]) -> tuple[str | None, str | None]:
+    source_key = command.arguments.get("source_ticket_key")
+    if not isinstance(source_key, str) or not source_key:
+        return None, None
+    current_node = str(state.get("current_node") or "")
+    plan_nodes = {
+        "plan_approval_gate",
+        "decompose_epics",
+        "regenerate_all_epics",
+        "update_single_epic",
+    }
+    task_nodes = {
+        "task_approval_gate",
+        "generate_tasks",
+        "regenerate_all_tasks",
+        "regenerate_epic_tasks",
+        "update_single_task",
+    }
+    if current_node in plan_nodes and source_key in state.get("epic_keys", []):
+        return source_key, "epic"
+    if current_node in task_nodes:
+        if source_key in state.get("task_keys", []):
+            return source_key, "task"
+        if source_key in state.get("epic_keys", []):
+            return source_key, "epic"
+    return None, None
+
+
+def _apply_feedback(
+    command: WorkflowCommand, state: Mapping[str, Any]
+) -> CommandApplication | None:
+    if command.arguments.get("source_system") != "jira":
+        return None
+    is_question = command.command_type is WorkflowCommandType.RESUME
+    content_key = "question" if is_question else "feedback"
+    content = str(command.arguments.get(content_key) or "").strip()
+    if not content:
+        return None
+    source_key, source_type = _source_ticket(command, state)
+    updated = {
+        **state,
+        "is_paused": False,
+        "is_question": is_question,
+        "revision_requested": not is_question,
+        "feedback_comment": content,
+    }
+    if not is_question:
+        if state.get("current_node") == "review_response_gate":
+            updated["contested_comments"] = []
+        if source_type == "epic":
+            updated["current_epic_key"] = source_key
+            updated["current_task_key"] = None
+        elif source_type == "task":
+            updated["current_task_key"] = source_key
+            updated["current_epic_key"] = None
+        else:
+            updated["current_epic_key"] = None
+            updated["current_task_key"] = None
+    return CommandApplication(
+        state=updated,
+        feedback=FeedbackRequest(
+            FeedbackKind.RESUME_ACKNOWLEDGEMENT,
+            {
+                "signal_type": "question" if is_question else "revision",
+                "stage": state.get("current_node", ""),
+                "source_ticket_key": source_key,
+            },
+        ),
+    )
+
+
 def create_default_command_handler_registry() -> CommandHandlerRegistry:
     registry = CommandHandlerRegistry()
     registry.register(WorkflowCommandType.SKIP_GATE, _apply_skip_gate)
@@ -221,4 +315,7 @@ def create_default_command_handler_registry() -> CommandHandlerRegistry:
     registry.register(WorkflowCommandType.ENABLE_YOLO, _apply_yolo)
     registry.register(WorkflowCommandType.SELECT_OPTION, _apply_select_option)
     registry.register(WorkflowCommandType.RETRY, _apply_retry)
+    registry.register(WorkflowCommandType.APPROVE, _apply_approval)
+    registry.register(WorkflowCommandType.REJECT, _apply_feedback)
+    registry.register(WorkflowCommandType.RESUME, _apply_feedback)
     return registry

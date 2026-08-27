@@ -753,6 +753,27 @@ class OrchestratorWorker:
                             message.ticket_key,
                             str(feedback_request.arguments["message"]),
                         )
+                    elif feedback_request.kind is FeedbackKind.RESUME_ACKNOWLEDGEMENT:
+                        source_ticket_key = feedback_request.arguments.get("source_ticket_key")
+                        await self._post_resume_ack_comment(
+                            message.ticket_key,
+                            signal_type=str(feedback_request.arguments["signal_type"]),
+                            current_node=str(feedback_request.arguments["stage"]),
+                            source_ticket_key=(
+                                str(source_ticket_key) if source_ticket_key else None
+                            ),
+                        )
+                    elif feedback_request.kind is FeedbackKind.OPTION_RANGE:
+                        maximum = int(feedback_request.arguments["maximum"])
+                        jira = JiraClient()
+                        try:
+                            await post_status_comment(
+                                jira,
+                                message.ticket_key,
+                                f"Please reply with >option N where N is between 1 and {maximum}.",
+                            )
+                        finally:
+                            await jira.close()
                 return application.state
 
         # An inline reply at the review-response gate applies only to its thread.
