@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from langgraph.types import Send
 from pydantic import ValidationError
 
 from forge.workflow.declarative.builtins import (
@@ -147,3 +148,22 @@ async def test_compiled_step_enforces_effect_capabilities_at_runtime() -> None:
     await allowed({})
     with pytest.raises(PermissionError, match="jira.comment.create"):
         await denied({})
+
+
+@pytest.mark.asyncio
+async def test_dynamic_router_enforces_targets_and_concurrency() -> None:
+    too_many = DeclarativeWorkflowCompiler._guarded_dynamic_router(
+        lambda _state: [Send("worker", {}), Send("worker", {})],
+        {"worker"},
+        1,
+    )
+    undeclared = DeclarativeWorkflowCompiler._guarded_dynamic_router(
+        lambda _state: Send("arbitrary", {}),
+        {"worker"},
+        1,
+    )
+
+    with pytest.raises(WorkflowValidationError, match="maximum is 1"):
+        await too_many({})
+    with pytest.raises(WorkflowValidationError, match="undeclared target"):
+        await undeclared({})
