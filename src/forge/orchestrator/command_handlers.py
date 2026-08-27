@@ -91,9 +91,7 @@ def _apply_skip_gate(
     )
 
 
-def _apply_rebase(
-    command: WorkflowCommand, state: Mapping[str, Any]
-) -> CommandApplication | None:
+def _apply_rebase(command: WorkflowCommand, state: Mapping[str, Any]) -> CommandApplication | None:
     if not state.get("current_pr_number"):
         return None
     current_node = str(state.get("current_node") or "")
@@ -105,15 +103,11 @@ def _apply_rebase(
             # Compatibility transition until Phase 5 owns topology.
             "current_node": "rebase_pr",
         },
-        feedback=FeedbackRequest(
-            FeedbackKind.REBASE, {"sender": command.arguments.get("sender")}
-        ),
+        feedback=FeedbackRequest(FeedbackKind.REBASE, {"sender": command.arguments.get("sender")}),
     )
 
 
-def _apply_yolo(
-    _command: WorkflowCommand, state: Mapping[str, Any]
-) -> CommandApplication:
+def _apply_yolo(_command: WorkflowCommand, state: Mapping[str, Any]) -> CommandApplication:
     return CommandApplication(
         state={
             **state,
@@ -134,9 +128,7 @@ def _apply_select_option(
     if not isinstance(option, int) or not 1 <= option <= len(options):
         return CommandApplication(
             state=state if isinstance(state, dict) else dict(state),
-            feedback=FeedbackRequest(
-                FeedbackKind.OPTION_RANGE, {"maximum": len(options)}
-            ),
+            feedback=FeedbackRequest(FeedbackKind.OPTION_RANGE, {"maximum": len(options)}),
         )
     return CommandApplication(
         state={
@@ -151,9 +143,7 @@ def _apply_select_option(
     )
 
 
-def _apply_retry(
-    _command: WorkflowCommand, state: Mapping[str, Any]
-) -> CommandApplication:
+def _apply_retry(_command: WorkflowCommand, state: Mapping[str, Any]) -> CommandApplication:
     current_node = str(state.get("current_node") or "")
     if current_node == "complete":
         return CommandApplication(
@@ -236,9 +226,7 @@ def _apply_approval(
     )
 
 
-def _apply_cancel(
-    command: WorkflowCommand, state: Mapping[str, Any]
-) -> CommandApplication:
+def _apply_cancel(command: WorkflowCommand, state: Mapping[str, Any]) -> CommandApplication:
     return CommandApplication(
         state={
             **state,
@@ -251,7 +239,9 @@ def _apply_cancel(
     )
 
 
-def _source_ticket(command: WorkflowCommand, state: Mapping[str, Any]) -> tuple[str | None, str | None]:
+def _source_ticket(
+    command: WorkflowCommand, state: Mapping[str, Any]
+) -> tuple[str | None, str | None]:
     source_key = command.arguments.get("source_ticket_key")
     if not isinstance(source_key, str) or not source_key:
         return None, None

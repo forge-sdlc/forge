@@ -59,9 +59,7 @@ class JiraEventAdapter:
                 "issue": issue,
                 "changelog": message.payload.get("changelog", {}),
                 "comment": message.payload.get("comment"),
-                "comment_text": _comment_text(
-                    message.payload.get("comment", {}).get("body", "")
-                ),
+                "comment_text": _comment_text(message.payload.get("comment", {}).get("body", "")),
                 "source_ticket_key": message.payload.get("source_ticket_key"),
             },
             correlation={"workflow_ticket_key": message.ticket_key},

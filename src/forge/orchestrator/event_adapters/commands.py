@@ -49,8 +49,7 @@ def validate_command_decision(
     if command is None or decision.status is not CommandDecisionStatus.ACCEPTED:
         return decision
     if any(
-        item.get("command_id") == command.command_id
-        for item in state.get("command_decisions", [])
+        item.get("command_id") == command.command_id for item in state.get("command_decisions", [])
     ):
         return CommandDecision(CommandDecisionStatus.DUPLICATE, "command already decided", command)
     revision = state.get("workflow_definition_revision") or state.get("workflow_revision")
@@ -189,7 +188,8 @@ def _jira_signal(
         if (
             "forge:yolo" in after
             and "forge:yolo" not in before
-            and current_node in {
+            and current_node
+            in {
                 "prd_approval_gate",
                 "spec_approval_gate",
                 "plan_approval_gate",
@@ -294,11 +294,15 @@ def _source_control_signal(
             ):
                 if lowered.startswith(prefix):
                     check_name = body[len(prefix) :].strip()
-                    if current_node not in {
-                        "ci_evaluator",
-                        "attempt_ci_fix",
-                        "human_review_gate",
-                    } or not check_name:
+                    if (
+                        current_node
+                        not in {
+                            "ci_evaluator",
+                            "attempt_ci_fix",
+                            "human_review_gate",
+                        }
+                        or not check_name
+                    ):
                         return None
                     return command_type, {
                         "check_name": check_name,

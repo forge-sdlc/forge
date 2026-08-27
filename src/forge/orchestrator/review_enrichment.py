@@ -32,9 +32,7 @@ class ReviewEnrichmentService:
 
     async def review_threads(self, repo_full_name: str, pr_number: int) -> list[Review]:
         repo_ref, adapter = self._adapter_resolver(repo_full_name)
-        return await adapter.get_review_thread_comments(
-            repo_ref, identity_for(repo_ref, pr_number)
-        )
+        return await adapter.get_review_thread_comments(repo_ref, identity_for(repo_ref, pr_number))
 
     async def review_comments(
         self, repo_full_name: str, pr_number: int, review_id: int | None

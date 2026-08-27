@@ -172,6 +172,7 @@ _FRESH_INVOKE_NODES = (
     "setup_workspace",
 )
 
+
 # Matches >option N anywhere in comment (case-insensitive, first match wins)
 # Supports both start-of-line usage (>option 2) and in-prose usage (let's go with >option 2)
 class OrchestratorWorker:
@@ -714,9 +715,9 @@ class OrchestratorWorker:
         comment_ticket_type = None
 
         if workflow_command is not None:
-            handlers = getattr(
-                self, "command_handlers", None
-            ) or create_default_command_handler_registry()
+            handlers = (
+                getattr(self, "command_handlers", None) or create_default_command_handler_registry()
+            )
             application = handlers.apply(workflow_command, current_state)
             if application is not None:
                 feedback_request = application.feedback
@@ -1969,9 +1970,9 @@ class OrchestratorWorker:
         labels: list[str] = []
         observation_id = f"transport:{message.event_id}"
         if message.source == EventSource.JIRA:
-            adapters = getattr(
-                self, "event_adapters", None
-            ) or create_default_event_adapter_registry()
+            adapters = (
+                getattr(self, "event_adapters", None) or create_default_event_adapter_registry()
+            )
             adapted = adapters.adapt(message)
             observation_id = adapted.observation.observation_id
             issue_data = adapted.observation.facts.get("issue", {})
