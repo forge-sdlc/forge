@@ -92,6 +92,50 @@ Exposes Prometheus-format metrics for the API server.
 | `forge_ci_fix_attempts_total` | Counter | CI fix attempts |
 | `forge_agent_duration_seconds` | Histogram | Agent execution time |
 
+### Operator execution API
+
+Execution inspection is a read-only API protected by the bearer token configured
+as `FORGE_OPERATOR_TOKEN`. Requests without a configured token return `503`; an
+invalid or missing bearer token returns `401`. The token is never accepted as a
+query parameter.
+
+```http
+GET /api/v1/workflows/{ticket_key}/execution
+GET /api/v1/workflows/{ticket_key}/execution/timeline?cursor=0&limit=50
+```
+
+Execution responses are versioned with `schema_version` (`1.0`). The timeline
+uses a deterministic integer cursor and returns `next_cursor` until the end;
+clients should treat cursors as opaque offsets and request no more than 200
+entries at a time. The response is a projection of durable Forge records and
+does not consult current Jira labels.
+
+The compact contract intended for Org Pulse is:
+
+```http
+GET /api/v1/org-pulse/workflows/{ticket_key}
+```
+
+It returns the execution status, current position, waiting/blocking information,
+retry count, observation freshness/conflict state, and migration eligibility.
+Org Pulse must preserve `schema_version`, tolerate additive fields, and treat
+`null` as “not available” (for example, legacy checkpoints have no migration
+decision). This endpoint is read-only and uses the same operator token.
+
+Timeline and terminal effect records are subject to the deployment's retention
+policy. Retention must not remove pending or running effects; consumers should
+not assume an old timeline event is available forever.
+
+**Operational metrics:** `forge_read_model_latency_seconds` measures API
+latency; `forge_execution_waiting_age_seconds`,
+`forge_execution_retry_count`, `forge_execution_drift_state`,
+`forge_execution_blocked_state`, and `forge_execution_migration_eligibility`
+expose waiting age, sampled retry count, drift, blocking codes, and migration
+eligibility. The retry, drift, blocked, and migration metrics are gauges for the
+most recently sampled execution; they are not event counters and repeated GETs
+do not inflate totals. `forge_read_model_latency_seconds` and waiting age are
+request/sample histograms by design.
+
 Worker metrics are available separately at `http://localhost:8001/metrics`.
 
 ## Webhook Configuration

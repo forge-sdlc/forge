@@ -19,6 +19,7 @@ from forge.api.routes import (
     health_router,
     jira_router,
     metrics_router,
+    org_pulse_router,
 )
 from forge.config import get_settings
 from forge.integrations.source_control.registry import get_registry
@@ -149,6 +150,7 @@ All webhook endpoints verify signatures:
     app.include_router(jira_router)
     app.include_router(github_router)
     app.include_router(executions_router)
+    app.include_router(org_pulse_router)
 
     return app
 

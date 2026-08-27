@@ -126,6 +126,9 @@ class BaseState(TypedDict, total=False):
     # Durable ingress audit trail. Entries are provider-neutral command decisions,
     # bounded by the worker to keep checkpoint growth predictable.
     command_decisions: list[dict[str, Any]]
+    # Normalized observation decisions are retained for read-model rebuilds;
+    # unlike provider payloads they contain only contract metadata and reason.
+    observation_history: list[dict[str, Any]]
 
     # Declarative workflow identity. Built-in workflows leave these unset.
     workflow_name: str
@@ -143,6 +146,8 @@ class BaseState(TypedDict, total=False):
     workflow_node_attempts: dict[str, int]
     transition_history: list[dict[str, Any]]
     station_history: list[dict[str, Any]]
+    migration_history: list[dict[str, Any]]
+    operator_actions: list[dict[str, Any]]
 
     # Generic node-contract capabilities and durable precondition audit trail.
     # Missing capability keys preserve legacy inference; explicit booleans are

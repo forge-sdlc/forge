@@ -5,6 +5,7 @@ from forge.reconciliation.ledger import (
     ObservationLedger,
     RedisObservationLedger,
     classify_observation,
+    observation_run_id,
     resource_identity,
 )
 from forge.reconciliation.models import (
@@ -23,5 +24,6 @@ __all__ = [
     "RedisObservationLedger",
     "ReconciledResource",
     "classify_observation",
+    "observation_run_id",
     "resource_identity",
 ]

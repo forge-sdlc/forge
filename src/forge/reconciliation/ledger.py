@@ -45,6 +45,7 @@ PROTECTED_WORKFLOW_FACTS = {
 _RESOURCE_PREFIX = "forge:observations:resource:"
 _DELIVERY_PREFIX = "forge:observations:delivery:"
 _HISTORY_PREFIX = "forge:observations:history:"
+_RUN_HISTORY_PREFIX = "forge:observations:run:"
 
 
 class ObservationLedger(Protocol):
@@ -53,6 +54,22 @@ class ObservationLedger(Protocol):
     async def latest(self, observation: Observation) -> ReconciledResource | None: ...
 
     async def history(self, observation: Observation) -> Sequence[ObservationDecision]: ...
+
+    async def history_for_run(self, run_id: str) -> Sequence[ObservationDecision]: ...
+
+
+def observation_run_id(observation: Observation) -> str | None:
+    """Extract workflow correlation without coupling the ledger to Jira."""
+    for value in (
+        observation.correlation.get("workflow_ticket_key"),
+        observation.correlation.get("ticket_key"),
+    ):
+        if isinstance(value, str) and value:
+            return value
+    issue = observation.facts.get("issue")
+    if isinstance(issue, dict) and isinstance(issue.get("key"), str):
+        return issue["key"]
+    return None
 
 
 def resource_identity(observation: Observation) -> str:
@@ -74,6 +91,7 @@ class InMemoryObservationLedger:
         self._resources: dict[str, ReconciledResource] = {}
         self._history: dict[str, list[ObservationDecision]] = {}
         self._deliveries: dict[str, ObservationDecision] = {}
+        self._run_history: dict[str, list[ObservationDecision]] = {}
         self._lock = asyncio.Lock()
 
     async def record(self, observation: Observation) -> ObservationDecision:
@@ -140,12 +158,18 @@ class InMemoryObservationLedger:
 
     def _append(self, observation: Observation, decision: ObservationDecision) -> None:
         self._history.setdefault(resource_identity(observation), []).append(decision)
+        run_id = observation_run_id(observation)
+        if run_id:
+            self._run_history.setdefault(run_id, []).append(decision)
 
     async def latest(self, observation: Observation) -> ReconciledResource | None:
         return self._resources.get(resource_identity(observation))
 
     async def history(self, observation: Observation) -> Sequence[ObservationDecision]:
         return tuple(self._history.get(resource_identity(observation), ()))
+
+    async def history_for_run(self, run_id: str) -> Sequence[ObservationDecision]:
+        return tuple(self._run_history.get(run_id, ()))
 
 
 class RedisObservationLedger:
@@ -171,6 +195,7 @@ class RedisObservationLedger:
             await (await self._client()).rpush(
                 self._history_key(observation), decision.model_dump_json()
             )
+            await self._index_run(observation, decision)
             return decision
 
         redis = await self._client()
@@ -225,6 +250,11 @@ class RedisObservationLedger:
                         )
                     pipeline.multi()
                     pipeline.rpush(self._history_key(observation), decision.model_dump_json())
+                    run_id = observation_run_id(observation)
+                    if run_id:
+                        pipeline.rpush(
+                            f"{_RUN_HISTORY_PREFIX}{run_id}", decision.model_dump_json()
+                        )
                     if prior is None:
                         pipeline.set(delivery_key, decision.model_dump_json())
                     if decision.disposition is ObservationDisposition.ACCEPTED:
@@ -246,6 +276,17 @@ class RedisObservationLedger:
     async def history(self, observation: Observation) -> Sequence[ObservationDecision]:
         values = await (await self._client()).lrange(self._history_key(observation), 0, -1)
         return tuple(ObservationDecision.model_validate_json(value) for value in values)
+
+    async def history_for_run(self, run_id: str) -> Sequence[ObservationDecision]:
+        values = await (await self._client()).lrange(f"{_RUN_HISTORY_PREFIX}{run_id}", 0, -1)
+        return tuple(ObservationDecision.model_validate_json(value) for value in values)
+
+    async def _index_run(self, observation: Observation, decision: ObservationDecision) -> None:
+        run_id = observation_run_id(observation)
+        if run_id:
+            await (await self._client()).rpush(
+                f"{_RUN_HISTORY_PREFIX}{run_id}", decision.model_dump_json()
+            )
 
     @staticmethod
     def _resource_key(observation: Observation) -> str:

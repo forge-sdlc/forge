@@ -45,6 +45,46 @@ class ObservationView(VersionedDomainModel):
     stale: bool | None = None
     conflicting: bool = False
     available: bool
+    disposition: str | None = None
+    reason: str | None = None
+    resource_revision: str | None = None
+    revision_order: int | None = None
+
+
+class RuleClauseView(VersionedDomainModel):
+    """The result of evaluating one persisted workflow rule clause.
+
+    Both satisfied and unsatisfied clauses are retained.  In particular, an
+    operator must be able to see which prerequisite was false rather than
+    reverse-engineering a reason from the current node name.
+    """
+
+    capability: str
+    satisfied: bool
+    on_missing: str | None = None
+    reason: str | None = None
+
+
+class RuleExplanationView(VersionedDomainModel):
+    rule: str
+    node: str
+    satisfied: bool
+    action: str | None = None
+    summary: str
+    clauses: tuple[RuleClauseView, ...] = ()
+
+
+class RecoveryOptionView(VersionedDomainModel):
+    command: str
+    description: str
+    available: bool = True
+
+
+class EffectAttemptView(VersionedDomainModel):
+    status: str
+    completed_at: datetime
+    provider_reference: str | None = None
+    error: str | None = None
 
 
 class StationAttemptView(VersionedDomainModel):
@@ -65,6 +105,7 @@ class EffectView(VersionedDomainModel):
     updated_at: datetime
     provider_reference: str | None = None
     error: str | None = None
+    attempts: tuple[EffectAttemptView, ...] = ()
 
 
 class MigrationView(VersionedDomainModel):
@@ -97,7 +138,11 @@ class ExecutionReadModel(VersionedDomainModel):
     next_transitions: tuple[NextTransitionView, ...]
     waiting: WaitingView | None = None
     last_observation: ObservationView
+    stale_observations: tuple[ObservationView, ...] = ()
+    conflicting_observations: tuple[ObservationView, ...] = ()
     station_attempts: tuple[StationAttemptView, ...] = ()
     effects: tuple[EffectView, ...] = ()
+    recovery_options: tuple[RecoveryOptionView, ...] = ()
+    explanations: tuple[RuleExplanationView, ...] = ()
     migration: MigrationView = MigrationView()
     timeline: tuple[TimelineEntry, ...] = ()

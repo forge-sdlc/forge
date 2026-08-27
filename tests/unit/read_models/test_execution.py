@@ -197,3 +197,83 @@ def test_timeline_combines_durable_decisions_transitions_stations_and_effects() 
         "station_attempt",
         "effect",
     ]
+
+
+def test_projection_retains_stale_and_conflicting_observation_decisions() -> None:
+    model = project_execution(
+        {
+            "ticket_key": "FORGE-1",
+            "current_node": "ci_evaluator",
+            "observation_history": [
+                {
+                    "observation_id": "observation-old",
+                    "source_system": "github",
+                    "disposition": "stale",
+                    "reason": "older provider revision",
+                },
+                {
+                    "observation_id": "observation-conflict",
+                    "source_system": "github",
+                    "disposition": "conflict",
+                    "reason": "same revision contains different facts",
+                },
+            ],
+        },
+        now=NOW,
+    )
+
+    assert [item.observation_id for item in model.stale_observations] == ["observation-old"]
+    assert model.conflicting_observations[0].reason == "same revision contains different facts"
+    assert [item.kind for item in model.timeline] == ["observation", "observation"]
+
+
+def test_rule_explanation_includes_true_and_false_contract_clauses() -> None:
+    model = project_execution(
+        {
+            "ticket_key": "FORGE-1",
+            "workflow_state_profile": "feature",
+            "current_node": "implement_work",
+            "capabilities": {
+                "repositories_resolved": True,
+                "workspace_ready": False,
+                "planning_context_available": True,
+            },
+            "precondition_result": {
+                "action": "block",
+                "missing": ["workspace_ready"],
+                "reason": "Workspace must exist before implementation",
+            },
+            "is_blocked": True,
+        }
+    )
+
+    explanation = model.explanations[0]
+    assert explanation.satisfied is False
+    assert {clause.capability: clause.satisfied for clause in explanation.clauses} == {
+        "repositories_resolved": True,
+        "workspace_ready": False,
+        "planning_context_available": True,
+    }
+
+
+def test_pinned_canonical_definition_revision_is_not_replaced_by_legacy_alias() -> None:
+    model = project_execution(
+        {
+            "ticket_key": "FORGE-1",
+            "workflow_name": "feature-flow",
+            "workflow_revision": 2,
+            "workflow_digest": "old-digest",
+            "workflow_definition_revision": 7,
+            "workflow_definition_digest": "pinned-digest",
+            "workflow_definition": {
+                "apiVersion": "forge/v1",
+                "kind": "Workflow",
+                "metadata": {"name": "feature-flow", "revision": 7},
+                "spec": {"state": "feature", "entry": "generate_prd", "steps": {}},
+            },
+        }
+    )
+
+    assert model.definition.available is True
+    assert model.definition.revision == 7
+    assert model.definition.digest == "pinned-digest"

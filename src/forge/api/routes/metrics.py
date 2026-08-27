@@ -166,6 +166,51 @@ EFFECT_REPLAYS = Counter(
     ["operation"],
 )
 
+# Execution read-model metrics.  These deliberately use bounded labels (status,
+# drift class, and blocking code) so an issue key or arbitrary provider message
+# can never create an unbounded Prometheus time series.
+READ_MODEL_LATENCY = Histogram(
+    "forge_read_model_latency_seconds",
+    "Latency of authenticated execution read-model requests",
+    ["operation"],
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+)
+
+EXECUTION_WAITING_AGE = Histogram(
+    "forge_execution_waiting_age_seconds",
+    "Age of executions currently waiting for an external or operator action",
+    ["code"],
+    buckets=[60, 300, 900, 3600, 21600, 86400, 604800],
+)
+
+EXECUTION_RETRIES = Gauge(
+    "forge_execution_retry_count",
+    "Retry count in the most recently sampled execution read model",
+    ["kind"],
+)
+
+EXECUTION_DRIFT = Gauge(
+    "forge_execution_drift_state",
+    "Drift state in the most recently sampled execution read model (0 or 1)",
+    ["class"],
+)
+
+EXECUTION_BLOCKED = Gauge(
+    "forge_execution_blocked_state",
+    "Blocked state in the most recently sampled execution read model (0 or 1)",
+    ["code"],
+)
+
+EXECUTION_MIGRATION_ELIGIBILITY = Gauge(
+    "forge_execution_migration_eligibility",
+    "Current execution migration eligibility (1 eligible, 0 ineligible, -1 unknown)",
+    ["state"],
+)
+
+_BLOCKING_CODES = ("blocked", "failed", "gate", "unknown")
+_DRIFT_CLASSES = ("operator_required", "stale")
+_MIGRATION_STATES = ("eligible", "ineligible", "unknown")
+
 
 @router.get("/metrics")
 async def metrics() -> Response:
@@ -256,6 +301,71 @@ def record_effect_result(operation: str, status: str) -> None:
 
 def record_effect_replay(operation: str) -> None:
     EFFECT_REPLAYS.labels(operation=operation).inc()
+
+
+def observe_read_model_latency(operation: str, duration: float) -> None:
+    """Observe one authenticated read-model request latency."""
+    READ_MODEL_LATENCY.labels(operation=operation).observe(max(0.0, duration))
+
+
+def record_execution_read_model(model: object) -> None:
+    """Record bounded operational signals from an execution projection.
+
+    ``model`` is intentionally accepted as an object rather than importing the
+    read-model package.  This keeps the metrics module usable by projection and
+    API code without introducing an import cycle.
+    """
+    raw_status = getattr(model, "status", "")
+    status = str(getattr(raw_status, "value", raw_status))
+    for known_code in _BLOCKING_CODES:
+        EXECUTION_BLOCKED.labels(code=known_code).set(0)
+    waiting = getattr(model, "waiting", None)
+    if waiting is not None:
+        raw_code = str(getattr(waiting, "code", "unknown"))
+        code = raw_code if raw_code in _BLOCKING_CODES else "unknown"
+        EXECUTION_BLOCKED.labels(code=code).set(1 if status == "blocked" else 0)
+        since = getattr(waiting, "since", None)
+        if since is not None:
+            from datetime import UTC, datetime
+
+            if since.tzinfo is None:
+                since = since.replace(tzinfo=UTC)
+            EXECUTION_WAITING_AGE.labels(code=code).observe(
+                max(0.0, (datetime.now(UTC) - since).total_seconds())
+            )
+
+    # A projection has attempt numbers for both station and durable-effect
+    # work.  Count only additional attempts (attempt 1 is the initial try).
+    retry_count = 0
+    for attempt in (
+        *(getattr(item, "attempt", 1) for item in getattr(model, "station_attempts", ())),
+        *(getattr(item, "attempt", 1) for item in getattr(model, "effects", ())),
+    ):
+        retry_count += max(0, int(attempt) - 1)
+    EXECUTION_RETRIES.labels(kind="execution").set(retry_count)
+
+    observations = [getattr(model, "last_observation", None)]
+    observations.extend(getattr(model, "stale_observations", ()))
+    observations.extend(getattr(model, "conflicting_observations", ()))
+    drift_counts = {"operator_required": 0, "stale": 0}
+    for observation in observations:
+        if observation is not None:
+            if getattr(observation, "conflicting", False):
+                drift_counts["operator_required"] += 1
+            elif getattr(observation, "stale", False):
+                drift_counts["stale"] += 1
+    for drift_class in _DRIFT_CLASSES:
+        count = drift_counts[drift_class]
+        EXECUTION_DRIFT.labels(**{"class": drift_class}).set(1 if count else 0)
+
+    migration = getattr(model, "migration", None)
+    eligible = getattr(migration, "eligible", None)
+    migration_state = "eligible" if eligible is True else "ineligible" if eligible is False else "unknown"
+    for state in _MIGRATION_STATES:
+        EXECUTION_MIGRATION_ELIGIBILITY.labels(state=state).set(0)
+    EXECUTION_MIGRATION_ELIGIBILITY.labels(state=migration_state).set(
+        1 if eligible is True else 0 if eligible is False else -1
+    )
 
 
 def record_proposal_review_decision(artifact_type: str, disposition: str) -> None:

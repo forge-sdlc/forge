@@ -28,7 +28,7 @@ def observation(
         revision_order=order,
         observed_at=now,
         received_at=now,
-        facts={"status": status},
+    facts={"status": status},
     )
 
 
@@ -76,6 +76,27 @@ async def test_stale_delivery_cannot_overwrite_latest_projection() -> None:
 
     assert decision.disposition is ObservationDisposition.STALE
     assert (await ledger.latest(stale)).latest.facts == {"status": "merged"}
+
+
+@pytest.mark.asyncio
+async def test_observation_history_can_be_rebuilt_by_workflow_run() -> None:
+    ledger = InMemoryObservationLedger()
+    current = observation(ObservationSource.WEBHOOK, 5)
+    current = current.model_copy(
+        update={"correlation": {"workflow_ticket_key": "FORGE-17"}}
+    )
+    older = observation(ObservationSource.POLLER, 3).model_copy(
+        update={"correlation": {"workflow_ticket_key": "FORGE-17"}}
+    )
+
+    await ledger.record(current)
+    await ledger.record(older)
+
+    history = await ledger.history_for_run("FORGE-17")
+    assert [item.disposition for item in history] == [
+        ObservationDisposition.ACCEPTED,
+        ObservationDisposition.STALE,
+    ]
 
 
 @pytest.mark.asyncio

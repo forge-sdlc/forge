@@ -154,7 +154,7 @@ for operator review and never used to infer workflow position.
 
 ## Phase 7 — Execution read models and operations
 
-PR: #329, rebased onto Phase 6. Status: partial.
+PR: #329, rebased onto Phase 6. Status: complete.
 
 Purpose: answer where work is, why it is waiting, and what happened without reconstructing state from Jira labels or logs.
 
@@ -168,6 +168,15 @@ Work:
 6. Prove projections rebuild deterministically from durable records.
 
 Exit gate: operators can diagnose and recover an execution using persisted records and APIs alone.
+
+Completion evidence: `docs/architecture/phase-7-read-models-plan.md` records the
+implementation evidence for all six work items, including durable timeline storage,
+deterministic projection rebuilds, authenticated/paginated APIs, Org Pulse's versioned
+contract, bounded operational metrics, and the read-only architecture guard. Retention
+and rollback procedures are documented there. The full local stack suite, integration
+suite, focused Ruff checks, and targeted mypy checks pass. The local Zensical build
+remains unverified because its file watcher hit the environment's `EMFILE` open-file
+limit.
 
 ## Phase 8 — Compatibility removal and final cutover
 
