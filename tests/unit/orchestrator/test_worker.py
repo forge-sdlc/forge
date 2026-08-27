@@ -30,6 +30,7 @@ from forge.queue.models import (
     QueueMessage,
     normalized_event_to_dict,
 )
+from forge.reconciliation import InMemoryObservationLedger
 from forge.workflow.utils.source_control import identity_for
 
 
@@ -47,6 +48,14 @@ def durable_effect_service_mock():
     service.run_forever = AsyncMock()
     with patch("forge.orchestrator.worker.create_default_effect_service", return_value=service):
         yield service
+
+
+@pytest.fixture(autouse=True)
+def observation_ledger_mock(monkeypatch):
+    """Keep unit workers isolated from the production Redis observation ledger."""
+    ledger = InMemoryObservationLedger()
+    monkeypatch.setattr("forge.orchestrator.worker.RedisObservationLedger", lambda: ledger)
+    return ledger
 
 
 @pytest.mark.parametrize(

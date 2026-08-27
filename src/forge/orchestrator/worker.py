@@ -67,6 +67,11 @@ from forge.orchestrator.event_adapters import (
 from forge.orchestrator.review_enrichment import ReviewEnrichmentService
 from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
+from forge.reconciliation import (
+    ObservationDisposition,
+    ObservationLedger,
+    RedisObservationLedger,
+)
 from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
@@ -204,6 +209,7 @@ class OrchestratorWorker:
         command_handlers: CommandHandlerRegistry | None = None,
         review_enrichment: ReviewEnrichmentService | None = None,
         effect_service: EffectService | None = None,
+        observation_ledger: ObservationLedger | None = None,
     ) -> None:
         """Initialize the worker.
 
@@ -222,6 +228,7 @@ class OrchestratorWorker:
         self.command_handlers = command_handlers or create_default_command_handler_registry()
         self.review_enrichment = review_enrichment
         self.effect_service = effect_service or create_default_effect_service()
+        self.observation_ledger = observation_ledger or RedisObservationLedger()
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
         self._compiled_workflows: dict[str, Any] = {}  # Cache compiled workflows by name
@@ -273,6 +280,14 @@ class OrchestratorWorker:
         )
         with bind_effect_runtime(self._durable_effect_service(), identity):
             return await compiled_workflow.ainvoke(invocation_input, config=config)
+
+    def _observation_ledger(self) -> ObservationLedger:
+        """Lazily restore reconciliation for fixtures that bypass ``__init__``."""
+        ledger = getattr(self, "observation_ledger", None)
+        if ledger is None:
+            ledger = RedisObservationLedger()
+            self.observation_ledger = ledger
+        return ledger
 
     async def _execute_required_jira_effect(
         self,
@@ -544,6 +559,18 @@ class OrchestratorWorker:
 
         try:
             ingress = self.event_adapters.adapt(message)
+            observation_decision = await self._observation_ledger().record(ingress.observation)
+            if observation_decision.disposition in {
+                ObservationDisposition.STALE,
+                ObservationDisposition.CONFLICT,
+            }:
+                logger.info(
+                    "Ignoring %s observation %s: %s",
+                    observation_decision.disposition.value,
+                    ingress.observation.observation_id,
+                    observation_decision.reason,
+                )
+                return
             # Determine ticket type early to select workflow
             ticket_type = self._extract_ticket_type(message)
 
