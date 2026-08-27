@@ -149,7 +149,7 @@ class TestWorkerSkipGateDetection:
         msg = _skip_gate_message(base_message, "epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         assert "epoxy" in result.get("ci_skipped_checks", [])
 
@@ -159,7 +159,7 @@ class TestWorkerSkipGateDetection:
         msg = _skip_gate_message(base_message, "epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         assert result["is_paused"] is False
         assert result["current_node"] == "ci_evaluator"
@@ -173,7 +173,7 @@ class TestWorkerSkipGateDetection:
         msg = _unskip_gate_message(base_message, "epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         skipped = result.get("ci_skipped_checks", [])
         assert "epoxy" not in skipped
@@ -186,7 +186,7 @@ class TestWorkerSkipGateDetection:
         msg = _skip_gate_message(base_message, "epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         assert result["ci_skipped_checks"].count("epoxy") == 1
 
@@ -199,7 +199,7 @@ class TestWorkerSkipGateDetection:
         )
         msg = _skip_gate_message(base_message, "epoxy")
 
-        result = await worker._handle_resume_event(msg, planning_state)
+        result = await worker._apply_observation_transition(msg, planning_state)
 
         assert result.get("ci_skipped_checks", []) == []
         assert result.get("is_paused") is True  # unchanged
@@ -211,7 +211,7 @@ class TestWorkerSkipGateDetection:
         mock_feedback = AsyncMock()
 
         with patch.object(worker, "_post_skip_gate_feedback", mock_feedback):
-            await worker._handle_resume_event(msg, ci_state)
+            await worker._apply_observation_transition(msg, ci_state)
 
         mock_feedback.assert_called_once()
 
@@ -221,7 +221,7 @@ class TestWorkerSkipGateDetection:
         msg = _comment_message(base_message, "/FORGE SKIP-GATE epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         assert "epoxy" in result.get("ci_skipped_checks", [])
 

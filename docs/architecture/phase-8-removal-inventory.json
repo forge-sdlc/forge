@@ -1,16 +1,14 @@
 {
   "schema_version": "2.0",
-  "remaining": [
+  "remaining": [],
+  "removed": [
     {
       "id": "worker-observation-transition-interpreter",
       "owner": "Forge orchestration",
-      "prerequisite": "Move CI, merge, review-thread, and proposal-review observation application behind the workflow transition boundary",
-      "replacement": "Provider-neutral observation applications selected by the pinned workflow definition",
-      "proof": "All resume characterization tests pass after the raw fallback in OrchestratorWorker._handle_resume_event is deleted",
-      "evidence_paths": ["src/forge/orchestrator/worker.py"]
-    }
-  ],
-  "removed": [
+      "prerequisite": "Governed observation-policy selection and provider-neutral transition runtime",
+      "replacement": "Pinned post-pr-v1 policy and apply_observation_transition",
+      "proof": "Worker delegates exactly once and contains no provider event-to-node logic"
+    },
     {
       "id": "source-specific-worker-handlers",
       "owner": "Forge orchestration",

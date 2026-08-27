@@ -52,7 +52,7 @@ def _normalized_from_payload(event_type: str, payload: dict) -> NormalizedEvent:
     """Build the NormalizedEvent a GitHub webhook payload would produce.
 
     Mirrors GitHubAdapter.parse_webhook for the event types exercised here so the
-    typed detection in _handle_resume_event runs against realistic data while the
+    typed detection in _apply_observation_transition runs against realistic data while the
     raw payload is still carried for the triage blocks that read it.
     """
     base_type = event_type.split(":", 1)[0]
@@ -270,7 +270,7 @@ class TestHandleSpecPrMerge:
             mock_jira.close = AsyncMock()
             MockJira.return_value = mock_jira
 
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["is_paused"] is False
         commands = [call.args[0] for call in worker.effect_service.execute_required.await_args_list]
@@ -310,7 +310,7 @@ async def test_satisfied_bot_spec_review_stays_paused(worker):
             new=AsyncMock(return_value=AutomatedReviewDecision("satisfied")),
         ) as triage,
     ):
-        result = await worker._handle_resume_event(msg, state)
+        result = await worker._apply_observation_transition(msg, state)
 
     assert result == state
     triage.assert_awaited_once()
@@ -347,7 +347,7 @@ class TestSpecPrReviewTypedFields:
         mock_adapter = AsyncMock()
         mock_adapter.get_review_thread_comments.return_value = []
         with _patch_adapter(_repo_ref_for("acme/payments"), mock_adapter):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["revision_requested"] is True
         assert "please fix X" in updated["feedback_comment"]
@@ -375,6 +375,6 @@ class TestSpecPrReviewTypedFields:
         with patch("forge.orchestrator.worker.JiraClient") as MockJira:
             MockJira.return_value.set_workflow_label = AsyncMock()
             MockJira.return_value.close = AsyncMock()
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["is_paused"] is False

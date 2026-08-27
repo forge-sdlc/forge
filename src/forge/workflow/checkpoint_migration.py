@@ -69,8 +69,10 @@ def migrate_unpinned_checkpoint(
             ("plan", "plan_content"),
         ):
             content = normalized.get(field)
-            if isinstance(content, str) and content.strip() and not any(
-                item.get("kind") == kind for item in normalized.get("artifacts") or []
+            if (
+                isinstance(content, str)
+                and content.strip()
+                and not any(item.get("kind") == kind for item in normalized.get("artifacts") or [])
             ):
                 normalized.update(record_planning_artifact(normalized, kind, content))
         repositories = list(normalized.get("repositories") or [])

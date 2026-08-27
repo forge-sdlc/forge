@@ -9,6 +9,24 @@ from typing import Any
 from forge.workflow.node_contracts import contracts_for
 from forge.workflow.preconditions import NodeContract
 
+# Observation policies are executable process capabilities.  They are named
+# and versioned here (rather than imported from workflow data) so a published
+# definition can select only an implementation reviewed by Forge.  The
+# post-PR policy is shared by the three built-in golden paths and may only
+# target nodes present in the selected definition.
+POST_PR_OBSERVATION_POLICY = "post-pr-v1"
+OBSERVATION_POLICY_TARGETS: dict[str, frozenset[str]] = {
+    POST_PR_OBSERVATION_POLICY: frozenset(
+        {
+            "ci_evaluator",
+            "attempt_ci_fix",
+            "human_review_gate",
+            "implement_review",
+            "review_response_gate",
+        }
+    )
+}
+
 
 @dataclass(frozen=True)
 class StateProfile:
@@ -23,6 +41,9 @@ class StateProfile:
     supported_policies: frozenset[str] = frozenset({"forge-contracts-v1"})
     supported_extensions: frozenset[str] = frozenset(
         {"station-behavior", "optional-stations", "routing-branches"}
+    )
+    observation_policy_targets: dict[str, frozenset[str]] = field(
+        default_factory=lambda: dict(OBSERVATION_POLICY_TARGETS)
     )
 
 

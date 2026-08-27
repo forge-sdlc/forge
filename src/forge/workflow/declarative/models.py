@@ -93,6 +93,12 @@ class WorkflowSpec(StrictModel):
     state: Literal["feature", "bug", "task_takeover"]
     entry: str
     steps: dict[str, WorkflowStep]
+    # The provider-neutral policy used to apply external observations to this
+    # workflow instance.  Policies are versioned, allowlisted runtime
+    # capabilities; arbitrary import paths are deliberately not supported.
+    # Definitions which do not accept external observation transitions may
+    # leave this unset (for example, small local test workflows).
+    observation_policy: str | None = Field(default=None, alias="observationPolicy")
     resume: WorkflowResume = Field(default_factory=WorkflowResume)
     mandatory_policies: tuple[str, ...] = Field(default=(), alias="mandatoryPolicies")
     extension_points: tuple[str, ...] = Field(default=(), alias="extensionPoints")

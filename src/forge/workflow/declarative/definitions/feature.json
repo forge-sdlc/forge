@@ -8,6 +8,7 @@
   },
   "spec": {
     "entry": "generate_prd",
+    "observationPolicy": "post-pr-v1",
     "extensionPoints": [
       "station-behavior"
     ],

@@ -8,6 +8,7 @@
   },
   "spec": {
     "entry": "triage_check",
+    "observationPolicy": "post-pr-v1",
     "extensionPoints": [
       "station-behavior"
     ],

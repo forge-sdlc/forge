@@ -86,6 +86,34 @@ def test_every_supported_golden_path_uses_the_versioned_definition_compiler() ->
         )
 
 
+def test_builtin_golden_paths_select_the_governed_observation_policy() -> None:
+    for definition in builtin_definitions():
+        workflow = DeclarativeWorkflow(definition, "BUILTIN")
+
+        assert definition.spec.observation_policy == "post-pr-v1"
+        assert workflow.observation_policy == "post-pr-v1"
+        assert workflow.resolve_observation_policy() == "post-pr-v1"
+
+
+def test_unknown_observation_policy_is_rejected() -> None:
+    value = definition_value()
+    value["spec"]["observationPolicy"] = "unknown-v1"
+    definition = load_workflow_value(value)
+
+    with pytest.raises(WorkflowValidationError, match="unknown observation policy"):
+        DeclarativeWorkflowCompiler(definition).validate()
+
+
+def test_observation_policy_cannot_target_an_undeclared_node() -> None:
+    value = definition_value(steps={"ci_evaluator": {"next": "__end__"}})
+    value["spec"]["observationPolicy"] = "post-pr-v1"
+    value["spec"]["entry"] = "ci_evaluator"
+    definition = load_workflow_value(value)
+
+    with pytest.raises(WorkflowValidationError, match="targets undeclared node 'attempt_ci_fix'"):
+        DeclarativeWorkflowCompiler(definition).validate()
+
+
 def test_default_router_has_no_python_topology_workflow_runtime() -> None:
     router = create_default_router()
 

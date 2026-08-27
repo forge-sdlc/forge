@@ -15,9 +15,7 @@ def content_digest(content: str) -> str:
     return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
 
 
-def record_planning_artifact(
-    state: Mapping[str, Any], kind: str, content: str
-) -> dict[str, Any]:
+def record_planning_artifact(state: Mapping[str, Any], kind: str, content: str) -> dict[str, Any]:
     """Persist generated planning content in the authoritative artifact lineage."""
     normalized = content.strip()
     digest = content_digest(normalized)
@@ -29,8 +27,7 @@ def record_planning_artifact(
         (
             item
             for item in reversed(planning_artifacts(state))
-            if item.get("kind") in {"prd", "spec", "rca", "plan"}
-            and item.get("kind") != kind
+            if item.get("kind") in {"prd", "spec", "rca", "plan"} and item.get("kind") != kind
         ),
         None,
     )

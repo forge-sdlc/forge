@@ -1,6 +1,6 @@
 # Phase 8 implementation plan: compatibility removal
 
-**Status:** Cutover implemented except for observation-to-transition ownership
+**Status:** Complete
 
 **Goal:** Delete superseded execution paths so Forge has one runtime model rather than
 permanent legacy and contract-backed implementations.
@@ -31,14 +31,13 @@ records the target definition and a seven-day rollback deadline by default. Roll
 means restoring that backup before the deadline; normal resume never performs migration
 or rollback implicitly.
 
-## Remaining blocker
+## Final observation cutover
 
-The worker resume interpreter still applies CI, merge, review-thread, and proposal-review
-observations directly. Phase 2 made explicit user commands authoritative but did not
-replace those observation transitions. A forced deletion caused 48 characterization
-failures, proving this is live behavior rather than removable compatibility code. It
-must move behind a provider-neutral transition boundary selected by the pinned workflow
-definition before the final inventory entry can be removed.
+CI, merge, review-thread, and proposal-review observations are now applied by the
+provider-neutral `post-pr-v1` transition policy. The pinned workflow definition selects
+that policy through an allowlisted identifier; compilation rejects unknown policies and
+policies whose target nodes are absent. The worker adapts ingress, delegates once, then
+persists the result—it no longer owns event-specific transition rules.
 
 The inventory at `docs/architecture/phase-8-removal-inventory.json` is the reviewable
 exit checklist. Phase 8 is complete only when `remaining` is empty and the associated

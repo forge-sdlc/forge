@@ -110,7 +110,9 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
         )
         outcome = await invoke_builtin_station(request)
         assert outcome.output is not None
-        state = cast(TaskTakeoverState, {**state, **reduce_implementation_input(state, request, outcome)})
+        state = cast(
+            TaskTakeoverState, {**state, **reduce_implementation_input(state, request, outcome)}
+        )
         primary_id = outcome.output.work_unit["source_artifact_ids"][0]
         artifact_titles = {
             "epic_plan": "Approved Implementation Plan",

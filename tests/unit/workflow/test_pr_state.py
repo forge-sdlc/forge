@@ -265,7 +265,9 @@ def test_save_with_unknown_number_keys_by_url() -> None:
     )
 
     assert "acme/docs:https://github.com/acme/docs/pull/30" in saved["pull_requests"]
-    assert saved["pull_requests"]["acme/docs:https://github.com/acme/docs/pull/30"]["number"] is None
+    assert (
+        saved["pull_requests"]["acme/docs:https://github.com/acme/docs/pull/30"]["number"] is None
+    )
 
 
 def test_save_without_number_or_url_is_noop() -> None:
@@ -359,18 +361,14 @@ def _legacy_state() -> dict:
 
 def test_event_does_not_match_unmigrated_bare_repo_key() -> None:
     state = _legacy_state()
-    event = _event(
-        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
-    )
+    event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
 
     assert not event_targets_pull_request(state, event)
 
 
 def test_activate_requires_migrated_pull_request_key() -> None:
     state = _legacy_state()
-    event = _event(
-        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
-    )
+    event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
 
     activated = activate_pull_request_for_event(state, event)
 
@@ -379,9 +377,7 @@ def test_activate_requires_migrated_pull_request_key() -> None:
 
 def test_save_does_not_implicitly_migrate_bare_repo_key() -> None:
     state = _legacy_state()
-    event = _event(
-        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
-    )
+    event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
     activated = activate_pull_request_for_event(state, event)
     activated["ci_status"] = "passed"
 

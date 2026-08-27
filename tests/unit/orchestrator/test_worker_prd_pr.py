@@ -21,6 +21,7 @@ from forge.integrations.source_control.contracts import (
 from forge.models.events import EventSource
 from forge.orchestrator.worker import OrchestratorWorker
 from forge.queue.models import QueueMessage, normalized_event_to_dict
+from forge.workflow.transitions import is_proposal_pull_request_event
 from forge.workflow.utils.automated_review_triage import AutomatedReviewDecision
 from forge.workflow.utils.source_control import identity_for
 
@@ -53,7 +54,7 @@ def _normalized_from_payload(event_type: str, payload: dict) -> NormalizedEvent:
     """Build the NormalizedEvent a GitHub webhook payload would produce.
 
     Mirrors GitHubAdapter.parse_webhook for the event types exercised here so the
-    typed detection in _handle_resume_event runs against realistic data while the
+    typed detection in _apply_observation_transition runs against realistic data while the
     raw payload is still carried for the triage blocks that read it.
     """
     base_type = event_type.split(":", 1)[0]
@@ -242,7 +243,7 @@ def worker():
 
 
 class TestIsPrdPrEvent:
-    def test_true_for_matching_repo_and_pr(self, worker):
+    def test_true_for_matching_repo_and_pr(self):
         msg = _make_message(
             "pull_request_review:submitted",
             {
@@ -251,9 +252,10 @@ class TestIsPrdPrEvent:
             },
         )
         state = _prd_gate_state()
-        assert worker._is_prd_pr_event(msg, state) is True
+        event = _normalized_from_payload(msg.event_type, msg.payload)
+        assert is_proposal_pull_request_event(msg, state, event, artifact="prd") is True
 
-    def test_false_for_wrong_repo(self, worker):
+    def test_false_for_wrong_repo(self):
         msg = _make_message(
             "pull_request_review:submitted",
             {
@@ -262,9 +264,10 @@ class TestIsPrdPrEvent:
             },
         )
         state = _prd_gate_state()
-        assert worker._is_prd_pr_event(msg, state) is False
+        event = _normalized_from_payload(msg.event_type, msg.payload)
+        assert is_proposal_pull_request_event(msg, state, event, artifact="prd") is False
 
-    def test_false_for_wrong_pr_number(self, worker):
+    def test_false_for_wrong_pr_number(self):
         msg = _make_message(
             "pull_request_review:submitted",
             {
@@ -273,9 +276,10 @@ class TestIsPrdPrEvent:
             },
         )
         state = _prd_gate_state()
-        assert worker._is_prd_pr_event(msg, state) is False
+        event = _normalized_from_payload(msg.event_type, msg.payload)
+        assert is_proposal_pull_request_event(msg, state, event, artifact="prd") is False
 
-    def test_false_when_no_prd_pr_in_state(self, worker):
+    def test_false_when_no_prd_pr_in_state(self):
         msg = _make_message(
             "pull_request_review:submitted",
             {
@@ -284,9 +288,10 @@ class TestIsPrdPrEvent:
             },
         )
         state = _prd_gate_state(prd_pr_number=None, prd_pr_repo=None)
-        assert worker._is_prd_pr_event(msg, state) is False
+        event = _normalized_from_payload(msg.event_type, msg.payload)
+        assert is_proposal_pull_request_event(msg, state, event, artifact="prd") is False
 
-    def test_false_for_jira_events(self, worker):
+    def test_false_for_jira_events(self):
         msg = QueueMessage(
             message_id="msg-1",
             event_id="evt-1",
@@ -296,9 +301,9 @@ class TestIsPrdPrEvent:
             payload={},
         )
         state = _prd_gate_state()
-        assert worker._is_prd_pr_event(msg, state) is False
+        assert is_proposal_pull_request_event(msg, state, None, artifact="prd") is False
 
-    def test_matches_issue_comment_with_issue_number(self, worker):
+    def test_matches_issue_comment_with_issue_number(self):
         msg = _make_message(
             "issue_comment:created",
             {
@@ -307,7 +312,8 @@ class TestIsPrdPrEvent:
             },
         )
         state = _prd_gate_state()
-        assert worker._is_prd_pr_event(msg, state) is True
+        event = _normalized_from_payload(msg.event_type, msg.payload)
+        assert is_proposal_pull_request_event(msg, state, event, artifact="prd") is True
 
 
 class TestHandlePrdPrMerge:
@@ -332,7 +338,7 @@ class TestHandlePrdPrMerge:
             mock_jira.close = AsyncMock()
             MockJira.return_value = mock_jira
 
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["is_paused"] is False
         assert result["automated_review_revision_count"] == 0
@@ -355,7 +361,7 @@ class TestHandlePrdPrMerge:
         )
         state = _prd_gate_state()
 
-        result = await worker._handle_resume_event(msg, state)
+        result = await worker._apply_observation_transition(msg, state)
 
         # Should remain paused -- closed without merge is not approval
         assert result.get("is_paused", True) is True
@@ -383,7 +389,7 @@ class TestHandlePrdPrReview:
         mock_adapter.get_review_thread_comments.return_value = []
 
         with _patch_adapter(repo_ref, mock_adapter):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
@@ -404,7 +410,7 @@ class TestHandlePrdPrReview:
         )
         state = _prd_gate_state()
 
-        result = await worker._handle_resume_event(msg, state)
+        result = await worker._apply_observation_transition(msg, state)
 
         # Should remain paused -- review approval is not an approval signal
         assert result.get("is_paused", True) is True
@@ -478,7 +484,7 @@ class TestHandlePrdPrReview:
                 new=AsyncMock(),
             ) as reply_decisions,
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["revision_requested"] is True
         assert result["feedback_comment"] == "Clarify authorization."
@@ -509,7 +515,7 @@ class TestHandlePrdPrComment:
         mock_adapter = AsyncMock()
         mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
@@ -536,7 +542,7 @@ class TestHandlePrdPrComment:
         mock_adapter = AsyncMock()
         mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         # Should remain paused -- self-comment ignored
         assert result.get("is_paused", True) is True
@@ -564,7 +570,7 @@ class TestHandlePrdPrComment:
             _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         # Should remain paused -- self-comment with signature ignored
         assert result.get("is_paused", True) is True
@@ -592,7 +598,7 @@ class TestHandlePrdPrComment:
             _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         # Should be processed and no longer paused
         assert result.get("is_paused") is False
@@ -616,7 +622,7 @@ class TestHandlePrdPrComment:
         mock_adapter = AsyncMock()
         mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["is_paused"] is False
         assert result.get("is_question") is True
@@ -662,7 +668,7 @@ class TestHandlePrdPrComment:
         mock_adapter = AsyncMock()
         mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["revision_requested"] is True
         assert result["feedback_comment"] == "Please make this change after all."
@@ -705,7 +711,7 @@ class TestHandlePrdPrComment:
             "_get_forge_github_login",
             new=AsyncMock(return_value="forge-bot"),
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result == state
         assert "Proposal reply target 999 did not match" in caplog.text
@@ -746,7 +752,7 @@ class TestHandlePrdPrComment:
                 new=AsyncMock(return_value=[decision]),
             ) as triage,
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["revision_requested"] is True
         assert result["feedback_comment"] == "Clarify the authorization behavior."
@@ -779,7 +785,7 @@ class TestHandlePrdPrComment:
                 ),
             ) as triage,
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result == state
         triage.assert_awaited_once()
@@ -812,7 +818,7 @@ class TestHandlePrdPrComment:
                 ),
             ),
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["revision_requested"] is True
         assert result["feedback_comment"] == "Add the missing authorization requirement."
@@ -846,7 +852,7 @@ class TestHandlePrdPrComment:
                 ),
             ),
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["revision_requested"] is True
         assert "The result may still need changes" in result["feedback_comment"]
@@ -879,7 +885,7 @@ class TestHandlePrdPrComment:
                 ),
             ),
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result == state
 
@@ -904,7 +910,7 @@ class TestJiraCommentIgnoredInPrMode:
         )
         state = _prd_gate_state()
 
-        result = await worker._handle_resume_event(msg, state)
+        result = await worker._apply_observation_transition(msg, state)
 
         # Should remain paused — Jira comment ignored in PR mode
         assert result.get("is_paused", True) is True
@@ -930,7 +936,7 @@ class TestJiraCommentIgnoredInPrMode:
         # No prd_pr_number — Jira-only mode
         state = _prd_gate_state(prd_pr_number=None, prd_pr_repo=None)
 
-        result = await worker._handle_resume_event(msg, state)
+        result = await worker._apply_observation_transition(msg, state)
 
         # Should process the comment as feedback
         assert result["is_paused"] is False
@@ -959,7 +965,7 @@ class TestInformationalCommentIgnored:
         mock_adapter = AsyncMock()
         mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result.get("is_paused", True) is True
         assert result.get("revision_requested") is not True
@@ -984,7 +990,7 @@ class TestInformationalCommentIgnored:
         mock_adapter = AsyncMock()
         mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result.get("is_paused", True) is True
         assert result.get("revision_requested") is not True
@@ -1028,7 +1034,7 @@ class TestHumanReviewSkipsTriage:
                 new=AsyncMock(),
             ) as triage,
         ):
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["revision_requested"] is True
         assert "Fix this section" in result["feedback_comment"]
@@ -1066,7 +1072,7 @@ class TestPrdPrReviewTypedFields:
         mock_adapter = AsyncMock()
         mock_adapter.get_review_thread_comments.return_value = []
         with _patch_adapter(_repo_ref_for("acme/payments"), mock_adapter):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["revision_requested"] is True
         assert "please fix X" in updated["feedback_comment"]
@@ -1094,7 +1100,7 @@ class TestPrdPrReviewTypedFields:
         with patch("forge.orchestrator.worker.JiraClient") as MockJira:
             MockJira.return_value.set_workflow_label = AsyncMock()
             MockJira.return_value.close = AsyncMock()
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["is_paused"] is False
 
@@ -1165,7 +1171,7 @@ class TestProposalReplyTypedFields:
         with patch.object(
             worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
@@ -1194,7 +1200,7 @@ class TestProposalReplyTypedFields:
         with patch.object(
             worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
@@ -1222,6 +1228,6 @@ class TestProposalReplyTypedFields:
         with patch.object(
             worker, "_get_forge_github_login", new=AsyncMock(return_value="forge-bot")
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result == state

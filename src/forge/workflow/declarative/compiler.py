@@ -39,6 +39,18 @@ class DeclarativeWorkflowCompiler:
             raise WorkflowValidationError(
                 f"unknown mandatory policy '{sorted(unknown_policies)[0]}'"
             )
+
+        observation_policy = spec.observation_policy
+        if observation_policy is not None:
+            policy_targets = self.profile.observation_policy_targets.get(observation_policy)
+            if policy_targets is None:
+                raise WorkflowValidationError(f"unknown observation policy '{observation_policy}'")
+            missing_policy_targets = policy_targets - set(steps)
+            if missing_policy_targets:
+                raise WorkflowValidationError(
+                    f"observation policy '{observation_policy}' targets undeclared node "
+                    f"'{sorted(missing_policy_targets)[0]}'"
+                )
         missing_nodes = (
             set(self.profile.mandatory_nodes) - set(steps) if spec.mandatory_policies else set()
         )

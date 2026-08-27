@@ -29,9 +29,7 @@ def legacy_state(**updates):
 def test_dry_run_reports_compatibility_without_mutating_checkpoint() -> None:
     state = legacy_state()
 
-    report = migrate_unpinned_checkpoint(
-        state, builtin_feature_definition(), apply=False, now=NOW
-    )
+    report = migrate_unpinned_checkpoint(state, builtin_feature_definition(), apply=False, now=NOW)
 
     assert report.compatible
     assert not report.applied

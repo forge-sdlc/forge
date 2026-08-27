@@ -180,7 +180,7 @@ limit.
 
 ## Phase 8 — Compatibility removal and final cutover
 
-PR: #330. Status: partial and intentionally last.
+PR: #330. Status: complete; final stacked phase.
 
 Purpose: delete the legacy architecture after every supported path uses the Option B contracts.
 

@@ -35,6 +35,25 @@ class DeclarativeWorkflow(BaseWorkflow):
     def state_schema(self) -> type:
         return self._profile.schema
 
+    @property
+    def observation_policy(self) -> str | None:
+        """Return the policy selected by this immutable definition."""
+        return self.definition.spec.observation_policy
+
+    def resolve_observation_policy(self) -> str | None:
+        """Resolve the selected policy through the profile allowlist.
+
+        Compilation performs the same validation during construction.  This
+        explicit lookup gives the orchestrator a single definition-backed
+        entry point when it begins applying an external observation.
+        """
+        policy = self.observation_policy
+        if policy is None:
+            return None
+        if policy not in self._profile.observation_policy_targets:
+            raise WorkflowValidationError(f"unknown observation policy '{policy}'")
+        return policy
+
     def matches(
         self,
         _ticket_type: TicketType,

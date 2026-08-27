@@ -31,6 +31,10 @@ from forge.queue.models import (
     normalized_event_to_dict,
 )
 from forge.reconciliation import InMemoryObservationLedger
+from forge.workflow.transitions import (
+    deserialize_observation_event,
+    is_proposal_pull_request_event,
+)
 from forge.workflow.utils.source_control import identity_for
 
 
@@ -134,9 +138,7 @@ async def test_terminal_error_comment_uses_markdown_code_block():
         "**Forge workflow stopped with error:**\n\n"
         "```\nObject of type set is not JSON serializable\n```\n\n"
         "To retry the workflow, add the label `forge:retry` to this ticket.",
-        logical_action=(
-            "terminal-workflow-error:Object of type set is not JSON serializable"
-        ),
+        logical_action=("terminal-workflow-error:Object of type set is not JSON serializable"),
     )
 
 
@@ -194,7 +196,7 @@ async def test_multi_repo_merge_waits_for_every_pr() -> None:
             normalized_event=normalized_event_to_dict(event),
         )
 
-    partial = await worker._handle_resume_event(merge_message("acme/backend", 10), state)
+    partial = await worker._apply_observation_transition(merge_message("acme/backend", 10), state)
 
     assert partial["current_repo"] == "acme/backend"
     assert partial["pull_requests"]["acme/backend:10"]["merged"] is True
@@ -202,7 +204,9 @@ async def test_multi_repo_merge_waits_for_every_pr() -> None:
     assert partial["pr_merged"] is False
     assert partial["is_paused"] is True
 
-    complete = await worker._handle_resume_event(merge_message("acme/frontend", 20), partial)
+    complete = await worker._apply_observation_transition(
+        merge_message("acme/frontend", 20), partial
+    )
 
     assert complete["pr_merged"] is True
     assert complete["is_paused"] is False
@@ -231,7 +235,7 @@ async def test_multi_repo_ci_webhook_selects_earlier_pr_from_review_gate() -> No
         normalized_event=normalized_event_to_dict(event),
     )
 
-    result = await worker._handle_resume_event(message, _multi_repo_pr_state())
+    result = await worker._apply_observation_transition(message, _multi_repo_pr_state())
 
     assert result["current_repo"] == "acme/backend"
     assert result["current_pr_number"] == 10
@@ -269,7 +273,7 @@ async def test_multi_repo_approval_uses_common_state_cleanup_path() -> None:
         normalized_event=normalized_event_to_dict(event),
     )
 
-    result = await worker._handle_resume_event(message, state)
+    result = await worker._apply_observation_transition(message, state)
 
     assert result["current_repo"] == "acme/backend"
     assert result["is_paused"] is True
@@ -308,7 +312,7 @@ async def test_multi_repo_review_selects_earlier_pr() -> None:
     )
 
     with _patch_adapter(_sc_repo_ref("acme/backend"), mock_adapter):
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
     assert result["current_repo"] == "acme/backend"
     assert result["current_pr_number"] == 10
@@ -355,7 +359,9 @@ async def test_terminal_failure_uses_stable_effect_identity(durable_effect_servi
     await worker._handle_terminal_failure(message, "failed")
     await worker._handle_terminal_failure(message, "failed")
 
-    commands = [call.args[0] for call in durable_effect_service_mock.execute_required.await_args_list]
+    commands = [
+        call.args[0] for call in durable_effect_service_mock.execute_required.await_args_list
+    ]
     assert len(commands) == 2
     assert commands[0].effect_id == commands[1].effect_id
 
@@ -432,7 +438,7 @@ class TestQuestionDetection:
         """Comments starting with ? set is_question flag."""
         message = self._make_message_with_comment(base_message, "?Why REST instead of GraphQL?")
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result["is_question"] is True
         assert result["feedback_comment"] == "?Why REST instead of GraphQL?"
@@ -454,7 +460,7 @@ class TestQuestionDetection:
             base_message, "@forge ask explain the database choice"
         )
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result["is_question"] is True
         assert result["feedback_comment"] == "@forge ask explain the database choice"
@@ -474,7 +480,7 @@ class TestQuestionDetection:
             base_message, "!Please add more detail to the security section"
         )
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result.get("is_question") is not True
         assert result["revision_requested"] is True
@@ -517,7 +523,7 @@ class TestQuestionDetection:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["revision_requested"] is True
         assert result["feedback_comment"] == "Please revise the tasks for this epic"
@@ -558,7 +564,7 @@ class TestQuestionDetection:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["revision_requested"] is True
         assert result["feedback_comment"] == "Please revise this epic plan"
@@ -608,7 +614,7 @@ class TestQuestionDetection:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["current_epic_key"] is None
         assert result["current_task_key"] is None
@@ -646,7 +652,7 @@ class TestQuestionDetection:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["current_node"] == "triage_check"
         assert result["is_paused"] is False
@@ -684,7 +690,7 @@ class TestQuestionDetection:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["current_node"] == "prd_approval_gate"
         assert result["is_paused"] is False
@@ -729,7 +735,7 @@ class TestQuestionDetection:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["current_node"] == "human_review_gate"
         assert result["is_paused"] is False
@@ -768,7 +774,7 @@ class TestQuestionDetection:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result.get("is_question") is not True
         assert result["revision_requested"] is False
@@ -792,7 +798,7 @@ class TestQuestionDetection:
         }
 
         with patch.object(worker, "_post_terminal_error_comment", new_callable=AsyncMock) as post:
-            result = await worker._handle_resume_event(base_message, state)
+            result = await worker._apply_observation_transition(base_message, state)
 
         assert result["current_node"] == "implement_review"
         assert result["retry_count"] == 3
@@ -809,7 +815,7 @@ class TestQuestionDetection:
         """Questions with leading whitespace are still detected."""
         message = self._make_message_with_comment(base_message, "  ?What about caching?")
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result["is_question"] is True
         assert result["revision_requested"] is False
@@ -821,7 +827,7 @@ class TestQuestionDetection:
         """@forge ask detection is case insensitive."""
         message = self._make_message_with_comment(base_message, "@FORGE ASK why use microservices?")
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result["is_question"] is True
         assert result["revision_requested"] is False
@@ -1088,7 +1094,7 @@ class TestEnsureSkillsIntegration:
             patch.object(worker, "_get_compiled_workflow", return_value=fake_compiled),
             patch.object(
                 worker,
-                "_handle_resume_event",
+                "_apply_observation_transition",
                 return_value={
                     "ticket_key": "TEST-123",
                     "current_node": "prd_approval_gate",
@@ -1146,7 +1152,7 @@ class TestEnsureSkillsIntegration:
             patch.object(worker, "_extract_ticket_type", return_value=MagicMock(value="Feature")),
             patch.object(worker.router, "resolve", return_value=fake_workflow),
             patch.object(worker, "_get_compiled_workflow", return_value=fake_compiled),
-            patch.object(worker, "_handle_resume_event", return_value=retry_cleared_state),
+            patch.object(worker, "_apply_observation_transition", return_value=retry_cleared_state),
         ):
             await worker._process_workflow(jira_message)
 
@@ -1204,7 +1210,7 @@ class TestEnsureSkillsIntegration:
             patch.object(worker, "_extract_ticket_type", return_value=MagicMock(value="Bug")),
             patch.object(worker.router, "resolve", return_value=fake_workflow),
             patch.object(worker, "_get_compiled_workflow", return_value=fake_compiled),
-            patch.object(worker, "_handle_resume_event", return_value=retry_cleared_state),
+            patch.object(worker, "_apply_observation_transition", return_value=retry_cleared_state),
         ):
             await worker._process_workflow(jira_message)
 
@@ -1263,14 +1269,14 @@ class TestCiWebhookSignalAtCiEvaluator:
     async def test_check_suite_recognized_at_ci_evaluator(self, worker):
         """A completed check_suite event at ci_evaluator must produce a new state object.
 
-        _handle_resume_event signals 'no valid event' by returning the *same* state
+        _apply_observation_transition signals 'no valid event' by returning the *same* state
         object unchanged. A recognised signal always returns a new dict. We verify
         object identity to catch the bug where the worker silently ignored the event.
         """
         state = self._ci_state("ci_evaluator")
         message = self._check_suite_message("failure")
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result is not state, (
             "check_suite at ci_evaluator returned the original state unchanged — "
@@ -1300,7 +1306,7 @@ class TestCiWebhookSignalAtCiEvaluator:
             normalized_event=normalized_event_to_dict(event),
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         # unchanged state returned — is_paused stays as it was
         assert result is state
@@ -1446,7 +1452,7 @@ class TestTaskPlanApprovalAndLabelPreservation:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result["is_paused"] is False
         assert result.get("revision_requested") is not True
@@ -1476,7 +1482,7 @@ class TestTaskPlanApprovalAndLabelPreservation:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result["is_paused"] is False
         assert result.get("revision_requested") is not True
@@ -1507,7 +1513,7 @@ class TestTaskPlanApprovalAndLabelPreservation:
             payload=payload,
         )
 
-        result = await worker._handle_resume_event(message, base_state)
+        result = await worker._apply_observation_transition(message, base_state)
 
         assert result["yolo_mode"] is True
         assert result["is_paused"] is False
@@ -1664,7 +1670,7 @@ class TestCiWebhookAtHumanReviewGate:
             normalized_event=normalized_event_to_dict(event),
         )
 
-        result = await worker._handle_resume_event(message, current_state)
+        result = await worker._apply_observation_transition(message, current_state)
 
         assert result.get("pending_ci_event") is True
         assert result.get("is_paused") is False
@@ -1700,7 +1706,7 @@ class TestCiWebhookAtHumanReviewGate:
             normalized_event=normalized_event_to_dict(event),
         )
 
-        result = await worker._handle_resume_event(message, current_state)
+        result = await worker._apply_observation_transition(message, current_state)
 
         assert result.get("is_paused") is False
         assert result.get("pending_ci_event", False) is False  # not set for ci_evaluator
@@ -1746,7 +1752,7 @@ class TestCiWebhookAtHumanReviewGate:
         )
 
         with _patch_adapter(_sc_repo_ref("owner/repo"), mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result["revision_requested"] is True
         assert result["feedback_comment"] == "Needs changes"
@@ -1808,7 +1814,7 @@ class TestHandleResumeEventReviewGates:
             ) as get_forge_login,
             patch("forge.orchestrator.worker.get_adapter") as get_adapter_mock,
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result is state
         get_forge_login.assert_awaited_once()
@@ -1853,7 +1859,7 @@ class TestHandleResumeEventReviewGates:
         mock_adapter = AsyncMock()
         mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
         with _patch_adapter(_sc_repo_ref("owner/repo"), mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
@@ -1901,7 +1907,7 @@ class TestHandleResumeEventReviewGates:
         mock_adapter.get_authenticated_identity.return_value = Actor(login="forge-bot", is_bot=True)
 
         with _patch_adapter(_sc_repo_ref("owner/repo"), mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result["is_paused"] is False
         assert result["revision_requested"] is True
@@ -1962,7 +1968,7 @@ class TestHandleResumeEventReviewGates:
 
         repo_ref = _sc_repo_ref("owner/repo")
         with _patch_adapter(repo_ref, mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result is not state
         assert result["is_paused"] is False
@@ -2019,7 +2025,7 @@ class TestHandleResumeEventReviewGates:
 
         repo_ref = _sc_repo_ref("owner/repo")
         with _patch_adapter(repo_ref, mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result is not state
         assert result["is_paused"] is False
@@ -2103,7 +2109,7 @@ class TestHandleResumeEventReviewGates:
 
         repo_ref = _sc_repo_ref("owner/repo")
         with _patch_adapter(repo_ref, mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result is not state
         assert result["is_paused"] is False
@@ -2145,7 +2151,7 @@ class TestHandleResumeEventReviewGates:
             normalized_event=normalized_event_to_dict(event),
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result is not state
         assert result["is_paused"] is False
@@ -2181,7 +2187,7 @@ class TestHandleResumeEventReviewGates:
             normalized_event=normalized_event_to_dict(event),
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result is not state
         assert result["is_paused"] is False
@@ -2220,7 +2226,7 @@ class TestHandleResumeEventReviewGates:
         )
 
         with _patch_adapter(_sc_repo_ref("owner/repo"), mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result is not state
         assert result["is_paused"] is False
@@ -2277,7 +2283,7 @@ class TestHandleResumeEventReviewGates:
 
         repo_ref = _sc_repo_ref("owner/repo")
         with _patch_adapter(repo_ref, mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result is not state
         assert result["is_paused"] is False
@@ -2317,7 +2323,7 @@ class TestHandleResumeEventReviewGates:
             normalized_event=normalized_event_to_dict(event),
         )
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result is state
 
@@ -2380,7 +2386,7 @@ class TestHandleResumeEventReviewGates:
         )
 
         with _patch_adapter(_sc_repo_ref("owner/repo"), mock_adapter):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert route_review_response(result) == "implement_review"
 
@@ -2432,7 +2438,7 @@ class TestWorkerWebhookCommentFiltering:
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
             _patch_adapter(_sc_repo_ref("owner/repo"), mock_adapter),
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         # It should be processed (not ignored), so state will have updated to resume (is_paused becomes False)
         assert result is not state
@@ -2481,7 +2487,7 @@ class TestWorkerWebhookCommentFiltering:
             patch.object(worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         # It should be ignored (is_self_comment is True), so returns unchanged state
         assert result is state
@@ -2530,7 +2536,7 @@ class TestWorkerWebhookCommentFiltering:
             ),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         # It should be ignored because of the App bot suffix matching our bot login
         assert result is state
@@ -2582,7 +2588,7 @@ class TestWorkerWebhookCommentFiltering:
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
             _patch_adapter(_sc_repo_ref("owner/repo"), mock_adapter),
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         # It should be processed (not ignored)
         assert result is not state
@@ -2632,7 +2638,7 @@ class TestWorkerWebhookCommentFiltering:
             patch.object(worker, "_get_forge_github_login", new=AsyncMock(return_value="dev-user")),
             patch("forge.orchestrator.worker.get_settings", return_value=settings),
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         # It should be ignored under the legacy fallback because prefix is empty
         assert result is state
@@ -2722,7 +2728,8 @@ class TestDeserializeEvent:
             ticket_key="PROJ-1",
             payload={},
         )
-        assert worker._deserialize_event(message) is None
+        adapted = worker._event_adapter_registry().adapt(message)
+        assert deserialize_observation_event(message, adapted) is None
 
     def test_deserializes_source_control_message(self, worker):
         event = _make_normalized_event()
@@ -2735,7 +2742,8 @@ class TestDeserializeEvent:
             payload={},
             normalized_event=normalized_event_to_dict(event),
         )
-        restored = worker._deserialize_event(message)
+        adapted = worker._event_adapter_registry().adapt(message)
+        restored = deserialize_observation_event(message, adapted)
         assert restored is not None
         assert restored.kind == EventKind.CR_OPENED
         assert restored.repo_ref.namespace == "acme/payments"
@@ -2749,7 +2757,7 @@ class TestIsPrdSpecPrEvent:
         """Create a worker instance for testing."""
         return OrchestratorWorker(consumer_name="test-worker")
 
-    def test_is_prd_pr_event_matches_by_repo_and_number(self, worker):
+    def test_is_prd_pr_event_matches_by_repo_and_number(self):
         event = _make_normalized_event()
         message = QueueMessage(
             message_id="1",
@@ -2762,9 +2770,9 @@ class TestIsPrdSpecPrEvent:
         )
         current_state = {"prd_pr_number": 42, "prd_pr_repo": "acme/payments"}
 
-        assert worker._is_prd_pr_event(message, current_state) is True
+        assert is_proposal_pull_request_event(message, current_state, event, artifact="prd") is True
 
-    def test_is_prd_pr_event_false_when_number_differs(self, worker):
+    def test_is_prd_pr_event_false_when_number_differs(self):
         event = _make_normalized_event()
         message = QueueMessage(
             message_id="1",
@@ -2777,9 +2785,11 @@ class TestIsPrdSpecPrEvent:
         )
         current_state = {"prd_pr_number": 99, "prd_pr_repo": "acme/payments"}
 
-        assert worker._is_prd_pr_event(message, current_state) is False
+        assert (
+            is_proposal_pull_request_event(message, current_state, event, artifact="prd") is False
+        )
 
-    def test_is_prd_pr_event_false_for_jira_source(self, worker):
+    def test_is_prd_pr_event_false_for_jira_source(self):
         message = QueueMessage(
             message_id="1",
             event_id="e1",
@@ -2790,7 +2800,7 @@ class TestIsPrdSpecPrEvent:
         )
         current_state = {"prd_pr_number": 42, "prd_pr_repo": "acme/payments"}
 
-        assert worker._is_prd_pr_event(message, current_state) is False
+        assert is_proposal_pull_request_event(message, current_state, None, artifact="prd") is False
 
 
 class TestCiWebhookDetectionTypedFields:
@@ -2820,7 +2830,7 @@ class TestCiWebhookDetectionTypedFields:
             "current_pr_number": 42,
         }
 
-        updated = await worker._handle_resume_event(message, current_state)
+        updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["is_paused"] is False
 
@@ -2847,7 +2857,7 @@ class TestCiWebhookDetectionTypedFields:
         )
         current_state = {"current_node": "ci_evaluator", "is_paused": True, "context": {}}
 
-        updated = await worker._handle_resume_event(message, current_state)
+        updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated is current_state
 
@@ -2877,7 +2887,7 @@ class TestCiWebhookDetectionTypedFields:
             "pull_requests": {"acme/payments:42": {"number": 42, "repo": "acme/payments"}},
         }
 
-        updated = await worker._handle_resume_event(message, current_state)
+        updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["is_paused"] is False
 
@@ -2908,7 +2918,7 @@ class TestCiWebhookDetectionTypedFields:
             "context": {},
         }
 
-        updated = await worker._handle_resume_event(message, current_state)
+        updated = await worker._apply_observation_transition(message, current_state)
 
         # No CI signal recognised — the paused gate is not woken.
         assert updated["is_paused"] is True
@@ -2931,7 +2941,7 @@ class TestCiWebhookDetectionTypedFields:
         )
         current_state = {"current_node": "ci_evaluator", "is_paused": True, "context": {}}
 
-        updated = await worker._handle_resume_event(message, current_state)
+        updated = await worker._apply_observation_transition(message, current_state)
 
         # CI-webhook branch did not fire — the paused gate stays paused.
         assert updated["is_paused"] is True
@@ -2953,7 +2963,7 @@ class TestCiWebhookDetectionTypedFields:
         )
         current_state = {"current_node": "ci_evaluator", "is_paused": True, "context": {}}
 
-        updated = await worker._handle_resume_event(message, current_state)
+        updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["is_paused"] is True
 
@@ -2981,7 +2991,7 @@ class TestSkipGateCommandTypedFields:
         current_state = {"current_node": "ci_evaluator", "is_paused": True}
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert "flaky-test" in updated["ci_skipped_checks"]
         assert updated["current_node"] == "ci_evaluator"
@@ -3004,7 +3014,7 @@ class TestSkipGateCommandTypedFields:
         feedback = AsyncMock()
 
         with patch.object(worker, "_post_skip_gate_feedback", feedback):
-            await worker._handle_resume_event(message, current_state)
+            await worker._apply_observation_transition(message, current_state)
 
         feedback.assert_called_once()
         kwargs = feedback.call_args.kwargs
@@ -3034,7 +3044,7 @@ class TestSkipGateCommandTypedFields:
         feedback = AsyncMock()
 
         with patch.object(worker, "_post_rebase_feedback", feedback):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["current_node"] == "rebase_pr"
         assert updated["is_paused"] is False
@@ -3080,7 +3090,7 @@ class TestInlineReviewReplyTypedFields:
         }
 
         with patch.object(worker, "_get_forge_github_login", AsyncMock(return_value="forge-bot")):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["revision_requested"] is True
         assert updated["contested_comments"] == []
@@ -3117,7 +3127,7 @@ class TestInlineReviewReplyTypedFields:
         }
 
         with patch.object(worker, "_get_forge_github_login", AsyncMock(return_value="forge-bot")):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated is not current_state
         assert updated["is_paused"] is False
@@ -3153,7 +3163,7 @@ class TestInlineReviewReplyTypedFields:
             "context": {},
         }
 
-        updated = await worker._handle_resume_event(message, current_state)
+        updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated is current_state
 
@@ -3192,7 +3202,7 @@ class TestHumanReviewGateTypedFields:
         }
 
         with patch.object(worker, "_get_forge_github_login", AsyncMock(return_value="forge-bot")):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["human_review_status"] == "approved"
 
@@ -3220,7 +3230,7 @@ class TestHumanReviewGateTypedFields:
             "current_pr_number": 42,
         }
 
-        updated = await worker._handle_resume_event(message, current_state)
+        updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated.get("pr_merged") is True
 
@@ -3256,7 +3266,7 @@ class TestHumanReviewGateTypedFields:
         }
 
         with patch.object(worker, "_get_forge_github_login", AsyncMock(return_value="forge-bot")):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert "human_review_status" not in updated
         assert updated.get("revision_requested") is not True

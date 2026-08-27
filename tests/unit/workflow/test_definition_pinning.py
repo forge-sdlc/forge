@@ -88,9 +88,7 @@ def test_legacy_state_requires_explicit_checkpoint_migration() -> None:
     assert not dry_run.applied
     assert dry_run.migrated_state is None
 
-    pinned = migrate_unpinned_checkpoint(
-        legacy, workflow.definition, apply=True
-    ).migrated_state
+    pinned = migrate_unpinned_checkpoint(legacy, workflow.definition, apply=True).migrated_state
     assert pinned is not None
     assert pinned["workflow_pin_status"] == "phase8_migrated"
     assert pinned["workflow_digest"] == workflow.definition.digest
