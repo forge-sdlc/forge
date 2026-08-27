@@ -434,7 +434,7 @@ class TestTaskGenerationTraceContext:
                 return_value=mock_jira,
             ),
             patch(
-                "forge.workflow.nodes.task_generation.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=mock_agent,
             ),
         ):

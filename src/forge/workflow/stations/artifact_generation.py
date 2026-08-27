@@ -23,6 +23,7 @@ class ArtifactKind(StrEnum):
     PRD = "prd"
     SPEC = "spec"
     EPICS = "epics"
+    TASK = "task"
 
 
 class ArtifactGenerationInput(DomainModel):
@@ -57,8 +58,10 @@ async def run_artifact_generation_station(
             content = await agent.generate_prd(value.source_content, dict(value.context))
         elif value.kind is ArtifactKind.SPEC:
             content = await agent.generate_spec(value.source_content, dict(value.context))
-        else:
+        elif value.kind is ArtifactKind.EPICS:
             content = await agent.generate_epics(value.source_content, dict(value.context))
+        else:
+            raise ValueError("Task generation requires revision feedback")
     finally:
         await agent.close()
     return StationOutcome[ArtifactGenerationOutput](

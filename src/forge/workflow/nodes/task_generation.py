@@ -11,6 +11,11 @@ from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.projections.artifact_generation import project_artifact_generation
+from forge.workflow.stations.artifact_generation import (
+    ArtifactKind,
+    run_artifact_generation_station,
+)
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.references import fetch_and_inject_references
@@ -803,7 +808,6 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
     logger.info(f"Updating Task {task_key} with feedback")
 
     jira = JiraClient()
-    agent = ForgeAgent()
 
     try:
         # Get current Task description
@@ -815,19 +819,23 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         )
 
         # Regenerate description with feedback
-        new_description = await agent.regenerate_with_feedback(
-            original_content=original_description_with_refs,
-            feedback=feedback,
-            content_type="task",
-            ticket_key=ticket_key,
-            context={
-                "ticket_type": state.get("ticket_type", ""),
-                "current_node": state.get("current_node", ""),
-                "event_type": state.get("event_type", ""),
-                "event_source": state.get("context", {}).get("source", ""),
-                "retry_count": state.get("retry_count", 0),
-            },
+        outcome = await run_artifact_generation_station(
+            project_artifact_generation(
+                state,
+                kind=ArtifactKind.TASK,
+                source_content=original_description_with_refs,
+                feedback=feedback,
+                context={
+                    "ticket_type": state.get("ticket_type", ""),
+                    "current_node": state.get("current_node", ""),
+                    "event_type": state.get("event_type", ""),
+                    "event_source": state.get("context", {}).get("source", ""),
+                    "retry_count": state.get("retry_count", 0),
+                },
+            )
         )
+        assert outcome.output is not None
+        new_description = str(outcome.output.content)
 
         # Update Task in Jira
         await jira.update_description(task_key, new_description)
@@ -862,4 +870,3 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await agent.close()
