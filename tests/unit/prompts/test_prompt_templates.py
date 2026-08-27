@@ -261,6 +261,7 @@ class TestPromptContent:
         # Should include the provided content
         assert "Test requirements" in result
         assert "Test context" in result
+        assert "inspect every target repository" in result
 
     def test_task_takeover_triage_prompt(self):
         """task-takeover-triage prompt should allow contained tasks without formal sections."""

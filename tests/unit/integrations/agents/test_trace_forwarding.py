@@ -95,6 +95,7 @@ class TestGeneratePrdTraceForwarding:
             "retry_count": 1,
             "project_key": "PROJ",
             "summary": "Build auth",
+            "available_repos": ["acme/auth-service"],
         }
 
         with patch.object(agent, "run_task", new_callable=AsyncMock) as mock_run:
@@ -105,6 +106,7 @@ class TestGeneratePrdTraceForwarding:
         call_ctx = mock_run.call_args.kwargs["context"]
         assert call_ctx["ticket_key"] == "PROJ-42"
         assert call_ctx["project_key"] == "PROJ"
+        assert call_ctx["available_repos"] == ["acme/auth-service"]
         assert "ticket_type" not in call_ctx
         assert "summary" not in call_ctx
 
@@ -117,6 +119,7 @@ class TestGeneratePrdTraceForwarding:
         assert call_trace["retry_count"] == 1
 
         rendered_prompt = mock_run.call_args.kwargs["prompt"]
+        assert "acme/auth-service" in rendered_prompt
         assert "ticket_type" not in rendered_prompt
         assert "current_node" not in rendered_prompt
         assert "event_type" not in rendered_prompt
@@ -131,7 +134,7 @@ class TestGeneratePrdTraceForwarding:
             await agent.generate_prd("Build something", context=None)
 
         call_ctx = mock_run.call_args.kwargs["context"]
-        assert call_ctx == {"ticket_key": "", "project_key": ""}
+        assert call_ctx == {"ticket_key": "", "project_key": "", "available_repos": []}
 
     @pytest.mark.asyncio
     async def test_project_key_defaults_to_empty(self) -> None:

@@ -13,10 +13,15 @@ Generate a Product Requirements Document using the template and guidelines below
 
 1. Read the template from `skills/default/generate-prd/prd-template.md`
 2. **Fetch attachments**: Check whether the feature ticket has any attachments (e.g. mockups, research docs, specs, diagrams). Use `mcp__atlassian__jira_download_attachments` or equivalent Jira tools to retrieve them. For each attachment, attempt to read or fetch its content and incorporate it as additional context. If an attachment cannot be read (e.g. unsupported binary format), note its filename and skip it.
-3. Analyze the raw requirements provided, combined with any content extracted from attachments
-4. Fill in all sections of the template
-5. Ensure every requirement is testable and specific
-6. Validate against the quality checklist
+3. **Explore the target repositories**: For every repository identified in the ticket or additional context, use the available GitHub, repository, or filesystem tools to inspect the repository before writing the PRD.
+   - Read repository guidance and product context when present, including `README.md`, `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, relevant files under `docs/`, and nearby code or tests that establish current user-visible behavior.
+   - Focus exploration on understanding the existing product behavior, terminology, supported workflows, integrations, and constraints relevant to the requested feature.
+   - Use repository findings to make requirements accurate and to identify genuine assumptions or open questions. Do not turn the PRD into an implementation plan or prescribe technical solutions.
+   - Do not invent repository details. If a target repository cannot be accessed, record the missing access or unresolved repository-dependent facts as assumptions or open questions in the PRD.
+4. Analyze the raw requirements together with attachment content and relevant repository findings
+5. Fill in all sections of the template
+6. Ensure every requirement is testable and specific
+7. Validate against the quality checklist
 
 ## Size Calibration
 
@@ -64,6 +69,7 @@ Before returning the PRD, verify:
 - [ ] Scope boundaries clearly defined (in/out of scope)
 - [ ] Risks have mitigation strategies
 - [ ] No technical implementation details included
+- [ ] Relevant target repositories were inspected, or unavailable access is captured as an assumption or open question
 
 ## Output Format
 

@@ -1033,7 +1033,9 @@ class ForgeAgent:
         prompt = load_prompt(
             "generate-prd",
             raw_requirements=raw_requirements,
-            context=_prompt_context_fields(context, ("project_key", "summary")),
+            context=_prompt_context_fields(
+                context, ("project_key", "summary", "available_repos")
+            ),
         )
 
         logger.info("Generating PRD using Deep Agents with skill")
@@ -1044,6 +1046,7 @@ class ForgeAgent:
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
                 "project_key": context.get("project_key", "") if context else "",
+                "available_repos": context.get("available_repos", []) if context else [],
             },
             trace_context=_forward_trace_fields(context),
         )
