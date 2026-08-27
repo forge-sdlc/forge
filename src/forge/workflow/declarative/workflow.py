@@ -12,6 +12,7 @@ from forge.workflow.declarative.catalog import get_state_profile
 from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler, WorkflowValidationError
 from forge.workflow.declarative.loader import load_workflow_value
 from forge.workflow.declarative.models import WorkflowDefinition
+from forge.workflow.preconditions import project_capabilities
 
 
 class DeclarativeWorkflow(BaseWorkflow):
@@ -59,6 +60,7 @@ class DeclarativeWorkflow(BaseWorkflow):
     def create_initial_state(self, ticket_key: str, **kwargs: Any) -> dict[str, Any]:
         state = dict(self._profile.initializer(ticket_key, **kwargs))
         state.update(self.workflow_metadata())
+        state["capabilities"] = project_capabilities(state)
         return state
 
     def workflow_metadata(self) -> dict[str, Any]:
@@ -92,18 +94,6 @@ class DeclarativeWorkflow(BaseWorkflow):
         if revision is None or digest is None:
             return "legacy_unpinned"
         return "pinned"
-
-    def pin_legacy_state(self, state: dict[str, Any]) -> dict[str, Any]:
-        """Explicitly pin a legacy checkpoint to this active definition.
-
-        This is intentionally separate from :meth:`migrate_state`: legacy
-        checkpoints have no source artifact to validate and therefore cannot be
-        migrated.  Operators may use this one-time compatibility default when
-        accepting the currently active definition for an old checkpoint.
-        """
-        if state.get("workflow_name") and state.get("workflow_name") != self.name:
-            raise WorkflowValidationError("a checkpoint cannot switch workflow identity")
-        return {**state, **self.workflow_metadata(), "workflow_pin_status": "legacy_active_default"}
 
     def validate_pinned_state(self, state: dict[str, Any]) -> None:
         """Reject a checkpoint whose durable artifact identity is inconsistent."""

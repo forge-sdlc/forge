@@ -50,9 +50,8 @@ class ImplementationOutput(DomainModel):
 
 def _current(artifact: dict[str, JsonValue]) -> bool:
     status = artifact.get("status")
-    return status is None or (
-        status == "approved"
-        and bool(artifact.get("digest"))
+    return status == "approved" and (
+        bool(artifact.get("digest"))
         and artifact.get("approved_digest") == artifact.get("digest")
     )
 

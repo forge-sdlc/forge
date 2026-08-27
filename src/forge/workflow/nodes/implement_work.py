@@ -7,10 +7,6 @@ from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox.runner import ContainerRunner
-from forge.workflow.implementation_input import (
-    NoPendingImplementationWork,
-    resolve_implementation_input,
-)
 from forge.workflow.nodes.execution_engine import (
     ExecutionArtifact,
     ExecutionPersistenceError,
@@ -24,7 +20,10 @@ from forge.workflow.nodes.git_persistence import (
     push_to_fork_with_retry,
 )
 from forge.workflow.nodes.workspace_setup import prepare_workspace
-from forge.workflow.planning_state import repository_compatibility_update
+from forge.workflow.projections.implementation_input import project_implementation_input
+from forge.workflow.reducers.implementation_input import reduce_implementation_input
+from forge.workflow.stations.implementation_input import NoPendingImplementationWork
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.references import fetch_and_inject_references
@@ -35,8 +34,7 @@ logger = logging.getLogger(__name__)
 async def implement_work(state: dict[str, Any]) -> dict[str, Any]:
     """Implement the most specific repository-scoped work that is available."""
     ticket_key = state["ticket_key"]
-    state = {**state, **repository_compatibility_update(state)}
-    current_repo = state.get("current_repository") or ""
+    current_repo = state.get("current_repository") or state.get("current_repo") or ""
     node_name = "implement_work"
     jira = JiraClient(get_settings())
     container_started = False
@@ -78,7 +76,8 @@ async def implement_work(state: dict[str, Any]) -> dict[str, Any]:
             )
 
         try:
-            resolved = await resolve_implementation_input(state, jira)
+            request = await project_implementation_input(state, jira)
+            outcome = await invoke_builtin_station(request)
         except NoPendingImplementationWork:
             return update_state_timestamp(
                 {
@@ -90,7 +89,9 @@ async def implement_work(state: dict[str, Any]) -> dict[str, Any]:
                 }
             )
 
-        work_unit = resolved.work_unit
+        assert outcome.output is not None
+        state_update = reduce_implementation_input(state, request, outcome)
+        work_unit = outcome.output.work_unit
         work_id = work_unit["id"]
         primary_id = work_unit["source_artifact_ids"][0]
         supporting = tuple(
@@ -98,18 +99,18 @@ async def implement_work(state: dict[str, Any]) -> dict[str, Any]:
                 title=str(artifact.get("kind", "artifact")).replace("_", " ").title(),
                 content=str(artifact.get("content", "")),
             )
-            for artifact in resolved.context_artifacts
+            for artifact in outcome.output.context_artifacts
             if artifact.get("id") != primary_id and artifact.get("content")
         )
         source_kind = str(work_unit.get("kind", "artifact"))
-        summary = resolved.summary or f"Implement {source_kind} work for {ticket_key}"
+        summary = outcome.output.summary or f"Implement {source_kind} work for {ticket_key}"
         request = ExecutionRequest(
             ticket_key=ticket_key,
             work_id=work_id,
             repository=current_repo,
             workspace_path=workspace_path,
             summary=summary,
-            description=resolved.instructions,
+            description=outcome.output.instructions,
             description_title=f"Selected {source_kind.replace('_', ' ').title()}",
             node_name=node_name,
             step_name=node_name,
@@ -133,7 +134,7 @@ async def implement_work(state: dict[str, Any]) -> dict[str, Any]:
         container_started = True
         try:
             execution_state = await run_and_persist_execution(
-                {**state, **resolved.state_update(state)},
+                {**state, **state_update},
                 request,
                 runner=ContainerRunner(get_settings()),
                 git=git,

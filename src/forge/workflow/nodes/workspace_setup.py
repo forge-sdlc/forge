@@ -13,7 +13,6 @@ from forge.config import get_settings
 from forge.integrations.source_control.errors import NotFoundError, ProviderConfigError
 from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.nodes.git_persistence import push_to_fork_with_retry
-from forge.workflow.planning_state import repository_compatibility_update
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import (
     post_status_comment,
@@ -251,9 +250,8 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
     Returns:
         Updated state with workspace_path set.
     """
-    state = {**state, **repository_compatibility_update(state)}
     ticket_key = state["ticket_key"]
-    current_repo = state.get("current_repository")
+    current_repo = state.get("current_repository") or state.get("current_repo")
     tasks_by_repo = state.get("tasks_by_repo", {})
     repos_to_process = list(state.get("repos_to_process", []))
 
@@ -282,11 +280,7 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         current_repo = repos[0]
         repos_to_process = repos
 
-    state = {
-        **state,
-        **repository_compatibility_update(state, current=current_repo),
-    }
-    repos_to_process = list(state.get("repos_to_process", []))
+    state = {**state, "current_repository": current_repo, "current_repo": current_repo}
 
     # Validate repository name
     if current_repo == "unknown":

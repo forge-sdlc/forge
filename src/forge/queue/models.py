@@ -24,17 +24,6 @@ from forge.integrations.source_control.contracts import (
 )
 from forge.models.events import EventSource
 
-# EventSource.SOURCE_CONTROL's value was renamed from "github" to
-# "source_control". Retry/DLQ entries and unconsumed stream messages
-# persisted before the rename still carry the old value in Redis; map it
-# forward so they keep deserializing instead of raising ValueError.
-_LEGACY_SOURCE_VALUES: dict[str, EventSource] = {"github": EventSource.SOURCE_CONTROL}
-
-
-def _parse_event_source(value: str) -> EventSource:
-    legacy = _LEGACY_SOURCE_VALUES.get(value)
-    return legacy if legacy is not None else EventSource(value)
-
 
 @dataclass
 class QueueMessage:
@@ -84,7 +73,7 @@ class QueueMessage:
         return cls(
             message_id=message_id,
             event_id=data.get("event_id", ""),
-            source=_parse_event_source(data.get("source", "jira")),
+            source=EventSource(data.get("source", "jira")),
             event_type=data.get("event_type", ""),
             ticket_key=data.get("ticket_key", ""),
             payload=json.loads(data.get("payload", "{}")),

@@ -7,14 +7,7 @@ from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, cast
 
-from forge.workflow.base import ArtifactRef, RepositoryRef, WorkUnit
-
-LEGACY_ARTIFACT_FIELDS: tuple[tuple[str, str], ...] = (
-    ("prd", "prd_content"),
-    ("spec", "spec_content"),
-    ("rca", "rca_content"),
-    ("plan", "plan_content"),
-)
+from forge.workflow.base import ArtifactRef, WorkUnit
 
 
 def content_digest(content: str) -> str:
@@ -22,15 +15,53 @@ def content_digest(content: str) -> str:
     return f"sha256:{hashlib.sha256(content.encode('utf-8')).hexdigest()}"
 
 
+def record_planning_artifact(
+    state: Mapping[str, Any], kind: str, content: str
+) -> dict[str, Any]:
+    """Persist generated planning content in the authoritative artifact lineage."""
+    normalized = content.strip()
+    digest = content_digest(normalized)
+    existing = next(
+        (item for item in planning_artifacts(state) if item.get("kind") == kind),
+        None,
+    )
+    parent = next(
+        (
+            item
+            for item in reversed(planning_artifacts(state))
+            if item.get("kind") in {"prd", "spec", "rca", "plan"}
+            and item.get("kind") != kind
+        ),
+        None,
+    )
+    artifact: ArtifactRef = {
+        "id": (
+            str(existing.get("id"))
+            if existing
+            else f"artifact:{state.get('ticket_key') or state.get('thread_id') or 'unknown'}:{kind}"
+        ),
+        "kind": kind,
+        "source": "station",
+        "content": normalized,
+        "digest": digest,
+        "approved_digest": digest,
+        "status": "approved",
+        "revision": int(existing.get("revision") or 0) + 1 if existing else 1,
+        "repository": existing.get("repository") if existing else None,
+        "input_artifact_ids": [parent["id"]] if parent and parent.get("id") else [],
+        "parent_artifact_id": parent.get("id") if parent else None,
+        "child_artifact_ids": list(existing.get("child_artifact_ids") or []) if existing else [],
+        "provenance": {"station": "artifact-generation", "schema_version": "1.0"},
+    }
+    return apply_artifact_update(state, artifact)
+
+
 def artifact_is_current(artifact: Mapping[str, Any]) -> bool:
     """Return whether an artifact may participate in work resolution.
 
-    Status-less artifacts are accepted for checkpoints created before lifecycle
-    metadata existed. Explicit lifecycle state is authoritative.
+    Lifecycle state and the digest-bound approval are both required.
     """
     status = artifact.get("status")
-    if status is None:
-        return True
     if status != "approved":
         return False
     digest = artifact.get("digest")
@@ -38,95 +69,9 @@ def artifact_is_current(artifact: Mapping[str, Any]) -> bool:
     return bool(digest and approved_digest == digest)
 
 
-def legacy_artifacts(state: Mapping[str, Any]) -> list[ArtifactRef]:
-    """Adapt legacy planning content fields into an ordered artifact lineage."""
-    ticket_key = str(state.get("ticket_key") or "unknown")
-    artifacts: list[ArtifactRef] = []
-    previous_id: str | None = None
-    for kind, field in LEGACY_ARTIFACT_FIELDS:
-        content = state.get(field)
-        if not isinstance(content, str) or not content.strip():
-            continue
-        normalized = content.strip()
-        digest = content_digest(normalized)
-        artifact_id = f"legacy:{ticket_key}:{kind}:{digest[7:19]}"
-        artifact: ArtifactRef = {
-            "id": artifact_id,
-            "kind": kind,
-            "source": field,
-            "content": normalized,
-            "digest": digest,
-            "approved_digest": digest,
-            "status": "approved",
-            "revision": 1,
-            "repository": None,
-            "input_artifact_ids": [previous_id] if previous_id else [],
-            "parent_artifact_id": previous_id,
-            "child_artifact_ids": [],
-            "provenance": {"adapter": "legacy_state", "field": field},
-        }
-        if artifacts:
-            artifacts[-1].setdefault("child_artifact_ids", []).append(artifact_id)
-        artifacts.append(artifact)
-        previous_id = artifact_id
-    return artifacts
-
-
 def planning_artifacts(state: Mapping[str, Any]) -> list[ArtifactRef]:
-    """Return normalized artifacts plus non-duplicated legacy compatibility input."""
-    normalized = [cast(ArtifactRef, dict(item)) for item in state.get("artifacts") or []]
-    normalized_kinds = {
-        str(item.get("kind"))
-        for item in normalized
-        if item.get("kind") in {"prd", "spec", "rca", "plan"}
-    }
-    compatible = [
-        item for item in legacy_artifacts(state) if item.get("kind") not in normalized_kinds
-    ]
-    return [*normalized, *compatible]
-
-
-def repository_compatibility_update(
-    state: Mapping[str, Any], *, current: str | None = None
-) -> dict[str, Any]:
-    """Synchronize normalized repository state with legacy traversal fields."""
-    repository_items = [cast(RepositoryRef, dict(item)) for item in state.get("repositories") or []]
-    names = [
-        str(item["name"])
-        for item in repository_items
-        if isinstance(item.get("name"), str) and item.get("name")
-    ]
-    legacy_names = [
-        *list(state.get("repos_to_process") or []),
-        *list((state.get("tasks_by_repo") or {}).keys()),
-    ]
-    selected = current or state.get("current_repository") or state.get("current_repo")
-    if isinstance(selected, str) and selected:
-        legacy_names.insert(0, selected)
-    for name in legacy_names:
-        if isinstance(name, str) and name and name not in names:
-            names.append(name)
-
-    completed = set(state.get("repos_completed") or [])
-    by_name = {item.get("name"): item for item in repository_items}
-    repositories: list[RepositoryRef] = []
-    for name in names:
-        existing = by_name.get(name)
-        repositories.append(
-            existing
-            or {
-                "name": name,
-                "source": "legacy_state",
-                "status": "completed" if name in completed else "pending",
-                "work_unit_ids": [],
-            }
-        )
-    return {
-        "repositories": repositories,
-        "current_repository": selected,
-        "current_repo": selected,
-        "repos_to_process": names,
-    }
+    """Return the authoritative normalized artifact lineage."""
+    return [cast(ArtifactRef, dict(item)) for item in state.get("artifacts") or []]
 
 
 def upsert_artifact(

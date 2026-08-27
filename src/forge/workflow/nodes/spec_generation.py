@@ -22,6 +22,7 @@ from forge.workflow.nodes.proposal_pr import (
     create_proposal_pr,
     update_proposal_pr,
 )
+from forge.workflow.planning_state import record_planning_artifact
 from forge.workflow.projections.artifact_generation import project_artifact_generation
 from forge.workflow.stations.artifact_generation import (
     ArtifactKind,
@@ -202,6 +203,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         result = update_state_timestamp(
             {
                 **state,
+                **record_planning_artifact(state, "spec", spec_content),
                 "spec_content": spec_content,
                 "generation_context": generation_context,
                 "current_node": "spec_approval_gate",
@@ -343,6 +345,7 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         return update_state_timestamp(
             {
                 **state,
+                **record_planning_artifact(state, "spec", new_spec),
                 "spec_content": new_spec,
                 "feedback_comment": None,
                 "revision_requested": False,

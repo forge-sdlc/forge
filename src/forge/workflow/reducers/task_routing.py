@@ -1,4 +1,4 @@
-"""Allowlisted legacy checkpoint reducer for task routing."""
+"""Allowlisted checkpoint reducer for typed task routing."""
 
 from __future__ import annotations
 
@@ -33,6 +33,16 @@ def reduce_task_routing(
         raise ValueError(f"Task-routing station did not succeed: {outcome.status}")
     return {
         "station_history": append_station_attempt(state, request, outcome),
+        "repositories": [
+            {
+                "name": name,
+                "source": "task_routing",
+                "status": "pending",
+                "work_unit_ids": list(request.input.tasks_by_repository.get(name, ())),
+            }
+            for name in outcome.output.repositories
+        ],
+        "current_repository": outcome.output.first_repository,
         "repos_to_process": list(outcome.output.repositories),
         "current_repo": outcome.output.first_repository,
         "repos_completed": [],

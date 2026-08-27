@@ -1,4 +1,4 @@
-"""Task Takeover workflow implementation."""
+"""Locally runnable task-takeover workflow adapter and state contract."""
 
 from typing import Any, cast
 
@@ -13,7 +13,7 @@ from forge.workflow.task_takeover.state import (
 
 
 class TaskTakeoverWorkflow(BaseWorkflow):
-    """Workflow for Task Takeover tickets."""
+    """Local harness adapter; runtime uses the governed definition."""
 
     name = "task_takeover"
     description = "Task Takeover workflow"
@@ -23,17 +23,14 @@ class TaskTakeoverWorkflow(BaseWorkflow):
         return TaskTakeoverState
 
     def matches(self, ticket_type: TicketType, labels: list[str], _event: dict[str, Any]) -> bool:
-        """Return True for standalone managed Task/Epic tickets."""
         return ticket_type in (TicketType.TASK, TicketType.EPIC) and "forge:managed" in labels
 
     def build_graph(self) -> StateGraph[Any]:
-        """Construct the LangGraph StateGraph for Task Takeover."""
         from forge.workflow.task_takeover.graph import build_task_takeover_graph
 
         return build_task_takeover_graph()
 
     def create_initial_state(self, ticket_key: str, **kwargs: Any) -> dict[str, Any]:
-        """Create initial state for a new Task Takeover workflow run."""
         return cast(dict[str, Any], create_initial_task_takeover_state(ticket_key, **kwargs))
 
 

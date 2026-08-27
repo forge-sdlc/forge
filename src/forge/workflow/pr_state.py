@@ -67,11 +67,6 @@ def _lookup_record(
     """Find a PR record for ``repo``, preferring the per-PR numbered key and
     falling back to a URL-keyed record for a PR saved before its number was known.
 
-    Also falls back to the legacy bare-``repo`` key from before per-PR keying
-    was introduced, so a workflow checkpointed mid-CI/mid-review at deploy
-    time doesn't get stranded — its record still lives under ``repo`` alone
-    until the next ``save_active_pull_request`` migrates it to a per-PR key.
-
     Returns ``(key, record)`` or ``(None, None)`` when no record matches.
     """
     if number is not None:
@@ -82,9 +77,6 @@ def _lookup_record(
         record = pull_requests.get(_url_key(repo, url))
         if isinstance(record, dict):
             return _url_key(repo, url), record
-    record = pull_requests.get(repo)
-    if isinstance(record, dict):
-        return repo, record
     return None, None
 
 

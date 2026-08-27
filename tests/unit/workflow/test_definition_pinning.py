@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.orchestrator.worker import OrchestratorWorker
+from forge.workflow.checkpoint_migration import migrate_unpinned_checkpoint
 from forge.workflow.declarative.builtins import builtin_feature_definition
 from forge.workflow.declarative.loader import load_workflow_value
 from forge.workflow.declarative.models import WorkflowMetadata
@@ -77,11 +78,19 @@ def test_pinned_state_rejects_digest_mismatch() -> None:
         workflow.validate_pinned_state(state)
 
 
-def test_legacy_state_requires_explicit_compatibility_default() -> None:
+def test_legacy_state_requires_explicit_checkpoint_migration() -> None:
     workflow = DeclarativeWorkflow(load_workflow_value(definition()), "PROJ")
     legacy = {"workflow_name": "pinned", "current_node": "generate_prd"}
 
     assert workflow.pin_status(legacy) == "legacy_unpinned"
-    pinned = workflow.pin_legacy_state(legacy)
-    assert pinned["workflow_pin_status"] == "legacy_active_default"
+    dry_run = migrate_unpinned_checkpoint(legacy, workflow.definition, apply=False)
+    assert dry_run.compatible
+    assert not dry_run.applied
+    assert dry_run.migrated_state is None
+
+    pinned = migrate_unpinned_checkpoint(
+        legacy, workflow.definition, apply=True
+    ).migrated_state
+    assert pinned is not None
+    assert pinned["workflow_pin_status"] == "phase8_migrated"
     assert pinned["workflow_digest"] == workflow.definition.digest

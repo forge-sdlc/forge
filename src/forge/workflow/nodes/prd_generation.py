@@ -17,6 +17,7 @@ from forge.workflow.nodes.proposal_pr import (
     create_proposal_pr,
     update_proposal_pr,
 )
+from forge.workflow.planning_state import record_planning_artifact
 from forge.workflow.projections.artifact_generation import project_artifact_generation
 from forge.workflow.stations.artifact_generation import (
     ArtifactKind,
@@ -225,6 +226,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
         result = update_state_timestamp(
             {
                 **state,
+                **record_planning_artifact(state, "prd", prd_content),
                 "prd_content": prd_content,
                 "generation_context": generation_context,
                 "current_node": "prd_approval_gate",
@@ -352,6 +354,7 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
         return update_state_timestamp(
             {
                 **state,
+                **record_planning_artifact(state, "prd", new_prd),
                 "prd_content": new_prd,
                 "feedback_comment": None,
                 "revision_requested": False,

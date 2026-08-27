@@ -16,7 +16,7 @@ from forge.workflow.declarative.capabilities import (
 )
 from forge.workflow.declarative.catalog import get_state_profile
 from forge.workflow.declarative.models import MAX_TRANSITIONS, WorkflowDefinition
-from forge.workflow.preconditions import NodeContract, with_preconditions
+from forge.workflow.preconditions import NodeContract, project_capabilities, with_preconditions
 
 
 class WorkflowValidationError(ValueError):
@@ -356,6 +356,7 @@ class DeclarativeWorkflowCompiler:
             history = list(state.get("transition_history") or [])
             return {
                 **result,
+                "capabilities": project_capabilities(result),
                 "workflow_transition_count": transitions,
                 "workflow_node_attempts": attempts,
                 "transition_history": [*history, transition],

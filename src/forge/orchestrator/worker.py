@@ -75,6 +75,7 @@ from forge.reconciliation import (
 from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
+from forge.workflow.declarative.compiler import WorkflowValidationError
 from forge.workflow.declarative.resolver import (
     load_project_workflow,
     selected_workflow_name,
@@ -640,11 +641,9 @@ class OrchestratorWorker:
                     if status == "pinned":
                         workflow_instance.validate_pinned_state(values)
                     elif status == "legacy_unpinned":
-                        # Compatibility for checkpoints predating definition
-                        # pinning is explicit and auditable in the state.
-                        pinned = workflow_instance.pin_legacy_state(values)
-                        await compiled_workflow.aupdate_state(config, pinned)
-                        existing_state = await compiled_workflow.aget_state(config)
+                        raise WorkflowValidationError(
+                            "checkpoint requires the explicit Phase 8 definition-pinning migration"
+                        )
                 except Exception as exc:
                     await self._report_custom_workflow_configuration_error(ticket_key, str(exc))
                     return
@@ -2396,7 +2395,9 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
                 workflow_instance.validate_pinned_state(checkpoint_values)
                 initial_state = dict(checkpoint_values)
             elif status == "legacy_unpinned":
-                initial_state = workflow_instance.pin_legacy_state(checkpoint_values)
+                raise WorkflowValidationError(
+                    "checkpoint requires the explicit Phase 8 definition-pinning migration"
+                )
 
     # Use ticket_key as thread_id for checkpointing
     config: dict[str, Any] = checkpoint_config

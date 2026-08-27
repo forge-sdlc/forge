@@ -3,9 +3,7 @@
 from forge.workflow.planning_state import (
     apply_artifact_update,
     artifact_is_current,
-    legacy_artifacts,
     planning_artifacts,
-    repository_compatibility_update,
 )
 
 
@@ -33,23 +31,7 @@ def test_approval_is_bound_to_the_current_digest() -> None:
 
     assert artifact_is_current(approved) is True
     assert artifact_is_current(changed) is False
-    assert artifact_is_current({"id": "legacy", "kind": "spec"}) is True
-
-
-def test_legacy_fields_are_adapted_into_digest_bound_lineage() -> None:
-    artifacts = legacy_artifacts(
-        {
-            "ticket_key": "FEAT-1",
-            "prd_content": "requirements",
-            "spec_content": "design",
-            "plan_content": "steps",
-        }
-    )
-
-    assert [item["kind"] for item in artifacts] == ["prd", "spec", "plan"]
-    assert artifacts[1]["parent_artifact_id"] == artifacts[0]["id"]
-    assert artifacts[2]["input_artifact_ids"] == [artifacts[1]["id"]]
-    assert artifacts[0]["approved_digest"] == artifacts[0]["digest"]
+    assert artifact_is_current({"id": "unversioned", "kind": "spec"}) is False
 
 
 def test_normalized_kind_prevents_duplicate_legacy_artifact() -> None:
@@ -107,28 +89,3 @@ def test_parent_revision_stales_all_descendants_and_pending_work() -> None:
     }
     assert update["work_units"][0]["status"] == "stale"
     assert update["work_units"][1]["status"] == "completed"
-
-
-def test_repository_compatibility_preserves_order_and_metadata() -> None:
-    update = repository_compatibility_update(
-        {
-            "current_repo": "acme/api",
-            "repos_to_process": ["acme/web"],
-            "tasks_by_repo": {"acme/worker": ["TASK-1"]},
-            "repos_completed": ["acme/web"],
-            "repositories": [
-                {
-                    "name": "acme/api",
-                    "source": "task_label",
-                    "status": "active",
-                    "work_unit_ids": ["TASK-2"],
-                }
-            ],
-        }
-    )
-
-    assert update["current_repository"] == "acme/api"
-    assert update["current_repo"] == "acme/api"
-    assert update["repos_to_process"] == ["acme/api", "acme/web", "acme/worker"]
-    assert update["repositories"][0]["source"] == "task_label"
-    assert update["repositories"][1]["status"] == "completed"

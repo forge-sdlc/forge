@@ -61,6 +61,8 @@ def test_reducer_owns_legacy_topology_mapping() -> None:
         "station_history",
         "repos_to_process",
         "current_repo",
+        "current_repository",
+        "repositories",
         "repos_completed",
         "implemented_tasks",
         "current_node",
