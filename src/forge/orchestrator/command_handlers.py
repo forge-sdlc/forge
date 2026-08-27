@@ -133,7 +133,7 @@ def _apply_select_option(
     options = list(state.get("rca_options", []))
     if not isinstance(option, int) or not 1 <= option <= len(options):
         return CommandApplication(
-            state=dict(state),
+            state=state if isinstance(state, dict) else dict(state),
             feedback=FeedbackRequest(
                 FeedbackKind.OPTION_RANGE, {"maximum": len(options)}
             ),
