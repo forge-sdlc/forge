@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "paths": [
+    {
+      "id": "source-specific-worker-handlers",
+      "status": "removed",
+      "evidence_paths": ["src/forge/orchestrator/worker.py"],
+      "forbidden_symbols": ["_handle_jira_event", "_handle_source_control_event"],
+      "replacement": "EventAdapterRegistry and OrchestratorWorker._handle_event"
+    },
+    {
+      "id": "worker-event-to-node-interpretation",
+      "status": "active",
+      "evidence_paths": ["src/forge/orchestrator/worker.py"],
+      "replacement": "Authoritative Phase 2 command handlers and durable decisions"
+    },
+    {
+      "id": "inline-provider-writes",
+      "status": "active",
+      "evidence_paths": ["src/forge/workflow/nodes", "src/forge/workflow/gates"],
+      "replacement": "Phase 3 EffectCommand journal and executors"
+    },
+    {
+      "id": "broad-checkpoint-node-access",
+      "status": "active",
+      "evidence_paths": ["src/forge/workflow/nodes"],
+      "replacement": "Phase 4 station projections and allowlisted reducers"
+    },
+    {
+      "id": "python-only-golden-path-topology",
+      "status": "active",
+      "evidence_paths": ["src/forge/workflow/feature/graph.py", "src/forge/workflow/bug/graph.py", "src/forge/workflow/task_takeover/graph.py"],
+      "replacement": "Governed Phase 5 process definitions"
+    },
+    {
+      "id": "legacy-planning-state-adapters",
+      "status": "active",
+      "evidence_paths": ["src/forge/workflow/planning_state.py", "src/forge/workflow/implementation_input.py"],
+      "replacement": "Contract-backed planning and implementation stations"
+    },
+    {
+      "id": "legacy-checkpoint-fallbacks",
+      "status": "active",
+      "evidence_paths": ["src/forge/workflow/pr_state.py", "src/forge/workflow/preconditions.py"],
+      "replacement": "Versioned checkpoint migration with a documented rollback window"
+    }
+  ]
+}

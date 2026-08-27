@@ -428,22 +428,6 @@ class OrchestratorWorker:
         )
         logger.info(f"Posted terminal queue failure notification to {message.ticket_key}")
 
-    async def _handle_jira_event(self, message: QueueMessage) -> None:
-        """Handle a Jira webhook event.
-
-        Args:
-            message: The queue message to process.
-        """
-        await self._handle_event(message)
-
-    async def _handle_source_control_event(self, message: QueueMessage) -> None:
-        """Handle a source-control webhook event.
-
-        Args:
-            message: The queue message to process.
-        """
-        await self._handle_event(message)
-
     async def _handle_event(self, message: QueueMessage) -> None:
         """Handle any registered ingress source through its adapter."""
         adapted = self._event_adapter_registry().adapt(message)
