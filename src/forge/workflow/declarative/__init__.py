@@ -3,11 +3,16 @@
 from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler
 from forge.workflow.declarative.loader import load_workflow_file, load_workflow_value
 from forge.workflow.declarative.manifest import (
+    ProcessChangeClassification,
     ProcessChangeImpact,
+    ProcessInstanceSnapshot,
     ProcessManifest,
+    ProcessMigrationClassification,
+    ProcessMigrationSimulation,
     build_process_manifest,
     compare_process_definitions,
     render_mermaid,
+    simulate_process_migration,
 )
 from forge.workflow.declarative.models import WorkflowDefinition
 from forge.workflow.declarative.publication import (
@@ -20,14 +25,19 @@ from forge.workflow.declarative.workflow import DeclarativeWorkflow
 __all__ = [
     "DeclarativeWorkflow",
     "DeclarativeWorkflowCompiler",
+    "ProcessChangeClassification",
     "ProcessChangeImpact",
+    "ProcessInstanceSnapshot",
     "ProcessManifest",
+    "ProcessMigrationClassification",
+    "ProcessMigrationSimulation",
     "WorkflowDefinition",
     "load_workflow_file",
     "load_workflow_value",
     "build_process_manifest",
     "compare_process_definitions",
     "render_mermaid",
+    "simulate_process_migration",
     "DefinitionPublisher",
     "InMemoryDefinitionPublisher",
     "PublicationDecision",

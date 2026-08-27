@@ -1713,6 +1713,14 @@ def main(argv: list[str] | None = None) -> int:
     workflow_diff.add_argument("previous")
     workflow_diff.add_argument("current")
 
+    workflow_simulate = workflow_subparsers.add_parser(
+        "simulate-migration",
+        help="Dry-run a definition change against active instance snapshots",
+    )
+    workflow_simulate.add_argument("previous")
+    workflow_simulate.add_argument("current")
+    workflow_simulate.add_argument("instances", help="JSON array of active checkpoint snapshots")
+
     workflow_publish = workflow_subparsers.add_parser("publish", help="Publish a YAML workflow")
     workflow_publish.add_argument("project_key")
     workflow_publish.add_argument("file")

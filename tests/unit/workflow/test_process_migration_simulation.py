@@ -1,3 +1,10 @@
+import json
+from argparse import Namespace
+
+import pytest
+import yaml
+
+from forge.workflow.declarative.cli import cmd_workflow
 from forge.workflow.declarative.loader import load_workflow_value
 from forge.workflow.declarative.manifest import (
     ProcessMigrationClassification,
@@ -107,3 +114,39 @@ def test_simulation_detects_same_revision_digest_mutation():
     )
 
     assert report.instances[0].reason_code == "same_revision_digest_mutation"
+
+
+@pytest.mark.asyncio
+async def test_cli_simulation_returns_nonzero_for_blocked_instances(tmp_path, capsys):
+    previous = definition(revision=1, steps={"old": {"next": "__end__"}})
+    current = definition(revision=2, steps={"new": {"next": "__end__"}})
+    previous_path = tmp_path / "previous.yaml"
+    current_path = tmp_path / "current.yaml"
+    instances_path = tmp_path / "instances.json"
+    previous_path.write_text(yaml.safe_dump(previous.canonical_dict()), encoding="utf-8")
+    current_path.write_text(yaml.safe_dump(current.canonical_dict()), encoding="utf-8")
+    instances_path.write_text(
+        json.dumps(
+            [
+                {
+                    "run_id": "blocked",
+                    "current_node": "old",
+                    "workflow_revision": 1,
+                    "workflow_digest": previous.digest,
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = await cmd_workflow(
+        Namespace(
+            workflow_command="simulate-migration",
+            previous=str(previous_path),
+            current=str(current_path),
+            instances=str(instances_path),
+        )
+    )
+
+    assert result == 2
+    assert '"blocked": 1' in capsys.readouterr().out

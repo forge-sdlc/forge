@@ -14,6 +14,7 @@ from forge.workflow.declarative.manifest import (
     build_process_manifest,
     compare_process_definitions,
     render_mermaid,
+    simulate_process_migration,
 )
 from forge.workflow.declarative.publication import DefinitionPublisher
 
@@ -60,6 +61,20 @@ async def cmd_workflow(args: Any) -> int:
             return _print_error(exc)
         print(impact.model_dump_json(indent=2))
         return 0 if impact.compatible_for_in_flight else 2
+
+    if action == "simulate-migration":
+        try:
+            previous = load_workflow_file(args.previous)
+            current = load_workflow_file(args.current)
+            with open(args.instances, encoding="utf-8") as source:
+                instances = json.load(source)
+            if not isinstance(instances, list):
+                raise ValueError("active instance snapshot must be a JSON array")
+            simulation = simulate_process_migration(previous, current, instances)
+        except Exception as exc:
+            return _print_error(exc)
+        print(simulation.model_dump_json(indent=2))
+        return 0 if simulation.compatible else 2
 
     try:
         project_key = args.project_key.upper()
