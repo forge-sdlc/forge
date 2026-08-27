@@ -10,6 +10,11 @@ from forge.workflow.declarative.manifest import (
     render_mermaid,
 )
 from forge.workflow.declarative.models import WorkflowDefinition
+from forge.workflow.declarative.publication import (
+    DefinitionPublisher,
+    InMemoryDefinitionPublisher,
+    PublicationDecision,
+)
 from forge.workflow.declarative.workflow import DeclarativeWorkflow
 
 __all__ = [
@@ -23,4 +28,7 @@ __all__ = [
     "build_process_manifest",
     "compare_process_definitions",
     "render_mermaid",
+    "DefinitionPublisher",
+    "InMemoryDefinitionPublisher",
+    "PublicationDecision",
 ]

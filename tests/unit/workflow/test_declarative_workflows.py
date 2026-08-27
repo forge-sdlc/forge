@@ -20,6 +20,7 @@ from forge.workflow.declarative.manifest import (
     render_mermaid,
 )
 from forge.workflow.declarative.models import WORKFLOW_PROPERTY_PREFIX
+from forge.workflow.declarative.publication import InMemoryDefinitionPublisher
 from forge.workflow.declarative.resolver import (
     load_project_workflow,
     selected_workflow_name,
@@ -54,6 +55,25 @@ def test_loads_strict_definition_and_computes_stable_digest() -> None:
 
     assert first.digest == second.digest
     assert first.property_key == f"{WORKFLOW_PROPERTY_PREFIX}short-feature"
+
+
+@pytest.mark.asyncio
+async def test_publication_is_immutable_and_activation_is_explicit() -> None:
+    publisher = InMemoryDefinitionPublisher()
+    first = load_workflow_value(definition_value())
+
+    published = await publisher.publish(first, actor="platform", activate=False)
+    assert published.activated is False
+    assert await publisher.active(first.metadata.name) is None
+
+    activated = await publisher.publish(first, actor="platform", activate=True)
+    assert activated.activated is True
+    assert (await publisher.active(first.metadata.name)).digest == first.digest
+
+    changed = definition_value()
+    changed["metadata"]["description"] = "changed without a revision"
+    with pytest.raises(ValueError, match="immutable"):
+        await publisher.publish(load_workflow_value(changed), actor="platform")
 
 
 def test_rejects_unknown_fields() -> None:

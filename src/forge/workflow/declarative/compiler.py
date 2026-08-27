@@ -52,6 +52,20 @@ class DeclarativeWorkflowCompiler:
                     )
                 else:
                     adjacency[node_name].add(target)
+            missing_policies = set(self.definition.spec.mandatory_policies) - set(
+                step.required_policies
+            )
+            if missing_policies:
+                raise WorkflowValidationError(
+                    f"step '{node_name}' omits mandatory policy '{sorted(missing_policies)[0]}'"
+                )
+            if step.kind == "station":
+                binding = self.profile.station_bindings.get(node_name)
+                declared = (step.station_contract, step.station_contract_version)
+                if binding != declared:
+                    raise WorkflowValidationError(
+                        f"station contract for '{node_name}' is not registered: {declared}"
+                    )
 
         if not has_terminal:
             raise WorkflowValidationError("at least one path must target '__end__'")
@@ -130,6 +144,9 @@ class DeclarativeWorkflowCompiler:
                 continue
 
             assert step.route is not None
+            if step.dynamic_route:
+                graph.add_conditional_edges(node_name, self.profile.routers[step.route])
+                continue
             branches: dict[Any, str] = {
                 outcome: END if target == "__end__" else target
                 for outcome, target in step.branches.items()

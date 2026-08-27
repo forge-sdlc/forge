@@ -40,6 +40,14 @@ class WorkflowStep(StrictModel):
     next: str | None = None
     route: str | None = None
     branches: dict[str, str] = Field(default_factory=dict)
+    dynamic_route: bool = Field(default=False, alias="dynamicRoute")
+    kind: Literal["station", "gate", "operation"] | None = None
+    station_contract: str | None = Field(default=None, alias="stationContract")
+    station_contract_version: str | None = Field(default=None, alias="stationContractVersion")
+    required_policies: tuple[str, ...] = Field(default=(), alias="requiredPolicies")
+    allowed_effects: tuple[str, ...] = Field(default=(), alias="allowedEffects")
+    join: Literal["all", "any"] | None = None
+    max_concurrency: int | None = Field(default=None, alias="maxConcurrency", ge=1, le=64)
 
     @model_validator(mode="after")
     def validate_transition(self) -> WorkflowStep:
@@ -47,10 +55,20 @@ class WorkflowStep(StrictModel):
             raise ValueError("exactly one of 'next' or 'route' is required")
         if self.next and self.branches:
             raise ValueError("branches are only valid with 'route'")
-        if self.route and not self.branches:
+        if self.route and not self.branches and not self.dynamic_route:
             raise ValueError("a routed step requires non-empty branches")
+        if self.dynamic_route and (not self.route or self.branches):
+            raise ValueError("dynamicRoute requires a route and cannot declare static branches")
         if len(self.branches) > MAX_BRANCHES:
             raise ValueError(f"a routed step may have at most {MAX_BRANCHES} branches")
+        if self.kind == "station" and not (self.station_contract and self.station_contract_version):
+            raise ValueError("station steps require stationContract and stationContractVersion")
+        if self.kind not in {None, "station"} and (
+            self.station_contract or self.station_contract_version
+        ):
+            raise ValueError("station contract fields are only valid for station steps")
+        if self.max_concurrency is not None and not self.dynamic_route:
+            raise ValueError("maxConcurrency is only valid for dynamic routing")
         return self
 
 
@@ -66,6 +84,8 @@ class WorkflowSpec(StrictModel):
     entry: str
     steps: dict[str, WorkflowStep]
     resume: WorkflowResume = Field(default_factory=WorkflowResume)
+    mandatory_policies: tuple[str, ...] = Field(default=(), alias="mandatoryPolicies")
+    extension_points: tuple[str, ...] = Field(default=(), alias="extensionPoints")
 
     @field_validator("entry")
     @classmethod

@@ -28,6 +28,10 @@ class ProcessNode(DomainModel):
     kind: ProcessNodeKind
     station_contract: str | None = None
     station_contract_version: str | None = None
+    required_policies: tuple[str, ...] = ()
+    allowed_effects: tuple[str, ...] = ()
+    join: str | None = None
+    max_concurrency: int | None = None
 
 
 class ProcessManifest(DomainModel):
@@ -63,7 +67,9 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
     for name, step in definition.spec.steps.items():
         binding = profile.station_bindings.get(name)
         kind = (
-            ProcessNodeKind.GATE
+            ProcessNodeKind(step.kind)
+            if step.kind
+            else ProcessNodeKind.GATE
             if name in profile.pause_nodes
             else ProcessNodeKind.STATION
             if binding
@@ -75,11 +81,15 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
                 kind=kind,
                 station_contract=binding[0] if binding else None,
                 station_contract_version=binding[1] if binding else None,
+                required_policies=step.required_policies,
+                allowed_effects=step.allowed_effects,
+                join=step.join,
+                max_concurrency=step.max_concurrency,
             )
         )
         if step.next:
             transitions.append(ProcessTransition(source=name, target=step.next))
-        else:
+        elif not step.dynamic_route:
             transitions.extend(
                 ProcessTransition(source=name, target=target, outcome=outcome)
                 for outcome, target in step.branches.items()
