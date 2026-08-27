@@ -1,6 +1,6 @@
 # Phase 1 implementation plan: versioned domain contracts
 
-**Status:** Proposed
+**Status:** Implemented in PR 324
 
 **Depends on:** Phase 0 baseline and the stacked integration of `dev`, PR 317, and
 PR 318
@@ -167,19 +167,28 @@ outcomes in tests; do not dual-execute external effects.
 **Why it matters:** the phase ends with an independently testable station and measurable
 coupling reduction, not only unused model classes.
 
-## PR sequence
+## Delivery
 
-Keep Phase 1 reviewable as four stacked PRs on top of PR 318 (or its eventual merged
-successor):
+Phase 1 was delivered as one isolated PR stacked on PR 318, with the internal stages kept
+as reviewable commits and package boundaries:
 
 1. **Contract kernel and architecture rule** — Stage 1.1.
 2. **Observation adapter** — Stage 1.2.
-3. **Projection/reducer framework** — Stage 1.3.
-4. **Implementation-input station and conformance runner** — Stages 1.4 and 1.5.
+3. **Projection/reducer framework and implementation-input station** — Stages 1.3–1.4.
+4. **Conformance runner, characterization, and measurements** — Stage 1.5.
 
-Each PR must pass the full current gate. Contract additions must not require checkpoint
-migration, and the final PR must run feature, bug, and task-takeover characterization
-tests.
+The PR requires no checkpoint migration and runs feature, bug, and task-takeover
+characterization tests.
+
+### Resulting coupling measures
+
+- The compatibility facade decreased from 253 lines to 86 lines.
+- The station receives nine explicitly scoped input groups and writes no checkpoint state.
+- The reducer owns exactly four checkpoint fields: `artifacts`, `work_units`,
+  `current_work_unit_id`, and `work_resolution`.
+- The station imports no Jira/GitHub provider, LangGraph type, `BaseState`, worker, or queue.
+- The same serialized request runs through the local runner without Redis, LangGraph, Jira,
+  or source-control clients.
 
 ## Implications
 
