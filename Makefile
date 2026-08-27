@@ -1,4 +1,4 @@
-.PHONY: test test-unit test-workflow test-contract test-flow test-integration test-e2e test-pr coverage lint
+.PHONY: test test-unit test-workflow test-contract test-flow test-integration test-e2e test-pr coverage lint architecture-report
 
 PYTEST := uv run pytest
 
@@ -31,3 +31,6 @@ coverage:
 lint:
 	uv run ruff check src
 	uv run ruff format --check src
+
+architecture-report:
+	uv run python devtools/workflow_dependency_report.py

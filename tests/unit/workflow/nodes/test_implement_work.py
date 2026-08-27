@@ -46,8 +46,9 @@ async def test_implements_resolved_task_and_marks_normalized_work_complete() -> 
 
     with (
         patch("forge.workflow.nodes.implement_work.JiraClient", return_value=jira),
-        patch(
-            "forge.workflow.nodes.implement_work.prepare_workspace", return_value=("/tmp/ws", git)
+            patch(
+                "forge.workflow.nodes.implement_work.prepare_workspace",
+                AsyncMock(return_value=("/tmp/ws", git)),
         ),
         patch(
             "forge.workflow.nodes.implement_work.resolve_implementation_input",
@@ -80,9 +81,9 @@ async def test_no_pending_work_routes_to_local_review() -> None:
     jira.close = AsyncMock()
     with (
         patch("forge.workflow.nodes.implement_work.JiraClient", return_value=jira),
-        patch(
-            "forge.workflow.nodes.implement_work.prepare_workspace",
-            return_value=("/tmp/ws", MagicMock()),
+            patch(
+                "forge.workflow.nodes.implement_work.prepare_workspace",
+                AsyncMock(return_value=("/tmp/ws", MagicMock())),
         ),
         patch(
             "forge.workflow.nodes.implement_work.resolve_implementation_input",

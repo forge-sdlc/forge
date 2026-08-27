@@ -41,7 +41,7 @@ async def implement_work(state: dict[str, Any]) -> dict[str, Any]:
     container_started = False
 
     try:
-        workspace_path, git = prepare_workspace(state)
+        workspace_path, git = await prepare_workspace(state)
         state = {**state, "workspace_path": workspace_path}
 
         if state.get("implementation_push_pending"):
