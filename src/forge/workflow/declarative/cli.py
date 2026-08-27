@@ -106,14 +106,16 @@ async def cmd_workflow(args: Any) -> int:
             return 0
 
         if action == "show":
-            definition = await publisher.active(args.name)
-            if definition is None:
+            active_definition = await publisher.active(args.name)
+            if active_definition is None:
                 raise ValueError(f"workflow '{args.name}' is not defined for {project_key}")
-            DeclarativeWorkflowCompiler(definition).validate()
+            DeclarativeWorkflowCompiler(active_definition).validate()
             if getattr(args, "json", False):
-                print(json.dumps(definition.canonical_dict(), indent=2))
+                print(json.dumps(active_definition.canonical_dict(), indent=2))
             else:
-                print(yaml.safe_dump(definition.canonical_dict(), sort_keys=False).rstrip())
+                print(
+                    yaml.safe_dump(active_definition.canonical_dict(), sort_keys=False).rstrip()
+                )
             return 0
 
         if action == "list":

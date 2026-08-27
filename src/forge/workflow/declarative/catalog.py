@@ -242,8 +242,10 @@ def get_state_profile(name: str) -> StateProfile:
             _route_after_plan_bug_fix,
             _route_after_reflect_rca,
             _route_after_regenerate_plan,
-            _route_after_workspace_setup,
             _route_human_review_bug,
+        )
+        from forge.workflow.bug.graph import (
+            _route_after_workspace_setup as route_after_bug_workspace_setup,
         )
         from forge.workflow.bug.state import BugState, create_initial_bug_state
         from forge.workflow.nodes import (
@@ -296,7 +298,7 @@ def get_state_profile(name: str) -> StateProfile:
             "route_after_pr_creation": route_after_pr_creation,
             "route_after_reflect_rca": _route_after_reflect_rca,
             "route_after_regenerate_plan": _route_after_regenerate_plan,
-            "route_after_workspace_setup": _route_after_workspace_setup,
+            "route_after_workspace_setup": route_after_bug_workspace_setup,
             "route_plan_approval": route_bug_plan_approval,
             "route_rca_option": route_rca_option,
             "route_triage_gate": route_triage_gate,

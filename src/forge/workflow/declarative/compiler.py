@@ -127,8 +127,8 @@ class DeclarativeWorkflowCompiler:
             raise WorkflowValidationError(f"unreachable node '{sorted(unreachable)[0]}'")
 
         incoming: dict[str, set[str]] = {name: set() for name in steps}
-        for source, targets in adjacency.items():
-            for target in targets:
+        for source, incoming_targets in adjacency.items():
+            for target in incoming_targets:
                 incoming[target].add(source)
         for node_name, step in steps.items():
             if step.join and len(incoming[node_name]) < 2:
@@ -377,7 +377,7 @@ class DeclarativeWorkflowCompiler:
     def _guarded_dynamic_router(
         func: Callable[..., Any], targets: set[str], max_concurrency: int | None
     ) -> Callable[..., Any]:
-        async def route(state: dict[str, Any]) -> str | list[Send]:
+        async def route(state: dict[str, Any]) -> str | Send | list[Send]:
             if state.get("is_blocked"):
                 return "__end__"
             result = func(state)
@@ -394,6 +394,10 @@ class DeclarativeWorkflowCompiler:
                     raise WorkflowValidationError(
                         f"dynamic router returned undeclared target {target!r}"
                     )
-            return result
+            if isinstance(result, (str, Send)):
+                return result
+            if isinstance(result, list) and all(isinstance(value, Send) for value in result):
+                return result
+            raise WorkflowValidationError("dynamic router must return a target or Send values")
 
         return route

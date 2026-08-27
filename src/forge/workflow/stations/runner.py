@@ -204,7 +204,7 @@ async def run_serialized_async(
 ) -> str:
     """Run a station from serialized input without the Forge control plane."""
     definition = (registry or create_builtin_station_registry()).resolve(station_name)
-    request_type = StationRequest[definition.input_type]  # type: ignore[valid-type]
+    request_type = StationRequest[definition.input_type]  # type: ignore[name-defined]
     request = request_type.model_validate_json(request_json)
     outcome = await invoke_station(definition, request, effect_service=effect_service)
     return outcome.model_dump_json()

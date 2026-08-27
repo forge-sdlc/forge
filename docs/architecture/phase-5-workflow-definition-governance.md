@@ -1,6 +1,6 @@
 # Workflow-definition governance policy
 
-**Status:** Proposed for Phase 5
+**Status:** Active
 
 This policy governs every Forge `WorkflowDefinition`, whether it is shipped by Forge or
 published by a project administrator. A definition is a release artifact: it is compiled,
@@ -56,8 +56,8 @@ Publication fails closed unless the definition declares a supported state profil
 all of the following checks:
 
 - Every node, router, gate, join, and extension is in the Forge registry for that profile;
-  every station input/output contract and contract version is compatible with the state
-  and adjacent transitions.
+  every station contract and version matches the state profile's registered binding, and
+  every routed outcome is covered by the reviewed routing contract.
 - Every station outcome has an explicit route or terminal handling. Unknown outcomes,
   implicit fall-through, unreachable nodes, unbounded transitions, and unguarded cycles are
   rejected. Cycles must cross an approved human or CI pause boundary and have a bounded
@@ -69,8 +69,9 @@ all of the following checks:
   implementation/review/CI boundaries cannot be replaced with a direct edge to an
   external write. A definition must explicitly declare whether code changes, a pull
   request, CI, and human review are expected when those capabilities are optional.
-- Joins declare their fan-out identity, completion condition, failure policy, and maximum
-  cardinality. A join may not complete on a partial or ambiguous set of children.
+- Join steps declare `all` or `any` and are rejected without multiple incoming paths.
+  Dynamic fan-out declares every target and a maximum cardinality; runtime routing rejects
+  undeclared targets or branch counts above that bound.
 - The compiler emits a canonical manifest and digest; the review report includes the
   rendered topology, contract versions, policy decisions, effect capabilities, and change
   impact against the prior revision.
@@ -80,13 +81,14 @@ mandatory policy off through metadata or an extension point.
 
 ## Effect capabilities and extension points
 
-Definitions request named capabilities, not provider clients. The initial allowlist is:
+Definitions request named capabilities, not provider clients. The initial finite allowlist is:
 
 - `jira.comment`, `jira.labels`, and `jira.status` for workflow signalling;
-- `source_control.branch`, `source_control.commit`, and `source_control.pull_request` for
-  repository changes and review requests;
-- `ci.dispatch` and `ci.cancel` for explicitly declared CI work; and
-- registered durable effect types added by Forge under the same review policy.
+- `jira.issue_content`, `jira.issue_lifecycle`, and `jira.issue_structure` for bounded
+  issue mutations;
+- `jira.project_configuration` for explicitly governed project metadata; and
+- `source_control.branch`, `source_control.commit`, `source_control.pull_request`, and
+  `source_control.review` for repository and review mutations.
 
 Each capability is scoped to the workflow instance, repository/project identity, station
 contract, and effect idempotency key. Read-only observations do not grant a write
@@ -193,6 +195,7 @@ digest, project, and workflow instance. At minimum retain:
 - station contract decisions, transition/outcome decisions, join results, effect IDs and
   attempts/results, and links to incident or recovery records.
 
-Missing audit evidence blocks publication or activation. This policy is a Phase 5
-governance requirement; its existence does not by itself mark Phase 5 implementation
-complete.
+Forge publication and activation require an actor and reason, retain the canonical
+artifact and impact report, and record the decision append-only. Organizational release
+automation is responsible for attaching the additional review, canary, and incident links
+required above to that actor/reason evidence before invoking the governed API.

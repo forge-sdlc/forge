@@ -329,6 +329,7 @@ def compare_process_definitions(
     def transitions(steps: Mapping[str, Any]) -> dict[str, frozenset[tuple[str, str, str | None]]]:
         result: dict[str, frozenset[tuple[str, str, str | None]]] = {}
         for name, step in steps.items():
+            edges: set[tuple[str, str, str | None]]
             if step.next:
                 edges = {(name, step.next, None)}
             elif step.dynamic_route:
