@@ -45,6 +45,7 @@ from forge.orchestrator.event_adapters import (
     create_default_event_adapter_registry,
     interpret_event,
     record_command_decision,
+    validate_command_decision,
 )
 from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
@@ -513,6 +514,9 @@ class OrchestratorWorker:
                 # Resume workflow - check for approval/rejection signals
                 adapted_event = self.event_adapters.adapt(message)
                 command_decision = interpret_event(message, adapted_event, existing_state.values)
+                command_decision = validate_command_decision(
+                    command_decision, existing_state.values
+                )
                 updated_values = await self._handle_resume_event(
                     message,
                     existing_state.values,
@@ -683,6 +687,8 @@ class OrchestratorWorker:
                 message.event_id,
                 command_decision.reason,
             )
+        if command_decision.status.value in {"duplicate", "stale", "invalid"}:
+            return current_state
 
         event_obj = self._deserialize_event(message)
         current_state = activate_pull_request_for_event(current_state, event_obj)

@@ -108,3 +108,15 @@ def test_source_control_approval_is_left_for_enrichment_handler() -> None:
     )
 
     assert application is None
+
+
+def test_cancel_is_a_terminal_workflow_state_without_graph_routing() -> None:
+    application = create_default_command_handler_registry().apply(
+        _command(WorkflowCommandType.CANCEL, reason="obsolete"),
+        {"current_node": "spec_approval_gate", "is_paused": True},
+    )
+
+    assert application is not None
+    assert application.state["current_node"] == "spec_approval_gate"
+    assert application.state["workflow_status"] == "cancelled"
+    assert application.state["is_blocked"] is True

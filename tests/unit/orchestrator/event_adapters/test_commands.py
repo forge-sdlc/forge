@@ -20,6 +20,7 @@ from forge.orchestrator.event_adapters import (
     create_default_event_adapter_registry,
     interpret_event,
     record_command_decision,
+    validate_command_decision,
 )
 from forge.queue.models import QueueMessage, normalized_event_to_dict
 
@@ -267,3 +268,26 @@ def test_source_control_review_rejection_is_semantic_command() -> None:
     assert decision.command is not None
     assert decision.command.command_type is WorkflowCommandType.REJECT
     assert decision.command.arguments["requires_thread_enrichment"] is True
+
+
+def test_existing_command_is_classified_as_duplicate() -> None:
+    message = _message(
+        {"changelog": {"items": [{"field": "labels", "fromString": "", "toString": "forge:retry"}]}}
+    )
+    adapted = create_default_event_adapter_registry().adapt(message)
+    accepted = interpret_event(message, adapted, STATE)
+    assert accepted.command is not None
+
+    duplicate = validate_command_decision(
+        accepted, {**STATE, "command_decisions": [{"command_id": accepted.command.command_id}]}
+    )
+
+    assert duplicate.status is CommandDecisionStatus.DUPLICATE
+
+
+def test_cancel_comment_becomes_explicit_command() -> None:
+    decision = _interpret(_message({"comment": {"body": "/forge cancel obsolete"}}))
+
+    assert decision.command is not None
+    assert decision.command.command_type is WorkflowCommandType.CANCEL
+    assert decision.command.arguments["reason"] == "obsolete"

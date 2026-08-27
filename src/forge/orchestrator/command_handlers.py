@@ -236,6 +236,21 @@ def _apply_approval(
     )
 
 
+def _apply_cancel(
+    command: WorkflowCommand, state: Mapping[str, Any]
+) -> CommandApplication:
+    return CommandApplication(
+        state={
+            **state,
+            "workflow_status": "cancelled",
+            "cancel_reason": command.arguments.get("reason"),
+            "is_paused": True,
+            "is_blocked": True,
+            "last_error": None,
+        }
+    )
+
+
 def _source_ticket(command: WorkflowCommand, state: Mapping[str, Any]) -> tuple[str | None, str | None]:
     source_key = command.arguments.get("source_ticket_key")
     if not isinstance(source_key, str) or not source_key:
@@ -318,4 +333,5 @@ def create_default_command_handler_registry() -> CommandHandlerRegistry:
     registry.register(WorkflowCommandType.APPROVE, _apply_approval)
     registry.register(WorkflowCommandType.REJECT, _apply_feedback)
     registry.register(WorkflowCommandType.RESUME, _apply_feedback)
+    registry.register(WorkflowCommandType.CANCEL, _apply_cancel)
     return registry

@@ -30,6 +30,8 @@ class CommandDecisionStatus(StrEnum):
     ACCEPTED = "accepted"
     IGNORED = "ignored"
     INVALID = "invalid"
+    STALE = "stale"
+    DUPLICATE = "duplicate"
 
 
 @dataclass(frozen=True)
@@ -37,6 +39,30 @@ class CommandDecision:
     status: CommandDecisionStatus
     reason: str
     command: WorkflowCommand | None = None
+
+
+def validate_command_decision(
+    decision: CommandDecision, state: Mapping[str, Any]
+) -> CommandDecision:
+    """Classify a derived command against durable workflow state."""
+    command = decision.command
+    if command is None or decision.status is not CommandDecisionStatus.ACCEPTED:
+        return decision
+    if any(
+        item.get("command_id") == command.command_id
+        for item in state.get("command_decisions", [])
+    ):
+        return CommandDecision(CommandDecisionStatus.DUPLICATE, "command already decided", command)
+    revision = state.get("workflow_definition_revision") or state.get("workflow_revision")
+    if revision is not None and int(revision) != command.workflow.definition_revision:
+        return CommandDecision(
+            CommandDecisionStatus.STALE,
+            "command targets a different workflow definition revision",
+            command,
+        )
+    if state.get("workflow_status") == "cancelled":
+        return CommandDecision(CommandDecisionStatus.INVALID, "workflow is cancelled", command)
+    return decision
 
 
 def record_command_decision(
@@ -203,6 +229,11 @@ def _jira_signal(
         return None
     comment = adapted.observation.facts.get("comment_text", "")
     if isinstance(comment, str) and comment.strip():
+        if comment.strip().lower().startswith("/forge cancel"):
+            return WorkflowCommandType.CANCEL, {
+                "source_system": "jira",
+                "reason": comment.strip()[len("/forge cancel") :].strip() or None,
+            }
         if current_node == "rca_option_gate":
             option_match = re.search(r">option\s+(\d+)", comment, re.IGNORECASE)
             if option_match:
@@ -277,6 +308,12 @@ def _source_control_signal(
             if lowered.startswith("/forge rebase") and state.get("current_pr_number"):
                 return WorkflowCommandType.REBASE, {
                     "return_stage": current_node,
+                    "sender": event.actor.login,
+                }
+            if lowered.startswith("/forge cancel"):
+                return WorkflowCommandType.CANCEL, {
+                    "source_system": event.repo_ref.provider.value,
+                    "reason": body[len("/forge cancel") :].strip() or None,
                     "sender": event.actor.login,
                 }
     if event.kind is EventKind.CHECK_UPDATED:
