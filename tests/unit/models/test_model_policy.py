@@ -158,6 +158,52 @@ def test_provider_neutral_options_flow_to_resolved_target(
     assert resolved.max_output_tokens == 8192
 
 
+def test_openai_compatible_connection_flows_endpoint_without_secret() -> None:
+    resolver = ModelPolicyResolver(
+        connections={
+            "gateway": {
+                "backend": "openai-compatible",
+                "base_url": "https://gateway.example/v1",
+                "api_key_env": "GATEWAY_API_KEY",
+                "capabilities": ["tools"],
+            }
+        },
+        policy={},
+        default={"connection": "gateway", "model": "custom-model"},
+    )
+
+    resolved = resolver.resolve("implement_task")
+
+    assert resolved.base_url == "https://gateway.example/v1"
+    assert resolved.api_key_env == "GATEWAY_API_KEY"
+    assert "api_key" not in resolved.model_dump()
+
+
+@pytest.mark.parametrize("base_url", ["", "gateway.example/v1", "ftp://gateway.example/v1"])
+def test_openai_compatible_connection_requires_http_url(base_url: str) -> None:
+    with pytest.raises(ValueError, match="absolute HTTP.*base_url"):
+        ModelPolicyResolver(
+            connections={"gateway": {"backend": "openai-compatible", "base_url": base_url}},
+            policy={},
+            default={"connection": "gateway", "model": "custom-model"},
+        )
+
+
+def test_openai_compatible_connection_validates_api_key_env() -> None:
+    with pytest.raises(ValueError, match="valid environment variable"):
+        ModelPolicyResolver(
+            connections={
+                "gateway": {
+                    "backend": "openai-compatible",
+                    "base_url": "https://gateway.example/v1",
+                    "api_key_env": "not-valid!",
+                }
+            },
+            policy={},
+            default={"connection": "gateway", "model": "custom-model"},
+        )
+
+
 def test_invalid_default_connection_fails_eagerly() -> None:
     with pytest.raises(ValueError, match="unknown connection"):
         ModelPolicyResolver(

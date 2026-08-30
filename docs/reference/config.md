@@ -53,6 +53,19 @@ native credential environment variables.
     MODEL_DEFAULT={"connection":"anthropic-prod","model":"claude-sonnet-4-6"}
     ```
 
+=== "OpenAI-compatible endpoint"
+
+    ```bash
+    GATEWAY_API_KEY=your-gateway-key
+    MODEL_CONNECTIONS={"gateway":{"backend":"openai-compatible","base_url":"https://gateway.example/v1","api_key_env":"GATEWAY_API_KEY","allowed_models":["your-model"],"capabilities":["tools"]}}
+    MODEL_DEFAULT={"connection":"gateway","model":"your-model"}
+    ```
+
+    `api_key_env` contains an environment-variable name, never the credential.
+    Different connections can reference different keys. Omit `api_key_env` for
+    endpoints that do not authenticate. Compatible endpoints must implement the
+    OpenAI Chat Completions API and tool calling for agentic stages.
+
 Forge validates the backend, credentials, model allowlist, capabilities, and
 default target at startup.
 
@@ -66,6 +79,9 @@ default target at startup.
     GOOGLE_CLOUD_LOCATION=global
     LLM_MODEL=gemini-3.5-flash
     ```
+
+    For one OpenAI-compatible endpoint, set `LLM_BACKEND=openai-compatible`,
+    `OPENAI_BASE_URL`, `LLM_MODEL`, and optionally `OPENAI_API_KEY`.
 
     `LLM_BACKEND` and `LLM_MODEL` are required together when
     `MODEL_CONNECTIONS` and `MODEL_DEFAULT` are not configured. Provider

@@ -82,4 +82,4 @@ flowchart TD
 
 **Podman Container**: Ephemeral rootless containers that execute implementation tasks. Each container receives the repo at `/workspace` (read-write), a task file at `/task.json` (read-only), and LLM credentials. Runs Deep Agents with MCP tool access. The orchestrator handles pushing and PR creation after the container exits.
 
-**LLM Backends**: Claude and Gemini models called by both orchestrator nodes (planning, review) and container agents (code generation). Supports Anthropic direct API and Google Vertex AI, selected automatically based on configured credentials.
+**LLM Backends**: Claude, Gemini, and OpenAI-compatible models called by both orchestrator nodes (planning, review) and container agents (code generation). Supports Anthropic direct API, Google APIs and Vertex AI, and configured OpenAI-compatible Chat Completions endpoints.

@@ -442,9 +442,7 @@ def _create_llm_model(max_tokens_default: int = 16384):
         else:
             from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
-            logger.info(
-                f"Using Vertex AI Anthropic model: {model_name}, max_tokens={max_tokens}"
-            )
+            logger.info(f"Using Vertex AI Anthropic model: {model_name}, max_tokens={max_tokens}")
             model = ChatAnthropicVertex(
                 model_name=model_name,
                 project=vertex_project,
@@ -480,6 +478,20 @@ def _create_llm_model(max_tokens_default: int = 16384):
         model = ChatAnthropic(
             model=model_name,
             api_key=anthropic_api_key,
+            max_tokens=max_tokens,
+            **tuning,
+        )
+    elif backend_name == "openai-compatible":
+        base_url = os.environ.get("OPENAI_BASE_URL")
+        if not base_url:
+            raise RuntimeError("OPENAI_BASE_URL is required for the openai-compatible backend")
+        from langchain_openai import ChatOpenAI
+
+        logger.info("Using OpenAI-compatible model %s at %s", model_name, base_url)
+        model = ChatOpenAI(
+            model=model_name,
+            base_url=base_url,
+            api_key=os.environ.get("OPENAI_API_KEY") or "not-required",
             max_tokens=max_tokens,
             **tuning,
         )

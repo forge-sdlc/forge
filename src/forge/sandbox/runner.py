@@ -240,7 +240,7 @@ class ContainerRunner:
         Returns:
             Dict of environment variables.
         """
-        env = {}
+        env: dict[str, str] = {}
 
         selected_backend = model_target.backend if model_target else self.settings.llm_backend
         if not selected_backend:
@@ -255,6 +255,14 @@ class ContainerRunner:
             anthropic_api_key = self.settings.anthropic_api_key.get_secret_value()
             if anthropic_api_key:
                 env["ANTHROPIC_API_KEY"] = anthropic_api_key
+        elif selected_backend == "openai-compatible":
+            env["OPENAI_BASE_URL"] = (
+                model_target.base_url if model_target else self.settings.openai_base_url
+            ) or ""
+            api_key = self.settings.resolve_openai_api_key(
+                model_target.api_key_env if model_target else None
+            )
+            env["OPENAI_API_KEY"] = api_key or "not-required"
 
         # Pass Vertex AI credentials
         if selected_backend == "vertex-ai":

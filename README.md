@@ -50,7 +50,7 @@ Forge connects Jira, GitHub, and AI coding agents into one event-driven workflow
 
 Forge is built on [Deep Agents](https://docs.langchain.com/oss/python/deepagents/overview) and passes agents a LangChain chat model instance.
 
-The built-in model factory supports direct Anthropic API credentials and Google Vertex AI-backed models. Because the agent layer is model-object based, Forge can be extended to any LangChain-compatible chat model by adding it to the model factory.
+The built-in model factory supports direct Anthropic, Google Gemini, Vertex AI, and OpenAI-compatible Chat Completions endpoints. Named compatible connections can use distinct base URLs and environment-backed credentials. Because the agent layer is model-object based, Forge can be extended to other LangChain-compatible chat models by adding them to the model factory.
 
 ## Where Forge Is Different
 

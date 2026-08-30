@@ -14,6 +14,8 @@ def clear_prd_proposal_env(monkeypatch):
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
     monkeypatch.delenv("GOOGLE_CLOUD_LOCATION", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("CONTAINER_LLM_MODEL", raising=False)
     monkeypatch.delenv("MODEL_CONNECTIONS", raising=False)
@@ -264,6 +266,47 @@ class TestLlmConfig:
         assert settings.llm_backend == "anthropic"
         assert settings.llm_model == "claude-sonnet-4-6"
         assert settings.anthropic_api_key.get_secret_value() == "anthropic-key"
+
+    def test_openai_compatible_named_connection_resolves_its_credential(self, monkeypatch):
+        monkeypatch.setenv("GATEWAY_API_KEY", "gateway-secret")
+        settings = Settings(
+            _env_file=None,
+            jira_base_url="https://test.atlassian.net",
+            jira_api_token="test",
+            jira_user_email="test@example.com",
+            github_token="test",
+            model_connections={
+                "gateway": {
+                    "backend": "openai-compatible",
+                    "base_url": "https://gateway.example/v1",
+                    "api_key_env": "GATEWAY_API_KEY",
+                    "capabilities": ["tools"],
+                }
+            },
+            model_default={"connection": "gateway", "model": "custom-model"},
+        )
+
+        assert settings.llm_backend == "openai-compatible"
+        assert settings.openai_base_url == "https://gateway.example/v1"
+        assert settings.resolve_openai_api_key("GATEWAY_API_KEY") == "gateway-secret"
+
+    def test_openai_compatible_missing_referenced_credential_fails(self):
+        with pytest.raises(ValueError, match="MISSING_GATEWAY_KEY.*not set"):
+            Settings(
+                _env_file=None,
+                jira_base_url="https://test.atlassian.net",
+                jira_api_token="test",
+                jira_user_email="test@example.com",
+                github_token="test",
+                model_connections={
+                    "gateway": {
+                        "backend": "openai-compatible",
+                        "base_url": "https://gateway.example/v1",
+                        "api_key_env": "MISSING_GATEWAY_KEY",
+                    }
+                },
+                model_default={"connection": "gateway", "model": "custom-model"},
+            )
 
     def test_google_cloud_settings_use_provider_native_names(self):
         settings = make_settings(

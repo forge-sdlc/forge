@@ -18,6 +18,7 @@ from typing import Any
 from deepagents import create_deep_agent
 from deepagents.backends.filesystem import FilesystemBackend
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 
 # Optional MCP support
@@ -156,7 +157,7 @@ class ForgeAgent:
             api_key = self.settings.google_api_key.get_secret_value()
             if api_key and not os.environ.get("GOOGLE_API_KEY"):
                 os.environ["GOOGLE_API_KEY"] = api_key
-        elif not os.environ.get("ANTHROPIC_API_KEY"):
+        elif self.settings.llm_backend == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
             api_key = self.settings.anthropic_api_key.get_secret_value()
             if api_key:
                 os.environ["ANTHROPIC_API_KEY"] = api_key
@@ -257,6 +258,22 @@ class ForgeAgent:
             return ChatAnthropic(
                 model=model,
                 api_key=api_key,
+                max_tokens=max_tokens,
+                **({"temperature": temperature} if temperature is not None else {}),
+            )
+
+        if backend == "openai-compatible":
+            base_url = model_target.base_url if model_target else self.settings.openai_base_url
+            if not base_url:
+                raise ValueError("OPENAI_BASE_URL is required for openai-compatible")
+            api_key = self.settings.resolve_openai_api_key(
+                model_target.api_key_env if model_target else None
+            )
+            logger.info("Creating OpenAI-compatible model %s at %s", model, base_url)
+            return ChatOpenAI(
+                model=model,
+                base_url=base_url,
+                api_key=api_key or "not-required",
                 max_tokens=max_tokens,
                 **({"temperature": temperature} if temperature is not None else {}),
             )
@@ -999,6 +1016,8 @@ class ForgeAgent:
             "ATLASSIAN_AUTH_BASE64": lambda: self.settings.atlassian_auth_base64,
             "AGENT_WORKING_DIRECTORY": lambda: self.settings.agent_working_directory or os.getcwd(),
             "ANTHROPIC_API_KEY": lambda: self.settings.anthropic_api_key.get_secret_value(),
+            "OPENAI_API_KEY": lambda: self.settings.openai_api_key.get_secret_value(),
+            "OPENAI_BASE_URL": lambda: self.settings.openai_base_url,
         }
 
         if var_name in var_mapping:

@@ -104,11 +104,13 @@ Passed automatically by the orchestrator:
 
 | Variable | Description |
 |----------|-------------|
-| `LLM_BACKEND` | Required: `vertex-ai`, `google-genai`, or `anthropic` |
+| `LLM_BACKEND` | Required: `vertex-ai`, `google-genai`, `anthropic`, or `openai-compatible` |
 | `GOOGLE_API_KEY` | Gemini API key for `google-genai` |
 | `GOOGLE_CLOUD_PROJECT` | GCP project for `vertex-ai` |
 | `GOOGLE_CLOUD_LOCATION` | Vertex AI location |
 | `ANTHROPIC_API_KEY` | API key for `anthropic` |
+| `OPENAI_BASE_URL` | Required base URL for `openai-compatible` |
+| `OPENAI_API_KEY` | API key for `openai-compatible`; Forge supplies a placeholder for unauthenticated endpoints |
 | `LLM_MODEL` | Required model name (for example, `gemini-3.5-flash`) |
 | `CONTAINER_LLM_MODEL` | Optional container model override; it must be compatible with `LLM_BACKEND` because containers do not support a separate backend |
 | `CONTAINER_COMMAND_TIMEOUT` | Maximum execution time in seconds for individual commands: agent tasks, reviewer commands, and fallback tests (default: `600`, must not exceed `CONTAINER_TIMEOUT`) |
@@ -141,7 +143,7 @@ Example: `forge-AISOS-189-installer-12345`
 ## Task Execution
 
 The entrypoint runs a Deep Agent with `LocalShellBackend`. The built-in model
-factory supports the Gemini API, Vertex AI, and the Anthropic API. Because the
+factory supports the Gemini API, Vertex AI, Anthropic, and OpenAI-compatible endpoints. Because the
 agent receives a LangChain chat model instance, additional providers can be
 added by extending the model factory.
 

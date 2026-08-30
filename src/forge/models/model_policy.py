@@ -4,11 +4,13 @@ Policy objects deliberately contain identifiers and tuning options only.  Provid
 credentials remain in :mod:`forge.config` and are resolved at the adapter boundary.
 """
 
+import re
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Backend = Literal["google-genai", "vertex-ai", "anthropic"]
+Backend = Literal["google-genai", "vertex-ai", "anthropic", "openai-compatible"]
 MAX_MODEL_OUTPUT_TOKENS = 131_072
 
 
@@ -20,6 +22,8 @@ class ModelConnection(BaseModel):
     backend: Backend
     project: str | None = None
     location: str | None = None
+    base_url: str | None = None
+    api_key_env: str | None = None
     allowed_models: list[str] = Field(default_factory=lambda: ["*"])
     capabilities: set[str] = Field(default_factory=set)
     allow_project_override: bool = True
@@ -28,6 +32,14 @@ class ModelConnection(BaseModel):
     def validate_connection(self) -> "ModelConnection":
         if self.backend == "vertex-ai" and not self.project:
             raise ValueError("vertex-ai connections require project")
+        if self.backend == "openai-compatible":
+            parsed = urlparse(self.base_url or "")
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError(
+                    "openai-compatible connections require an absolute HTTP(S) base_url"
+                )
+            if self.api_key_env and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.api_key_env):
+                raise ValueError("api_key_env must be a valid environment variable name")
         return self
 
 
@@ -51,6 +63,8 @@ class ResolvedModelTarget(ModelTarget):
     policy_source: Literal["project", "project_default", "global", "default"]
     project: str | None = None
     location: str | None = None
+    base_url: str | None = None
+    api_key_env: str | None = None
 
     def trace_metadata(self) -> dict[str, Any]:
         return {
@@ -193,6 +207,8 @@ class ModelPolicyResolver:
         # Anthropic models. Direct-provider backends accept only their family.
         if backend == "vertex-ai":
             return True
+        if backend == "openai-compatible":
+            return True
         return is_gemini == (backend == "google-genai")
 
     def _validate_target(
@@ -269,6 +285,8 @@ class ModelPolicyResolver:
             backend=connection.backend,
             project=connection.project,
             location=connection.location,
+            base_url=connection.base_url,
+            api_key_env=connection.api_key_env,
             policy_key=key,
             policy_source=source,
         )

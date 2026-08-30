@@ -1280,6 +1280,8 @@ async def cmd_health(_args: argparse.Namespace) -> int:
             print("[OK] Using Anthropic API")
         else:
             print("[WARN] Anthropic selected but ANTHROPIC_API_KEY is not configured")
+    elif settings.llm_backend == "openai-compatible":
+        print(f"[OK] Using OpenAI-compatible endpoint: {settings.openai_base_url}")
     else:
         print("[WARN] No LLM backend configured")
 

@@ -1,10 +1,12 @@
 """Configuration management using Pydantic settings."""
 
 import logging
+import os
 from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from dotenv import dotenv_values
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -165,8 +167,8 @@ class Settings(BaseSettings):
 
     # Model backend configuration. Provider-specific credentials stay at the
     # adapter boundary; the rest of Forge consumes the resolved backend/model.
-    llm_backend: Literal["google-genai", "vertex-ai", "anthropic"] = Field(
-        description="Model backend: vertex-ai, google-genai, or anthropic",
+    llm_backend: Literal["google-genai", "vertex-ai", "anthropic", "openai-compatible"] = Field(
+        description="Model backend: vertex-ai, google-genai, anthropic, or openai-compatible",
     )
     google_api_key: SecretStr = Field(
         default=SecretStr(""),
@@ -183,6 +185,14 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr = Field(
         default=SecretStr(""),
         description="Anthropic API key for the anthropic backend",
+    )
+    openai_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description="API key for a legacy single OpenAI-compatible connection",
+    )
+    openai_base_url: str = Field(
+        default="",
+        description="Base URL for a legacy single OpenAI-compatible connection",
     )
     llm_model: str = Field(
         description="Model for orchestrator agents",
@@ -245,6 +255,8 @@ class Settings(BaseSettings):
         if backend == "vertex-ai":
             derived["google_cloud_project"] = connection.get("project") or ""
             derived["google_cloud_location"] = connection.get("location") or "global"
+        elif backend == "openai-compatible":
+            derived["openai_base_url"] = connection.get("base_url") or ""
         return derived
 
     @property
@@ -316,6 +328,10 @@ class Settings(BaseSettings):
             self._validate_model_policy(ModelPolicyResolver)
             return self
 
+        if self.llm_backend == "openai-compatible":
+            self._validate_model_policy(ModelPolicyResolver)
+            return self
+
         if not self.anthropic_api_key.get_secret_value():
             raise ValueError("ANTHROPIC_API_KEY is required for anthropic")
         incompatible = [m for m in models if self.detect_model_provider(m) != "anthropic"]
@@ -336,6 +352,24 @@ class Settings(BaseSettings):
                 raise ValueError("GOOGLE_API_KEY is required by a google-genai model connection")
             if connection.backend == "anthropic" and not self.anthropic_api_key.get_secret_value():
                 raise ValueError("ANTHROPIC_API_KEY is required by an anthropic model connection")
+            if connection.backend == "openai-compatible" and connection.api_key_env:
+                self.resolve_openai_api_key(connection.api_key_env)
+
+    def resolve_openai_api_key(self, api_key_env: str | None) -> str:
+        """Resolve a compatible endpoint credential without serializing it into policy."""
+        if not api_key_env:
+            return self.openai_api_key.get_secret_value()
+        value = os.environ.get(api_key_env)
+        if value is None:
+            env_file = self.model_config.get("env_file")
+            if isinstance(env_file, str):
+                dotenv_value = dotenv_values(env_file).get(api_key_env)
+                value = str(dotenv_value) if dotenv_value is not None else None
+        if value is None:
+            raise ValueError(
+                f"Environment variable '{api_key_env}' referenced by api_key_env is not set"
+            )
+        return value
 
     @property
     def effective_model_connections(self) -> dict[str, Any]:
@@ -353,6 +387,8 @@ class Settings(BaseSettings):
                 project=self.google_cloud_project,
                 location=self.google_cloud_location,
             )
+        elif self.llm_backend == "openai-compatible":
+            connection.update(base_url=self.openai_base_url)
         return {"default": connection}
 
     @property
