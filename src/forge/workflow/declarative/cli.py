@@ -113,9 +113,7 @@ async def cmd_workflow(args: Any) -> int:
             if getattr(args, "json", False):
                 print(json.dumps(active_definition.canonical_dict(), indent=2))
             else:
-                print(
-                    yaml.safe_dump(active_definition.canonical_dict(), sort_keys=False).rstrip()
-                )
+                print(yaml.safe_dump(active_definition.canonical_dict(), sort_keys=False).rstrip())
             return 0
 
         if action == "list":

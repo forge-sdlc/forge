@@ -145,9 +145,13 @@ class DeclarativeWorkflow(BaseWorkflow):
             try:
                 persisted = load_workflow_value(canonical)
             except Exception as exc:
-                raise WorkflowValidationError("checkpoint contains an invalid workflow definition") from exc
+                raise WorkflowValidationError(
+                    "checkpoint contains an invalid workflow definition"
+                ) from exc
             if persisted.digest != self.definition.digest:
-                raise WorkflowValidationError("checkpoint definition digest does not match its identity")
+                raise WorkflowValidationError(
+                    "checkpoint definition digest does not match its identity"
+                )
 
     def migrate_state(self, state: dict[str, Any]) -> dict[str, Any]:
         """Adopt this definition while refusing ambiguous or unsafe migration."""
@@ -164,16 +168,24 @@ class DeclarativeWorkflow(BaseWorkflow):
             try:
                 persisted = load_workflow_value(canonical)
             except Exception as exc:
-                raise WorkflowValidationError("checkpoint contains an invalid workflow definition") from exc
+                raise WorkflowValidationError(
+                    "checkpoint contains an invalid workflow definition"
+                ) from exc
             old_digest = state.get("workflow_definition_digest", state.get("workflow_digest"))
             if persisted.digest != old_digest:
-                raise WorkflowValidationError("checkpoint definition digest does not match its identity")
+                raise WorkflowValidationError(
+                    "checkpoint definition digest does not match its identity"
+                )
             if persisted.metadata.name != self.name:
-                raise WorkflowValidationError("checkpoint definition name does not match its identity")
+                raise WorkflowValidationError(
+                    "checkpoint definition name does not match its identity"
+                )
             if persisted.metadata.revision != int(
                 state.get("workflow_definition_revision", state.get("workflow_revision", 0))
             ):
-                raise WorkflowValidationError("checkpoint definition revision does not match its identity")
+                raise WorkflowValidationError(
+                    "checkpoint definition revision does not match its identity"
+                )
         if state.get("workflow_state_profile") != self.definition.spec.state:
             raise WorkflowValidationError("an active workflow cannot change state profile")
 

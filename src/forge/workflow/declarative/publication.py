@@ -87,18 +87,23 @@ class DefinitionPublisher:
             self._redis = await get_redis_client()
         return self._redis
 
-    async def publish(self, definition: WorkflowDefinition, *, actor: str, reason: str, activate: bool = False) -> PublicationDecision:
+    async def publish(
+        self, definition: WorkflowDefinition, *, actor: str, reason: str, activate: bool = False
+    ) -> PublicationDecision:
         """Validate and persist an immutable artifact, without activating it."""
         if activate:
             raise ValueError("publication and activation are separate decisions; use activate()")
         self._validate(definition)
         decision = self._decision(definition, actor=actor, reason=reason, action="publish")
         result = await (await self._client()).eval(
-            _PUBLISH_SCRIPT, 3,
+            _PUBLISH_SCRIPT,
+            3,
             self._definition_key(definition.metadata.name, definition.metadata.revision),
             self._latest_key(definition.metadata.name),
             self._decisions_key(definition.metadata.name),
-            definition.canonical_json(), str(definition.metadata.revision), definition.digest,
+            definition.canonical_json(),
+            str(definition.metadata.revision),
+            definition.digest,
             decision.model_dump_json(),
         )
         if result == -1:
@@ -107,20 +112,59 @@ class DefinitionPublisher:
             raise ValueError("changed workflow content must increment metadata.revision")
         return decision
 
-    async def activate(self, name: str | WorkflowDefinition, revision: int | None = None, *, actor: str, reason: str, expected_active_digest: str | None = None) -> PublicationDecision:
+    async def activate(
+        self,
+        name: str | WorkflowDefinition,
+        revision: int | None = None,
+        *,
+        actor: str,
+        reason: str,
+        expected_active_digest: str | None = None,
+    ) -> PublicationDecision:
         """Activate an existing artifact using compare-and-set semantics."""
         name, revision = self._target_identity(name, revision)
-        return await self._set_active(name, revision, actor=actor, reason=reason, action="activate", expected_active_digest=expected_active_digest)
+        return await self._set_active(
+            name,
+            revision,
+            actor=actor,
+            reason=reason,
+            action="activate",
+            expected_active_digest=expected_active_digest,
+        )
 
-    async def rollback(self, name: str | WorkflowDefinition, revision: int | None = None, *, actor: str, reason: str, expected_active_digest: str | None = None) -> PublicationDecision:
+    async def rollback(
+        self,
+        name: str | WorkflowDefinition,
+        revision: int | None = None,
+        *,
+        actor: str,
+        reason: str,
+        expected_active_digest: str | None = None,
+    ) -> PublicationDecision:
         """Move activation to an older compatible artifact; never mutate history."""
         name, revision = self._target_identity(name, revision)
         current = await self.active(name)
         if current is None or revision >= current.metadata.revision:
             raise ValueError("rollback target must be an already-published older revision")
-        return await self._set_active(name, revision, actor=actor, reason=reason, action="rollback", expected_active_digest=expected_active_digest)
+        return await self._set_active(
+            name,
+            revision,
+            actor=actor,
+            reason=reason,
+            action="rollback",
+            expected_active_digest=expected_active_digest,
+        )
 
-    async def _set_active(self, name: str, revision: int, *, actor: str, reason: str, action: Literal["activate", "rollback"], expected_active_digest: str | None) -> PublicationDecision:
+    async def _set_active(
+        self,
+        name: str,
+        revision: int,
+        *,
+        actor: str,
+        reason: str,
+        action: Literal["activate", "rollback"],
+        expected_active_digest: str | None,
+    ) -> PublicationDecision:
         target = await self.get(name, revision)
         if target is None:
             raise ValueError(f"published workflow '{name}' revision {revision} is unavailable")
@@ -129,18 +173,28 @@ class DefinitionPublisher:
         self._validate(target)
         previous = await self.active(name)
         if previous is not None and expected_active_digest is None:
-            raise ValueError("expected_active_digest is required when replacing an active definition")
-        if expected_active_digest and (previous is None or previous.digest != expected_active_digest):
+            raise ValueError(
+                "expected_active_digest is required when replacing an active definition"
+            )
+        if expected_active_digest and (
+            previous is None or previous.digest != expected_active_digest
+        ):
             raise ValueError("active definition changed concurrently")
         impact = compare_process_definitions(previous, target) if previous else None
-        if impact is not None and not _compatible_impact(
-            impact, rollback=action == "rollback"
-        ):
+        if impact is not None and not _compatible_impact(impact, rollback=action == "rollback"):
             raise ValueError("definition is incompatible with active workflow instances")
-        decision = self._decision(target, actor=actor, reason=reason, action=action, activated=True, impact=impact)
+        decision = self._decision(
+            target, actor=actor, reason=reason, action=action, activated=True, impact=impact
+        )
         result = await (await self._client()).eval(
-            _ACTIVATE_SCRIPT, 3, self._definition_key(name, revision), self._active_key(name), self._decisions_key(name),
-            expected_active_digest or "", self._pointer(target), decision.model_dump_json(),
+            _ACTIVATE_SCRIPT,
+            3,
+            self._definition_key(name, revision),
+            self._active_key(name),
+            self._decisions_key(name),
+            expected_active_digest or "",
+            self._pointer(target),
+            decision.model_dump_json(),
         )
         if result == -1:
             raise ValueError(f"published workflow '{name}' revision {revision} is unavailable")
@@ -189,7 +243,7 @@ class DefinitionPublisher:
             cursor, found = await redis.scan(cursor=cursor, match=f"{prefix}*")
             for key in found:
                 text = key.decode() if isinstance(key, bytes) else str(key)
-                remainder = text[len(prefix):]
+                remainder = text[len(prefix) :]
                 if ":" in remainder:
                     names.add(remainder.rsplit(":", 1)[0])
             if cursor == 0:
@@ -200,12 +254,32 @@ class DefinitionPublisher:
         definition.validate_property_size()
         DeclarativeWorkflowCompiler(definition).validate_for_publication()
 
-    def _decision(self, definition: WorkflowDefinition, *, actor: str, reason: str, action: Literal["publish", "activate", "rollback"], activated: bool = False, impact: ProcessChangeImpact | None = None) -> PublicationDecision:
+    def _decision(
+        self,
+        definition: WorkflowDefinition,
+        *,
+        actor: str,
+        reason: str,
+        action: Literal["publish", "activate", "rollback"],
+        activated: bool = False,
+        impact: ProcessChangeImpact | None = None,
+    ) -> PublicationDecision:
         if not actor.strip():
             raise ValueError("actor is required for governed decisions")
         if not reason.strip():
             raise ValueError("reason is required for governed decisions")
-        return PublicationDecision(project_key=self.project_key, workflow_name=definition.metadata.name, revision=definition.metadata.revision, digest=definition.digest, published_at=datetime.now(UTC), activated=activated, actor=actor, reason=reason, action=action, impact=impact.model_dump(mode="json") if impact else {})
+        return PublicationDecision(
+            project_key=self.project_key,
+            workflow_name=definition.metadata.name,
+            revision=definition.metadata.revision,
+            digest=definition.digest,
+            published_at=datetime.now(UTC),
+            activated=activated,
+            actor=actor,
+            reason=reason,
+            action=action,
+            impact=impact.model_dump(mode="json") if impact else {},
+        )
 
     @staticmethod
     def _target_identity(name: str | WorkflowDefinition, revision: int | None) -> tuple[str, int]:
@@ -248,7 +322,9 @@ class InMemoryDefinitionPublisher:
         self._active: dict[str, WorkflowDefinition] = {}
         self._decisions: dict[str, list[PublicationDecision]] = {}
 
-    async def publish(self, definition: WorkflowDefinition, *, actor: str, reason: str, activate: bool = False) -> PublicationDecision:
+    async def publish(
+        self, definition: WorkflowDefinition, *, actor: str, reason: str, activate: bool = False
+    ) -> PublicationDecision:
         if activate:
             raise ValueError("publication and activation are separate decisions; use activate()")
         self._validate(definition)
@@ -257,25 +333,68 @@ class InMemoryDefinitionPublisher:
         if existing is not None and existing.digest != definition.digest:
             raise ValueError("published revision is immutable and has different content")
         published = await self.history(definition.metadata.name)
-        if any(item.digest != definition.digest and item.metadata.revision >= definition.metadata.revision for item in published):
+        if any(
+            item.digest != definition.digest
+            and item.metadata.revision >= definition.metadata.revision
+            for item in published
+        ):
             raise ValueError("changed workflow content must increment metadata.revision")
         self._definitions[key] = definition
         decision = self._decision(definition, actor=actor, reason=reason, action="publish")
         self._decisions.setdefault(definition.metadata.name, []).append(decision)
         return decision
 
-    async def activate(self, name: str | WorkflowDefinition, revision: int | None = None, *, actor: str, reason: str, expected_active_digest: str | None = None) -> PublicationDecision:
+    async def activate(
+        self,
+        name: str | WorkflowDefinition,
+        revision: int | None = None,
+        *,
+        actor: str,
+        reason: str,
+        expected_active_digest: str | None = None,
+    ) -> PublicationDecision:
         name, revision = self._target_identity(name, revision)
-        return await self._set_active(name, revision, actor=actor, reason=reason, action="activate", expected_active_digest=expected_active_digest)
+        return await self._set_active(
+            name,
+            revision,
+            actor=actor,
+            reason=reason,
+            action="activate",
+            expected_active_digest=expected_active_digest,
+        )
 
-    async def rollback(self, name: str | WorkflowDefinition, revision: int | None = None, *, actor: str, reason: str, expected_active_digest: str | None = None) -> PublicationDecision:
+    async def rollback(
+        self,
+        name: str | WorkflowDefinition,
+        revision: int | None = None,
+        *,
+        actor: str,
+        reason: str,
+        expected_active_digest: str | None = None,
+    ) -> PublicationDecision:
         name, revision = self._target_identity(name, revision)
         current = self._active.get(name)
         if current is None or revision >= current.metadata.revision:
             raise ValueError("rollback target must be an already-published older revision")
-        return await self._set_active(name, revision, actor=actor, reason=reason, action="rollback", expected_active_digest=expected_active_digest)
+        return await self._set_active(
+            name,
+            revision,
+            actor=actor,
+            reason=reason,
+            action="rollback",
+            expected_active_digest=expected_active_digest,
+        )
 
-    async def _set_active(self, name: str, revision: int, *, actor: str, reason: str, action: Literal["activate", "rollback"], expected_active_digest: str | None) -> PublicationDecision:
+    async def _set_active(
+        self,
+        name: str,
+        revision: int,
+        *,
+        actor: str,
+        reason: str,
+        action: Literal["activate", "rollback"],
+        expected_active_digest: str | None,
+    ) -> PublicationDecision:
         target = self._definitions.get((name, revision))
         if target is None:
             raise ValueError(f"published workflow '{name}' revision {revision} is unavailable")
@@ -283,14 +402,18 @@ class InMemoryDefinitionPublisher:
             raise ValueError("published workflow name does not match activation key")
         current = self._active.get(name)
         if current is not None and expected_active_digest is None:
-            raise ValueError("expected_active_digest is required when replacing an active definition")
+            raise ValueError(
+                "expected_active_digest is required when replacing an active definition"
+            )
         if expected_active_digest and (current is None or current.digest != expected_active_digest):
             raise ValueError("active definition changed concurrently")
         impact = compare_process_definitions(current, target) if current else None
         if impact and not _compatible_impact(impact, rollback=action == "rollback"):
             raise ValueError("definition is incompatible with active workflow instances")
         self._active[name] = target
-        decision = self._decision(target, actor=actor, reason=reason, action=action, activated=True, impact=impact)
+        decision = self._decision(
+            target, actor=actor, reason=reason, action=action, activated=True, impact=impact
+        )
         self._decisions.setdefault(name, []).append(decision)
         return decision
 
@@ -304,7 +427,12 @@ class InMemoryDefinitionPublisher:
         return tuple(self._decisions.get(name, ()))
 
     async def history(self, name: str) -> tuple[WorkflowDefinition, ...]:
-        return tuple(sorted((definition for (item, _), definition in self._definitions.items() if item == name), key=lambda item: item.metadata.revision))
+        return tuple(
+            sorted(
+                (definition for (item, _), definition in self._definitions.items() if item == name),
+                key=lambda item: item.metadata.revision,
+            )
+        )
 
     async def list_workflows(self) -> tuple[str, ...]:
         return tuple(sorted({name for name, _ in self._definitions}))
@@ -313,12 +441,32 @@ class InMemoryDefinitionPublisher:
         definition.validate_property_size()
         DeclarativeWorkflowCompiler(definition).validate_for_publication()
 
-    def _decision(self, definition: WorkflowDefinition, *, actor: str, reason: str, action: Literal["publish", "activate", "rollback"], activated: bool = False, impact: ProcessChangeImpact | None = None) -> PublicationDecision:
+    def _decision(
+        self,
+        definition: WorkflowDefinition,
+        *,
+        actor: str,
+        reason: str,
+        action: Literal["publish", "activate", "rollback"],
+        activated: bool = False,
+        impact: ProcessChangeImpact | None = None,
+    ) -> PublicationDecision:
         if not actor.strip():
             raise ValueError("actor is required for governed decisions")
         if not reason.strip():
             raise ValueError("reason is required for governed decisions")
-        return PublicationDecision(project_key=self.project_key, workflow_name=definition.metadata.name, revision=definition.metadata.revision, digest=definition.digest, published_at=datetime.now(UTC), activated=activated, actor=actor, reason=reason, action=action, impact=impact.model_dump(mode="json") if impact else {})
+        return PublicationDecision(
+            project_key=self.project_key,
+            workflow_name=definition.metadata.name,
+            revision=definition.metadata.revision,
+            digest=definition.digest,
+            published_at=datetime.now(UTC),
+            activated=activated,
+            actor=actor,
+            reason=reason,
+            action=action,
+            impact=impact.model_dump(mode="json") if impact else {},
+        )
 
     @staticmethod
     def _target_identity(name: str | WorkflowDefinition, revision: int | None) -> tuple[str, int]:

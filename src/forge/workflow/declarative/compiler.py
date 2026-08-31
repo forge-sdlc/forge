@@ -39,17 +39,13 @@ class DeclarativeWorkflowCompiler:
                 f"unknown mandatory policy '{sorted(unknown_policies)[0]}'"
             )
         missing_nodes = (
-            set(self.profile.mandatory_nodes) - set(steps)
-            if spec.mandatory_policies
-            else set()
+            set(self.profile.mandatory_nodes) - set(steps) if spec.mandatory_policies else set()
         )
         if missing_nodes:
             raise WorkflowValidationError(
                 f"workflow omits mandatory gate '{sorted(missing_nodes)[0]}'"
             )
-        unknown_extensions = set(spec.extension_points) - set(
-            self.profile.supported_extensions
-        )
+        unknown_extensions = set(spec.extension_points) - set(self.profile.supported_extensions)
         if unknown_extensions:
             raise WorkflowValidationError(
                 f"unsupported extension point '{sorted(unknown_extensions)[0]}'"
@@ -215,9 +211,7 @@ class DeclarativeWorkflowCompiler:
             if expected is None or not expected.route or step.route != expected.route:
                 continue
             expected_outcomes = (
-                set(expected.dynamic_targets)
-                if expected.dynamic_route
-                else set(expected.branches)
+                set(expected.dynamic_targets) if expected.dynamic_route else set(expected.branches)
             )
             declared_outcomes = (
                 set(step.dynamic_targets) if step.dynamic_route else set(step.branches)

@@ -58,7 +58,9 @@ async def load_project_workflow(
     this function deliberately never falls back to Jira's active property for a
     pinned checkpoint.
     """
-    is_pinned = pinned_revision is not None or pinned_digest is not None or pinned_definition is not None
+    is_pinned = (
+        pinned_revision is not None or pinned_digest is not None or pinned_definition is not None
+    )
     if is_pinned:
         if pinned_revision is None or not pinned_digest:
             raise ValueError("pinned workflow identity requires both revision and digest")

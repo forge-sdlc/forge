@@ -365,10 +365,18 @@ def compare_process_definitions(
         )
     )
     effect_capability_changes = tuple(
-        sorted(name for name in common if set(old[name].allowed_effects) != set(new[name].allowed_effects))
+        sorted(
+            name
+            for name in common
+            if set(old[name].allowed_effects) != set(new[name].allowed_effects)
+        )
     )
     policy_changes = tuple(
-        sorted(name for name in common if set(old[name].required_policies) != set(new[name].required_policies))
+        sorted(
+            name
+            for name in common
+            if set(old[name].required_policies) != set(new[name].required_policies)
+        )
     )
     if set(previous.spec.mandatory_policies) != set(current.spec.mandatory_policies):
         policy_changes = tuple(sorted(set(policy_changes) | {"<workflow>"}))
@@ -546,6 +554,7 @@ def _coerce_snapshot(value: ProcessInstanceSnapshot | Mapping[str, Any]) -> Proc
         revision = int(raw_revision) if raw_revision is not None else None
     except (TypeError, ValueError):
         revision = None
+
     def as_text(field: str) -> str | None:
         raw = _snapshot_field(value, field)
         return str(raw) if raw is not None else None
