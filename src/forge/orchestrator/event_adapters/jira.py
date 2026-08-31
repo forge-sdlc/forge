@@ -131,9 +131,7 @@ def _canonical_facts(
         # changelog routing and only needs normalized comment text here.
         "changelog": {},
         "comment": None,
-        "comment_text": _comment_text(comment.get("body", ""))
-        if isinstance(comment, dict)
-        else "",
+        "comment_text": _comment_text(comment.get("body", "")) if isinstance(comment, dict) else "",
         "source_ticket_key": str(source_ticket_key) if source_ticket_key else None,
     }
 
