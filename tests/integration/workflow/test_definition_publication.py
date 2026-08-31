@@ -13,19 +13,27 @@ async def test_redis_publication_activation_and_cas(redis_client) -> None:
     second = first.model_copy(
         update={
             "metadata": first.metadata.model_copy(
-                update={"revision": 2, "description": "compatible description update"}
+                update={
+                    "revision": first.metadata.revision + 1,
+                    "description": "compatible description update",
+                }
             )
         }
     )
 
     await publisher.publish(first, actor="platform", reason="initial publication")
-    await publisher.activate("feature", 1, actor="platform", reason="initial rollout")
+    await publisher.activate(
+        "feature",
+        first.metadata.revision,
+        actor="platform",
+        reason="initial rollout",
+    )
     await publisher.publish(second, actor="platform", reason="approved revision")
 
     with pytest.raises(ValueError, match="concurrently"):
         await publisher.activate(
             "feature",
-            2,
+            second.metadata.revision,
             actor="platform",
             reason="stale rollout",
             expected_active_digest="stale",
@@ -33,7 +41,7 @@ async def test_redis_publication_activation_and_cas(redis_client) -> None:
 
     await publisher.activate(
         "feature",
-        2,
+        second.metadata.revision,
         actor="platform",
         reason="approved rollout",
         expected_active_digest=first.digest,
@@ -46,4 +54,7 @@ async def test_redis_publication_activation_and_cas(redis_client) -> None:
         "publish",
         "activate",
     ]
-    assert [item.metadata.revision for item in await publisher.history("feature")] == [1, 2]
+    assert [item.metadata.revision for item in await publisher.history("feature")] == [
+        first.metadata.revision,
+        second.metadata.revision,
+    ]
