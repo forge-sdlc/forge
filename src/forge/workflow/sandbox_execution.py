@@ -36,6 +36,7 @@ async def execute_sandbox_station(
         requested_at=project_requested_at(state),
         input=value,
     )
+
     async def handler(candidate: StationRequest[Any]):
         return await run_sandbox_execution_station(candidate, runner=runner)
 

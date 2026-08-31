@@ -102,9 +102,7 @@ def create_builtin_station_registry() -> StationRegistry:
         )
     )
     registry.register(
-        StationDefinition(
-            "persistence-actions", "1.0", PersistenceInput, run_persistence_station
-        )
+        StationDefinition("persistence-actions", "1.0", PersistenceInput, run_persistence_station)
     )
     registry.register(
         StationDefinition("task-routing", "1.0", TaskRoutingInput, run_task_routing_station)
@@ -132,9 +130,7 @@ def _validate_request(definition: StationDefinition, request: StationRequest[Any
         raise ValueError("Station request input does not match its registered contract")
 
 
-def _validate_outcome(
-    request: StationRequest[Any], outcome: StationOutcome[Any]
-) -> None:
+def _validate_outcome(request: StationRequest[Any], outcome: StationOutcome[Any]) -> None:
     if outcome.workflow != request.workflow or outcome.invocation != request.invocation:
         raise ValueError("Station outcome does not belong to its request")
     if (outcome.contract_name, outcome.contract_version) != (

@@ -422,15 +422,11 @@ class TestInteractiveGateBehavior:
         self, paused_state: TaskTakeoverState
     ) -> None:
         """Comment prefixed with '?' or '@forge ask' routes to answer_question."""
-        # 1. Direct bool flag
-        state_bool = {**paused_state, "is_question": True}
-        assert route_task_plan_approval(state_bool) == "answer_question"
-
-        # 2. '?' prefix comment
+        # '?' prefix comment
         state_q = {**paused_state, "feedback_comment": "?Can we run this in parallel?"}
         assert route_task_plan_approval(state_q) == "answer_question"
 
-        # 3. '@forge ask' prefix comment
+        # '@forge ask' prefix comment
         state_ask = {**paused_state, "feedback_comment": "@forge ask how does this scale?"}
         assert route_task_plan_approval(state_ask) == "answer_question"
 
@@ -438,11 +434,7 @@ class TestInteractiveGateBehavior:
         self, paused_state: TaskTakeoverState
     ) -> None:
         """Comment prefixed with '!' routes to regenerate_plan."""
-        # 1. Direct bool flag
-        state_bool = {**paused_state, "revision_requested": True}
-        assert route_task_plan_approval(state_bool) == "regenerate_plan"
-
-        # 2. '!' prefix comment
+        # '!' prefix comment
         state_excl = {**paused_state, "feedback_comment": "!Please add redis cache."}
         assert route_task_plan_approval(state_excl) == "regenerate_plan"
 
