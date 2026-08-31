@@ -160,7 +160,6 @@ def is_proposal_pull_request_event(
     )
 
 
-
 async def apply_observation_transition(
     runtime: Any,
     message: Any,
@@ -186,9 +185,7 @@ async def apply_observation_transition(
         "supplied" if policy.definition is not None else "implicit",
     )
     adapted_event = adapted_event or runtime._event_adapter_registry().adapt(message)
-    command_decision = command_decision or interpret_event(
-        message, adapted_event, current_state
-    )
+    command_decision = command_decision or interpret_event(message, adapted_event, current_state)
     workflow_command = command_decision.command
     if command_decision.command is not None:
         logger.debug(
@@ -274,9 +271,7 @@ async def apply_observation_transition(
                         message.ticket_key,
                         signal_type=str(feedback_request.arguments["signal_type"]),
                         current_node=str(feedback_request.arguments["stage"]),
-                        source_ticket_key=(
-                            str(source_ticket_key) if source_ticket_key else None
-                        ),
+                        source_ticket_key=(str(source_ticket_key) if source_ticket_key else None),
                     )
                 elif feedback_request.kind is FeedbackKind.OPTION_RANGE:
                     maximum = int(feedback_request.arguments["maximum"])
@@ -392,14 +387,10 @@ async def apply_observation_transition(
             else None
         )
         is_proposal_reply = (
-            is_proposal_pull_request_event(
-                message, current_state, event_obj, artifact="prd"
-            )
+            is_proposal_pull_request_event(message, current_state, event_obj, artifact="prd")
             and current_node in _PRD_GATE_NODES
         ) or (
-            is_proposal_pull_request_event(
-                message, current_state, event_obj, artifact="spec"
-            )
+            is_proposal_pull_request_event(message, current_state, event_obj, artifact="spec")
             and current_node in _SPEC_GATE_NODES
         )
         sender_login = event_obj.actor.login
@@ -466,9 +457,7 @@ async def apply_observation_transition(
                                 "comment_id": comment_id,
                                 "body": body,
                                 "author": sender_login,
-                                "commit_sha": event_obj.raw.get("comment", {}).get(
-                                    "commit_id", ""
-                                ),
+                                "commit_sha": event_obj.raw.get("comment", {}).get("commit_id", ""),
                             }
                         ],
                     }
@@ -598,9 +587,7 @@ async def apply_observation_transition(
                 elif comment_type == CommentType.FEEDBACK:
                     is_rejected = True
                     feedback = re.sub(r"^\s*!\s*", "", comment_body)
-                    logger.info(
-                        f"PRD PR feedback for {message.ticket_key}: {feedback[:100]}..."
-                    )
+                    logger.info(f"PRD PR feedback for {message.ticket_key}: {feedback[:100]}...")
                 else:
                     logger.info(
                         f"Informational comment on PRD PR for {message.ticket_key}, "
@@ -744,9 +731,7 @@ async def apply_observation_transition(
                 elif comment_type == CommentType.FEEDBACK:
                     is_rejected = True
                     feedback = re.sub(r"^\s*!\s*", "", comment_body)
-                    logger.info(
-                        f"Spec PR feedback for {message.ticket_key}: {feedback[:100]}..."
-                    )
+                    logger.info(f"Spec PR feedback for {message.ticket_key}: {feedback[:100]}...")
                 else:
                     logger.info(
                         f"Informational comment on spec PR for {message.ticket_key}, "
@@ -757,12 +742,14 @@ async def apply_observation_transition(
     # their overall verdict is satisfied. Semantically triage the complete review
     # before treating it as a revision request. Only a satisfied verdict stops;
     # ambiguous results retain the original feedback and revise within the cap.
-    is_prd_review = is_proposal_pull_request_event(
-        message, current_state, event_obj, artifact="prd"
-    ) and current_node in _PRD_GATE_NODES
-    is_spec_review = is_proposal_pull_request_event(
-        message, current_state, event_obj, artifact="spec"
-    ) and current_node in _SPEC_GATE_NODES
+    is_prd_review = (
+        is_proposal_pull_request_event(message, current_state, event_obj, artifact="prd")
+        and current_node in _PRD_GATE_NODES
+    )
+    is_spec_review = (
+        is_proposal_pull_request_event(message, current_state, event_obj, artifact="spec")
+        and current_node in _SPEC_GATE_NODES
+    )
     if (
         is_rejected
         and proposal_review_threads
@@ -839,9 +826,7 @@ async def apply_observation_transition(
         review_state = event_obj.review.state.value if event_obj.review else "comment"
         review_author = event_obj.actor.login or "unknown bot"
         artifact_type = "PRD" if is_prd_review else "specification"
-        artifact_content = current_state.get(
-            "prd_content" if is_prd_review else "spec_content", ""
-        )
+        artifact_content = current_state.get("prd_content" if is_prd_review else "spec_content", "")
         decision = await runtime._review_enrichment().triage_automated(
             artifact_type=artifact_type,
             artifact_content=artifact_content,
@@ -906,9 +891,7 @@ async def apply_observation_transition(
             # regardless of whether a summary body is also present.
             repo_full = event_obj.repo_ref.namespace
             pr_number = (
-                event_obj.change_request.identity.native_id
-                if event_obj.change_request
-                else None
+                event_obj.change_request.identity.native_id if event_obj.change_request else None
             )
             inline_comments = []
             if repo_full and pr_number:
@@ -1067,9 +1050,7 @@ async def apply_observation_transition(
 
         if is_terminal or cap_reached:
             last_error = current_state.get("last_error", "Unknown error")
-            reason = (
-                "terminal state" if is_terminal else f"retry cap ({MAX_AUTO_RETRIES}) reached"
-            )
+            reason = "terminal state" if is_terminal else f"retry cap ({MAX_AUTO_RETRIES}) reached"
             if cap_reached and current_state.get("auto_retry_cap_notified"):
                 logger.info(
                     f"Workflow for {message.ticket_key} is already blocked after "
@@ -1107,10 +1088,7 @@ async def apply_observation_transition(
             "human_review_gate",
             "review_response_gate",
         )
-        if (
-            not current_state.get("is_paused", True)
-            and current_node not in _signal_required_nodes
-        ):
+        if not current_state.get("is_paused", True) and current_node not in _signal_required_nodes:
             # Workflow is unpaused at an execution node — let it run.
             # Covers checkpoint patches and nodes that don't need a signal.
             logger.info(
