@@ -41,12 +41,22 @@ class WorkflowStep(StrictModel):
     route: str | None = None
     branches: dict[str, str] = Field(default_factory=dict)
     dynamic_route: bool = Field(default=False, alias="dynamicRoute")
-    dynamic_targets: tuple[str, ...] = Field(default=(), alias="dynamicTargets")
+    # Legacy router capability metadata. New definitions omit it; the trusted
+    # router catalog owns the possible destinations.
+    dynamic_targets: tuple[str, ...] = Field(
+        default=(), alias="dynamicTargets", exclude_if=lambda value: not value
+    )
+    # Legacy catalog metadata remains readable for pinned definitions. New
+    # definitions omit it and the compiler derives it from the state profile.
     kind: Literal["station", "gate", "operation"] | None = None
     station_contract: str | None = Field(default=None, alias="stationContract")
     station_contract_version: str | None = Field(default=None, alias="stationContractVersion")
-    required_policies: tuple[str, ...] = Field(default=(), alias="requiredPolicies")
-    allowed_effects: tuple[str, ...] = Field(default=(), alias="allowedEffects")
+    required_policies: tuple[str, ...] = Field(
+        default=(), alias="requiredPolicies", exclude_if=lambda value: not value
+    )
+    # Legacy effect metadata. Authority belongs to the trusted node catalog;
+    # this remains readable so old pinned definitions preserve their identity.
+    allowed_effects: tuple[str, ...] | None = Field(default=None, alias="allowedEffects")
     join: Literal["all", "any"] | None = None
     max_concurrency: int | None = Field(default=None, alias="maxConcurrency", ge=1, le=64)
     retry_bound: int | None = Field(default=None, alias="retryBound", ge=1, le=100)
@@ -64,7 +74,7 @@ class WorkflowStep(StrictModel):
             raise ValueError("branches are only valid with 'route'")
         if self.route and not self.branches and not self.dynamic_route:
             raise ValueError("a routed step requires non-empty branches")
-        if self.dynamic_route and (not self.route or self.branches or not self.dynamic_targets):
+        if self.dynamic_route and (not self.route or self.branches):
             raise ValueError("dynamicRoute requires a route and cannot declare static branches")
         if not self.dynamic_route and self.dynamic_targets:
             raise ValueError("dynamicTargets are only valid with dynamicRoute")
@@ -103,10 +113,16 @@ class WorkflowSpec(StrictModel):
     # capabilities; arbitrary import paths are deliberately not supported.
     # Definitions which do not accept external observation transitions may
     # leave this unset (for example, small local test workflows).
+    # Legacy derived/governance fields. They are accepted so an old pinned
+    # artifact keeps its identity, but omitted from newly-authored definitions.
     observation_policy: str | None = Field(default=None, alias="observationPolicy")
     resume: WorkflowResume = Field(default_factory=WorkflowResume)
-    mandatory_policies: tuple[str, ...] = Field(default=(), alias="mandatoryPolicies")
-    extension_points: tuple[str, ...] = Field(default=(), alias="extensionPoints")
+    mandatory_policies: tuple[str, ...] = Field(
+        default=(), alias="mandatoryPolicies", exclude_if=lambda value: not value
+    )
+    extension_points: tuple[str, ...] = Field(
+        default=(), alias="extensionPoints", exclude_if=lambda value: not value
+    )
 
     @field_validator("entry")
     @classmethod

@@ -71,7 +71,6 @@ class TestTaskTakeoverGraphStructure:
             "human_review_gate",
             "implement_review",
             "review_response_gate",
-            "rebase_pr",
             "complete_task_takeover",
         }
         for node in expected_nodes:

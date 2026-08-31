@@ -44,9 +44,14 @@ flowchart LR
 
 Forge ships immutable, versioned golden-path definitions for Feature/Story, Bug, and managed
 Task/Epic workflows. Project administrators can publish constrained definitions composed only from
-registered nodes, routes, gates, stations, and effect capabilities. Definitions cannot execute
-arbitrary Python or weaken mandatory policies. See
+registered nodes, routes, gates, and stations. Effect authority is attached to those trusted nodes
+in the Forge catalog rather than granted by workflow authors. Definitions cannot execute arbitrary
+Python, expand node authority, or weaken mandatory policies. See
 [Declarative workflows](../reference/declarative-workflows.md).
+
+Exceptional user commands are handled outside lifecycle topology. For example, `/forge rebase`
+executes a trusted command operation and then resumes the saved workflow position; it is not a
+workflow node with branches to every possible return stage.
 
 ## Model execution
 

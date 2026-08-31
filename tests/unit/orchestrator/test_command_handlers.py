@@ -1,10 +1,14 @@
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from forge.domain import WorkflowCommand, WorkflowCommandType, WorkflowIdentity
 from forge.orchestrator.command_handlers import (
     FeedbackKind,
     create_default_command_handler_registry,
 )
+from forge.workflow.command_operations import execute_command_operation
 
 
 def _command(command_type: WorkflowCommandType, **arguments) -> WorkflowCommand:
@@ -37,8 +41,28 @@ def test_rebase_preserves_return_position() -> None:
     )
 
     assert application is not None
-    assert application.state["current_node"] == "rebase_pr"
+    assert application.state["current_node"] == "human_review_gate"
     assert application.state["rebase_return_node"] == "human_review_gate"
+    assert application.state["context"]["force_fresh_invoke"] is True
+
+
+@pytest.mark.asyncio
+async def test_rebase_executes_outside_the_workflow_graph() -> None:
+    state = {
+        "current_node": "human_review_gate",
+        "rebase_return_node": "human_review_gate",
+    }
+    result = {**state, "rebase_return_node": None, "last_error": None}
+
+    with patch(
+        "forge.workflow.command_operations.rebase_pr",
+        new=AsyncMock(return_value=result),
+    ) as operation:
+        actual = await execute_command_operation(_command(WorkflowCommandType.REBASE), state)
+
+    operation.assert_awaited_once_with(state)
+    assert actual["current_node"] == "human_review_gate"
+    assert actual["rebase_return_node"] is None
 
 
 def test_select_option_validates_against_authoritative_state() -> None:

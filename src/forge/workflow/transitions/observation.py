@@ -78,8 +78,8 @@ def _validate_policy(policy: ObservationTransitionPolicy) -> frozenset[str] | No
     if policy.definition is None:
         raise ValueError("a governed observation policy requires a pinned definition")
     spec = policy.definition.get("spec")
-    if not isinstance(spec, Mapping) or spec.get("observationPolicy") != policy.identifier:
-        raise ValueError("checkpoint definition does not select the requested observation policy")
+    if not isinstance(spec, Mapping):
+        raise ValueError("checkpoint definition has no workflow specification")
     steps = spec.get("steps")
     if not isinstance(steps, Mapping):
         raise ValueError("checkpoint definition has no workflow steps")

@@ -394,15 +394,7 @@ class TestGraphCompilation:
         targets = {e.target for e in compiled.get_graph().edges if e.source == "attempt_ci_fix"}
         assert "escalate_blocked" in targets
 
-    def test_rebase_can_return_to_post_pr_nodes(self):
+    def test_rebase_is_not_a_workflow_node(self):
         graph = build_bug_graph()
         compiled = graph.compile()
-        targets = {e.target for e in compiled.get_graph().edges if e.source == "rebase_pr"}
-
-        assert {
-            "ci_evaluator",
-            "implement_review",
-            "review_response_gate",
-            "create_pr",
-            "teardown_workspace",
-        }.issubset(targets)
+        assert "rebase_pr" not in compiled.get_graph().nodes

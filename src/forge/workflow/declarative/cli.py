@@ -76,6 +76,54 @@ async def cmd_workflow(args: Any) -> int:
         print(simulation.model_dump_json(indent=2))
         return 0 if simulation.compatible else 2
 
+    if action == "catalog":
+        from forge.workflow.declarative.catalog import get_state_profile
+
+        profile = get_state_profile(args.state)
+        catalog = {
+            "state": args.state,
+            "nodes": {
+                name: {
+                    "kind": (
+                        "gate"
+                        if name in profile.pause_nodes
+                        else "station"
+                        if name in profile.station_bindings
+                        else "operation"
+                    ),
+                    **(
+                        {
+                            "stationContract": profile.station_bindings[name][0],
+                            "stationContractVersion": profile.station_bindings[name][1],
+                        }
+                        if name in profile.station_bindings
+                        else {}
+                    ),
+                    "effects": list(profile.effect_policies[name].default),
+                    "optionalEffects": sorted(profile.effect_policies[name].optional),
+                }
+                for name in sorted(profile.nodes)
+            },
+            "routers": {
+                name: {
+                    **(
+                        {"dynamicTargets": sorted(profile.dynamic_router_targets[name])}
+                        if name in profile.dynamic_router_targets
+                        else {}
+                    )
+                }
+                for name in sorted(profile.routers)
+            },
+            "pauseNodes": sorted(profile.pause_nodes),
+            "mandatoryPolicies": sorted(profile.mandatory_policies),
+            "observationPolicies": sorted(profile.observation_policy_targets),
+        }
+        if args.json:
+            print(json.dumps(catalog, indent=2))
+        else:
+            print(yaml.safe_dump(catalog, sort_keys=False).rstrip())
+        return 0
+
     try:
         project_key = args.project_key.upper()
         publisher = DefinitionPublisher(project_key)

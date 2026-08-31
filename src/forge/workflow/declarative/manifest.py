@@ -216,33 +216,26 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
     """Build an inspectable view from the same definition used by the runtime compiler."""
     from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler
 
-    DeclarativeWorkflowCompiler(definition).validate()
+    compiler = DeclarativeWorkflowCompiler(definition)
+    compiler.validate()
     profile = get_state_profile(definition.spec.state)
     nodes = []
     transitions = []
     for name, step in definition.spec.steps.items():
         binding = profile.station_bindings.get(name)
-        kind = (
-            ProcessNodeKind(step.kind)
-            if step.kind
-            else ProcessNodeKind.GATE
-            if name in profile.pause_nodes
-            else ProcessNodeKind.STATION
-            if binding
-            else ProcessNodeKind.OPERATION
-        )
+        kind = ProcessNodeKind(profile.node_kind(name))
         nodes.append(
             ProcessNode(
                 name=name,
                 kind=kind,
                 station_contract=binding[0] if binding else None,
                 station_contract_version=binding[1] if binding else None,
-                required_policies=tuple(sorted(step.required_policies)),
-                allowed_effects=tuple(sorted(step.allowed_effects)),
+                required_policies=tuple(sorted(profile.mandatory_policies)),
+                allowed_effects=compiler.effective_effects(name),
                 join=step.join,
                 max_concurrency=step.max_concurrency,
                 retry_bound=step.retry_bound,
-                external_entry=step.external_entry,
+                external_entry=False,
             )
         )
         if step.next:
@@ -250,7 +243,7 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
         elif step.dynamic_route:
             transitions.extend(
                 ProcessTransition(source=name, target=target, outcome="dynamic")
-                for target in step.dynamic_targets
+                for target in compiler.dynamic_targets(step)
             )
         else:
             transitions.extend(
@@ -305,19 +298,29 @@ def compare_process_definitions(
     added = tuple(sorted(new_names - old_names))
     removed = tuple(sorted(old_names - new_names))
 
-    def step_signature(step: Any) -> tuple[Any, ...]:
+    def effective_effects(definition: WorkflowDefinition, name: str) -> tuple[str, ...]:
+        profile = get_state_profile(definition.spec.state)
+        policy = profile.effect_policies.get(name)
+        declared = definition.spec.steps[name].allowed_effects
+        if policy is None:
+            return declared or ()
+        return policy.resolve(declared)
+
+    def step_signature(definition: WorkflowDefinition, name: str, step: Any) -> tuple[Any, ...]:
         """Executable step fields, normalizing fields whose order is irrelevant."""
+        profile = get_state_profile(definition.spec.state)
+        dynamic_targets = (
+            profile.dynamic_router_targets.get(step.route, frozenset())
+            if step.dynamic_route
+            else frozenset()
+        )
         return (
             step.next,
             step.route,
             tuple(sorted(step.branches.items())),
             step.dynamic_route,
-            tuple(sorted(step.dynamic_targets)),
-            step.kind,
-            step.station_contract,
-            step.station_contract_version,
-            tuple(sorted(step.required_policies)),
-            tuple(sorted(step.allowed_effects)),
+            tuple(sorted(dynamic_targets)),
+            effective_effects(definition, name),
             step.join,
             step.max_concurrency,
             step.retry_bound,
@@ -325,24 +328,34 @@ def compare_process_definitions(
 
     common = old_names & new_names
     changed = tuple(
-        sorted(name for name in common if step_signature(old[name]) != step_signature(new[name]))
+        sorted(
+            name
+            for name in common
+            if step_signature(previous, name, old[name]) != step_signature(current, name, new[name])
+        )
     )
 
-    def transitions(steps: Mapping[str, Any]) -> dict[str, frozenset[tuple[str, str, str | None]]]:
+    def transitions(
+        definition: WorkflowDefinition, steps: Mapping[str, Any]
+    ) -> dict[str, frozenset[tuple[str, str, str | None]]]:
+        profile = get_state_profile(definition.spec.state)
         result: dict[str, frozenset[tuple[str, str, str | None]]] = {}
         for name, step in steps.items():
             edges: set[tuple[str, str, str | None]]
             if step.next:
                 edges = {(name, step.next, None)}
             elif step.dynamic_route:
-                edges = {(name, target, "dynamic") for target in step.dynamic_targets}
+                edges = {
+                    (name, target, "dynamic")
+                    for target in profile.dynamic_router_targets.get(step.route, frozenset())
+                }
             else:
                 edges = {(name, target, outcome) for outcome, target in step.branches.items()}
             result[name] = frozenset(edges)
         return result
 
-    old_transitions = transitions(old)
-    new_transitions = transitions(new)
+    old_transitions = transitions(previous, old)
+    new_transitions = transitions(current, new)
     changed_transitions = tuple(
         sorted(name for name in common if old_transitions[name] != new_transitions[name])
     )
@@ -358,32 +371,25 @@ def compare_process_definitions(
         if old_edges != new_edges:
             routing_changes.append(name)
 
+    old_profile = get_state_profile(previous.spec.state)
+    new_profile = get_state_profile(current.spec.state)
     station_contract_changes = tuple(
         sorted(
             name
             for name in common
-            if (old[name].station_contract, old[name].station_contract_version)
-            != (new[name].station_contract, new[name].station_contract_version)
+            if old_profile.station_bindings.get(name) != new_profile.station_bindings.get(name)
         )
     )
     effect_capability_changes = tuple(
         sorted(
             name
             for name in common
-            if set(old[name].allowed_effects) != set(new[name].allowed_effects)
+            if set(effective_effects(previous, name)) != set(effective_effects(current, name))
         )
     )
-    policy_changes = tuple(
-        sorted(
-            name
-            for name in common
-            if set(old[name].required_policies) != set(new[name].required_policies)
-        )
+    policy_changes = (
+        ("<workflow>",) if old_profile.mandatory_policies != new_profile.mandatory_policies else ()
     )
-    if set(previous.spec.mandatory_policies) != set(current.spec.mandatory_policies):
-        policy_changes = tuple(sorted(set(policy_changes) | {"<workflow>"}))
-    if set(previous.spec.extension_points) != set(current.spec.extension_points):
-        policy_changes = tuple(sorted(set(policy_changes) | {"<extensions>"}))
     join_changes = tuple(sorted(name for name in common if old[name].join != new[name].join))
     concurrency_changes = tuple(
         sorted(name for name in common if old[name].max_concurrency != new[name].max_concurrency)

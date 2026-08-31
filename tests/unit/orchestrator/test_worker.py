@@ -3023,8 +3023,8 @@ class TestSkipGateCommandTypedFields:
         assert kwargs["sender"] == "octocat"
 
     @pytest.mark.asyncio
-    async def test_rebase_command_routes_to_rebase_pr(self, worker):
-        """/forge rebase reads typed fields and routes to rebase_pr."""
+    async def test_rebase_command_preserves_graph_position(self, worker):
+        """/forge rebase is an operation and does not become a graph stage."""
         event = _make_normalized_event(kind=EventKind.COMMENT_CREATED)
         event.comment = ReviewComment(id="1", body="/forge rebase", author="octocat")
         message = QueueMessage(
@@ -3046,9 +3046,10 @@ class TestSkipGateCommandTypedFields:
         with patch.object(worker, "_post_rebase_feedback", feedback):
             updated = await worker._apply_observation_transition(message, current_state)
 
-        assert updated["current_node"] == "rebase_pr"
+        assert updated["current_node"] == "human_review_gate"
         assert updated["is_paused"] is False
         assert updated["rebase_return_node"] == "human_review_gate"
+        assert updated["context"]["force_fresh_invoke"] is True
         feedback.assert_called_once()
         kwargs = feedback.call_args.kwargs
         assert kwargs["repo_ref"].namespace == "acme/payments"

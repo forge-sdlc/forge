@@ -100,8 +100,10 @@ def _apply_rebase(command: WorkflowCommand, state: Mapping[str, Any]) -> Command
             **state,
             "rebase_return_node": current_node,
             "is_paused": False,
-            # Compatibility transition until Phase 5 owns topology.
-            "current_node": "rebase_pr",
+            "context": {
+                **dict(state.get("context") or {}),
+                "force_fresh_invoke": True,
+            },
         },
         feedback=FeedbackRequest(FeedbackKind.REBASE, {"sender": command.arguments.get("sender")}),
     )

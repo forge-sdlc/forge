@@ -6,6 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from forge.workflow.declarative.effect_catalog import (
+    EFFECT_POLICIES_BY_PROFILE,
+    NodeEffectPolicy,
+)
 from forge.workflow.node_contracts import contracts_for
 from forge.workflow.preconditions import NodeContract
 
@@ -37,14 +41,32 @@ class StateProfile:
     pause_nodes: frozenset[str]
     contracts: dict[str, NodeContract] = field(default_factory=dict)
     station_bindings: dict[str, tuple[str, str]] = field(default_factory=dict)
+    effect_policies: dict[str, NodeEffectPolicy] = field(default_factory=dict)
     mandatory_nodes: frozenset[str] = frozenset()
-    supported_policies: frozenset[str] = frozenset({"forge-contracts-v1"})
-    supported_extensions: frozenset[str] = frozenset(
-        {"station-behavior", "optional-stations", "routing-branches"}
-    )
+    mandatory_policies: frozenset[str] = frozenset({"forge-contracts-v1"})
+    default_observation_policy: str | None = POST_PR_OBSERVATION_POLICY
     observation_policy_targets: dict[str, frozenset[str]] = field(
         default_factory=lambda: dict(OBSERVATION_POLICY_TARGETS)
     )
+    # Dynamic router destinations are executable capabilities of the trusted
+    # router implementation, not choices authored into workflow topology.
+    dynamic_router_targets: dict[str, frozenset[str]] = field(default_factory=dict)
+
+    def node_kind(self, name: str) -> str:
+        """Return catalog-owned display and governance kind for a node."""
+        if name in self.pause_nodes:
+            return "gate"
+        if name in self.station_bindings:
+            return "station"
+        return "operation"
+
+    def observation_policy_for(self, nodes: set[str]) -> str | None:
+        """Derive observation handling when its complete target lifecycle is present."""
+        policy = self.default_observation_policy
+        if policy is None:
+            return None
+        targets = self.observation_policy_targets[policy]
+        return policy if targets <= nodes else None
 
 
 def _common_nodes() -> dict[str, Callable[..., Any]]:
@@ -56,7 +78,6 @@ def _common_nodes() -> dict[str, Callable[..., Any]]:
         human_review_gate,
         implement_review,
         implement_work,
-        rebase_pr,
         review_response_gate,
         setup_workspace,
         teardown_and_route,
@@ -71,7 +92,6 @@ def _common_nodes() -> dict[str, Callable[..., Any]]:
         "human_review_gate": human_review_gate,
         "implement_work": implement_work,
         "implement_review": implement_review,
-        "rebase_pr": rebase_pr,
         "review_response_gate": review_response_gate,
         "setup_workspace": setup_workspace,
         "teardown_workspace": teardown_and_route,
@@ -239,6 +259,7 @@ def get_state_profile(name: str) -> StateProfile:
                 "human_review_gate": ("persistence-actions", "1.0"),
                 "implement_review": ("sandbox-execution", "1.0"),
             },
+            dict(EFFECT_POLICIES_BY_PROFILE["feature"]),
             frozenset(
                 {
                     "prd_approval_gate",
@@ -248,6 +269,9 @@ def get_state_profile(name: str) -> StateProfile:
                     "human_review_gate",
                 }
             ),
+            dynamic_router_targets={
+                "route_tasks_parallel": frozenset({"setup_workspace"}),
+            },
         )
 
     if name == "bug":
@@ -352,6 +376,7 @@ def get_state_profile(name: str) -> StateProfile:
                 "implement_review": ("sandbox-execution", "1.0"),
                 "post_merge_summary": ("persistence-actions", "1.0"),
             },
+            dict(EFFECT_POLICIES_BY_PROFILE["bug"]),
             frozenset(
                 {"triage_gate", "rca_option_gate", "plan_approval_gate", "human_review_gate"}
             ),
@@ -433,6 +458,7 @@ def get_state_profile(name: str) -> StateProfile:
                 "human_review_gate": ("persistence-actions", "1.0"),
                 "implement_review": ("sandbox-execution", "1.0"),
             },
+            dict(EFFECT_POLICIES_BY_PROFILE["task_takeover"]),
             frozenset({"triage_gate", "task_plan_approval_gate", "human_review_gate"}),
         )
 

@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from forge.orchestrator.worker import OrchestratorWorker
 from forge.workflow.declarative.builtins import builtin_definitions, builtin_feature_definition
+from forge.workflow.declarative.catalog import get_state_profile
 from forge.workflow.declarative.cli import cmd_workflow
 from forge.workflow.declarative.compiler import (
     DeclarativeWorkflowCompiler,
@@ -66,10 +67,41 @@ def test_builtin_feature_golden_path_is_valid_and_inspectable() -> None:
     manifest = build_process_manifest(definition)
 
     assert definition.metadata.name == "feature"
-    assert len(manifest.nodes) == 33
-    assert any(node.name == "rebase_pr" and node.external_entry for node in manifest.nodes)
+    assert len(manifest.nodes) == 32
+    assert all(node.name != "rebase_pr" for node in manifest.nodes)
     assert any(node.name == "task_router" and node.station_contract for node in manifest.nodes)
     assert any(node.name == "prd_approval_gate" and node.kind == "gate" for node in manifest.nodes)
+
+
+def test_dynamic_router_targets_are_derived_from_trusted_catalog() -> None:
+    definition = builtin_feature_definition()
+    step = definition.spec.steps["task_router"]
+    compiler = DeclarativeWorkflowCompiler(definition)
+
+    assert step.dynamic_targets == ()
+    assert compiler.dynamic_targets(step) == frozenset({"setup_workspace"})
+    assert any(
+        transition.source == "task_router" and transition.target == "setup_workspace"
+        for transition in build_process_manifest(definition).transitions
+    )
+
+
+def test_legacy_dynamic_targets_cannot_override_router_catalog() -> None:
+    value = definition_value(
+        steps={
+            "task_router": {
+                "route": "route_tasks_parallel",
+                "dynamicRoute": True,
+                "dynamicTargets": ["implement_task"],
+                "maxConcurrency": 16,
+            },
+            "implement_task": {"next": "__end__"},
+        }
+    )
+    value["spec"]["entry"] = "task_router"
+
+    with pytest.raises(WorkflowValidationError, match="catalog-owned"):
+        DeclarativeWorkflowCompiler(load_workflow_value(value)).validate()
 
 
 def test_every_supported_golden_path_uses_the_versioned_definition_compiler() -> None:
@@ -80,26 +112,25 @@ def test_every_supported_golden_path_uses_the_versioned_definition_compiler() ->
         DeclarativeWorkflowCompiler(definition).validate()
         graph = DeclarativeWorkflowCompiler(definition).build_graph()
         assert graph is not None
-        assert definition.spec.mandatory_policies == ("forge-contracts-v1",)
-        assert all(
-            "forge-contracts-v1" in step.required_policies
-            for step in definition.spec.steps.values()
-        )
-        rebase = definition.spec.steps["rebase_pr"]
-        assert rebase.external_entry is True
-        assert {"source_control.commit", "source_control.review"}.issubset(rebase.allowed_effects)
+        profile = get_state_profile(definition.spec.state)
+        assert definition.spec.mandatory_policies == ()
+        assert profile.mandatory_policies == frozenset({"forge-contracts-v1"})
+        assert all(not step.required_policies for step in definition.spec.steps.values())
+        assert "rebase_pr" not in definition.spec.steps
+        assert "rebase_pr" not in profile.nodes
 
 
-def test_every_builtin_step_can_emit_audited_status_and_error_comments() -> None:
+def test_every_builtin_step_inherits_audited_status_and_error_comment_authority() -> None:
     definitions = {item.metadata.name: item for item in builtin_definitions()}
 
     for definition in definitions.values():
+        compiler = DeclarativeWorkflowCompiler(definition)
         assert all(
-            "jira.comment" in step.allowed_effects for step in definition.spec.steps.values()
+            "jira.comment" in compiler.effective_effects(name) for name in definition.spec.steps
         )
 
 
-def test_builtin_effectful_steps_declare_domain_mutations() -> None:
+def test_builtin_effectful_steps_inherit_domain_mutations() -> None:
     definitions = {item.metadata.name: item for item in builtin_definitions()}
     required = {
         ("bug", "plan_bug_fix"): {"jira.comment", "jira.labels"},
@@ -115,17 +146,19 @@ def test_builtin_effectful_steps_declare_domain_mutations() -> None:
         },
     }
     for (workflow, step), effects in required.items():
-        assert effects.issubset(definitions[workflow].spec.steps[step].allowed_effects)
+        compiler = DeclarativeWorkflowCompiler(definitions[workflow])
+        assert effects.issubset(compiler.effective_effects(step))
 
 
-def test_shared_repair_and_review_steps_declare_source_control_writes() -> None:
+def test_shared_repair_and_review_steps_inherit_source_control_writes() -> None:
     for definition in builtin_definitions():
-        assert "jira.labels" in definition.spec.steps["ci_evaluator"].allowed_effects
-        assert "source_control.commit" in definition.spec.steps["attempt_ci_fix"].allowed_effects
+        compiler = DeclarativeWorkflowCompiler(definition)
+        assert "jira.labels" in compiler.effective_effects("ci_evaluator")
+        assert "source_control.commit" in compiler.effective_effects("attempt_ci_fix")
         assert {"source_control.commit", "source_control.review"}.issubset(
-            definition.spec.steps["implement_review"].allowed_effects
+            compiler.effective_effects("implement_review")
         )
-        assert "source_control.review" in definition.spec.steps["answer_question"].allowed_effects
+        assert "source_control.review" in compiler.effective_effects("answer_question")
 
 
 @pytest.mark.asyncio
@@ -143,7 +176,7 @@ def test_builtin_golden_paths_select_the_governed_observation_policy() -> None:
     for definition in builtin_definitions():
         workflow = DeclarativeWorkflow(definition, "BUILTIN")
 
-        assert definition.spec.observation_policy == "post-pr-v1"
+        assert definition.spec.observation_policy is None
         assert workflow.observation_policy == "post-pr-v1"
         assert workflow.resolve_observation_policy() == "post-pr-v1"
 
@@ -581,6 +614,18 @@ spec:
 
     assert result == 0
     assert "flowchart TD" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_cli_catalog_exposes_catalog_owned_effect_authority(capsys) -> None:
+    result = await cmd_workflow(Namespace(workflow_command="catalog", state="feature", json=False))
+
+    output = capsys.readouterr().out
+    assert result == 0
+    assert "generate_prd:" in output
+    assert "effects:" in output
+    assert "jira.comment" in output
+    assert "routers:" in output
 
 
 @pytest.mark.asyncio

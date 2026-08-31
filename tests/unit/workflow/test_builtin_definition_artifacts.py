@@ -24,9 +24,9 @@ _DEFINITIONS = {
 # A changed digest is an intentional process revision and must update the
 # checked-in artifact and this snapshot together.
 _DIGESTS = {
-    "feature": "acd72772df85b1eee7923a7755152f15e80b1a0e53aa437d7a9b67ff896aacac",
-    "bug": "673e79375089220d1f3c15644faf881b3d5b168ea45c1185df87dfa353acc582",
-    "task_takeover": "dd54bb71f81220228b8fb0302c9422b838c2335fba44fd13c25f2e56d4637c0d",
+    "feature": "ab7e723fb4938c3dd3a1eff8fd0ea4ba8d067013704cd2c1c61c7f89a79f4384",
+    "bug": "08c4869fa5f6e780fd65af8e9b0ccfc2097d1e53990e05ed99d3658b43d3b9d8",
+    "task_takeover": "a117afe337faa08ad493abca0137340447420d27396e4cd4e257a1836c90b4f0",
 }
 
 

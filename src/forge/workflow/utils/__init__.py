@@ -33,7 +33,6 @@ _SHARED_RESUME_MAP: dict[str, str] = {
     "review_response_gate": "review_response_gate",
     "ci_evaluator": "ci_evaluator",
     "attempt_ci_fix": "ci_evaluator",
-    "rebase_pr": "rebase_pr",
     # wait_for_ci_gate was merged into human_review_gate so CI and review run
     # concurrently; this compatibility alias lets a ticket already
     # checkpointed at wait_for_ci_gate before that merge resume correctly

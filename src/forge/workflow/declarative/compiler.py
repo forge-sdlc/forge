@@ -28,13 +28,31 @@ class DeclarativeWorkflowCompiler:
         self.definition = definition
         self.profile = get_state_profile(definition.spec.state)
 
+    def dynamic_targets(self, step: Any) -> frozenset[str]:
+        """Return catalog-owned targets, accepting matching legacy metadata."""
+        if not step.dynamic_route or not step.route:
+            return frozenset()
+        targets = self.profile.dynamic_router_targets.get(step.route)
+        if not targets:
+            raise WorkflowValidationError(
+                f"router '{step.route}' is not registered for dynamic routing"
+            )
+        declared = frozenset(step.dynamic_targets)
+        if declared and declared != targets:
+            raise WorkflowValidationError(
+                f"dynamicTargets for router '{step.route}' are catalog-owned"
+            )
+        return targets
+
     def validate(self) -> None:
         spec = self.definition.spec
         steps = spec.steps
         if spec.entry not in steps:
             raise WorkflowValidationError(f"entry node '{spec.entry}' is not declared")
 
-        unknown_policies = set(spec.mandatory_policies) - set(self.profile.supported_policies)
+        # The following checks preserve old pinned artifacts. New definitions
+        # omit this catalog/governance metadata entirely.
+        unknown_policies = set(spec.mandatory_policies) - set(self.profile.mandatory_policies)
         if unknown_policies:
             raise WorkflowValidationError(
                 f"unknown mandatory policy '{sorted(unknown_policies)[0]}'"
@@ -51,14 +69,13 @@ class DeclarativeWorkflowCompiler:
                     f"observation policy '{observation_policy}' targets undeclared node "
                     f"'{sorted(missing_policy_targets)[0]}'"
                 )
-        missing_nodes = (
-            set(self.profile.mandatory_nodes) - set(steps) if spec.mandatory_policies else set()
-        )
-        if missing_nodes:
-            raise WorkflowValidationError(
-                f"workflow omits mandatory gate '{sorted(missing_nodes)[0]}'"
-            )
-        unknown_extensions = set(spec.extension_points) - set(self.profile.supported_extensions)
+            derived_policy = self.profile.observation_policy_for(set(steps))
+            if observation_policy != derived_policy:
+                raise WorkflowValidationError(
+                    f"observation policy '{observation_policy}' is not applicable to this topology"
+                )
+        legacy_extensions = {"station-behavior", "optional-stations", "routing-branches"}
+        unknown_extensions = set(spec.extension_points) - legacy_extensions
         if unknown_extensions:
             raise WorkflowValidationError(
                 f"unsupported extension point '{sorted(unknown_extensions)[0]}'"
@@ -68,6 +85,11 @@ class DeclarativeWorkflowCompiler:
         if unknown_nodes:
             raise WorkflowValidationError(
                 f"node '{sorted(unknown_nodes)[0]}' is not registered for state '{spec.state}'"
+            )
+        missing_effect_policies = set(steps) - set(self.profile.effect_policies)
+        if missing_effect_policies:
+            raise WorkflowValidationError(
+                f"node '{sorted(missing_effect_policies)[0]}' has no registered effect policy"
             )
 
         adjacency: dict[str, set[str]] = {name: set() for name in steps}
@@ -81,7 +103,7 @@ class DeclarativeWorkflowCompiler:
             targets = (
                 [step.next]
                 if step.next
-                else list(step.dynamic_targets)
+                else list(self.dynamic_targets(step))
                 if step.dynamic_route
                 else list(step.branches.values())
             )
@@ -101,12 +123,16 @@ class DeclarativeWorkflowCompiler:
                 raise WorkflowValidationError(
                     f"step '{node_name}' omits mandatory policy '{sorted(missing_policies)[0]}'"
                 )
-            unknown_effects = set(step.allowed_effects) - set(KNOWN_EFFECT_CAPABILITIES)
+            unknown_effects = set(step.allowed_effects or ()) - set(KNOWN_EFFECT_CAPABILITIES)
             if unknown_effects:
                 raise WorkflowValidationError(
                     f"step '{node_name}' requests unknown effect capability "
                     f"'{sorted(unknown_effects)[0]}'"
                 )
+            try:
+                self.effective_effects(node_name)
+            except ValueError as exc:
+                raise WorkflowValidationError(f"step '{node_name}' {exc}") from exc
             binding = self.profile.station_bindings.get(node_name)
             if binding and (step.kind in {"station", "gate"} or step.station_contract):
                 declared = (step.station_contract, step.station_contract_version)
@@ -119,12 +145,21 @@ class DeclarativeWorkflowCompiler:
                     f"node '{node_name}' does not support station contract "
                     f"'{step.station_contract}'"
                 )
+            if step.kind is not None and step.kind != self.profile.node_kind(node_name):
+                raise WorkflowValidationError(
+                    f"node kind for '{node_name}' is catalog-owned and must be "
+                    f"'{self.profile.node_kind(node_name)}'"
+                )
+            if step.external_entry:
+                raise WorkflowValidationError(
+                    f"externalEntry is legacy command plumbing and is not valid on '{node_name}'"
+                )
 
         if not has_terminal:
             raise WorkflowValidationError("at least one path must target '__end__'")
 
         reachable: set[str] = set()
-        stack = [spec.entry, *(name for name, step in steps.items() if step.external_entry)]
+        stack = [spec.entry]
         while stack:
             node = stack.pop()
             if node in reachable:
@@ -149,7 +184,7 @@ class DeclarativeWorkflowCompiler:
         unguarded = {
             name
             for name, step in steps.items()
-            if name not in self.profile.pause_nodes and step.kind != "gate" and not step.retry_bound
+            if name not in self.profile.pause_nodes and not step.retry_bound
         }
         colors: dict[str, int] = {}
 
@@ -181,27 +216,12 @@ class DeclarativeWorkflowCompiler:
 
     def validate_for_publication(self) -> None:
         """Apply organizational governance in addition to structural validity."""
-        self.validate()
-        required_policies = {"forge-contracts-v1"}
-        missing_policies = required_policies - set(self.definition.spec.mandatory_policies)
-        if missing_policies:
-            raise WorkflowValidationError(
-                f"publication requires mandatory policy '{sorted(missing_policies)[0]}'"
-            )
         missing_nodes = set(self.profile.mandatory_nodes) - set(self.definition.spec.steps)
         if missing_nodes:
             raise WorkflowValidationError(
                 f"publication omits mandatory gate '{sorted(missing_nodes)[0]}'"
             )
-        for node_name, binding in self.profile.station_bindings.items():
-            step = self.definition.spec.steps.get(node_name)
-            if step is None:
-                continue
-            declared = (step.station_contract, step.station_contract_version)
-            if declared != binding:
-                raise WorkflowValidationError(
-                    f"published step '{node_name}' must declare station contract {binding}"
-                )
+        self.validate()
         self._validate_golden_route_contracts()
 
     def _validate_golden_route_contracts(self) -> None:
@@ -218,16 +238,17 @@ class DeclarativeWorkflowCompiler:
             "task_takeover": builtin_task_takeover_definition,
         }
         golden = factories[self.definition.spec.state]()
-        extensions = set(self.definition.spec.extension_points)
         for node_name, step in self.definition.spec.steps.items():
             expected = golden.spec.steps.get(node_name)
             if expected is None or not expected.route or step.route != expected.route:
                 continue
             expected_outcomes = (
-                set(expected.dynamic_targets) if expected.dynamic_route else set(expected.branches)
+                set(self.dynamic_targets(expected))
+                if expected.dynamic_route
+                else set(expected.branches)
             )
             declared_outcomes = (
-                set(step.dynamic_targets) if step.dynamic_route else set(step.branches)
+                set(self.dynamic_targets(step)) if step.dynamic_route else set(step.branches)
             )
             missing = expected_outcomes - declared_outcomes
             if missing:
@@ -235,10 +256,9 @@ class DeclarativeWorkflowCompiler:
                     f"step '{node_name}' omits router outcome '{sorted(missing)[0]}'"
                 )
             extra = declared_outcomes - expected_outcomes
-            if extra and "routing-branches" not in extensions:
+            if extra:
                 raise WorkflowValidationError(
-                    f"step '{node_name}' adds outcome '{sorted(extra)[0]}' without the "
-                    "routing-branches extension"
+                    f"step '{node_name}' adds unregistered router outcome '{sorted(extra)[0]}'"
                 )
 
     def build_graph(self) -> StateGraph[Any]:
@@ -254,7 +274,7 @@ class DeclarativeWorkflowCompiler:
                     terminal=step.next == "__end__",
                     contract=self.profile.contracts.get(node_name),
                     retry_bound=step.retry_bound,
-                    allowed_effects=step.allowed_effects,
+                    allowed_effects=self.effective_effects(node_name),
                 ),
             )
         graph.set_entry_point("_forge_entry")
@@ -280,7 +300,7 @@ class DeclarativeWorkflowCompiler:
                     node_name,
                     self._guarded_dynamic_router(
                         self.profile.routers[step.route],
-                        set(step.dynamic_targets),
+                        set(self.dynamic_targets(step)),
                         step.max_concurrency,
                     ),
                 )
@@ -296,6 +316,15 @@ class DeclarativeWorkflowCompiler:
                 branches,
             )
         return graph
+
+    def effective_effects(self, node_name: str) -> tuple[str, ...]:
+        """Resolve catalog-owned authority and an optional supported restriction."""
+        step = self.definition.spec.steps[node_name]
+        return self.profile.effect_policies[node_name].resolve(step.allowed_effects)
+
+    def effective_observation_policy(self) -> str | None:
+        """Return the profile policy implied by this definition's topology."""
+        return self.profile.observation_policy_for(set(self.definition.spec.steps))
 
     def _entry_route(self) -> Callable[[dict[str, Any]], str]:
         def route(state: dict[str, Any]) -> str:

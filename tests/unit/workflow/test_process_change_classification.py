@@ -1,6 +1,7 @@
 """Focused tests for declarative process-definition change impact."""
 
 from forge.workflow.declarative.builtins import builtin_feature_definition
+from forge.workflow.declarative.catalog import get_state_profile
 from forge.workflow.declarative.loader import load_workflow_value
 from forge.workflow.declarative.manifest import (
     ProcessChangeClassification,
@@ -27,7 +28,11 @@ def definition(
                 "state": state,
                 "entry": entry or next(iter(steps)),
                 "steps": steps,
-                **({"mandatoryPolicies": mandatory_policies} if mandatory_policies is not None else {}),
+                **(
+                    {"mandatoryPolicies": mandatory_policies}
+                    if mandatory_policies is not None
+                    else {}
+                ),
             },
         }
     )
@@ -66,12 +71,37 @@ def test_manifest_and_rendering_are_deterministically_ordered() -> None:
     second = build_process_manifest(reordered)
 
     assert [node.name for node in second.nodes] == sorted(node.name for node in second.nodes)
-    assert [(edge.source, edge.target, edge.outcome or "") for edge in second.transitions] == sorted(
+    assert [
         (edge.source, edge.target, edge.outcome or "") for edge in second.transitions
-    )
+    ] == sorted((edge.source, edge.target, edge.outcome or "") for edge in second.transitions)
     assert first.nodes == second.nodes
     assert first.transitions == second.transitions
     assert render_mermaid(first) == render_mermaid(second)
+
+
+def test_removing_legacy_catalog_metadata_is_semantically_a_patch() -> None:
+    current = builtin_feature_definition()
+    previous_raw = current.canonical_dict()
+    previous_raw["metadata"]["revision"] -= 1
+    profile = get_state_profile("feature")
+    for name, step in previous_raw["spec"]["steps"].items():
+        step["allowedEffects"] = list(profile.effect_policies[name].default)
+        step["kind"] = profile.node_kind(name)
+        step["requiredPolicies"] = sorted(profile.mandatory_policies)
+        if name in profile.station_bindings:
+            step["stationContract"], step["stationContractVersion"] = profile.station_bindings[name]
+    previous_raw["spec"]["observationPolicy"] = "post-pr-v1"
+    previous_raw["spec"]["mandatoryPolicies"] = sorted(profile.mandatory_policies)
+    previous_raw["spec"]["extensionPoints"] = ["station-behavior"]
+    previous = load_workflow_value(previous_raw)
+
+    assert previous.canonical_dict() == previous_raw
+
+    impact = compare_process_definitions(previous, current)
+
+    assert impact.classification is ProcessChangeClassification.PATCH
+    assert impact.changed_nodes == ()
+    assert impact.effect_capability_changes == ()
 
 
 def test_removed_nodes_need_mapping_and_mapped_removal_is_migratable() -> None:
@@ -122,7 +152,7 @@ def test_routing_and_outcome_changes_are_explicit_and_not_silently_compatible() 
     assert impact.compatible_for_in_flight is False
 
 
-def test_contract_effect_policy_and_execution_changes_are_breaking() -> None:
+def test_legacy_catalog_metadata_is_ignored_but_execution_changes_are_breaking() -> None:
     old = definition(
         revision=1,
         steps={
@@ -156,16 +186,18 @@ def test_contract_effect_policy_and_execution_changes_are_breaking() -> None:
 
     assert impact.classification is ProcessChangeClassification.BREAKING
     assert impact.compatible_for_in_flight is False
-    assert impact.station_contract_changes == ("work",)
+    assert impact.station_contract_changes == ()
     assert impact.effect_capability_changes == ("work",)
-    assert impact.policy_changes == ("work",)
+    assert impact.policy_changes == ()
     assert impact.retry_changes == ("work",)
 
 
 def test_state_profile_and_same_revision_mutation_are_breaking() -> None:
     old = definition(revision=1, steps={"work": {"next": "__end__"}})
     profile = definition(revision=2, steps={"work": {"next": "__end__"}}, state="bug")
-    mutated = definition(revision=1, steps={"work": {"next": "__end__"}, "new": {"next": "__end__"}})
+    mutated = definition(
+        revision=1, steps={"work": {"next": "__end__"}, "new": {"next": "__end__"}}
+    )
 
     profile_impact = compare_process_definitions(old, profile)
     mutation_impact = compare_process_definitions(old, mutated)

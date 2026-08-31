@@ -4,51 +4,23 @@
   "metadata": {
     "description": "Forge supported task-takeover golden path",
     "name": "task_takeover",
-    "revision": 3
+    "revision": 4
   },
   "spec": {
     "entry": "triage_check",
-    "observationPolicy": "post-pr-v1",
-    "extensionPoints": [
-      "station-behavior"
-    ],
-    "mandatoryPolicies": [
-      "forge-contracts-v1"
-    ],
     "resume": {
       "fromRevisions": {}
     },
     "state": "task_takeover",
     "steps": {
       "answer_question": {
-        "allowedEffects": [
-          "jira.comment",
-          "jira.issue_content",
-          "jira.issue_lifecycle",
-          "jira.issue_structure",
-          "jira.labels",
-          "jira.project_configuration",
-          "jira.status",
-          "source_control.review"
-        ],
         "branches": {
           "task_plan_approval_gate": "task_plan_approval_gate"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
-        "route": "route_after_answer",
-        "stationContract": "agent-operation",
-        "stationContractVersion": "1.0"
+        "route": "route_after_answer"
       },
       "attempt_ci_fix": {
-        "allowedEffects": [
-          "jira.comment",
-          "source_control.commit"
-        ],
         "branches": {
           "attempt_ci_fix": "escalate_blocked",
           "ci_evaluator": "ci_evaluator",
@@ -56,153 +28,57 @@
           "human_review_gate": "human_review_gate"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "retryBound": 5,
-        "route": "route_current_node",
-        "stationContract": "sandbox-execution",
-        "stationContractVersion": "1.0"
+        "route": "route_current_node"
       },
       "ci_evaluator": {
-        "allowedEffects": [
-          "jira.comment",
-          "jira.labels"
-        ],
         "branches": {
           "attempt_ci_fix": "attempt_ci_fix",
           "escalate_blocked": "escalate_blocked",
           "human_review_gate": "human_review_gate"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
-        "route": "route_ci_evaluation",
-        "stationContract": "sandbox-execution",
-        "stationContractVersion": "1.0"
+        "route": "route_ci_evaluation"
       },
       "complete_task_takeover": {
-        "allowedEffects": [
-          "jira.comment",
-          "jira.issue_content",
-          "jira.issue_lifecycle",
-          "jira.issue_structure",
-          "jira.labels",
-          "jira.project_configuration",
-          "jira.status"
-        ],
         "branches": {},
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "operation",
-        "next": "__end__",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ]
+        "next": "__end__"
       },
       "create_pr": {
-        "allowedEffects": [
-          "jira.comment",
-          "jira.issue_structure",
-          "jira.labels",
-          "jira.status",
-          "source_control.branch",
-          "source_control.commit",
-          "source_control.pull_request",
-          "source_control.review"
-        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "teardown_workspace": "teardown_workspace"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
-        "route": "route_after_pr_creation",
-        "stationContract": "agent-operation",
-        "stationContractVersion": "1.0"
+        "route": "route_after_pr_creation"
       },
       "escalate_blocked": {
-        "allowedEffects": [
-          "jira.comment",
-          "jira.issue_content",
-          "jira.issue_lifecycle",
-          "jira.issue_structure",
-          "jira.labels",
-          "jira.project_configuration",
-          "jira.status",
-          "source_control.review"
-        ],
         "branches": {},
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "operation",
-        "next": "__end__",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ]
+        "next": "__end__"
       },
       "execute_task_changes": {
-        "allowedEffects": [
-          "jira.comment"
-        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "execute_task_changes": "execute_task_changes",
           "run_qualitative_review": "run_qualitative_review"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "retryBound": 100,
-        "route": "route_after_execution",
-        "stationContract": "sandbox-execution",
-        "stationContractVersion": "1.0"
+        "route": "route_after_execution"
       },
       "generate_plan": {
-        "allowedEffects": [
-          "jira.comment",
-          "jira.labels"
-        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "generate_plan": "generate_plan",
           "task_plan_approval_gate": "task_plan_approval_gate"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "retryBound": 3,
-        "route": "route_after_generate_plan",
-        "stationContract": "agent-operation",
-        "stationContractVersion": "1.0"
+        "route": "route_after_generate_plan"
       },
       "human_review_gate": {
-        "allowedEffects": [
-          "jira.comment",
-          "jira.issue_content",
-          "jira.issue_lifecycle",
-          "jira.issue_structure",
-          "jira.labels",
-          "jira.project_configuration",
-          "jira.status",
-          "source_control.commit",
-          "source_control.review"
-        ],
         "branches": {
           "__end__": "__end__",
           "ci_evaluator": "ci_evaluator",
@@ -211,21 +87,9 @@
           "implement_review": "implement_review"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "gate",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
-        "route": "route_human_review_task_takeover",
-        "stationContract": "persistence-actions",
-        "stationContractVersion": "1.0"
+        "route": "route_human_review_task_takeover"
       },
       "implement_review": {
-        "allowedEffects": [
-          "jira.comment",
-          "source_control.commit",
-          "source_control.review"
-        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "human_review_gate": "human_review_gate",
@@ -233,70 +97,19 @@
           "review_response_gate": "review_response_gate"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "retryBound": 3,
-        "route": "route_current_node",
-        "stationContract": "sandbox-execution",
-        "stationContractVersion": "1.0"
-      },
-      "rebase_pr": {
-        "allowedEffects": [
-          "jira.comment",
-          "source_control.commit",
-          "source_control.review"
-        ],
-        "branches": {
-          "__end__": "__end__",
-          "attempt_ci_fix": "ci_evaluator",
-          "ci_evaluator": "ci_evaluator",
-          "complete_task_takeover": "complete_task_takeover",
-          "create_pr": "create_pr",
-          "escalate_blocked": "escalate_blocked",
-          "execute_task_changes": "execute_task_changes",
-          "generate_plan": "generate_plan",
-          "human_review_gate": "human_review_gate",
-          "implement_review": "implement_review",
-          "review_response_gate": "review_response_gate",
-          "run_qualitative_review": "run_qualitative_review",
-          "setup_workspace": "setup_workspace",
-          "task_plan_approval_gate": "task_plan_approval_gate",
-          "teardown_workspace": "teardown_workspace",
-          "triage_gate": "triage_gate"
-        },
-        "dynamicRoute": false,
-        "dynamicTargets": [],
-        "externalEntry": true,
-        "kind": "operation",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "route": "route_current_node"
       },
       "review_response_gate": {
-        "allowedEffects": [
-          "jira.comment"
-        ],
         "branches": {
           "__end__": "__end__",
           "human_review_gate": "human_review_gate",
           "implement_review": "implement_review"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "gate",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "route": "route_review_response"
       },
       "run_qualitative_review": {
-        "allowedEffects": [
-          "jira.comment"
-        ],
         "branches": {
           "create_pr": "create_pr",
           "escalate_blocked": "escalate_blocked",
@@ -304,36 +117,18 @@
           "run_qualitative_review": "run_qualitative_review"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "retryBound": 3,
-        "route": "route_after_qualitative_review",
-        "stationContract": "sandbox-execution",
-        "stationContractVersion": "1.0"
+        "route": "route_after_qualitative_review"
       },
       "setup_workspace": {
-        "allowedEffects": [
-          "jira.comment"
-        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "execute_task_changes": "execute_task_changes"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "operation",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "route": "route_after_workspace_setup"
       },
       "task_plan_approval_gate": {
-        "allowedEffects": [
-          "jira.comment"
-        ],
         "branches": {
           "__end__": "__end__",
           "answer_question": "answer_question",
@@ -341,41 +136,17 @@
           "setup_workspace": "setup_workspace"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "gate",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
-        "route": "route_task_plan_approval",
-        "stationContract": "approval-policy",
-        "stationContractVersion": "1.0"
+        "route": "route_task_plan_approval"
       },
       "teardown_workspace": {
-        "allowedEffects": [
-          "jira.comment"
-        ],
         "branches": {
           "human_review_gate": "human_review_gate",
           "setup_workspace": "setup_workspace"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "operation",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "route": "route_after_teardown"
       },
       "triage_check": {
-        "allowedEffects": [
-          "jira.comment",
-          "jira.issue_content",
-          "jira.issue_lifecycle",
-          "jira.issue_structure",
-          "jira.labels",
-          "jira.project_configuration",
-          "jira.status"
-        ],
         "branches": {
           "escalate_blocked": "escalate_blocked",
           "generate_plan": "generate_plan",
@@ -383,30 +154,15 @@
           "triage_gate": "triage_gate"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "station",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "retryBound": 3,
-        "route": "route_after_triage_check",
-        "stationContract": "triage-evaluation",
-        "stationContractVersion": "1.0"
+        "route": "route_after_triage_check"
       },
       "triage_gate": {
-        "allowedEffects": [
-          "jira.comment"
-        ],
         "branches": {
           "__end__": "__end__",
           "triage_check": "triage_check"
         },
         "dynamicRoute": false,
-        "dynamicTargets": [],
-        "kind": "gate",
-        "requiredPolicies": [
-          "forge-contracts-v1"
-        ],
         "route": "route_triage_gate"
       }
     }

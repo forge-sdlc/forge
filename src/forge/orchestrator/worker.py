@@ -59,6 +59,7 @@ from forge.reconciliation import (
 from forge.skills.orchestrator import ensure_skills
 from forge.skills.utils import extract_project_key
 from forge.utils.redaction import redact_secrets
+from forge.workflow.command_operations import execute_command_operation
 from forge.workflow.declarative.compiler import WorkflowValidationError
 from forge.workflow.declarative.resolver import (
     load_project_workflow,
@@ -123,7 +124,6 @@ _FRESH_INVOKE_NODES = (
     "ci_evaluator",
     "attempt_ci_fix",
     "human_review_gate",
-    "rebase_pr",
     "setup_workspace",
 )
 
@@ -583,6 +583,14 @@ class OrchestratorWorker:
                         else ObservationTransitionPolicy()
                     ),
                 )
+                if (
+                    updated_values is not existing_state.values
+                    and command_decision.command is not None
+                    and command_decision.command.command_type.value == "rebase"
+                ):
+                    updated_values = await execute_command_operation(
+                        command_decision.command, updated_values
+                    )
                 state_changed = updated_values is not existing_state.values
                 updated_values = record_command_decision(
                     updated_values,

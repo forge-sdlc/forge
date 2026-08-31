@@ -37,8 +37,8 @@ class DeclarativeWorkflow(BaseWorkflow):
 
     @property
     def observation_policy(self) -> str | None:
-        """Return the policy selected by this immutable definition."""
-        return self.definition.spec.observation_policy
+        """Return the observation policy derived from the selected state profile."""
+        return DeclarativeWorkflowCompiler(self.definition).effective_observation_policy()
 
     def resolve_observation_policy(self) -> str | None:
         """Resolve the selected policy through the profile allowlist.

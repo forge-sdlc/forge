@@ -93,7 +93,7 @@ async def test_publication_rejects_ungoverned_definition() -> None:
         }
     )
 
-    with pytest.raises(ValueError, match="mandatory policy"):
+    with pytest.raises(ValueError, match="mandatory gate"):
         await InMemoryDefinitionPublisher("proj").publish(
             ungoverned,
             actor="alice",

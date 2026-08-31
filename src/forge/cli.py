@@ -1730,6 +1730,12 @@ def main(argv: list[str] | None = None) -> int:
     workflow_simulate.add_argument("current")
     workflow_simulate.add_argument("instances", help="JSON array of active checkpoint snapshots")
 
+    workflow_catalog = workflow_subparsers.add_parser(
+        "catalog", help="Show registered nodes, routers, contracts, and effect authority"
+    )
+    workflow_catalog.add_argument("state", choices=("feature", "bug", "task_takeover"))
+    workflow_catalog.add_argument("--json", action="store_true")
+
     workflow_publish = workflow_subparsers.add_parser("publish", help="Publish a YAML workflow")
     workflow_publish.add_argument("project_key")
     workflow_publish.add_argument("file")

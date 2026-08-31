@@ -16,6 +16,7 @@ from forge.workflow.declarative.compiler import (
     DeclarativeWorkflowCompiler,
     WorkflowValidationError,
 )
+from forge.workflow.declarative.effect_catalog import NodeEffectPolicy
 from forge.workflow.declarative.models import WorkflowDefinition
 
 
@@ -26,14 +27,15 @@ def _replace(definition: WorkflowDefinition, **spec_updates) -> WorkflowDefiniti
     return WorkflowDefinition.model_validate(value)
 
 
-def test_every_builtin_station_step_declares_the_registered_contract() -> None:
+def test_every_builtin_station_step_derives_the_registered_contract() -> None:
     for definition in builtin_definitions():
         profile = get_state_profile(definition.spec.state)
         for node_name, binding in profile.station_bindings.items():
             if node_name not in definition.spec.steps:
                 continue
             step = definition.spec.steps[node_name]
-            assert (step.station_contract, step.station_contract_version) == binding
+            assert (step.station_contract, step.station_contract_version) == (None, None)
+            assert profile.station_bindings[node_name] == binding
 
 
 @pytest.mark.parametrize(
@@ -51,7 +53,7 @@ def test_governed_definitions_cannot_remove_mandatory_gates(factory, gate: str) 
     candidate = _replace(definition, steps=steps)
 
     with pytest.raises(WorkflowValidationError, match=f"mandatory gate '{gate}'"):
-        DeclarativeWorkflowCompiler(candidate).validate()
+        DeclarativeWorkflowCompiler(candidate).validate_for_publication()
 
 
 @pytest.mark.parametrize(
@@ -79,10 +81,44 @@ def test_unknown_effect_capability_is_rejected() -> None:
         DeclarativeWorkflowCompiler(candidate).validate()
 
 
+def test_effect_capabilities_are_inherited_from_the_node_catalog() -> None:
+    candidate = WorkflowDefinition.model_validate(
+        {
+            "apiVersion": "forge/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "inherited-effects", "revision": 1},
+            "spec": {
+                "state": "feature",
+                "entry": "generate_prd",
+                "steps": {"generate_prd": {"next": "__end__"}},
+            },
+        }
+    )
+    compiler = DeclarativeWorkflowCompiler(candidate)
+
+    compiler.validate()
+
+    assert candidate.spec.steps["generate_prd"].allowed_effects is None
+    assert "jira.comment" in compiler.effective_effects("generate_prd")
+
+
+def test_explicit_effects_cannot_remove_a_required_capability() -> None:
+    policy = NodeEffectPolicy(
+        required=frozenset({"jira.comment"}),
+        optional=frozenset({"jira.labels"}),
+    )
+
+    with pytest.raises(ValueError, match="omits required effect capability 'jira.comment'"):
+        policy.resolve(("jira.labels",))
+
+    assert policy.resolve(("jira.comment",)) == ("jira.comment",)
+
+
 def test_registered_station_contract_cannot_be_changed() -> None:
     definition = builtin_feature_definition()
     steps = definition.canonical_dict()["spec"]["steps"]
     steps["generate_prd"]["stationContract"] = "sandbox-execution"
+    steps["generate_prd"]["stationContractVersion"] = "1.0"
     candidate = _replace(definition, steps=steps)
 
     with pytest.raises(WorkflowValidationError, match="must be"):
@@ -114,6 +150,18 @@ def test_publication_validates_complete_router_outcome_contract() -> None:
     candidate = _replace(definition, steps=steps)
 
     with pytest.raises(WorkflowValidationError, match="omits router outcome 'answer_question'"):
+        DeclarativeWorkflowCompiler(candidate).validate_for_publication()
+
+
+def test_legacy_extension_declaration_cannot_authorize_router_outcomes() -> None:
+    definition = builtin_feature_definition()
+    raw = definition.canonical_dict()
+    raw["metadata"]["revision"] += 1
+    raw["spec"]["extensionPoints"] = ["routing-branches"]
+    raw["spec"]["steps"]["prd_approval_gate"]["branches"]["invented"] = "generate_spec"
+    candidate = WorkflowDefinition.model_validate(raw)
+
+    with pytest.raises(WorkflowValidationError, match="unregistered router outcome 'invented'"):
         DeclarativeWorkflowCompiler(candidate).validate_for_publication()
 
 

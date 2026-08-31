@@ -47,7 +47,6 @@ _PR_LIFECYCLE_NODES = {
     "human_review_gate",
     "implement_review",
     "review_response_gate",
-    "rebase_pr",
 }
 
 
