@@ -173,7 +173,11 @@ class RedisExecutionTimelineStore:
                     continue
                 run_id = key[len(_PREFIX) :]
                 entries = await self.list(run_id)
-                keep = [entry for entry in entries if entry.occurred_at is None or entry.occurred_at >= cutoff]
+                keep = [
+                    entry
+                    for entry in entries
+                    if entry.occurred_at is None or entry.occurred_at >= cutoff
+                ]
                 if len(keep) == len(entries):
                     continue
                 await redis.delete(key)

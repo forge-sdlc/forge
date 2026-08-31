@@ -48,7 +48,9 @@ class OrgPulseExecution(VersionedDomainModel):
             workflow_revision=execution.definition.revision,
             waiting_code=waiting.code if waiting else None,
             waiting_since=waiting.since if waiting else None,
-            blocking_reason=(waiting.message if waiting and execution.status.value == "blocked" else None),
+            blocking_reason=(
+                waiting.message if waiting and execution.status.value == "blocked" else None
+            ),
             retry_count=retries,
             observation_available=execution.last_observation.available,
             observation_stale=execution.last_observation.stale,

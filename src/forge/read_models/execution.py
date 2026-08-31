@@ -72,7 +72,9 @@ def project_execution(
                 **({"digest": manifest.digest} if manifest else {}),
             }
             if isinstance(checkpoint.get("workflow_definition"), dict)
-            else manifest.model_dump(mode="json") if manifest else None
+            else manifest.model_dump(mode="json")
+            if manifest
+            else None
         ),
     )
     decisions = tuple(observation_decisions) or _checkpoint_observation_decisions(checkpoint)
@@ -203,7 +205,9 @@ def _permitted_commands(
         return ("retry", "cancel")
     if status is ExecutionStatus.WAITING:
         commands = ["resume", "retry", "cancel"]
-        node = next((item for item in (manifest.nodes if manifest else ()) if item.name == position), None)
+        node = next(
+            (item for item in (manifest.nodes if manifest else ()) if item.name == position), None
+        )
         # Gate-ness comes from the pinned process manifest, never from a name
         # convention such as ``*_gate``.
         if node is not None and node.kind.value == "gate":
@@ -231,7 +235,9 @@ def _observation(
         observation_id=observation.observation_id,
         source_system=observation.source_system,
         observed_at=observation.observed_at,
-        stale=_observation_is_stale(observation, decisions, comparable_now, comparable_observed, stale_after),
+        stale=_observation_is_stale(
+            observation, decisions, comparable_now, comparable_observed, stale_after
+        ),
         conflicting=bool(checkpoint.get("external_state_conflict"))
         or _observation_has_disposition(observation, decisions, "conflict"),
         available=True,
@@ -243,9 +249,7 @@ def _observation(
 
 def _decision_disposition(item: Any) -> str | None:
     value = (
-        item.get("disposition")
-        if isinstance(item, Mapping)
-        else getattr(item, "disposition", None)
+        item.get("disposition") if isinstance(item, Mapping) else getattr(item, "disposition", None)
     )
     return getattr(value, "value", value)
 
@@ -257,9 +261,7 @@ def _checkpoint_observation_decisions(checkpoint: Mapping[str, Any]) -> tuple[An
 
 def _decision_observation(item: Any) -> Any:
     observation = (
-        item.get("observation")
-        if isinstance(item, Mapping)
-        else getattr(item, "observation", None)
+        item.get("observation") if isinstance(item, Mapping) else getattr(item, "observation", None)
     )
     if isinstance(observation, Mapping):
         return _MappingObservation(observation)
@@ -294,7 +296,11 @@ def _decision_observation_id(item: Any) -> str | None:
 
 
 def _decision_delivery_identity(item: Any) -> str | None:
-    value = item.get("delivery_identity") if isinstance(item, Mapping) else getattr(item, "delivery_identity", None)
+    value = (
+        item.get("delivery_identity")
+        if isinstance(item, Mapping)
+        else getattr(item, "delivery_identity", None)
+    )
     return str(value) if value else None
 
 
@@ -446,7 +452,11 @@ def _recovery_options(
     return tuple(
         RecoveryOptionView(
             command=command,
-            description=(waiting.recovery if command == "retry" and waiting and waiting.recovery else descriptions.get(command, "Issue this permitted command.")),
+            description=(
+                waiting.recovery
+                if command == "retry" and waiting and waiting.recovery
+                else descriptions.get(command, "Issue this permitted command.")
+            ),
         )
         for command in permitted
     )
@@ -507,11 +517,14 @@ def _rule_explanations(
                 )
             )
     action = persisted.get("action") if isinstance(persisted, Mapping) else None
-    satisfied = all(clause.satisfied for clause in clauses) if clauses else action in {None, "proceed"}
+    satisfied = (
+        all(clause.satisfied for clause in clauses) if clauses else action in {None, "proceed"}
+    )
     summary = (
         "All required workflow rules are satisfied."
         if satisfied
-        else str(persisted.get("reason")) if isinstance(persisted, Mapping) and persisted.get("reason")
+        else str(persisted.get("reason"))
+        if isinstance(persisted, Mapping) and persisted.get("reason")
         else "One or more required workflow rules are false."
     )
     # A checkpoint can have several evaluations over time.  The current
@@ -600,8 +613,16 @@ def _timeline(
                 "revision_order": observation.revision_order,
             }
         else:
-            occurred_at = _datetime(item.get("decided_at")) if isinstance(item, Mapping) else getattr(item, "decided_at", None)
-            event_id = str(item.get("observation_id") or "observation") if isinstance(item, Mapping) else "observation"
+            occurred_at = (
+                _datetime(item.get("decided_at"))
+                if isinstance(item, Mapping)
+                else getattr(item, "decided_at", None)
+            )
+            event_id = (
+                str(item.get("observation_id") or "observation")
+                if isinstance(item, Mapping)
+                else "observation"
+            )
             details = {}
         disposition = _decision_disposition(item)
         delivery_identity = _decision_delivery_identity(item)
@@ -610,9 +631,7 @@ def _timeline(
             # decisions (accepted, duplicate, stale, or conflict).  Include
             # decision identity so projection does not collapse that audit
             # history into one observation event.
-            event_id = ":".join(
-                part for part in (event_id, delivery_identity, disposition) if part
-            )
+            event_id = ":".join(part for part in (event_id, delivery_identity, disposition) if part)
         reason = item.get("reason") if isinstance(item, Mapping) else getattr(item, "reason", None)
         entries.append(
             TimelineEntry(
@@ -635,7 +654,8 @@ def _timeline(
                 details={
                     key: value
                     for key, value in item.items()
-                    if key not in {"event_id", "node", "occurred_at", "evaluated_at", "action", "reason"}
+                    if key
+                    not in {"event_id", "node", "occurred_at", "evaluated_at", "action", "reason"}
                 },
             )
         )
@@ -665,8 +685,14 @@ def _timeline(
                 kind="operator_action",
                 occurred_at=_datetime(item.get("occurred_at") or item.get("acted_at")),
                 status=str(item.get("status") or "recorded"),
-                summary=str(item.get("summary") or item.get("action") or "Operator action recorded"),
-                details={key: value for key, value in item.items() if key not in {"summary", "action", "occurred_at", "acted_at"}},
+                summary=str(
+                    item.get("summary") or item.get("action") or "Operator action recorded"
+                ),
+                details={
+                    key: value
+                    for key, value in item.items()
+                    if key not in {"summary", "action", "occurred_at", "acted_at"}
+                },
             )
         )
     for record in effects:
@@ -684,7 +710,11 @@ def _timeline(
                     details={
                         "effect_id": record.command.effect_id,
                         "idempotency_key": record.command.idempotency_key,
-                        **({"provider_reference": result.provider_reference} if result.provider_reference else {}),
+                        **(
+                            {"provider_reference": result.provider_reference}
+                            if result.provider_reference
+                            else {}
+                        ),
                         **({"error": result.error_message} if result.error_message else {}),
                     },
                 )

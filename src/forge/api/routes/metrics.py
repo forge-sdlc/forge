@@ -360,7 +360,9 @@ def record_execution_read_model(model: object) -> None:
 
     migration = getattr(model, "migration", None)
     eligible = getattr(migration, "eligible", None)
-    migration_state = "eligible" if eligible is True else "ineligible" if eligible is False else "unknown"
+    migration_state = (
+        "eligible" if eligible is True else "ineligible" if eligible is False else "unknown"
+    )
     for state in _MIGRATION_STATES:
         EXECUTION_MIGRATION_ELIGIBILITY.labels(state=state).set(0)
     EXECUTION_MIGRATION_ELIGIBILITY.labels(state=migration_state).set(

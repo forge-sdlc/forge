@@ -252,9 +252,7 @@ class RedisObservationLedger:
                     pipeline.rpush(self._history_key(observation), decision.model_dump_json())
                     run_id = observation_run_id(observation)
                     if run_id:
-                        pipeline.rpush(
-                            f"{_RUN_HISTORY_PREFIX}{run_id}", decision.model_dump_json()
-                        )
+                        pipeline.rpush(f"{_RUN_HISTORY_PREFIX}{run_id}", decision.model_dump_json())
                     if prior is None:
                         pipeline.set(delivery_key, decision.model_dump_json())
                     if decision.disposition is ObservationDisposition.ACCEPTED:
