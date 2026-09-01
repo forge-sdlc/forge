@@ -1591,6 +1591,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#jira-comment-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Jira comment commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#jira-labels" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -3070,6 +3081,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#jira-comment-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Jira comment commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#jira-labels" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -3971,6 +3993,44 @@ unit, contract, flow, integration, or E2E gates must not be ignored.</p>
 <td><code>/forge unskip-gate &lt;name&gt;</code></td>
 <td>Remove a skip</td>
 <td>CI stages</td>
+</tr>
+</tbody>
+</table>
+<h3 id="jira-comment-commands">Jira comment commands<a class="headerlink" href="#jira-comment-commands" title="Permanent link">&para;</a></h3>
+<p>These commands are used on the parent Jira ticket during the draft review stages (Epic Plan and Tasks).</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Effect</th>
+<th>Active at</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/forge approve</code></td>
+<td>Approve draft, provision sub-tickets, and delete draft attachment</td>
+<td><code>plan_approval_gate</code>, <code>task_approval_gate</code></td>
+</tr>
+<tr>
+<td><code>/forge remove &lt;ID&gt;</code></td>
+<td>Remove a draft item by local sequential ID</td>
+<td><code>plan_approval_gate</code>, <code>task_approval_gate</code></td>
+</tr>
+<tr>
+<td><code>/forge exclude &lt;ID&gt;</code></td>
+<td>Toggle the exclusion flag of a draft item</td>
+<td><code>plan_approval_gate</code>, <code>task_approval_gate</code></td>
+</tr>
+<tr>
+<td><code>/forge update &lt;ID&gt; key=val</code></td>
+<td>Update fields (<code>summary</code>, <code>description</code>, <code>repo</code>) of a draft item</td>
+<td><code>plan_approval_gate</code>, <code>task_approval_gate</code></td>
+</tr>
+<tr>
+<td><code>/forge add key=val</code></td>
+<td>Add a new proposed item to the draft</td>
+<td><code>plan_approval_gate</code>, <code>task_approval_gate</code></td>
 </tr>
 </tbody>
 </table>

@@ -2113,78 +2113,100 @@ generating model must also answer questions about its artifact. See
 <hr />
 <h3 id="epic-decomposition">Epic Decomposition<a class="headerlink" href="#epic-decomposition" title="Permanent link">&para;</a></h3>
 <p>Forge breaks the feature into logical epics — high-level areas of work that map to implementation phases.</p>
-<p><strong>Human action:</strong> Review the epic plan. You have four options at this stage:</p>
+<p>By default, Forge uses an interactive <strong>Draft Review Flow</strong> at this stage (unless YOLO mode is active):
+1. Instead of creating Jira tickets immediately, Forge serializes the proposed epics into <code>forge-epics-draft.json</code> and uploads it as an attachment on the Feature ticket.
+2. Forge posts a markdown table comment on the Feature ticket outlining the proposed Epics.
+3. The workflow pauses at <code>plan_approval_gate</code>.</p>
+<p><strong>Human action:</strong> Review the epic plan draft. You have several options at this stage:</p>
 <table>
 <thead>
 <tr>
 <th>Action</th>
 <th>How</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Approve</td>
-<td>Change label to <code>forge:plan-approved</code></td>
+<td><strong>Approve</strong></td>
+<td>Comment <code>/forge approve</code> OR set label to <code>forge:plan-approved</code></td>
+<td>Forge provisions the Epic sub-tickets on Jira from the draft, deletes the draft attachment, and advances to Task Generation.</td>
 </tr>
 <tr>
-<td>Ask a question</td>
-<td>Comment with <code>?</code> prefix — Forge answers without re-decomposing</td>
+<td><strong>Direct Edit</strong></td>
+<td>Use <code>/forge</code> commands (e.g. <code>/forge update</code>, <code>/forge remove</code>, etc.)</td>
+<td>Directly modify the draft attachment and regenerate the proposal comment. See <a href="../labels/">Jira Labels &amp; Comments</a> for a list of commands.</td>
 </tr>
 <tr>
-<td>Revise one epic</td>
-<td><code>!</code> comment on the <strong>specific epic sub-ticket</strong> — Forge updates only that epic</td>
+<td><strong>Ask a question</strong></td>
+<td>Comment with <code>?</code> prefix or <code>@forge ask</code></td>
+<td>Forge answers your question without regenerating the draft.</td>
 </tr>
 <tr>
-<td>Redo the full decomposition</td>
-<td><code>!</code> comment on the <strong>feature ticket</strong> — Forge regenerates all epics with your feedback</td>
+<td><strong>Request revisions</strong></td>
+<td>Comment with <code>!</code> prefix followed by your feedback</td>
+<td>Forge uses LLM assistance to revise the entire draft JSON and update the proposal comment with your feedback.</td>
 </tr>
 </tbody>
 </table>
+<p>If <code>forge:yolo</code> mode is active, the draft review is bypassed. Epics are created in Jira immediately, and the workflow automatically proceeds to Task Generation.</p>
+<p>If <code>forge:direct-mode</code> is active, the draft review is also bypassed and Epics are created in Jira immediately, but the workflow still pauses at the <code>plan_approval_gate</code> waiting for manual human approval (via label or commands) before proceeding.</p>
 <pre class="mermaid"><code>flowchart TD
     Gate([plan_approval_gate])
-    Gate --&gt;|forge:plan-approved| Next[Generate Tasks]
+    Gate --&gt;|forge:plan-approved or /forge approve| Next[Generate Tasks]
     Gate --&gt;|"? on feature ticket"| QA[Answer Question]
     Gate --&gt;|"! on feature ticket"| Regen[Regenerate All Epics]
-    Gate --&gt;|"! on epic sub-ticket"| Update[Update Single Epic]
+    Gate --&gt;|"/forge update/remove/exclude/add"| Update[Modify Draft]
     QA --&gt; Gate
     Regen --&gt; Gate
     Update --&gt; Gate</code></pre>
 <hr />
 <h3 id="task-generation">Task Generation<a class="headerlink" href="#task-generation" title="Permanent link">&para;</a></h3>
 <p>Forge generates granular implementation tasks scoped to individual repositories. Each task is sized to fit in a single container execution pass.</p>
-<p><strong>Human action:</strong> Review the tasks. You have four options at this stage:</p>
+<p>By default, Forge uses an interactive <strong>Draft Review Flow</strong> at this stage (unless YOLO mode is active):
+1. Instead of creating Jira tickets immediately, Forge serializes the proposed tasks into <code>forge-tasks-draft.json</code> and uploads it as an attachment on the Feature ticket.
+2. Forge posts a markdown table comment on the Feature ticket outlining the proposed Tasks.
+3. The workflow pauses at <code>task_approval_gate</code>.</p>
+<p><strong>Human action:</strong> Review the task draft. You have several options at this stage:</p>
 <table>
 <thead>
 <tr>
 <th>Action</th>
 <th>How</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Approve</td>
-<td>Change label to <code>forge:task-approved</code></td>
+<td><strong>Approve</strong></td>
+<td>Comment <code>/forge approve</code> OR set label to <code>forge:task-approved</code></td>
+<td>Forge provisions the Task sub-tickets on Jira from the draft, deletes the draft attachment, and advances to Implementation.</td>
 </tr>
 <tr>
-<td>Ask a question</td>
-<td>Comment with <code>?</code> prefix — Forge answers without regenerating</td>
+<td><strong>Direct Edit</strong></td>
+<td>Use <code>/forge</code> commands (e.g. <code>/forge update</code>, <code>/forge remove</code>, etc.)</td>
+<td>Directly modify the draft attachment and regenerate the proposal comment. See <a href="../labels/">Jira Labels &amp; Comments</a> for a list of commands.</td>
 </tr>
 <tr>
-<td>Revise one task</td>
-<td><code>!</code> comment on the <strong>specific task sub-ticket</strong> — Forge updates only that task</td>
+<td><strong>Ask a question</strong></td>
+<td>Comment with <code>?</code> prefix or <code>@forge ask</code></td>
+<td>Forge answers your question without regenerating the draft.</td>
 </tr>
 <tr>
-<td>Regenerate all tasks</td>
-<td><code>!</code> comment on the <strong>feature or epic ticket</strong> — Forge regenerates the full task list with your feedback</td>
+<td><strong>Request revisions</strong></td>
+<td>Comment with <code>!</code> prefix followed by your feedback</td>
+<td>Forge uses LLM assistance to revise the entire draft JSON and update the proposal comment with your feedback.</td>
 </tr>
 </tbody>
 </table>
+<p>If <code>forge:yolo</code> mode is active, the draft review is bypassed. Tasks are created in Jira immediately, and the workflow automatically proceeds to Implementation.</p>
+<p>If <code>forge:direct-mode</code> is active, the draft review is also bypassed and Tasks are created in Jira immediately, but the workflow still pauses at the <code>task_approval_gate</code> waiting for manual human approval (via label or commands) before proceeding.</p>
 <pre class="mermaid"><code>flowchart TD
     Gate([task_approval_gate])
-    Gate --&gt;|forge:task-approved| Next[Implement Tasks]
+    Gate --&gt;|forge:task-approved or /forge approve| Next[Implement Tasks]
     Gate --&gt;|"? on ticket"| QA[Answer Question]
     Gate --&gt;|"! on feature/epic"| Regen[Regenerate All Tasks]
-    Gate --&gt;|"! on task sub-ticket"| Update[Update Single Task]
+    Gate --&gt;|"/forge update/remove/exclude/add"| Update[Modify Draft]
     QA --&gt; Gate
     Regen --&gt; Gate
     Update --&gt; Gate</code></pre>

@@ -740,6 +740,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="How to Use Labels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#jira-comment-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Jira Comment Commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1834,6 +1851,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="How to Use Labels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#jira-comment-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Jira Comment Commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2043,6 +2077,10 @@
 <td>Auto-approve supported planning gates. Human PR review still remains a gate.</td>
 </tr>
 <tr>
+<td><code>forge:direct-mode</code></td>
+<td>Direct ticket creation mode (bypasses draft JSON attachments and creates Epic/Task tickets immediately in Jira), but still pauses for human approval at the planning gates (instead of auto-approving like <code>forge:yolo</code>).</td>
+</tr>
+<tr>
 <td><code>repo:&lt;owner&gt;/&lt;repo&gt;</code></td>
 <td>Identifies repositories selected for planning and implementation.</td>
 </tr>
@@ -2050,10 +2088,54 @@
 </table>
 <h2 id="how-to-use-labels">How to Use Labels<a class="headerlink" href="#how-to-use-labels" title="Permanent link">&para;</a></h2>
 <p><strong>Starting a workflow:</strong> Create a Jira issue and add <code>forge:managed</code>. Forge detects the issue type and begins the appropriate pipeline: Feature/Story, Bug, or standalone Task/Epic takeover.</p>
-<p><strong>Approving a stage:</strong> When Forge posts a PRD, spec, or other artifact, it sets the <code>forge:*-pending</code> label. Change it to <code>forge:*-approved</code> to advance the workflow. Do not add the approved label manually before Forge posts — it won't be recognized until the pending state is set.</p>
-<p><strong>Requesting revisions:</strong> Start a comment with <code>!</code> followed by your feedback. Forge regenerates the artifact and resets the pending label.</p>
-<p><strong>Asking questions:</strong> Start a comment with <code>?</code> or <code>@forge ask</code>. Forge answers without advancing or regenerating.</p>
-<p><strong>Informational comments:</strong> Comments without a recognized prefix (<code>!</code>, <code>?</code>, <code>@forge ask</code>, <code>&gt;option</code>) are ignored by the workflow — use them for team discussion without triggering Forge.</p>
+<p><strong>Approving a stage:</strong> When Forge posts an artifact (such as a PRD or Spec), it sets the <code>forge:*-pending</code> label. You can approve it by changing the label to <code>forge:*-approved</code> to advance the workflow. For draft-based stages (Epic Plan and Tasks), you can also approve by commenting <code>/forge approve</code> on the ticket.</p>
+<p><strong>Interactive Draft Review:</strong> For Epic Decomposition and Task Generation stages, Forge uses a draft-based review flow by default (unless <code>forge:yolo</code> or <code>forge:direct-mode</code> mode is active).
+1. Instead of creating sub-tickets immediately, Forge serializes the proposed items into a JSON draft file (<code>forge-epics-draft.json</code> or <code>forge-tasks-draft.json</code>) and uploads it as a Jira attachment.
+2. Forge posts a formatted markdown table comment on the ticket detailing the proposed plan.
+3. While the stage is pending, you can modify the draft directly using <strong>Jira comment commands</strong> (see below) or request a natural language revision.
+4. Once you approve (via <code>/forge approve</code> or setting the approved label), Forge downloads the draft, provisions the actual Jira tickets from it, and deletes the draft attachment.</p>
+<h3 id="jira-comment-commands">Jira Comment Commands<a class="headerlink" href="#jira-comment-commands" title="Permanent link">&para;</a></h3>
+<p>For stages using the draft-based review flow (Epic Plan and Tasks), you can post comments on the parent ticket with the following commands:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/forge approve</code></td>
+<td>Approve the draft, provision all non-excluded items as Jira tickets, and delete the draft attachment.</td>
+<td><code>/forge approve</code></td>
+</tr>
+<tr>
+<td><code>/forge remove &lt;ID&gt;</code></td>
+<td>Remove a draft item by its local sequential ID. Remaining items are automatically re-sequenced.</td>
+<td><code>/forge remove 3</code></td>
+</tr>
+<tr>
+<td><code>/forge exclude &lt;ID&gt;</code></td>
+<td>Toggle the exclusion flag of a draft item. Excluded items are skipped during ticket provisioning.</td>
+<td><code>/forge exclude 2</code></td>
+</tr>
+<tr>
+<td><code>/forge update &lt;ID&gt; key=val</code></td>
+<td>Update fields of a draft item (supported keys: <code>summary</code>, <code>description</code>, <code>repo</code>).</td>
+<td><code>/forge update 1 repo="my-org/custom-repo"</code></td>
+</tr>
+<tr>
+<td><code>/forge add key=val</code></td>
+<td>Add a new proposed item to the draft.</td>
+<td><code>/forge add summary="New Story" repo="my-org/repo"</code></td>
+</tr>
+</tbody>
+</table>
+<p><em>Note: Successful command/revision comments are automatically edited by Forge to prepend <code>✅</code>. If a command or revision fails, Forge posts a comment detailing the error with a leading <code>❌</code>.</em></p>
+<p><strong>Requesting revisions:</strong> Start a comment with <code>!</code> followed by your feedback (e.g., <code>! update the repositories to use the new service</code>). For standard artifacts, Forge regenerates them. For drafts, Forge uses LLM assistance to revise the draft JSON attachment and update the proposed plan table.</p>
+<p><strong>Asking questions:</strong> Start a comment with <code>?</code> or <code>@forge ask</code>. Forge answers without advancing or regenerating/modifying the drafts.</p>
+<p><strong>Informational comments:</strong> Comments without a recognized prefix (such as <code>!</code>, <code>?</code>, <code>@forge ask</code>, <code>&gt;option</code>, or <code>/forge</code>) are ignored by the workflow — use them for team discussion without triggering Forge.</p>
 <p><strong>Handling failures:</strong> When <code>forge:blocked</code> appears, read the Forge comment for the error. Fix the underlying issue if needed, then add <code>forge:retry</code>.</p>
 <p><strong>Resetting contested reviews:</strong> If the workflow is paused at <code>review_response_gate</code> due to contested comments, adding <code>forge:retry</code> will transition the workflow back to <code>human_review_gate</code>, clearing the contested comments and resetting the review state to await a fresh review.</p>
 <div class="admonition warning">
