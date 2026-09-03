@@ -315,22 +315,23 @@ def test_exclusive_scope_rename_with_different_status_codes() -> None:
 def test_zensical_build_clean_compilation() -> None:
     """Verify that the documentation site compiles cleanly using the Zensical build pipeline."""
     # Run the compilation command: uv run --extra docs zensical build
-    result = subprocess.run(
-        ["uv", "run", "--extra", "docs", "zensical", "build"],
-        capture_output=True,
-        text=True,
-    )
+    root_dir = Path(__file__).parents[2]
+    uv_path = root_dir / ".venv" / "bin" / "uv"
 
-    # If uv is not available on PATH for some reason, run with absolute path of uv if possible
-    if result.returncode == 127:
-        root_dir = Path(__file__).parents[2]
-        uv_path = root_dir / ".venv" / "bin" / "uv"
-        if uv_path.exists():
-            result = subprocess.run(
-                [str(uv_path), "run", "--extra", "docs", "zensical", "build"],
-                capture_output=True,
-                text=True,
-            )
+    # Try using the absolute path of uv in .venv first if it exists, otherwise fall back to system 'uv'
+    if uv_path.exists():
+        cmd = [str(uv_path), "run", "--extra", "docs", "zensical", "build"]
+    else:
+        cmd = ["uv", "run", "--extra", "docs", "zensical", "build"]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        pytest.fail("Neither .venv/bin/uv nor system 'uv' was found on the path.")
 
     # 1. Running uv run --extra docs zensical build returns exit code 0
     assert result.returncode == 0, (
@@ -345,11 +346,11 @@ def test_zensical_build_clean_compilation() -> None:
     for line in stderr_lines:
         line_lower = line.lower()
         # Exclude typical uv setup / performance / cache / notice messages
-        if "warning: failed to hardlink files" in line_lower:
+        if "failed to hardlink" in line_lower:
             continue
-        if "warning: if the cache and target" in line_lower:
+        if "if the cache and target" in line_lower:
             continue
-        if "warning: if this is intentional" in line_lower:
+        if "if this is intentional, set" in line_lower or "suppress this warning" in line_lower:
             continue
         if "notice: a new release of pip" in line_lower:
             continue
