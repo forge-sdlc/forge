@@ -2036,6 +2036,10 @@
 <li><strong>Human review</strong> gate.</li>
 <li><strong>Post-merge summary:</strong> After merge, Forge posts a fix summary and release note to the Jira ticket.</li>
 </ol>
+<div class="admonition note">
+<p class="admonition-title">PR Merge Reconciliation</p>
+<p>A merged pull request is terminally reconciled by its repository namespace and pull request number, not by its head SHA. This design ensures that merge detection remains robust and unaffected by commit rebuilds, squashing, or rebase operations during review.</p>
+</div>
 <hr />
 <h2 id="comment-syntax">Comment Syntax<a class="headerlink" href="#comment-syntax" title="Permanent link">&para;</a></h2>
 <p>At any approval gate, Forge classifies your comment by its prefix:</p>

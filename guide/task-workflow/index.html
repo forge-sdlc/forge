@@ -2168,6 +2168,10 @@
 - <strong>Confirm the request:</strong> Reply on the PR to confirm the change (e.g., "please implement as requested"), and Forge will proceed with the implementation.
 - <strong>Reset/Withdraw:</strong> Add the <code>forge:retry</code> label to the Jira ticket to clear the contested comments and transition the workflow back to <code>human_review_gate</code> to await a fresh review.</p>
 <p>When the PR is merged, Forge marks the Task workflow complete.</p>
+<div class="admonition note">
+<p class="admonition-title">PR Merge Reconciliation</p>
+<p>A merged pull request is terminally reconciled by its repository namespace and pull request number, not by its head SHA. This design ensures that merge detection remains robust and unaffected by commit rebuilds, squashing, or rebase operations during review.</p>
+</div>
 <h2 id="comment-syntax">Comment Syntax<a class="headerlink" href="#comment-syntax" title="Permanent link">&para;</a></h2>
 <p>At the triage and plan gates, Forge classifies comments by prefix:</p>
 <ul>

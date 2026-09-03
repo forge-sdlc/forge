@@ -2245,6 +2245,10 @@ generating model must also answer questions about its artifact. See
 <h3 id="human-review">Human Review<a class="headerlink" href="#human-review" title="Permanent link">&para;</a></h3>
 <p>The PR is now ready for human review. Merge when satisfied, or request changes to trigger another implementation pass.</p>
 <p>Once the PR is merged, Forge automatically completes the workflow by transitioning the Feature, all associated Tasks and Epics, and its parent Epic (if present) to <strong><code>Closed</code></strong> status in Jira.</p>
+<div class="admonition note">
+<p class="admonition-title">PR Merge Reconciliation</p>
+<p>A merged pull request is terminally reconciled by its repository namespace and pull request number, not by its head SHA. This design ensures that merge detection remains robust and unaffected by commit rebuilds, squashing, or rebase operations during review.</p>
+</div>
 <h2 id="qa-mode">Q&amp;A Mode<a class="headerlink" href="#qa-mode" title="Permanent link">&para;</a></h2>
 <p>At any approval gate, you can ask questions without triggering regeneration:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>? Why did you choose this approach over X?
