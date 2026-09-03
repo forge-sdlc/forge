@@ -879,7 +879,7 @@ These commands are used on the parent Jira ticket during the draft review stages
 
 | Command | Effect | Active at |
 |---------|--------|-----------|
-| `/forge approve` | Approve draft, provision sub-tickets, and delete draft attachment | `plan_approval_gate`, `task_approval_gate` |
+| `/forge approve` | Approve draft and provision sub-tickets | `plan_approval_gate`, `task_approval_gate` |
 | `/forge remove <ID>` | Remove a draft item by local sequential ID | `plan_approval_gate`, `task_approval_gate` |
 | `/forge exclude <ID>` | Toggle the exclusion flag of a draft item | `plan_approval_gate`, `task_approval_gate` |
 | `/forge update <ID> key=val` | Update fields (`summary`, `description`, `repo`) of a draft item | `plan_approval_gate`, `task_approval_gate` |
