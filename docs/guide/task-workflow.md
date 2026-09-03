@@ -153,6 +153,9 @@ If the agent classifies any review comments as *contested* (e.g., if they contra
 
 When the PR is merged, Forge marks the Task workflow complete.
 
+!!! note "PR Merge Reconciliation"
+    A merged pull request is terminally reconciled by its repository namespace and pull request number, not by its head SHA. This design ensures that merge detection remains robust and unaffected by commit rebuilds, squashing, or rebase operations during review.
+
 ## Comment Syntax
 
 At the triage and plan gates, Forge classifies comments by prefix:

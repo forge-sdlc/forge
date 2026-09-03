@@ -265,7 +265,9 @@ def test_save_with_unknown_number_keys_by_url() -> None:
     )
 
     assert "acme/docs:https://github.com/acme/docs/pull/30" in saved["pull_requests"]
-    assert saved["pull_requests"]["acme/docs:https://github.com/acme/docs/pull/30"]["number"] is None
+    assert (
+        saved["pull_requests"]["acme/docs:https://github.com/acme/docs/pull/30"]["number"] is None
+    )
 
 
 def test_save_without_number_or_url_is_noop() -> None:
@@ -359,18 +361,14 @@ def _legacy_state() -> dict:
 
 def test_event_targets_pull_request_matches_legacy_bare_repo_key() -> None:
     state = _legacy_state()
-    event = _event(
-        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
-    )
+    event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
 
     assert event_targets_pull_request(state, event)
 
 
 def test_activate_pull_request_for_event_hydrates_from_legacy_bare_repo_key() -> None:
     state = _legacy_state()
-    event = _event(
-        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
-    )
+    event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
 
     activated = activate_pull_request_for_event(state, event)
 
@@ -381,9 +379,7 @@ def test_activate_pull_request_for_event_hydrates_from_legacy_bare_repo_key() ->
 
 def test_save_migrates_legacy_bare_repo_key_to_numbered_key() -> None:
     state = _legacy_state()
-    event = _event(
-        repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99"
-    )
+    event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
     activated = activate_pull_request_for_event(state, event)
     activated["ci_status"] = "passed"
 
@@ -392,3 +388,35 @@ def test_save_migrates_legacy_bare_repo_key_to_numbered_key() -> None:
     assert "acme/legacy" not in saved["pull_requests"]
     assert saved["pull_requests"]["acme/legacy:99"]["ci_status"] == "passed"
     assert saved["pull_requests"]["acme/legacy:99"]["lifecycle_node"] == "ci_evaluator"
+
+
+def test_reconciliation_is_independent_of_head_sha() -> None:
+    """A pull request is terminally reconciled by its repository and PR number, not by its head SHA."""
+    # Create two events with different head_sha but the same repo and native_id
+    event_1 = _event(
+        repo="acme/payments", native_id=42, url="https://github.com/acme/payments/pull/42"
+    )
+    # Set different head SHAs on the ChangeRequests
+    event_1.change_request.head_sha = "sha1"
+
+    event_2 = _event(
+        repo="acme/payments", native_id=42, url="https://github.com/acme/payments/pull/42"
+    )
+    event_2.change_request.head_sha = "sha2"
+
+    # State with key based on repo and number
+    key = "acme/payments:42"
+    state = {
+        "pull_requests": {key: {"number": 42, "url": event_1.change_request.url, "merged": False}}
+    }
+
+    # Both events target the exact same pull request record regardless of the head SHA
+    assert event_targets_pull_request(state, event_1) is True
+    assert event_targets_pull_request(state, event_2) is True
+
+    # Activating either event works and targets the same record
+    activated_1 = activate_pull_request_for_event(state, event_1)
+    activated_2 = activate_pull_request_for_event(state, event_2)
+
+    assert activated_1["current_pr_number"] == 42
+    assert activated_2["current_pr_number"] == 42
