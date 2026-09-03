@@ -188,6 +188,9 @@ The PR is now ready for human review. Merge when satisfied, or request changes t
 
 Once the PR is merged, Forge automatically completes the workflow by transitioning the Feature, all associated Tasks and Epics, and its parent Epic (if present) to **`Closed`** status in Jira.
 
+!!! note "PR Merge Reconciliation"
+    A merged pull request is terminally reconciled by its repository namespace and pull request number, not by its head SHA. This design ensures that merge detection remains robust and unaffected by commit rebuilds, squashing, or rebase operations during review.
+
 ## Q&A Mode
 
 At any approval gate, you can ask questions without triggering regeneration:
