@@ -1928,7 +1928,6 @@ legacy settings, and per-stage model policies.</p>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;tickets&quot;: [&quot;MYPROJ-123&quot;]}&#39;</span>
 </code></pre></div>
-<p>🐱 If you receive an HTTP 405 error, you likely sent the request to the Forge gateway port (default: 8000) instead of the forge-poller port (default: 8001).</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>Disable signature validation in Forge's <code>.env</code> so the poller's forwarded events are accepted:
