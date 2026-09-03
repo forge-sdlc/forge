@@ -194,7 +194,7 @@ def parse_git_status_line(line: str) -> list[str]:
     path_part = line[3:]
 
     # Handle rename/copy which has " -> " separator
-    if (status.startswith("R") or status.startswith("C")) and " -> " in path_part:
+    if ("R" in status or "C" in status) and " -> " in path_part:
         parts = path_part.split(" -> ")
         return [p.strip("\"' ") for p in parts]
 
@@ -294,3 +294,19 @@ def test_exclusive_scope_rename_failure() -> None:
         check_exclusive_documentation_scope(status_output)
 
     assert "src/getting-started.md" in str(exc_info.value)
+
+
+def test_exclusive_scope_rename_with_different_status_codes() -> None:
+    """Verify that renames with different status codes (e.g., RM,  R) are parsed correctly."""
+    # Renamed in worktree with space prefix " R"
+    status_output_1 = " R docs/old-doc.md -> docs/new-doc.md\n"
+    check_exclusive_documentation_scope(status_output_1)
+
+    # Renamed and modified "RM"
+    status_output_2 = "RM docs/old-doc.md -> docs/new-doc.md\n"
+    check_exclusive_documentation_scope(status_output_2)
+
+    # Rename failure with different status code
+    status_output_3 = " R docs/getting-started.md -> src/getting-started.md\n"
+    with pytest.raises(AssertionError):
+        check_exclusive_documentation_scope(status_output_3)
