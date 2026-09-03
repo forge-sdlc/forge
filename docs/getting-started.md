@@ -106,8 +106,6 @@ For local development you have two options:
       -d '{"tickets": ["MYPROJ-123"]}'
     ```
 
-    🐱 If you receive an HTTP 405 error, you likely sent the request to the Forge gateway port (default: 8000) instead of the forge-poller port (default: 8001).
-
     !!! note
         Disable signature validation in Forge's `.env` so the poller's forwarded events are accepted:
         ```
