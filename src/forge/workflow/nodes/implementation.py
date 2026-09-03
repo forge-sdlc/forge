@@ -11,7 +11,9 @@ Architecture:
 - Orchestrator (this node) handles git push after container exits
 """
 
+import asyncio
 import logging
+import shutil
 from pathlib import Path
 
 from forge.config import get_settings
@@ -33,6 +35,23 @@ from forge.workspace.git_ops import GitOperations
 from forge.workspace.handoff import capture_handoff
 
 logger = logging.getLogger(__name__)
+
+_MAX_IMPLEMENTATION_RETRIES = 3
+_RETRY_BACKOFF_BASE_SECONDS = 1.0
+
+
+def _cleanup_failed_workspace(path: str | None) -> None:
+    """Best-effort removal of a workspace directory left by a failed prepare."""
+    if not path:
+        return
+    workspace = Path(path)
+    if not workspace.exists():
+        return
+    try:
+        shutil.rmtree(workspace, ignore_errors=True)
+        logger.info("Cleaned up failed workspace at %s", workspace)
+    except OSError as exc:
+        logger.warning("Failed to clean up workspace %s: %s", workspace, exc)
 
 
 async def implement_task(state: WorkflowState) -> WorkflowState:
@@ -60,6 +79,33 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
     container_started = False
     recorded_workspace = state.get("workspace_path")
     local_workspace_survived = bool(recorded_workspace and Path(recorded_workspace).exists())
+    retry_count = state.get("retry_count", 0)
+
+    # Hard stop before allocating another temp workspace when the graph-level
+    # retry budget is already exhausted.
+    if state.get("last_error") and retry_count >= _MAX_IMPLEMENTATION_RETRIES:
+        logger.error(
+            "Implementation retry limit (%s) already reached for %s; not preparing workspace",
+            _MAX_IMPLEMENTATION_RETRIES,
+            ticket_key,
+        )
+        return update_state_timestamp(
+            {
+                **state,
+                "current_node": "escalate_blocked",
+                "last_error": state.get("last_error"),
+            }
+        )
+
+    if state.get("last_error") and retry_count > 0:
+        delay = min(_RETRY_BACKOFF_BASE_SECONDS * (2 ** (retry_count - 1)), 8.0)
+        logger.info(
+            "Backing off %.1fs before implementation retry %s for %s",
+            delay,
+            retry_count,
+            ticket_key,
+        )
+        await asyncio.sleep(delay)
 
     try:
         git: GitOperations
@@ -67,8 +113,13 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         state = {**state, "workspace_path": workspace_path}
     except Exception as exc:
         logger.error("Unable to prepare implementation workspace for %s: %s", ticket_key, exc)
+        # prepare_workspace cleans ephemeral dirs it creates; also drop a
+        # recorded path that no longer represents a usable workspace.
+        if recorded_workspace and not (Path(recorded_workspace).exists()):
+            _cleanup_failed_workspace(recorded_workspace)
         return {
             **state,
+            "workspace_path": None,
             "last_error": str(exc),
             "current_node": implementation_node,
             "retry_count": state.get("retry_count", 0) + 1,

@@ -81,6 +81,9 @@ async def _recreate_workspace_from_fork(
     workspace_obj = manager.create_workspace(repo_name=current_repo, ticket_key=ticket_key)
     target_path = workspace_obj.path
     stale_path = Path(stale_workspace_path) if stale_workspace_path else None
+    # create_workspace may mkdtemp a brand-new empty directory that must be
+    # removed if clone/checkout fails; otherwise retries fill /tmp.
+    created_empty_target = target_path.exists() and not any(target_path.iterdir())
 
     # Build and validate the replacement beside the target.  The existing
     # workspace may contain the only copy of an unpushed commit, so it must not
@@ -105,6 +108,9 @@ async def _recreate_workspace_from_fork(
             git.checkout_branch(branch_name, remote="origin")
     except Exception:
         shutil.rmtree(replacement_path, ignore_errors=True)
+        if created_empty_target and target_path.exists():
+            shutil.rmtree(target_path, ignore_errors=True)
+            manager.destroy_workspace(workspace_obj)
         raise
 
     old_path = stale_path if stale_path and stale_path.exists() else None
@@ -126,6 +132,8 @@ async def _recreate_workspace_from_fork(
         if backup_path and backup_path.exists() and not target_path.exists():
             backup_path.rename(target_path)
         shutil.rmtree(replacement_path, ignore_errors=True)
+        if created_empty_target and target_path.exists() and not any(target_path.iterdir()):
+            shutil.rmtree(target_path, ignore_errors=True)
         raise
 
     if backup_path and backup_path.exists():
