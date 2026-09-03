@@ -310,3 +310,84 @@ def test_exclusive_scope_rename_with_different_status_codes() -> None:
     status_output_3 = " R docs/getting-started.md -> src/getting-started.md\n"
     with pytest.raises(AssertionError):
         check_exclusive_documentation_scope(status_output_3)
+
+
+def test_zensical_build_clean_compilation() -> None:
+    """Verify that the documentation site compiles cleanly using the Zensical build pipeline."""
+    # Run the compilation command: uv run --extra docs zensical build
+    result = subprocess.run(
+        ["uv", "run", "--extra", "docs", "zensical", "build"],
+        capture_output=True,
+        text=True,
+    )
+
+    # If uv is not available on PATH for some reason, run with absolute path of uv if possible
+    if result.returncode == 127:
+        root_dir = Path(__file__).parents[2]
+        uv_path = root_dir / ".venv" / "bin" / "uv"
+        if uv_path.exists():
+            result = subprocess.run(
+                [str(uv_path), "run", "--extra", "docs", "zensical", "build"],
+                capture_output=True,
+                text=True,
+            )
+
+    # 1. Running uv run --extra docs zensical build returns exit code 0
+    assert result.returncode == 0, (
+        f"Zensical build failed with exit code {result.returncode}.\n"
+        f"stdout: {result.stdout}\n"
+        f"stderr: {result.stderr}"
+    )
+
+    # 2. No compilation warnings or syntax errors are reported during the build.
+    stderr_lines = result.stderr.splitlines()
+    filtered_stderr = []
+    for line in stderr_lines:
+        line_lower = line.lower()
+        # Exclude typical uv setup / performance / cache / notice messages
+        if "warning: failed to hardlink files" in line_lower:
+            continue
+        if "warning: if the cache and target" in line_lower:
+            continue
+        if "warning: if this is intentional" in line_lower:
+            continue
+        if "notice: a new release of pip" in line_lower:
+            continue
+        # Also exclude virtualenv / downloading output from uv
+        if line_lower.startswith("downloading ") or line_lower.startswith(" downloaded "):
+            continue
+        if "uninstalled" in line_lower and "package" in line_lower:
+            continue
+        if "installed" in line_lower and "package" in line_lower:
+            continue
+        if "built forge" in line_lower or "building forge" in line_lower:
+            continue
+        filtered_stderr.append(line)
+
+    filtered_stderr_str = "\n".join(filtered_stderr)
+
+    assert "error" not in filtered_stderr_str.lower(), (
+        f"Zensical build reported errors:\n{filtered_stderr_str}"
+    )
+    assert "warning" not in filtered_stderr_str.lower(), (
+        f"Zensical build reported warnings:\n{filtered_stderr_str}"
+    )
+
+    # 3. The built static documentation site is correctly generated under the configured output directory.
+    root_dir = Path(__file__).parents[2]
+    site_dir = root_dir / "site"
+    assert site_dir.exists() and site_dir.is_dir(), (
+        f"Built documentation directory '{site_dir}' does not exist or is not a directory."
+    )
+
+    getting_started_index = site_dir / "getting-started" / "index.html"
+    assert getting_started_index.exists() and getting_started_index.is_file(), (
+        f"Built documentation for getting-started is missing: '{getting_started_index}'"
+    )
+
+    # Verify that the cat troubleshooting note is in getting_started_index
+    content = getting_started_index.read_text(encoding="utf-8")
+    assert "🐱" in content, "The Unicode cat emoji '🐱' was not found in the compiled HTML."
+    assert "HTTP 405 error" in content, (
+        "The troubleshooting note text was not found in the compiled HTML."
+    )
