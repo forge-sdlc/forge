@@ -110,6 +110,9 @@ After plan approval, Forge:
 8. **Human review** gate.
 9. **Post-merge summary:** After merge, Forge posts a fix summary and release note to the Jira ticket.
 
+!!! note "PR Merge Reconciliation"
+    A merged pull request is terminally reconciled by its repository namespace and pull request number, not by its head SHA. This design ensures that merge detection remains robust and unaffected by commit rebuilds, squashing, or rebase operations during review.
+
 ---
 
 ## Comment Syntax
