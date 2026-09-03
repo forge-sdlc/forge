@@ -202,6 +202,13 @@ CLICKHOUSE_PASSWORD=clickhouse
 
 # CI behaviour
 CI_FIX_MAX_RETRIES=5
+
+# Terminal workflow retrospectives are opt-in. Reports contain only bounded,
+# redacted facts and are published as Jira comments. Improvement task creation
+# has a separate opt-in and uses stable labels to avoid duplicates.
+RETROSPECTIVE_ENABLED=false
+RETROSPECTIVE_CREATE_ISSUES=false
+RETROSPECTIVE_MAX_ITEMS=20
 CI_IGNORED_CHECKS=tide          # comma-separated substrings of checks to ignore
 ```
 
