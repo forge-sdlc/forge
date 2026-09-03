@@ -67,7 +67,7 @@ Forge generates a behavioral specification from the approved PRD, typically usin
 Forge breaks the feature into logical epics — high-level areas of work that map to implementation phases.
 
 By default, Forge uses an interactive **Draft Review Flow** at this stage (unless YOLO mode is active):
-1. Instead of creating Jira tickets immediately, Forge serializes the proposed epics into `forge-epics-draft.json` and uploads it as an attachment on the Feature ticket.
+1. Instead of creating Jira tickets immediately, Forge stores the proposed epics in durable workflow state.
 2. Forge posts a markdown table comment on the Feature ticket outlining the proposed Epics.
 3. The workflow pauses at `plan_approval_gate`.
 
@@ -75,10 +75,10 @@ By default, Forge uses an interactive **Draft Review Flow** at this stage (unles
 
 | Action | How | Description |
 |--------|-----|-------------|
-| **Approve** | Comment `/forge approve` OR set label to `forge:plan-approved` | Forge provisions the Epic sub-tickets on Jira from the draft, deletes the draft attachment, and advances to Task Generation. |
-| **Direct Edit** | Use `/forge` commands (e.g. `/forge update`, `/forge remove`, etc.) | Directly modify the draft attachment and regenerate the proposal comment. See [Jira Labels & Comments](labels.md) for a list of commands. |
+| **Approve** | Comment `/forge approve` OR set label to `forge:plan-approved` | Forge provisions the Epic sub-tickets from the workflow-state draft and advances to Task Generation. |
+| **Direct Edit** | Use `/forge` commands (e.g. `/forge update`, `/forge remove`, etc.) | Directly modify the workflow-state draft and regenerate the proposal comment. See [Jira Labels & Comments](labels.md) for a list of commands. |
 | **Ask a question** | Comment with `?` prefix or `@forge ask` | Forge answers your question without regenerating the draft. |
-| **Request revisions** | Comment with `!` prefix followed by your feedback | Forge uses LLM assistance to revise the entire draft JSON and update the proposal comment with your feedback. |
+| **Request revisions** | Comment with `!` prefix followed by your feedback | Forge uses LLM assistance to revise the workflow-state draft and update the proposal comment with your feedback. |
 
 If `forge:yolo` mode is active, the draft review is bypassed. Epics are created in Jira immediately, and the workflow automatically proceeds to Task Generation.
 
@@ -103,7 +103,7 @@ flowchart TD
 Forge generates granular implementation tasks scoped to individual repositories. Each task is sized to fit in a single container execution pass.
 
 By default, Forge uses an interactive **Draft Review Flow** at this stage (unless YOLO mode is active):
-1. Instead of creating Jira tickets immediately, Forge serializes the proposed tasks into `forge-tasks-draft.json` and uploads it as an attachment on the Feature ticket.
+1. Instead of creating Jira tickets immediately, Forge stores the proposed tasks in durable workflow state.
 2. Forge posts a markdown table comment on the Feature ticket outlining the proposed Tasks.
 3. The workflow pauses at `task_approval_gate`.
 
@@ -111,10 +111,10 @@ By default, Forge uses an interactive **Draft Review Flow** at this stage (unles
 
 | Action | How | Description |
 |--------|-----|-------------|
-| **Approve** | Comment `/forge approve` OR set label to `forge:task-approved` | Forge provisions the Task sub-tickets on Jira from the draft, deletes the draft attachment, and advances to Implementation. |
-| **Direct Edit** | Use `/forge` commands (e.g. `/forge update`, `/forge remove`, etc.) | Directly modify the draft attachment and regenerate the proposal comment. See [Jira Labels & Comments](labels.md) for a list of commands. |
+| **Approve** | Comment `/forge approve` OR set label to `forge:task-approved` | Forge provisions the Task sub-tickets from the workflow-state draft and advances to Implementation. |
+| **Direct Edit** | Use `/forge` commands (e.g. `/forge update`, `/forge remove`, etc.) | Directly modify the workflow-state draft and regenerate the proposal comment. See [Jira Labels & Comments](labels.md) for a list of commands. |
 | **Ask a question** | Comment with `?` prefix or `@forge ask` | Forge answers your question without regenerating the draft. |
-| **Request revisions** | Comment with `!` prefix followed by your feedback | Forge uses LLM assistance to revise the entire draft JSON and update the proposal comment with your feedback. |
+| **Request revisions** | Comment with `!` prefix followed by your feedback | Forge uses LLM assistance to revise the workflow-state draft and update the proposal comment with your feedback. |
 
 If `forge:yolo` mode is active, the draft review is bypassed. Tasks are created in Jira immediately, and the workflow automatically proceeds to Implementation.
 

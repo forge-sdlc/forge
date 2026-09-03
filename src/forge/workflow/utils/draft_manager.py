@@ -1,23 +1,25 @@
-"""Utility for managing draft CRUD operations on Jira parent tickets as attachments."""
+"""Utilities for state-backed draft review and comment rendering."""
 
 import copy
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import ValidationError
 
-from forge.integrations.jira import JiraClient
 from forge.models.draft import DraftItem, ForgeDecompositionDraft
 
 logger = logging.getLogger(__name__)
 
-FORGE_EPICS_DRAFT_FILENAME = "forge-epics-draft.json"
-FORGE_TASKS_DRAFT_FILENAME = "forge-tasks-draft.json"
+
+class DraftCommentPort(Protocol):
+    """Minimal port needed to publish draft-review comments."""
+
+    async def add_comment(self, issue_key: str, body: str) -> None: ...
 
 
 class DraftManager:
-    """Manages draft CRUD operations on Jira parent tickets as attachments."""
+    """Manages draft edits and state-backed review comments."""
 
     @staticmethod
     def _validate_item_params(
@@ -191,98 +193,6 @@ class DraftManager:
         return mutated_list
 
     @staticmethod
-    async def get_draft_attachment(
-        jira_client: JiraClient,
-        issue_key: str,
-        filename: str,
-    ) -> ForgeDecompositionDraft | None:
-        """Fetch a draft attachment from Jira parent ticket and parse it.
-
-        .. deprecated:: 1.0
-           Read from workflow state instead.
-        """
-        import warnings
-
-        warnings.warn(
-            "get_draft_attachment is deprecated and scheduled for removal. Read from workflow state instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        try:
-            attachments = await jira_client.get_attachments(issue_key)
-            target_attachment = None
-            for att in attachments:
-                if att.get("filename") == filename:
-                    target_attachment = att
-                    break
-
-            if not target_attachment:
-                logger.info(f"Draft attachment '{filename}' not found on {issue_key}")
-                return None
-
-            content_bytes = await jira_client.download_attachment(target_attachment["content_url"])
-            content_str = content_bytes.decode("utf-8")
-            return ForgeDecompositionDraft.model_validate_json(content_str)
-        except Exception as e:
-            logger.error(
-                f"Failed to fetch draft attachment '{filename}' from {issue_key}: {e}",
-                exc_info=True,
-            )
-            raise
-
-    @staticmethod
-    async def delete_draft_attachment(
-        jira_client: JiraClient,
-        issue_key: str,
-        filename: str,
-    ) -> None:
-        """Scan for any attachment with matching filename and delete it.
-
-        Args:
-            jira_client: The Jira client instance.
-            issue_key: The Jira issue key.
-            filename: The target filename to delete.
-        """
-        try:
-            await jira_client.delete_attachments_by_name(issue_key, filename)
-        except Exception as e:
-            logger.error(
-                f"Failed to delete draft attachments named '{filename}' on {issue_key}: {e}",
-                exc_info=True,
-            )
-            raise
-
-    @staticmethod
-    async def save_draft_attachment(
-        jira_client: JiraClient,
-        issue_key: str,
-        draft: ForgeDecompositionDraft,
-        filename: str = FORGE_EPICS_DRAFT_FILENAME,
-    ) -> None:
-        """Serialize draft as JSON and attach it to Jira parent ticket.
-
-        Args:
-            jira_client: The Jira client instance.
-            issue_key: The Jira issue key.
-            draft: The draft model to save.
-            filename: The filename for the attachment.
-        """
-        try:
-            content = draft.model_dump_json(indent=2)
-            await jira_client.add_attachment(
-                issue_key=issue_key,
-                filename=filename,
-                content=content,
-                content_type="application/json",
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to save draft attachment '{filename}' on {issue_key}: {e}",
-                exc_info=True,
-            )
-            raise
-
-    @staticmethod
     def _truncate_to_jira_limit(text: str, limit: int = 32767) -> str:
         """Truncate text to fit within Jira's character limit and append a [truncated] suffix."""
         if len(text) <= limit:
@@ -303,13 +213,11 @@ class DraftManager:
             phase_action = "decomposition"
             item_label = "Plan"
             approval_label = ForgeLabel.PLAN_APPROVED.value
-            filename = FORGE_EPICS_DRAFT_FILENAME
         else:
             phase_title = "Tasks"
             phase_action = "implementation"
             item_label = "Description"
             approval_label = ForgeLabel.TASK_APPROVED.value
-            filename = FORGE_TASKS_DRAFT_FILENAME
 
         header = f"### 📋 Proposed {phase_title} Draft\n\nThe following {phase_title} have been proposed for {phase_action}:\n\n"
         summary_list = ""
@@ -347,7 +255,8 @@ class DraftManager:
 
         if len(full_comment) > limit or (draft.phase == "epics" and len(items) > 15):
             overflow_guidance = (
-                f"Please refer to the attached `{filename}` for full implementation plan details."
+                "The complete plan is retained in Forge's workflow state; request a revision "
+                "if the condensed summary needs more detail."
                 if draft.phase == "epics"
                 else "The complete task breakdown will be posted in ordered continuation comments."
             )
@@ -431,7 +340,7 @@ class DraftManager:
 
     @staticmethod
     async def post_task_draft_review(
-        jira_client: JiraClient,
+        jira_client: DraftCommentPort,
         feature_key: str,
         draft: ForgeDecompositionDraft,
     ) -> None:

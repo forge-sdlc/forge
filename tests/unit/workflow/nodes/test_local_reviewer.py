@@ -236,7 +236,7 @@ class TestLocalReviewBug:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_node"] == "implement_bug_fix"
+        assert result["current_node"] == "implement_work"
         assert result["qualitative_retry_count"] == 1
         assert result["local_review_verdict"] == "tests_incomplete"
         assert "Tests do not fail" in (result["qualitative_feedback"] or "")
@@ -253,7 +253,7 @@ class TestLocalReviewBug:
         ):
             result = await local_review_changes(base_bug_review_state)
 
-        assert result["current_node"] == "implement_bug_fix"
+        assert result["current_node"] == "implement_work"
         assert result["qualitative_retry_count"] == 1
 
     @pytest.mark.asyncio

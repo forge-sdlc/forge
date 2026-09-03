@@ -13,7 +13,7 @@ WORKFLOW_PROPERTY_PREFIX = "forge.workflow."
 WORKFLOW_LABEL_PREFIX = "forge:workflow:"
 MAX_PROPERTY_BYTES = 32_768
 MAX_STEPS = 64
-MAX_BRANCHES = 16
+MAX_BRANCHES = 32
 MAX_TRANSITIONS = 500
 WORKFLOW_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,62}$")
 NODE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
@@ -40,6 +40,31 @@ class WorkflowStep(StrictModel):
     next: str | None = None
     route: str | None = None
     branches: dict[str, str] = Field(default_factory=dict)
+    dynamic_route: bool = Field(default=False, alias="dynamicRoute")
+    # Legacy router capability metadata. New definitions omit it; the trusted
+    # router catalog owns the possible destinations.
+    dynamic_targets: tuple[str, ...] = Field(
+        default=(), alias="dynamicTargets", exclude_if=lambda value: not value
+    )
+    # Legacy catalog metadata remains readable for pinned definitions. New
+    # definitions omit it and the compiler derives it from the state profile.
+    kind: Literal["station", "gate", "operation"] | None = None
+    station_contract: str | None = Field(default=None, alias="stationContract")
+    station_contract_version: str | None = Field(default=None, alias="stationContractVersion")
+    required_policies: tuple[str, ...] = Field(
+        default=(), alias="requiredPolicies", exclude_if=lambda value: not value
+    )
+    # Legacy effect metadata. Authority belongs to the trusted node catalog;
+    # this remains readable so old pinned definitions preserve their identity.
+    allowed_effects: tuple[str, ...] | None = Field(default=None, alias="allowedEffects")
+    join: Literal["all", "any"] | None = None
+    max_concurrency: int | None = Field(default=None, alias="maxConcurrency", ge=1, le=64)
+    retry_bound: int | None = Field(default=None, alias="retryBound", ge=1, le=100)
+    external_entry: bool = Field(
+        default=False,
+        alias="externalEntry",
+        exclude_if=lambda value: not value,
+    )
 
     @model_validator(mode="after")
     def validate_transition(self) -> WorkflowStep:
@@ -47,10 +72,28 @@ class WorkflowStep(StrictModel):
             raise ValueError("exactly one of 'next' or 'route' is required")
         if self.next and self.branches:
             raise ValueError("branches are only valid with 'route'")
-        if self.route and not self.branches:
+        if self.route and not self.branches and not self.dynamic_route:
             raise ValueError("a routed step requires non-empty branches")
+        if self.dynamic_route and (not self.route or self.branches):
+            raise ValueError("dynamicRoute requires a route and cannot declare static branches")
+        if not self.dynamic_route and self.dynamic_targets:
+            raise ValueError("dynamicTargets are only valid with dynamicRoute")
         if len(self.branches) > MAX_BRANCHES:
             raise ValueError(f"a routed step may have at most {MAX_BRANCHES} branches")
+        if self.kind == "station" and not (self.station_contract and self.station_contract_version):
+            raise ValueError("station steps require stationContract and stationContractVersion")
+        if self.kind not in {None, "station", "gate"} and (
+            self.station_contract or self.station_contract_version
+        ):
+            raise ValueError("station contract fields are only valid for station steps")
+        if bool(self.station_contract) != bool(self.station_contract_version):
+            raise ValueError("stationContract and stationContractVersion must be declared together")
+        if self.max_concurrency is not None and not self.dynamic_route:
+            raise ValueError("maxConcurrency is only valid for dynamic routing")
+        if self.dynamic_route and self.max_concurrency is None:
+            raise ValueError("dynamicRoute requires an explicit maxConcurrency")
+        if self.join is not None and self.dynamic_route:
+            raise ValueError("a fan-out step cannot also be a join")
         return self
 
 
@@ -65,7 +108,21 @@ class WorkflowSpec(StrictModel):
     state: Literal["feature", "bug", "task_takeover"]
     entry: str
     steps: dict[str, WorkflowStep]
+    # The provider-neutral policy used to apply external observations to this
+    # workflow instance.  Policies are versioned, allowlisted runtime
+    # capabilities; arbitrary import paths are deliberately not supported.
+    # Definitions which do not accept external observation transitions may
+    # leave this unset (for example, small local test workflows).
+    # Legacy derived/governance fields. They are accepted so an old pinned
+    # artifact keeps its identity, but omitted from newly-authored definitions.
+    observation_policy: str | None = Field(default=None, alias="observationPolicy")
     resume: WorkflowResume = Field(default_factory=WorkflowResume)
+    mandatory_policies: tuple[str, ...] = Field(
+        default=(), alias="mandatoryPolicies", exclude_if=lambda value: not value
+    )
+    extension_points: tuple[str, ...] = Field(
+        default=(), alias="extensionPoints", exclude_if=lambda value: not value
+    )
 
     @field_validator("entry")
     @classmethod

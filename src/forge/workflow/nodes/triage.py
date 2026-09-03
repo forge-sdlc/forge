@@ -4,17 +4,17 @@ Evaluates whether a bug ticket contains sufficient information
 for codebase analysis before any exploration begins.
 """
 
-import json
 import logging
 
 from langgraph.graph import END
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
-from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
-from forge.prompts import load_prompt
 from forge.workflow.bug.state import BugState
+from forge.workflow.effect_runtime import JiraClient
+from forge.workflow.projections.triage import project_triage
+from forge.workflow.stations.runner import invoke_builtin_station
+from forge.workflow.stations.triage import TriageKind
 from forge.workflow.utils import set_paused, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 
@@ -48,7 +48,6 @@ async def triage_check(state: BugState) -> BugState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    agent = ForgeAgent(settings)
 
     try:
         if retry_count >= _MAX_RETRIES:
@@ -69,22 +68,19 @@ async def triage_check(state: BugState) -> BugState:
         comment_text = "\n\n".join(c.body for c in comments if c.body)
 
         # Step 3: Invoke triage prompt
-        user_prompt = load_prompt(
-            "triage-bug",
-            summary=issue.summary or "",
-            description=issue.description or "",
-            comments=comment_text,
+        outcome = await invoke_builtin_station(
+            project_triage(
+                state,
+                kind=TriageKind.BUG,
+                summary=issue.summary or "",
+                description=issue.description or "",
+                comments=comment_text,
+            )
         )
-        raw_result = await agent.run_task(
-            task="triage-bug",
-            policy_key="bug_triage",
-            prompt=user_prompt,
-            context={"ticket_key": ticket_key},
-        )
+        assert outcome.output is not None
 
         # Step 4: Parse result
-        result_stripped = raw_result.strip()
-        if result_stripped.lower() == "sufficient":
+        if outcome.output.sufficient:
             pass_msg = (
                 "Thanks for the update — ticket now has enough information to proceed. "
                 "Starting root cause analysis — results will be posted here."
@@ -109,19 +105,7 @@ async def triage_check(state: BugState) -> BugState:
 
         # Step 5: Missing fields path
         # Strip markdown code fences that LLMs sometimes add despite instructions
-        json_candidate = result_stripped
-        if json_candidate.startswith("```"):
-            lines = json_candidate.splitlines()
-            json_candidate = "\n".join(line for line in lines if not line.startswith("```")).strip()
-        try:
-            missing_fields = json.loads(json_candidate)
-            if not isinstance(missing_fields, list):
-                raise ValueError("Expected a list")
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("Unexpected triage output for %s: %r", ticket_key, result_stripped)
-            missing_fields = [
-                "(could not determine — please provide additional context about the bug)"
-            ]
+        missing_fields = list(outcome.output.missing_fields)
 
         fields_listed = "\n".join(f"- {f}" for f in missing_fields)
         await post_status_comment(
@@ -154,7 +138,6 @@ async def triage_check(state: BugState) -> BugState:
         }
     finally:
         await jira.close()
-        await agent.close()
 
 
 def triage_gate(state: BugState) -> BugState:

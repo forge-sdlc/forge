@@ -250,6 +250,12 @@ class SourceControlProvider(Protocol):
         self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity, body: str
     ) -> ReviewComment: ...
 
+    async def get_change_request_comments(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+    ) -> list[ReviewComment]:
+        """Return general conversation comments for idempotency/recovery checks."""
+        ...
+
     async def reply_to_comment(
         self,
         repo_ref: RepositoryRef,

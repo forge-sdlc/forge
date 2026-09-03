@@ -9,10 +9,20 @@ from langgraph.graph import END
 
 from forge.integrations.source_control.contracts import Provider, RepositoryRef
 from forge.models.workflow import TicketType
-from forge.workflow.bug.graph import build_bug_graph
-from forge.workflow.feature.graph import build_feature_graph
-from forge.workflow.task_takeover.graph import build_task_takeover_graph
+from forge.workflow.bug.routing import build_bug_graph
+from forge.workflow.feature.routing import build_feature_graph
+from forge.workflow.task_takeover.routing import build_task_takeover_graph
 from tests.fixtures.workflow_states import make_workflow_state
+
+
+@pytest.fixture(autouse=True)
+def _stub_required_persistence():
+    """Keep node tests focused on routing instead of provider effect delivery."""
+    with patch(
+        "forge.workflow.nodes.human_review.execute_persistence_actions",
+        new_callable=AsyncMock,
+    ):
+        yield
 
 
 def _repo_ref(repo: str = "org/repo") -> RepositoryRef:
@@ -221,7 +231,7 @@ class TestReviewResponseGate:
 class TestImplementReviewInFeatureGraph:
     def test_implement_review_is_a_node(self):
         """implement_review must be a node in the feature graph."""
-        from forge.workflow.feature.graph import build_feature_graph
+        from forge.workflow.feature.routing import build_feature_graph
 
         graph = build_feature_graph()
         compiled = graph.compile()
@@ -229,7 +239,7 @@ class TestImplementReviewInFeatureGraph:
 
     def test_review_response_gate_is_a_node(self):
         """review_response_gate must be a node in the feature graph."""
-        from forge.workflow.feature.graph import build_feature_graph
+        from forge.workflow.feature.routing import build_feature_graph
 
         graph = build_feature_graph()
         compiled = graph.compile()
@@ -237,7 +247,7 @@ class TestImplementReviewInFeatureGraph:
 
     def test_human_review_gate_has_implement_review_edge(self):
         """human_review_gate must have an edge to implement_review."""
-        from forge.workflow.feature.graph import build_feature_graph
+        from forge.workflow.feature.routing import build_feature_graph
 
         graph = build_feature_graph()
         compiled = graph.compile()
@@ -246,7 +256,7 @@ class TestImplementReviewInFeatureGraph:
 
     def test_implement_task_not_reachable_from_human_review_gate(self):
         """implement_task must NOT be a direct target of human_review_gate."""
-        from forge.workflow.feature.graph import build_feature_graph
+        from forge.workflow.feature.routing import build_feature_graph
 
         graph = build_feature_graph()
         compiled = graph.compile()
@@ -259,14 +269,14 @@ class TestImplementReviewInFeatureGraph:
 
 class TestImplementReviewInBugGraph:
     def test_implement_review_is_a_node_in_bug_graph(self):
-        from forge.workflow.bug.graph import build_bug_graph
+        from forge.workflow.bug.routing import build_bug_graph
 
         graph = build_bug_graph()
         compiled = graph.compile()
         assert "implement_review" in compiled.get_graph().nodes
 
     def test_human_review_gate_routes_to_implement_review_in_bug_graph(self):
-        from forge.workflow.bug.graph import build_bug_graph
+        from forge.workflow.bug.routing import build_bug_graph
 
         graph = build_bug_graph()
         compiled = graph.compile()
@@ -279,25 +289,25 @@ class TestImplementReviewInBugGraph:
 
 class TestResumeRoutingForReviewNodes:
     def test_feature_resumes_at_implement_review(self):
-        from forge.workflow.feature.graph import route_by_ticket_type
+        from forge.workflow.feature.routing import route_by_ticket_type
 
         state = make_workflow_state(current_node="implement_review")
         assert route_by_ticket_type(state) == "implement_review"
 
     def test_feature_resumes_at_review_response_gate(self):
-        from forge.workflow.feature.graph import route_by_ticket_type
+        from forge.workflow.feature.routing import route_by_ticket_type
 
         state = make_workflow_state(current_node="review_response_gate")
         assert route_by_ticket_type(state) == "review_response_gate"
 
     def test_bug_resumes_at_implement_review(self):
-        from forge.workflow.bug.graph import route_entry
+        from forge.workflow.bug.routing import route_entry
 
         state = make_workflow_state(current_node="implement_review")
         assert route_entry(state) == "implement_review"
 
     def test_bug_resumes_at_review_response_gate(self):
-        from forge.workflow.bug.graph import route_entry
+        from forge.workflow.bug.routing import route_entry
 
         state = make_workflow_state(current_node="review_response_gate")
         assert route_entry(state) == "review_response_gate"

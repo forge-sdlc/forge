@@ -6,6 +6,64 @@ from httpx import ASGITransport, AsyncClient
 from forge.main import app
 
 
+def test_execution_metrics_record_bounded_operational_signals() -> None:
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    from forge.api.routes.metrics import (
+        EXECUTION_BLOCKED,
+        EXECUTION_DRIFT,
+        EXECUTION_MIGRATION_ELIGIBILITY,
+        EXECUTION_RETRIES,
+        EXECUTION_WAITING_AGE,
+        record_execution_read_model,
+    )
+
+    model = SimpleNamespace(
+        status=SimpleNamespace(value="blocked"),
+        waiting=SimpleNamespace(
+            code="credential", since=datetime.now(UTC) - timedelta(seconds=5), message="missing"
+        ),
+        station_attempts=(SimpleNamespace(attempt=2),),
+        effects=(),
+        last_observation=SimpleNamespace(conflicting=True, stale=False),
+        migration=SimpleNamespace(eligible=False),
+    )
+    record_execution_read_model(model)
+
+    assert EXECUTION_BLOCKED.labels(code="unknown")._value.get() == 1
+    assert EXECUTION_WAITING_AGE.labels(code="unknown")._sum.get() > 0
+    assert EXECUTION_RETRIES.labels(kind="execution")._value.get() == 1
+    assert EXECUTION_DRIFT.labels(**{"class": "operator_required"})._value.get() == 1
+    assert EXECUTION_MIGRATION_ELIGIBILITY.labels(state="ineligible")._value.get() == 0
+
+
+def test_execution_sampled_metrics_do_not_accumulate_on_repeated_reads() -> None:
+    from types import SimpleNamespace
+
+    from forge.api.routes.metrics import (
+        EXECUTION_BLOCKED,
+        EXECUTION_DRIFT,
+        EXECUTION_RETRIES,
+        record_execution_read_model,
+    )
+
+    model = SimpleNamespace(
+        status="blocked",
+        waiting=SimpleNamespace(code="blocked", since=None),
+        station_attempts=(SimpleNamespace(attempt=3),),
+        effects=(),
+        last_observation=SimpleNamespace(conflicting=True, stale=False),
+        migration=SimpleNamespace(eligible=None),
+    )
+    record_execution_read_model(model)
+    record_execution_read_model(model)
+
+    assert EXECUTION_BLOCKED.labels(code="blocked")._value.get() == 1
+    assert EXECUTION_RETRIES.labels(kind="execution")._value.get() == 2
+    assert EXECUTION_DRIFT.labels(**{"class": "operator_required"})._value.get() == 1
+
+
 class TestMetricsEndpoint:
     """Tests for /metrics endpoint."""
 

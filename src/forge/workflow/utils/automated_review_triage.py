@@ -1,12 +1,16 @@
 """Semantic triage for automated proposal reviews."""
 
-import json
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from forge.prompts import load_prompt
+from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+)
+from forge.workflow.stations.runner import invoke_builtin_station
 
 logger = logging.getLogger(__name__)
 
@@ -34,33 +38,6 @@ def is_bot_sender(payload: dict[str, Any]) -> bool:
     return bool(sender_type.lower() == "bot" or review_user_type.lower() == "bot")
 
 
-def parse_automated_review_decision(output: str) -> AutomatedReviewDecision:
-    """Parse triage output, falling back to an uncertain revision decision."""
-    match = re.search(r"\{.*\}", output, re.DOTALL)
-    if not match:
-        return AutomatedReviewDecision("uncertain", reason="Triage returned no JSON object")
-
-    try:
-        data = json.loads(match.group(0))
-    except (json.JSONDecodeError, TypeError):
-        return AutomatedReviewDecision("uncertain", reason="Triage returned invalid JSON")
-
-    verdict = data.get("verdict")
-    if verdict not in ("blocking", "satisfied", "uncertain"):
-        return AutomatedReviewDecision("uncertain", reason="Triage returned an invalid verdict")
-
-    feedback = data.get("blocking_feedback", "")
-    reason = data.get("reason", "")
-    if not isinstance(feedback, str) or not isinstance(reason, str):
-        return AutomatedReviewDecision("uncertain", reason="Triage returned invalid fields")
-    if verdict == "blocking" and not feedback.strip():
-        return AutomatedReviewDecision(
-            "uncertain", reason="Triage marked the review blocking without feedback"
-        )
-
-    return AutomatedReviewDecision(verdict, feedback.strip(), reason.strip())
-
-
 async def triage_automated_review(
     *,
     artifact_type: str,
@@ -71,9 +48,6 @@ async def triage_automated_review(
     ticket_key: str,
 ) -> AutomatedReviewDecision:
     """Ask a tool-free agent whether an automated review is still blocking."""
-    # Keep the comparatively heavy agent integration out of webhook worker imports.
-    from forge.integrations.agents.agent import ForgeAgent
-
     prompt = load_prompt(
         "triage-automated-review",
         artifact_type=artifact_type,
@@ -83,14 +57,30 @@ async def triage_automated_review(
         review_content=review_content,
     )
     try:
-        output = await ForgeAgent().run_task(
-            task="triage-automated-review",
-            policy_key="automated_review_triage",
-            prompt=prompt,
-            context={"ticket_key": ticket_key},
-            include_tools=False,
+        outcome = await invoke_builtin_station(
+            project_agent_operation(
+                {"ticket_key": ticket_key},
+                AgentOperationInput(
+                    operation=AgentOperation.RUN_TASK,
+                    task="triage-automated-review",
+                    policy_key="automated_review_triage",
+                    prompt=prompt,
+                    context={"ticket_key": ticket_key},
+                    include_tools=False,
+                    response_schema="automated_review_triage",
+                ),
+                discriminator=f"automated-review:{artifact_type}:{review_author}",
+            )
+        )
+        assert outcome.output is not None
+        structured = outcome.output.structured
+        if not isinstance(structured, dict):
+            raise ValueError("Automated review triage returned no structured response")
+        return AutomatedReviewDecision(
+            verdict=structured["verdict"],
+            blocking_feedback=str(structured.get("blocking_feedback", "")).strip(),
+            reason=str(structured.get("reason", "")).strip(),
         )
     except Exception as exc:
         logger.warning("Automated review triage failed for %s: %s", ticket_key, exc)
         return AutomatedReviewDecision("uncertain", reason=f"Triage failed: {exc}")
-    return parse_automated_review_decision(output)

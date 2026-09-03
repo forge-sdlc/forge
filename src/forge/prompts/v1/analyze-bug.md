@@ -64,6 +64,7 @@ Write exactly this JSON structure to `.forge/rca.json`. All top-level keys are r
 ```json
 {
     "summary": "One-paragraph summary of the root cause.",
+    "repository": "owner/repository selected from Available Repositories",
     "code_location": {
         "file": "src/auth/validators.py",
         "function": "validate_password",
@@ -105,6 +106,8 @@ Write exactly this JSON structure to `.forge/rca.json`. All top-level keys are r
 ```
 
 **Constraints:**
+- `repository` must be exactly one entry from Available Repositories. It is the repository
+  whose code was analyzed and will become the ticket's `repo:<owner>/<repository>` label.
 - `options` must be a list of 1–4 items.
 - Each option must have `title`, `description`, and `tradeoffs`.
 - `hypothesis_log` must have at least one entry. Unless the bug is trivially isolated, include at least one `"rejected"` candidate.

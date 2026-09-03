@@ -4,6 +4,7 @@ import asyncio
 import logging
 from enum import StrEnum
 
+from forge.workflow.effect_runtime import push_repository
 from forge.workspace.git_ops import GitOperations
 
 logger = logging.getLogger(__name__)
@@ -88,10 +89,7 @@ async def push_to_fork_with_retry(
     """
     for attempt in range(1, max_attempts + 1):
         try:
-            if use_fork:
-                git.push_to_fork()
-            else:
-                git.push(force=False, check_conflicts=False)
+            await push_repository(git, use_fork=use_fork, force=False, check_conflicts=False)
             return
         except Exception as exc:
             kind = classify_push_failure(exc)

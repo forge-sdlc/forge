@@ -564,6 +564,22 @@ class JiraClient:
         response.raise_for_status()
         logger.info(f"Added remote link to {issue_key}: {url}")
 
+    async def get_remote_links(self, issue_key: str) -> list[dict[str, str]]:
+        """Return remote-link URLs and titles for idempotent reconciliation."""
+        client = await self._get_client()
+        response = await client.get(f"/issue/{issue_key}/remotelink")
+        response.raise_for_status()
+        links: list[dict[str, str]] = []
+        for item in response.json():
+            remote_object = item.get("object") or {}
+            links.append(
+                {
+                    "url": str(remote_object.get("url") or ""),
+                    "title": str(remote_object.get("title") or ""),
+                }
+            )
+        return links
+
     async def create_issue_link(
         self,
         link_type: str,
@@ -622,7 +638,13 @@ class JiraClient:
             )
         return result
 
-    async def add_comment(self, issue_key: str, body: str) -> JiraComment:
+    async def add_comment(
+        self,
+        issue_key: str,
+        body: str,
+        *,
+        properties: dict[str, Any] | None = None,
+    ) -> JiraComment:
         """Add a comment to a Jira issue.
 
         Args:
@@ -642,7 +664,18 @@ class JiraClient:
 
         response = await client.post(
             f"/issue/{issue_key}/comment",
-            json={"body": adf_content},
+            json={
+                "body": adf_content,
+                **(
+                    {
+                        "properties": [
+                            {"key": key, "value": value} for key, value in properties.items()
+                        ]
+                    }
+                    if properties
+                    else {}
+                ),
+            },
         )
         response.raise_for_status()
         data = response.json()
@@ -655,6 +688,8 @@ class JiraClient:
         error_message: str,
         node_name: str,
         mention_account_ids: list[str] | None = None,
+        *,
+        properties: dict[str, Any] | None = None,
     ) -> JiraComment:
         """Add an error notification comment with user mentions.
 
@@ -730,7 +765,18 @@ class JiraClient:
 
         response = await client.post(
             f"/issue/{issue_key}/comment",
-            json={"body": adf_content},
+            json={
+                "body": adf_content,
+                **(
+                    {
+                        "properties": [
+                            {"key": key, "value": value} for key, value in properties.items()
+                        ]
+                    }
+                    if properties
+                    else {}
+                ),
+            },
         )
         response.raise_for_status()
         data = response.json()
@@ -745,6 +791,8 @@ class JiraClient:
         available_connections: str,
         fix_command: str,
         mention_account_ids: list[str] | None = None,
+        *,
+        properties: dict[str, Any] | None = None,
     ) -> JiraComment:
         """Post an actionable model-policy configuration error in Jira."""
         client = await self._get_client()
@@ -822,7 +870,18 @@ class JiraClient:
         ]
         response = await client.post(
             f"/issue/{issue_key}/comment",
-            json={"body": {"version": 1, "type": "doc", "content": content}},
+            json={
+                "body": {"version": 1, "type": "doc", "content": content},
+                **(
+                    {
+                        "properties": [
+                            {"key": key, "value": value} for key, value in properties.items()
+                        ]
+                    }
+                    if properties
+                    else {}
+                ),
+            },
         )
         response.raise_for_status()
         logger.info(f"Added model policy error guidance to {issue_key}")
@@ -845,7 +904,11 @@ class JiraClient:
         while True:
             response = await client.get(
                 f"/issue/{issue_key}/comment",
-                params={"startAt": start_at, "maxResults": max_results},
+                params={
+                    "startAt": start_at,
+                    "maxResults": max_results,
+                    "expand": "properties",
+                },
             )
             response.raise_for_status()
             data = response.json()
@@ -909,7 +972,7 @@ class JiraClient:
     async def set_workflow_label(
         self,
         issue_key: str,
-        new_label: ForgeLabel,
+        new_label: ForgeLabel | str,
         remove_prefix: str = "forge:",
     ) -> None:
         """Set a workflow label, removing other forge: labels.
@@ -922,6 +985,8 @@ class JiraClient:
             new_label: The new workflow label to set.
             remove_prefix: Prefix of labels to remove (default: "forge:").
         """
+        label_value = new_label.value if isinstance(new_label, ForgeLabel) else new_label
+
         # Get current labels
         current_labels = await self.get_labels(issue_key)
 
@@ -930,7 +995,7 @@ class JiraClient:
             label
             for label in current_labels
             if label.startswith(remove_prefix)
-            and label != new_label.value
+            and label != label_value
             and label != ForgeLabel.FORGE_MANAGED.value
             and label != "forge:managed:task"
             and label != "forge:managed:task-takeover"
@@ -948,7 +1013,7 @@ class JiraClient:
         operations: list[dict[str, str]] = []
         for label in labels_to_remove:
             operations.append({"remove": label})
-        operations.append({"add": new_label.value})
+        operations.append({"add": label_value})
 
         # Ensure forge:managed is set
         if ForgeLabel.FORGE_MANAGED.value not in current_labels:
@@ -961,7 +1026,7 @@ class JiraClient:
         )
         response.raise_for_status()
         logger.info(
-            f"Set workflow label {new_label.value} on {issue_key} (removed: {labels_to_remove})"
+            f"Set workflow label {label_value} on {issue_key} (removed: {labels_to_remove})"
         )
 
     async def add_structured_comment(
@@ -970,6 +1035,8 @@ class JiraClient:
         title: str,
         content: str,
         comment_type: str = "forge-artifact",
+        *,
+        properties: dict[str, Any] | None = None,
     ) -> JiraComment:
         """Add a structured comment with a marker for later retrieval.
 
@@ -993,7 +1060,7 @@ class JiraClient:
             f"[/FORGE:{comment_type.upper()}]\n\n"
             f"{artifact_interaction_options(comment_type)}"
         )
-        return await self.add_comment(issue_key, formatted_body)
+        return await self.add_comment(issue_key, formatted_body, properties=properties)
 
     async def get_structured_comment(
         self,
@@ -1290,30 +1357,28 @@ class JiraClient:
         """
         client = await self._get_client()
         issues: list[JiraIssue] = []
-        start_at = 0
+        next_page_token: str | None = None
 
         while max_results is None or len(issues) < max_results:
             page_size = 100 if max_results is None else min(100, max_results - len(issues))
             params: dict[str, Any] = {
                 "jql": jql,
-                "startAt": start_at,
                 "maxResults": page_size,
             }
             if fields:
                 params["fields"] = ",".join(fields)
+            if next_page_token:
+                params["nextPageToken"] = next_page_token
 
-            response = await client.get("/search", params=params)
+            response = await client.get("/search/jql", params=params)
             response.raise_for_status()
             data = response.json()
             page = data.get("issues", [])
             issues.extend(JiraIssue.from_api_response(issue) for issue in page)
 
-            page_start = int(data.get("startAt", start_at))
-            total = int(data.get("total", page_start + len(page)))
-            next_start = page_start + len(page)
-            if not page or next_start >= total:
+            next_page_token = data.get("nextPageToken")
+            if not page or data.get("isLast", not next_page_token) or not next_page_token:
                 break
-            start_at = next_start
 
         return issues
 

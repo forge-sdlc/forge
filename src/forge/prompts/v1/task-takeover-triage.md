@@ -26,22 +26,5 @@ Be flexible for small documentation updates, copy changes, configuration tweaks,
 
 If additional information is required, ask only for the specific missing information that blocks safe planning. Prefer actionable clarification requests such as "Target repository/file", "Expected behavior", "Required content", "Constraints", or the formal field names below when those are actually the clearest missing items.
 
-### Output Format
-
-Output exactly one of the following:
-
-1. If the ticket is sufficiently detailed and clear to begin planning, output ONLY the exact bare string:
-sufficient
-
-2. If the ticket is missing information required for safe planning, output ONLY a JSON array of the missing or incomplete information. Use concise field names. Prefer these names when applicable:
-[
-  "Problem Statement",
-  "Proposed Solution/Approach",
-  "Acceptance Criteria"
-]
-
-Strictly adhere to the following output rules:
-- Do NOT wrap your output in markdown code blocks (such as ``` or ```json).
-- Do NOT include any additional comments, explanations, greetings, or whitespace.
-- If sufficient, output only the word "sufficient" (case-insensitive).
-- If insufficient, output only a valid JSON list of strings representing the missing fields.
+Set `sufficient` to whether planning can begin safely. When false, return concise names
+for the genuinely blocking information in `missing_fields`; otherwise leave it empty.

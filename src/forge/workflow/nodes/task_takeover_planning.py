@@ -6,15 +6,20 @@ import re
 from typing import Any, cast
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
-from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
+from forge.workflow.effect_runtime import JiraClient
+from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+)
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import set_paused, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.references import fetch_and_inject_references
-from forge.workflow.utils.repo_resolution import get_effective_repos
+from forge.workflow.utils.repo_resolution import get_effective_repos, reconcile_repo_labels
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +39,6 @@ def _extract_plan_repos(plan_content: str, known_repos: list[str]) -> list[str]:
         if repo not in repos:
             repos.append(repo)
     return repos
-
-
-def _repo_labels(repos: list[str]) -> list[str]:
-    """Build Jira repo labels for valid repository names."""
-    return [f"repo:{repo}" for repo in repos if repo and "/" in repo]
 
 
 def _truncate_plan_comment(plan_content: str, max_chars: int = _MAX_COMMENT_CHARS) -> str:
@@ -74,7 +74,6 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    agent = ForgeAgent(settings)
 
     try:
         issue = await jira.get_issue(ticket_key)
@@ -130,20 +129,26 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         # 3. Generate the plan directly with the planning agent. This mirrors
         # feature workflow planning and lets the agent use read-only repository
         # tools instead of requiring a cloned container workspace.
-        raw_plan = await agent.run_task(
-            task="task-takeover-planning",
-            policy_key="task_takeover_planning",
-            prompt=task_description,
-            context={
-                "ticket_key": ticket_key,
-                "project_key": issue.project_key,
-                "current_repo": state.get("current_repo") or "",
-                "available_repos": known_repos,
-            },
+        outcome = await invoke_builtin_station(
+            project_agent_operation(
+                state,
+                AgentOperationInput(
+                    operation=AgentOperation.RUN_TASK,
+                    task="task-takeover-planning",
+                    policy_key="task_takeover_planning",
+                    prompt=task_description,
+                    context={
+                        "ticket_key": ticket_key,
+                        "project_key": issue.project_key,
+                        "current_repo": state.get("current_repo") or "",
+                        "available_repos": known_repos,
+                    },
+                ),
+                discriminator="task-takeover-planning",
+            )
         )
-        new_plan = agent._strip_preamble(raw_plan).strip()
-        if not new_plan:
-            raise ValueError("Planning agent returned an empty plan")
+        assert outcome.output is not None
+        new_plan = outcome.output.text
 
         plan_repos = _extract_plan_repos(new_plan, known_repos)
         if not plan_repos:
@@ -156,12 +161,7 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         truncated_comment = _truncate_plan_comment(new_plan)
         await jira.add_comment(ticket_key, truncated_comment)
 
-        # Clear stale repo labels before adding the new ones (matters on revision)
-        existing_labels = await jira.get_labels(ticket_key)
-        stale_repo_labels = [lbl for lbl in existing_labels if lbl.startswith("repo:")]
-        if stale_repo_labels:
-            await jira.remove_labels(ticket_key, stale_repo_labels)
-        await jira.add_labels(ticket_key, _repo_labels(plan_repos))
+        await reconcile_repo_labels(jira, ticket_key, plan_repos)
         await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
 
         return cast(
@@ -197,7 +197,6 @@ async def generate_plan(state: TaskTakeoverState) -> TaskTakeoverState:
         )
     finally:
         await jira.close()
-        await agent.close()
 
 
 def plan_approval_gate(state: TaskTakeoverState) -> TaskTakeoverState:

@@ -4,10 +4,11 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any
 
-from forge.integrations.jira.client import JiraClient, pr_interaction_options
+from forge.integrations.jira.client import pr_interaction_options
 from forge.integrations.source_control.errors import NotFoundError
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.checkpointer import set_pr_ticket_index
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
 
@@ -120,8 +121,8 @@ async def create_proposal_pr(
             f"{prefix}_pr_url": pr_url,
             f"{prefix}_pr_number": pr_number,
             # Canonical namespace, not the raw (possibly repos.yaml-alias)
-            # proposals_repo -- webhook matching (worker._is_prd_pr_event /
-            # _is_spec_pr_event) compares this against event.repo_ref.namespace,
+            # proposals_repo -- webhook matching in the observation transition
+            # boundary compares this against event.repo_ref.namespace,
             # which is always canonical.
             f"{prefix}_pr_repo": repo_ref.namespace,
             f"{prefix}_pr_fork_owner": fork_owner,

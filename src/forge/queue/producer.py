@@ -17,12 +17,6 @@ logger = logging.getLogger(__name__)
 JIRA_STREAM = "forge:events:jira"
 SOURCE_CONTROL_STREAM = "forge:events:source_control"
 
-# Pre-rename stream name (source-control events used to publish here, and to
-# EventSource value "github"). New events never publish to this stream, but
-# it may still hold unconsumed entries from before the rename, so the
-# consumer keeps draining it -- see queue/consumer.py.
-LEGACY_SOURCE_CONTROL_STREAM = "forge:events:github"
-
 _PUBLISH_ONCE_SCRIPT = """
 local reserved = redis.call('SET', KEYS[1], '1', 'EX', ARGV[1], 'NX')
 if not reserved then

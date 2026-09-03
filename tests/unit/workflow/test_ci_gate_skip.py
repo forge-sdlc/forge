@@ -1,7 +1,7 @@
 """Tests for CI gate skip via GitHub PR comment (proposal 005)."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -149,7 +149,7 @@ class TestWorkerSkipGateDetection:
         msg = _skip_gate_message(base_message, "epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         assert "epoxy" in result.get("ci_skipped_checks", [])
 
@@ -159,7 +159,7 @@ class TestWorkerSkipGateDetection:
         msg = _skip_gate_message(base_message, "epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         assert result["is_paused"] is False
         assert result["current_node"] == "ci_evaluator"
@@ -173,7 +173,7 @@ class TestWorkerSkipGateDetection:
         msg = _unskip_gate_message(base_message, "epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         skipped = result.get("ci_skipped_checks", [])
         assert "epoxy" not in skipped
@@ -186,7 +186,7 @@ class TestWorkerSkipGateDetection:
         msg = _skip_gate_message(base_message, "epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         assert result["ci_skipped_checks"].count("epoxy") == 1
 
@@ -199,7 +199,7 @@ class TestWorkerSkipGateDetection:
         )
         msg = _skip_gate_message(base_message, "epoxy")
 
-        result = await worker._handle_resume_event(msg, planning_state)
+        result = await worker._apply_observation_transition(msg, planning_state)
 
         assert result.get("ci_skipped_checks", []) == []
         assert result.get("is_paused") is True  # unchanged
@@ -211,7 +211,7 @@ class TestWorkerSkipGateDetection:
         mock_feedback = AsyncMock()
 
         with patch.object(worker, "_post_skip_gate_feedback", mock_feedback):
-            await worker._handle_resume_event(msg, ci_state)
+            await worker._apply_observation_transition(msg, ci_state)
 
         mock_feedback.assert_called_once()
 
@@ -221,7 +221,7 @@ class TestWorkerSkipGateDetection:
         msg = _comment_message(base_message, "/FORGE SKIP-GATE epoxy")
 
         with patch.object(worker, "_post_skip_gate_feedback", AsyncMock()):
-            result = await worker._handle_resume_event(msg, ci_state)
+            result = await worker._apply_observation_transition(msg, ci_state)
 
         assert "epoxy" in result.get("ci_skipped_checks", [])
 
@@ -243,15 +243,11 @@ class TestPostSkipGateFeedback:
             default_branch="main",
             change_request_mode="fork",
         )
-        mock_adapter = AsyncMock()
-
-        mock_jira = MagicMock()
-        mock_jira.add_comment = AsyncMock()
-        mock_jira.close = AsyncMock()
-
+        source_comment = AsyncMock()
+        jira_comment = AsyncMock()
         with (
-            patch("forge.orchestrator.worker.get_adapter", return_value=(repo_ref, mock_adapter)),
-            patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira),
+            patch.object(worker, "_execute_required_source_comment", source_comment),
+            patch.object(worker, "_execute_required_comment", jira_comment),
         ):
             await worker._post_skip_gate_feedback(
                 ticket_key="TEST-123",
@@ -262,8 +258,8 @@ class TestPostSkipGateFeedback:
                 action="skip",
             )
 
-        mock_adapter.create_comment.assert_called_once()
-        mock_jira.add_comment.assert_called_once()
+        source_comment.assert_awaited_once()
+        jira_comment.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_unskip_posts_different_message(self):
@@ -278,15 +274,11 @@ class TestPostSkipGateFeedback:
             default_branch="main",
             change_request_mode="fork",
         )
-        mock_adapter = AsyncMock()
-
-        mock_jira = MagicMock()
-        mock_jira.add_comment = AsyncMock()
-        mock_jira.close = AsyncMock()
-
+        source_comment = AsyncMock()
+        jira_comment = AsyncMock()
         with (
-            patch("forge.orchestrator.worker.get_adapter", return_value=(repo_ref, mock_adapter)),
-            patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira),
+            patch.object(worker, "_execute_required_source_comment", source_comment),
+            patch.object(worker, "_execute_required_comment", jira_comment),
         ):
             await worker._post_skip_gate_feedback(
                 ticket_key="TEST-123",
@@ -297,7 +289,7 @@ class TestPostSkipGateFeedback:
                 action="unskip",
             )
 
-        comment = mock_adapter.create_comment.call_args[0][2]
+        comment = source_comment.await_args.args[2]
         assert "unskip" in comment.lower() or "removed" in comment.lower()
 
 

@@ -149,24 +149,27 @@ BUILTIN_PREDICATES: Mapping[str, CapabilityPredicate] = {
 }
 
 
+def project_capabilities(state: Mapping[str, Any]) -> dict[str, bool]:
+    """Project workflow output into the explicit capability contract."""
+    return {name: bool(predicate(state)) for name, predicate in BUILTIN_PREDICATES.items()}
+
+
 def has_capability(
     state: Mapping[str, Any],
     capability: CapabilityName | str,
     *,
     predicates: Mapping[str, CapabilityPredicate] | None = None,
 ) -> bool:
-    """Resolve a capability, preferring an explicit state declaration.
-
-    ``state["capabilities"]`` is authoritative even when its value is false.  The
-    built-in predicates are compatibility inference for existing workflow state.
-    """
+    """Resolve an explicitly projected capability."""
 
     name = capability.value if isinstance(capability, CapabilityName) else capability
     declared = state.get("capabilities", {})
     if isinstance(declared, Mapping) and name in declared:
         return declared[name] is True
-    predicate = (predicates or BUILTIN_PREDICATES).get(name)
-    return bool(predicate and predicate(state))
+    if predicates is not None:
+        predicate = predicates.get(name)
+        return bool(predicate and predicate(state))
+    return False
 
 
 _ACTION_PRIORITY = {

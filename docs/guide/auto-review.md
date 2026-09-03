@@ -273,10 +273,10 @@ Each review cycle writes a JSON file to the workspace:
 ```
 
 Where:
-- `{step-name}` is the workflow step (e.g., `implement_task`, `local_review`)
+- `{step-name}` is the workflow step (e.g., `implement_work`, `local_review`)
 - `N` is the cycle number (1-indexed)
 
-**Example path:** `.forge/implement_task/review_cycle_1.json`
+**Example path:** `.forge/implement_work/review_cycle_1.json`
 
 ### File Contents
 

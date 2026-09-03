@@ -154,7 +154,11 @@ class TestStandardPathTierAssignment:
 
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_generation.ForgeAgent", return_value=mock_agent),
+            patch(
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
+                return_value=mock_agent,
+                create=True,
+            ),
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
                 new=AsyncMock(
@@ -207,8 +211,9 @@ class TestStandardPathTierAssignment:
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient", return_value=mock_jira),
             patch(
-                "forge.workflow.nodes.task_generation.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=create_mock_agent(),
+                create=True,
             ),
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
@@ -259,8 +264,9 @@ class TestStandardPathTierAssignment:
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient", return_value=mock_jira),
             patch(
-                "forge.workflow.nodes.task_generation.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=create_mock_agent(),
+                create=True,
             ),
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
@@ -631,8 +637,9 @@ class TestCommentFailureDoesNotFailCreation:
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient", return_value=mock_jira),
             patch(
-                "forge.workflow.nodes.task_generation.ForgeAgent",
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
                 return_value=create_mock_agent(),
+                create=True,
             ),
             patch(
                 "forge.workflow.nodes.task_generation._generate_tasks_for_epic",
@@ -755,7 +762,7 @@ class TestModelTargetsUnaffected:
         resolver.resolve = MagicMock(return_value=target)
         settings.model_policy_resolver = MagicMock(return_value=resolver)
 
-        before = await resolve_model_target_for_project(settings, None, "implement_task")
+        before = await resolve_model_target_for_project(settings, None, "implement_work")
 
         # Perform a tier operation via the client (must not touch model policy).
         with patch("forge.integrations.jira.client.get_settings") as mock_settings:
@@ -769,7 +776,7 @@ class TestModelTargetsUnaffected:
             client.post_tier_comment = AsyncMock()
             await client.resolve_and_maybe_assign_tier("AISOS-50")
 
-        after = await resolve_model_target_for_project(settings, None, "implement_task")
+        after = await resolve_model_target_for_project(settings, None, "implement_work")
 
         # The resolved target is unaffected by tier operations (BR-007).
         assert before is after is target
@@ -841,7 +848,11 @@ class TestExplicitReestimateTriggerDispatch:
 
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_generation.ForgeAgent", return_value=mock_agent),
+            patch(
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
+                return_value=mock_agent,
+                create=True,
+            ),
             patch(
                 "forge.workflow.nodes.task_generation.fetch_and_inject_references",
                 new_callable=AsyncMock,
@@ -895,7 +906,11 @@ class TestExplicitReestimateTriggerDispatch:
 
         with (
             patch("forge.workflow.nodes.task_generation.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_generation.ForgeAgent", return_value=mock_agent),
+            patch(
+                "forge.workflow.stations.artifact_generation.ForgeAgent",
+                return_value=mock_agent,
+                create=True,
+            ),
             patch(
                 "forge.workflow.nodes.task_generation.fetch_and_inject_references",
                 new_callable=AsyncMock,

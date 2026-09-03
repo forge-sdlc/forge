@@ -1,9 +1,10 @@
 """End-to-end smoke tests for the current pluggable workflow architecture."""
 
+import asyncio
 from unittest.mock import patch
 
 from forge.models.workflow import TicketType
-from forge.workflow.feature import FeatureWorkflow
+from forge.workflow.declarative.builtins import FeatureGoldenWorkflow
 from forge.workflow.registry import create_default_router
 
 
@@ -22,12 +23,12 @@ def test_feature_workflow_routes_generates_and_pauses() -> None:
     router = create_default_router()
     workflow = router.resolve(TicketType.FEATURE, ["forge:managed"], {})
 
-    assert isinstance(workflow, FeatureWorkflow)
+    assert isinstance(workflow, FeatureGoldenWorkflow)
 
-    with patch("forge.workflow.feature.graph.generate_prd", _generate_prd):
+    with patch("forge.workflow.nodes.generate_prd", _generate_prd):
         graph = workflow.build_graph().compile()
         state = workflow.create_initial_state("TEST-123")
-        result = graph.invoke(state)
+        result = asyncio.run(graph.ainvoke(state))
 
     assert result["prd_content"].startswith("# PRD")
     assert result["current_node"] == "prd_approval_gate"

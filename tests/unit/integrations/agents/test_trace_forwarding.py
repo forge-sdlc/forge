@@ -197,8 +197,12 @@ class TestGenerateEpicsTraceForwarding:
             "feature_summary": "Auth system",
             "available_repos": ["acme/backend", "acme/frontend"],
         }
-        with patch.object(agent, "run_task", new_callable=AsyncMock) as mock_run:
-            mock_run.return_value = "---\nEPIC: Test\nREPO: acme/backend\nPLAN:\n1. Do it\n---"
+        from forge.integrations.agents.structured_outputs import EpicDecomposition, EpicItem
+
+        with patch.object(agent, "run_structured_task", new_callable=AsyncMock) as mock_run:
+            mock_run.return_value = EpicDecomposition(
+                epics=[EpicItem(summary="Test", repository="acme/backend", plan="1. Do it")]
+            )
             await agent.generate_epics("Spec content", context=context)
 
         # Prompt context contains only task-relevant fields

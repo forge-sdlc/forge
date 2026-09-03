@@ -62,7 +62,7 @@ class TestRouteEntryCompleteness:
 
     def _route(self, node: str):
 
-        from forge.workflow.bug.graph import route_entry
+        from forge.workflow.bug.routing import route_entry
         return route_entry({"current_node": node})
 
     def test_all_new_pipeline_nodes_mapped(self):
@@ -95,7 +95,7 @@ class TestRouteEntryCompleteness:
         from langgraph.graph import END
         preserved = {
             "setup_workspace": "setup_workspace",
-            "implement_bug_fix": "implement_bug_fix",
+            "implement_work": "implement_work",
             "local_review": "local_review",
             "create_pr": "create_pr",
             "teardown_workspace": "teardown_workspace",

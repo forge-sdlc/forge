@@ -9,7 +9,7 @@ from langgraph.graph import END, StateGraph
 from forge.models.workflow import ForgeLabel, JiraStatus, TicketType
 from forge.workflow.gates.task_plan_approval import route_task_plan_approval
 from forge.workflow.post_pr import _route_ci_evaluation
-from forge.workflow.task_takeover.graph import (
+from forge.workflow.task_takeover.routing import (
     _route_after_answer,
     _route_after_execution,
     _route_after_generate_plan,
@@ -54,7 +54,7 @@ class TestTaskTakeoverGraphStructure:
 
         # Verify expected nodes are present in the compiled graph
         expected_nodes = {
-            "route_entry",
+            "_forge_entry",
             "triage_check",
             "triage_gate",
             "generate_plan",
@@ -62,7 +62,7 @@ class TestTaskTakeoverGraphStructure:
             "escalate_blocked",
             "answer_question",
             "setup_workspace",
-            "execute_task_changes",
+            "implement_work",
             "run_qualitative_review",
             "create_pr",
             "teardown_workspace",
@@ -71,7 +71,6 @@ class TestTaskTakeoverGraphStructure:
             "human_review_gate",
             "implement_review",
             "review_response_gate",
-            "rebase_pr",
             "complete_task_takeover",
         }
         for node in expected_nodes:
@@ -90,7 +89,7 @@ class TestPathTransitions:
             ("task_plan_approval_gate", "task_plan_approval_gate"),
             ("escalate_blocked", "escalate_blocked"),
             ("setup_workspace", "setup_workspace"),
-            ("execute_task_changes", "execute_task_changes"),
+            ("implement_work", "implement_work"),
             ("qualitative_review", "run_qualitative_review"),
             ("create_pr", "create_pr"),
             ("teardown_workspace", "teardown_workspace"),
@@ -166,7 +165,7 @@ class TestExecutionRouting:
     def test_successful_workspace_setup_routes_to_execution(self) -> None:
         state = make_task_state(workspace_path="/tmp/forge-workspace", last_error=None)
 
-        assert _route_after_workspace_setup(state) == "execute_task_changes"
+        assert _route_after_workspace_setup(state) == "implement_work"
 
     @pytest.mark.parametrize(
         "workspace_path,last_error",
@@ -203,7 +202,7 @@ class TestExecutionRouting:
 
     def test_push_failure_retries_execution_node(self) -> None:
         state = make_task_state(last_error="network timeout", persistence_retry_count=1)
-        assert _route_after_execution(state) == "execute_task_changes"
+        assert _route_after_execution(state) == "implement_work"
 
     def test_persistence_cap_blocks_without_review(self) -> None:
         state = make_task_state(last_error="authentication failed", persistence_retry_count=3)
@@ -215,7 +214,7 @@ class TestQualitativeReviewRouting:
 
     def test_route_after_qualitative_review_adequate(self) -> None:
         """If review is adequate, proceed to PR creation."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             review_verdict="adequate",
@@ -224,19 +223,19 @@ class TestQualitativeReviewRouting:
         assert _route_after_qualitative_review(state) == "create_pr"
 
     def test_route_after_qualitative_review_failed_under_limit(self) -> None:
-        """If review is failed or incomplete and under the limit, route back to execute_task_changes."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        """If review is failed or incomplete and under the limit, route back to implement_work."""
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             review_verdict="tests_incomplete",
             qualitative_review_retry_count=1,
         )
         # The task takeover qualitative review retry limit is 2, so retry_count of 1 is under the limit.
-        assert _route_after_qualitative_review(state) == "execute_task_changes"
+        assert _route_after_qualitative_review(state) == "implement_work"
 
     def test_route_after_qualitative_review_failed_at_or_above_limit(self) -> None:
         """If review is failed or incomplete and at/above the limit, proceed to PR creation if changes exist."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             review_verdict="tests_incomplete",
@@ -248,7 +247,7 @@ class TestQualitativeReviewRouting:
 
     def test_route_after_qualitative_review_no_changes_escalates(self) -> None:
         """When qualitative_review_retry_count reaches max and commit_info.committed is False, escalate."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             review_verdict="tests_incomplete",
@@ -259,7 +258,7 @@ class TestQualitativeReviewRouting:
 
     def test_route_after_qualitative_review_with_last_error_escalates(self) -> None:
         """When qualitative_review_retry_count reaches max and state.last_error is set, escalate."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             review_verdict="tests_incomplete",
@@ -271,7 +270,7 @@ class TestQualitativeReviewRouting:
 
     def test_route_after_qualitative_review_error_without_verdict_retries(self) -> None:
         """Review execution errors retry the review without rerunning implementation."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             last_error="Workspace not set up",
@@ -281,7 +280,7 @@ class TestQualitativeReviewRouting:
 
     def test_route_after_qualitative_review_error_at_cap_escalates(self) -> None:
         """Review execution errors escalate after retry limit when error is present with review_verdict=None."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             last_error="Review container unavailable",
@@ -294,7 +293,7 @@ class TestQualitativeReviewRouting:
         self,
     ) -> None:
         """Verifies: When last_error is set and review_verdict is 'adequate', but we are at/above the limit, it escalates instead of routing to create_pr."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             last_error="Active execution error",
@@ -307,7 +306,7 @@ class TestQualitativeReviewRouting:
         self,
     ) -> None:
         """Verifies: When last_error is set and review_verdict is 'adequate', but we are under the limit, it retries instead of routing to create_pr."""
-        from forge.workflow.task_takeover.graph import _route_after_qualitative_review
+        from forge.workflow.task_takeover.routing import _route_after_qualitative_review
 
         state = make_task_state(
             last_error="Active execution error",
@@ -356,7 +355,7 @@ class TestPostPrRouting:
         assert _route_human_review_task_takeover(state) == "complete_task_takeover"
 
     @pytest.mark.asyncio
-    @patch("forge.workflow.task_takeover.graph.JiraClient")
+    @patch("forge.workflow.task_takeover.routing.JiraClient")
     async def test_complete_task_takeover_marks_workflow_complete(
         self, mock_jira_class: MagicMock
     ) -> None:
@@ -381,7 +380,7 @@ class TestPostPrRouting:
         mock_jira.close.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("forge.workflow.task_takeover.graph.JiraClient")
+    @patch("forge.workflow.task_takeover.routing.JiraClient")
     async def test_complete_task_takeover_resilience_on_exception(
         self, mock_jira_class: MagicMock
     ) -> None:
@@ -422,15 +421,11 @@ class TestInteractiveGateBehavior:
         self, paused_state: TaskTakeoverState
     ) -> None:
         """Comment prefixed with '?' or '@forge ask' routes to answer_question."""
-        # 1. Direct bool flag
-        state_bool = {**paused_state, "is_question": True}
-        assert route_task_plan_approval(state_bool) == "answer_question"
-
-        # 2. '?' prefix comment
+        # '?' prefix comment
         state_q = {**paused_state, "feedback_comment": "?Can we run this in parallel?"}
         assert route_task_plan_approval(state_q) == "answer_question"
 
-        # 3. '@forge ask' prefix comment
+        # '@forge ask' prefix comment
         state_ask = {**paused_state, "feedback_comment": "@forge ask how does this scale?"}
         assert route_task_plan_approval(state_ask) == "answer_question"
 
@@ -438,11 +433,7 @@ class TestInteractiveGateBehavior:
         self, paused_state: TaskTakeoverState
     ) -> None:
         """Comment prefixed with '!' routes to regenerate_plan."""
-        # 1. Direct bool flag
-        state_bool = {**paused_state, "revision_requested": True}
-        assert route_task_plan_approval(state_bool) == "regenerate_plan"
-
-        # 2. '!' prefix comment
+        # '!' prefix comment
         state_excl = {**paused_state, "feedback_comment": "!Please add redis cache."}
         assert route_task_plan_approval(state_excl) == "regenerate_plan"
 

@@ -27,6 +27,16 @@ def _make_state(
         "workspace_path": workspace_path,
         "current_repo": current_repo,
         "plan_content": plan_content,
+        "artifacts": [
+            {
+                "id": "plan:TASK-123",
+                "kind": "plan",
+                "content": plan_content,
+                "digest": "sha256:plan",
+                "approved_digest": "sha256:plan",
+                "status": "approved",
+            }
+        ],
         "implemented_tasks": implemented_tasks or [],
         "context": {"branch_name": "forge/TASK-123", "guardrails": ""},
         "fork_owner": "forge-bot",

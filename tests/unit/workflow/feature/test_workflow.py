@@ -3,7 +3,7 @@
 from langgraph.graph import END
 
 from forge.models.workflow import TicketType
-from forge.workflow.feature.graph import (
+from forge.workflow.feature.routing import (
     _route_after_epic_regeneration,
     _route_after_epic_task_regeneration,
     _route_after_prd_regeneration,
@@ -28,7 +28,7 @@ class TestFeatureWorkflow:
             "tasks_by_repo": {"owner/repo": ["TASK-1"]},
             "implemented_tasks": ["TASK-1"],
         }
-        assert _route_implementation(state) == "implement_task"
+        assert _route_implementation(state) == "implement_work"
 
     def test_workflow_has_name(self):
         """FeatureWorkflow has name attribute."""
@@ -159,35 +159,15 @@ class TestFeatureWorkflow:
 
         assert route_by_ticket_type(state) == "update_single_task"
 
-    def test_resume_implement_task_stays_on_implementation_node(self):
+    def test_resume_implement_work_stays_on_implementation_node(self):
         """Retrying feature implementation should not reroute through task_router."""
         state = {
             "ticket_key": "TEST-123",
             "ticket_type": TicketType.FEATURE,
-            "current_node": "implement_task",
+            "current_node": "implement_work",
         }
 
-        assert route_by_ticket_type(state) == "implement_task"
-
-    def test_resume_legacy_implementation_alias_stays_on_implementation_node(self):
-        """Legacy feature implementation checkpoints should retry implementation."""
-        state = {
-            "ticket_key": "TEST-123",
-            "ticket_type": TicketType.FEATURE,
-            "current_node": "implementation",
-        }
-
-        assert route_by_ticket_type(state) == "implement_task"
-
-    def test_resume_polluted_bug_implementation_node_stays_on_implementation_node(self):
-        """Feature checkpoints polluted with bug node names should not restart PRD generation."""
-        state = {
-            "ticket_key": "TEST-123",
-            "ticket_type": TicketType.FEATURE,
-            "current_node": "implement_bug_fix",
-        }
-
-        assert route_by_ticket_type(state) == "implement_task"
+        assert route_by_ticket_type(state) == "implement_work"
 
     def test_resume_regenerate_epic_tasks_stays_on_regeneration_node(self):
         """Retrying epic-level task regeneration should not restart the workflow."""
@@ -351,15 +331,7 @@ class TestFeatureWorkflow:
 
         assert _route_after_single_task_update(state) == "task_approval_gate"
 
-    def test_rebase_can_return_to_post_pr_nodes(self):
+    def test_rebase_is_not_a_workflow_node(self):
         graph = build_feature_graph()
         compiled = graph.compile()
-        targets = {e.target for e in compiled.get_graph().edges if e.source == "rebase_pr"}
-
-        assert {
-            "ci_evaluator",
-            "implement_review",
-            "review_response_gate",
-            "create_pr",
-            "teardown_workspace",
-        }.issubset(targets)
+        assert "rebase_pr" not in compiled.get_graph().nodes

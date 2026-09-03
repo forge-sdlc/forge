@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "description": "Provider revisions used by Forge/poller observation conformance tests.",
+  "source_system": "github",
+  "resource": {
+    "resource_type": "change_request",
+    "external_id": "acme/widgets#17",
+    "namespace": "default"
+  },
+  "revisions": [
+    {
+      "name": "opened",
+      "provider_event_id": "github-pr-17-opened",
+      "resource_revision": "sha-open",
+      "revision_order": 1,
+      "facts": {
+        "kind": "cr_opened",
+        "change_request_state": "open"
+      },
+      "expected_command": null
+    },
+    {
+      "name": "merged",
+      "provider_event_id": "github-pr-17-merged",
+      "resource_revision": "sha-merge",
+      "revision_order": 2,
+      "facts": {
+        "kind": "cr_merged",
+        "change_request_state": "merged"
+      },
+      "expected_command": "approve"
+    }
+  ]
+}

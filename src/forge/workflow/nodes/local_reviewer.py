@@ -81,7 +81,7 @@ def route_local_review(state: WorkflowState) -> str:
         state: Current workflow state after local_review_changes ran.
 
     Returns:
-        Next node name: 'create_pr' or 'implement_bug_fix'.
+        Next node name: 'create_pr' or 'implement_work'.
     """
     return state.get("current_node", "create_pr")
 
@@ -91,7 +91,7 @@ async def local_review_changes(state: WorkflowState) -> WorkflowState:
 
     For bug tickets: runs qualitative review (local-review-bug.md) that checks
     root-cause alignment and test coverage. Parses verdict; routes to
-    implement_bug_fix on non-adequate verdicts (up to 2 retries), then create_pr.
+    implement_work on non-adequate verdicts (up to 2 retries), then create_pr.
 
     For other tickets: runs mechanical review (local-review prompt) to find and
     fix breaking issues in-place.
@@ -100,7 +100,7 @@ async def local_review_changes(state: WorkflowState) -> WorkflowState:
         state: Current workflow state.
 
     Returns:
-        Updated state routing to create_pr or implement_bug_fix.
+        Updated state routing to create_pr or implement_work.
     """
     ticket_key = state["ticket_key"]
     ticket_type = state.get("ticket_type")
@@ -251,9 +251,9 @@ async def _run_bug_review(state: WorkflowState, git: GitOperations) -> WorkflowS
                 "local_review_verdict": verdict,
                 "qualitative_feedback": feedback or None,
                 "qualitative_retry_count": new_retry_count,
-                "current_node": "implement_bug_fix",
+                "current_node": "implement_work",
                 "last_error": None,
-                # Reset so implement_task re-runs the container instead of seeing "all done"
+                # Reset so implement_work re-runs the container instead of seeing "all done"
                 "implemented_tasks": [],
                 "current_task_key": linked_task_keys[0] if linked_task_keys else None,
             },

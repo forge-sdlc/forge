@@ -1,0 +1,435 @@
+"""Durable effect journal implementations."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
+from typing import Any, Protocol
+
+from forge.domain import EffectCommand, EffectResult, EffectResultStatus
+from forge.effects.models import EffectRecord, EffectRecordStatus
+from forge.orchestrator.checkpointer import get_redis_client
+
+_RECORD_PREFIX = "forge:effects:record:"
+_DUE_KEY = "forge:effects:due"
+_WORKFLOW_PREFIX = "forge:effects:workflow:"
+
+_SUBMIT_SCRIPT = """
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return 0
+end
+redis.call('SET', KEYS[1], ARGV[1])
+redis.call('ZADD', KEYS[2], ARGV[2], ARGV[3])
+redis.call('SADD', KEYS[3], ARGV[3])
+return 1
+"""
+
+_CLAIM_SCRIPT = """
+local members = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[3])
+for _, member in ipairs(members) do
+  redis.call('ZADD', KEYS[1], ARGV[2], member)
+end
+return members
+"""
+
+_CLAIM_ONE_SCRIPT = """
+local score = redis.call('ZSCORE', KEYS[1], ARGV[1])
+if not score or tonumber(score) > tonumber(ARGV[2]) then
+  return nil
+end
+redis.call('ZADD', KEYS[1], ARGV[3], ARGV[1])
+return ARGV[1]
+"""
+
+
+class EffectJournal(Protocol):
+    async def submit(self, command: EffectCommand) -> EffectRecord: ...
+
+    async def get(self, idempotency_key: str) -> EffectRecord | None: ...
+
+    async def list_for_workflow(self, run_id: str) -> Sequence[EffectRecord]: ...
+
+    async def claim_due(self, limit: int = 10) -> Sequence[EffectRecord]: ...
+
+    async def claim(self, idempotency_key: str) -> EffectRecord | None: ...
+
+    async def complete(self, result: EffectResult) -> EffectRecord: ...
+
+    async def retry(self, result: EffectResult, delay: timedelta) -> EffectRecord: ...
+
+    async def replay(self, idempotency_key: str) -> EffectRecord: ...
+
+    async def purge_terminal_before(self, cutoff: datetime) -> int: ...
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _pending(command: EffectCommand, now: datetime) -> EffectRecord:
+    return EffectRecord(
+        command=command,
+        status=EffectRecordStatus.PENDING,
+        attempt=0,
+        created_at=now,
+        updated_at=now,
+        next_attempt_at=now,
+    )
+
+
+class InMemoryEffectJournal:
+    """Deterministic journal for local execution and contract tests."""
+
+    def __init__(self, *, lease: timedelta = timedelta(minutes=5)) -> None:
+        self._records: dict[str, EffectRecord] = {}
+        self._lock = asyncio.Lock()
+        self._lease = lease
+
+    async def submit(self, command: EffectCommand) -> EffectRecord:
+        async with self._lock:
+            existing = self._records.get(command.idempotency_key)
+            if existing:
+                return existing
+            record = _pending(command, _now())
+            self._records[command.idempotency_key] = record
+            return record
+
+    async def get(self, idempotency_key: str) -> EffectRecord | None:
+        return self._records.get(idempotency_key)
+
+    async def list_for_workflow(self, run_id: str) -> Sequence[EffectRecord]:
+        return [
+            record for record in self._records.values() if record.command.workflow.run_id == run_id
+        ]
+
+    async def claim_due(self, limit: int = 10) -> Sequence[EffectRecord]:
+        now = _now()
+        async with self._lock:
+            due = [
+                record
+                for record in self._records.values()
+                if record.status
+                in {
+                    EffectRecordStatus.PENDING,
+                    EffectRecordStatus.RETRYABLE_FAILURE,
+                    EffectRecordStatus.RUNNING,
+                }
+                and record.next_attempt_at <= now
+                and (record.lease_until is None or record.lease_until <= now)
+            ][:limit]
+            claimed = []
+            for record in due:
+                updated = record.model_copy(
+                    update={
+                        "status": EffectRecordStatus.RUNNING,
+                        "attempt": record.attempt + 1,
+                        "updated_at": now,
+                        "lease_until": now + self._lease,
+                    }
+                )
+                self._records[record.command.idempotency_key] = updated
+                claimed.append(updated)
+            return claimed
+
+    async def claim(self, idempotency_key: str) -> EffectRecord | None:
+        now = _now()
+        async with self._lock:
+            record = self._records.get(idempotency_key)
+            if (
+                record is None
+                or record.status
+                not in {
+                    EffectRecordStatus.PENDING,
+                    EffectRecordStatus.RETRYABLE_FAILURE,
+                    EffectRecordStatus.RUNNING,
+                }
+                or record.next_attempt_at > now
+                or (record.lease_until is not None and record.lease_until > now)
+            ):
+                return None
+            updated = record.model_copy(
+                update={
+                    "status": EffectRecordStatus.RUNNING,
+                    "attempt": record.attempt + 1,
+                    "updated_at": now,
+                    "lease_until": now + self._lease,
+                }
+            )
+            self._records[idempotency_key] = updated
+            return updated
+
+    async def complete(self, result: EffectResult) -> EffectRecord:
+        return await self._store_result(result, delay=None)
+
+    async def retry(self, result: EffectResult, delay: timedelta) -> EffectRecord:
+        return await self._store_result(result, delay=delay)
+
+    async def _store_result(self, result: EffectResult, delay: timedelta | None) -> EffectRecord:
+        async with self._lock:
+            record = self._records[result.idempotency_key]
+            status = EffectRecordStatus(result.status.value)
+            updated = record.model_copy(
+                update={
+                    "status": status,
+                    "updated_at": result.completed_at,
+                    "next_attempt_at": result.completed_at + (delay or timedelta()),
+                    "lease_until": None,
+                    "result": result,
+                    "attempt_history": [*record.attempt_history, result],
+                }
+            )
+            self._records[result.idempotency_key] = updated
+            return updated
+
+    async def replay(self, idempotency_key: str) -> EffectRecord:
+        async with self._lock:
+            record = self._records[idempotency_key]
+            if record.status not in {
+                EffectRecordStatus.PRECONDITION_FAILED,
+                EffectRecordStatus.TERMINAL_FAILURE,
+            }:
+                raise ValueError(f"Effect {idempotency_key} is not terminal")
+            now = _now()
+            updated = record.model_copy(
+                update={
+                    "status": EffectRecordStatus.PENDING,
+                    "updated_at": now,
+                    "next_attempt_at": now,
+                    "lease_until": None,
+                    "result": None,
+                    "replay_count": record.replay_count + 1,
+                }
+            )
+            self._records[idempotency_key] = updated
+            return updated
+
+    async def purge_terminal_before(self, cutoff: datetime) -> int:
+        async with self._lock:
+            keys = [
+                key
+                for key, record in self._records.items()
+                if record.status
+                in {
+                    EffectRecordStatus.SUCCEEDED,
+                    EffectRecordStatus.PRECONDITION_FAILED,
+                    EffectRecordStatus.TERMINAL_FAILURE,
+                }
+                and record.updated_at < cutoff
+            ]
+            for key in keys:
+                del self._records[key]
+            return len(keys)
+
+
+class RedisEffectJournal:
+    """Redis-backed journal with atomic submission and exclusive leases."""
+
+    def __init__(
+        self,
+        redis_client: Any = None,
+        *,
+        lease: timedelta = timedelta(minutes=5),
+    ) -> None:
+        self._redis = redis_client
+        self._lease = lease
+
+    async def _client(self) -> Any:
+        if self._redis is None:
+            self._redis = await get_redis_client()
+        return self._redis
+
+    async def submit(self, command: EffectCommand) -> EffectRecord:
+        redis = await self._client()
+        now = _now()
+        record = _pending(command, now)
+        key = f"{_RECORD_PREFIX}{command.idempotency_key}"
+        await redis.eval(
+            _SUBMIT_SCRIPT,
+            3,
+            key,
+            _DUE_KEY,
+            f"{_WORKFLOW_PREFIX}{command.workflow.run_id}",
+            record.model_dump_json(),
+            now.timestamp(),
+            command.idempotency_key,
+        )
+        stored = await self.get(command.idempotency_key)
+        assert stored is not None
+        return stored
+
+    async def get(self, idempotency_key: str) -> EffectRecord | None:
+        redis = await self._client()
+        value = await redis.get(f"{_RECORD_PREFIX}{idempotency_key}")
+        return EffectRecord.model_validate_json(value) if value else None
+
+    async def list_for_workflow(self, run_id: str) -> Sequence[EffectRecord]:
+        redis = await self._client()
+        members = await redis.smembers(f"{_WORKFLOW_PREFIX}{run_id}")
+        records = []
+        for raw in members:
+            key = raw.decode() if isinstance(raw, bytes) else raw
+            record = await self.get(key)
+            if record is not None:
+                records.append(record)
+        return records
+
+    async def claim_due(self, limit: int = 10) -> Sequence[EffectRecord]:
+        redis = await self._client()
+        now = _now()
+        lease_until = now + self._lease
+        members = await redis.eval(
+            _CLAIM_SCRIPT,
+            1,
+            _DUE_KEY,
+            now.timestamp(),
+            lease_until.timestamp(),
+            limit,
+        )
+        claimed = []
+        for raw in members:
+            idempotency_key = raw.decode() if isinstance(raw, bytes) else raw
+            record = await self.get(idempotency_key)
+            if record is None:
+                await redis.zrem(_DUE_KEY, idempotency_key)
+                continue
+            if record.status not in {
+                EffectRecordStatus.PENDING,
+                EffectRecordStatus.RETRYABLE_FAILURE,
+                EffectRecordStatus.RUNNING,
+            }:
+                await redis.zrem(_DUE_KEY, idempotency_key)
+                continue
+            updated = record.model_copy(
+                update={
+                    "status": EffectRecordStatus.RUNNING,
+                    "attempt": record.attempt + 1,
+                    "updated_at": now,
+                    "lease_until": lease_until,
+                    "next_attempt_at": lease_until,
+                }
+            )
+            await redis.set(f"{_RECORD_PREFIX}{idempotency_key}", updated.model_dump_json())
+            claimed.append(updated)
+        return claimed
+
+    async def claim(self, idempotency_key: str) -> EffectRecord | None:
+        redis = await self._client()
+        now = _now()
+        lease_until = now + self._lease
+        claimed = await redis.eval(
+            _CLAIM_ONE_SCRIPT,
+            1,
+            _DUE_KEY,
+            idempotency_key,
+            now.timestamp(),
+            lease_until.timestamp(),
+        )
+        if not claimed:
+            return None
+        record = await self.get(idempotency_key)
+        if record is None:
+            await redis.zrem(_DUE_KEY, idempotency_key)
+            return None
+        updated = record.model_copy(
+            update={
+                "status": EffectRecordStatus.RUNNING,
+                "attempt": record.attempt + 1,
+                "updated_at": now,
+                "lease_until": lease_until,
+                "next_attempt_at": lease_until,
+            }
+        )
+        await redis.set(f"{_RECORD_PREFIX}{idempotency_key}", updated.model_dump_json())
+        return updated
+
+    async def complete(self, result: EffectResult) -> EffectRecord:
+        return await self._store_result(result, delay=None)
+
+    async def retry(self, result: EffectResult, delay: timedelta) -> EffectRecord:
+        return await self._store_result(result, delay=delay)
+
+    async def _store_result(self, result: EffectResult, delay: timedelta | None) -> EffectRecord:
+        redis = await self._client()
+        record = await self.get(result.idempotency_key)
+        if record is None:
+            raise KeyError(result.idempotency_key)
+        next_attempt = result.completed_at + (delay or timedelta())
+        updated = record.model_copy(
+            update={
+                "status": EffectRecordStatus(result.status.value),
+                "updated_at": result.completed_at,
+                "next_attempt_at": next_attempt,
+                "lease_until": None,
+                "result": result,
+                "attempt_history": [*record.attempt_history, result],
+            }
+        )
+        key = f"{_RECORD_PREFIX}{result.idempotency_key}"
+        pipeline = redis.pipeline(transaction=True)
+        pipeline.set(key, updated.model_dump_json())
+        if result.status is EffectResultStatus.RETRYABLE_FAILURE:
+            pipeline.zadd(_DUE_KEY, {result.idempotency_key: next_attempt.timestamp()})
+        else:
+            pipeline.zrem(_DUE_KEY, result.idempotency_key)
+        await pipeline.execute()
+        return updated
+
+    async def replay(self, idempotency_key: str) -> EffectRecord:
+        redis = await self._client()
+        record = await self.get(idempotency_key)
+        if record is None:
+            raise KeyError(idempotency_key)
+        if record.status not in {
+            EffectRecordStatus.PRECONDITION_FAILED,
+            EffectRecordStatus.TERMINAL_FAILURE,
+        }:
+            raise ValueError(f"Effect {idempotency_key} is not terminal")
+        now = _now()
+        updated = record.model_copy(
+            update={
+                "status": EffectRecordStatus.PENDING,
+                "updated_at": now,
+                "next_attempt_at": now,
+                "lease_until": None,
+                "result": None,
+                "replay_count": record.replay_count + 1,
+            }
+        )
+        pipeline = redis.pipeline(transaction=True)
+        pipeline.set(f"{_RECORD_PREFIX}{idempotency_key}", updated.model_dump_json())
+        pipeline.zadd(_DUE_KEY, {idempotency_key: now.timestamp()})
+        await pipeline.execute()
+        return updated
+
+    async def purge_terminal_before(self, cutoff: datetime) -> int:
+        redis = await self._client()
+        cursor: int | bytes = 0
+        removed = 0
+        while True:
+            cursor, keys = await redis.scan(cursor=cursor, match=f"{_RECORD_PREFIX}*", count=100)
+            for raw_key in keys:
+                key = raw_key.decode() if isinstance(raw_key, bytes) else raw_key
+                value = await redis.get(key)
+                if not value:
+                    continue
+                record = EffectRecord.model_validate_json(value)
+                if (
+                    record.status
+                    in {
+                        EffectRecordStatus.SUCCEEDED,
+                        EffectRecordStatus.PRECONDITION_FAILED,
+                        EffectRecordStatus.TERMINAL_FAILURE,
+                    }
+                    and record.updated_at < cutoff
+                ):
+                    identity = record.command.idempotency_key
+                    pipeline = redis.pipeline(transaction=True)
+                    pipeline.delete(key)
+                    pipeline.zrem(_DUE_KEY, identity)
+                    pipeline.srem(f"{_WORKFLOW_PREFIX}{record.command.workflow.run_id}", identity)
+                    await pipeline.execute()
+                    removed += 1
+            if cursor in {0, b"0", "0"}:
+                break
+        return removed

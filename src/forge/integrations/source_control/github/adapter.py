@@ -704,6 +704,17 @@ class GitHubAdapter:
         return self._map_review_comment(comment)
 
     @_translate_provider_errors
+    async def get_change_request_comments(
+        self, repo_ref: RepositoryRef, identity: ChangeRequestIdentity
+    ) -> list[ReviewComment]:
+        """List general PR comments used to recover marker-bearing effects."""
+        owner, repo = repo_ref.namespace.split("/", 1)
+        comments = await self._get_client().get_issue_comments(
+            owner, repo, _require_native_id(identity)
+        )
+        return [self._map_review_comment(comment) for comment in comments]
+
+    @_translate_provider_errors
     async def reply_to_comment(
         self,
         repo_ref: RepositoryRef,

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from forge.models.workflow import JiraStatus
 from forge.workflow.nodes.human_review import (
     aggregate_epic_status,
     aggregate_feature_status,
@@ -13,26 +12,37 @@ from forge.workflow.nodes.human_review import (
 )
 
 
+@pytest.fixture
+def persistence():
+    mock = AsyncMock()
+    with patch("forge.workflow.nodes.human_review.execute_persistence_actions", mock):
+        yield mock
+
+
+def _transition_targets(persistence: AsyncMock) -> list[str]:
+    return [
+        action.external_id
+        for call in persistence.await_args_list
+        for action in call.args[1]
+        if action.operation == "jira.issue.transition"
+    ]
+
+
 @pytest.mark.asyncio
-async def test_complete_tasks_only_records_successful_jira_transitions():
+async def test_complete_tasks_only_records_successful_jira_transitions(persistence):
     state = {
         "ticket_key": "FEAT-123",
         "implemented_tasks": ["TASK-1", "TASK-2"],
     }
 
-    jira = MagicMock()
-    jira.transition_issue = AsyncMock(side_effect=[None, RuntimeError("transition denied")])
-    jira.set_workflow_label = AsyncMock()
-    jira.close = AsyncMock()
-
-    with patch("forge.workflow.nodes.human_review.JiraClient", return_value=jira):
-        result = await complete_tasks(state)
+    persistence.side_effect = [("effect-1", "effect-2"), RuntimeError("transition denied")]
+    result = await complete_tasks(state)
 
     assert result["jira_completed_tasks"] == ["TASK-1"]
 
 
 @pytest.mark.asyncio
-async def test_aggregate_epic_status_does_not_mask_failed_task_transition():
+async def test_aggregate_epic_status_does_not_mask_failed_task_transition(persistence):
     state = {
         "ticket_key": "FEAT-123",
         "implemented_tasks": ["TASK-1"],
@@ -50,12 +60,12 @@ async def test_aggregate_epic_status_does_not_mask_failed_task_transition():
     with patch("forge.workflow.nodes.human_review.JiraClient", return_value=jira):
         result = await aggregate_epic_status(state)
 
-    jira.transition_issue.assert_not_awaited()
+    assert _transition_targets(persistence) == []
     assert result["current_node"] == "complete"
 
 
 @pytest.mark.asyncio
-async def test_aggregate_epic_status_derives_missing_epics_from_implemented_tasks():
+async def test_aggregate_epic_status_derives_missing_epics_from_implemented_tasks(persistence):
     """Merged workflows should close Epics even when state lost epic_keys."""
     state = {
         "ticket_key": "FEAT-123",
@@ -84,14 +94,14 @@ async def test_aggregate_epic_status_derives_missing_epics_from_implemented_task
     with patch("forge.workflow.nodes.human_review.JiraClient", return_value=jira):
         result = await aggregate_epic_status(state)
 
-    jira.transition_issue.assert_awaited_once_with("EPIC-1", JiraStatus.CLOSED.value)
+    assert _transition_targets(persistence) == ["EPIC-1"]
     assert result["epic_keys"] == ["EPIC-1"]
     assert result["epics_completed"] is True
     assert result["current_node"] == "aggregate_feature_status"
 
 
 @pytest.mark.asyncio
-async def test_aggregate_feature_status_transitions_parent_epic():
+async def test_aggregate_feature_status_transitions_parent_epic(persistence):
     """Should transition Feature and its parent Epic to Closed/Done status."""
     state = {
         "ticket_key": "FEAT-123",
@@ -117,9 +127,7 @@ async def test_aggregate_feature_status_transitions_parent_epic():
         result = await aggregate_feature_status(state)
 
     # Asserts that transition_issue is called on the Feature key and the parent key
-    assert jira.transition_issue.call_count == 2
-    jira.transition_issue.assert_any_call("FEAT-123", JiraStatus.CLOSED.value)
-    jira.transition_issue.assert_any_call("EPIC-PARENT", JiraStatus.CLOSED.value)
+    assert _transition_targets(persistence) == ["FEAT-123", "EPIC-PARENT"]
 
     # Asserts that the updated state has feature_completed=True and current_node="complete"
     assert result["feature_completed"] is True
@@ -127,7 +135,7 @@ async def test_aggregate_feature_status_transitions_parent_epic():
 
 
 @pytest.mark.asyncio
-async def test_aggregate_feature_status_skips_parent_epic_when_no_children_found():
+async def test_aggregate_feature_status_skips_parent_epic_when_no_children_found(persistence):
     """A parent Epic that returns no children (query/config mismatch) must not be closed."""
     state = {
         "ticket_key": "FEAT-123",
@@ -146,14 +154,13 @@ async def test_aggregate_feature_status_skips_parent_epic_when_no_children_found
         result = await aggregate_feature_status(state)
 
     # Feature is closed, but the parent Epic is left untouched.
-    assert jira.transition_issue.call_count == 1
-    jira.transition_issue.assert_called_once_with("FEAT-123", JiraStatus.CLOSED.value)
+    assert _transition_targets(persistence) == ["FEAT-123"]
     assert result["feature_completed"] is True
     assert result["current_node"] == "complete"
 
 
 @pytest.mark.asyncio
-async def test_aggregate_feature_status_skips_parent_epic_if_incomplete_children():
+async def test_aggregate_feature_status_skips_parent_epic_if_incomplete_children(persistence):
     """Should transition Feature but NOT its parent Epic if some child tickets are incomplete."""
     state = {
         "ticket_key": "FEAT-123",
@@ -177,8 +184,7 @@ async def test_aggregate_feature_status_skips_parent_epic_if_incomplete_children
         result = await aggregate_feature_status(state)
 
     # Asserts that transition_issue is called ONLY on the Feature key
-    assert jira.transition_issue.call_count == 1
-    jira.transition_issue.assert_called_once_with("FEAT-123", JiraStatus.CLOSED.value)
+    assert _transition_targets(persistence) == ["FEAT-123"]
 
     # Asserts that the updated state has feature_completed=True and current_node="complete"
     assert result["feature_completed"] is True
@@ -186,7 +192,7 @@ async def test_aggregate_feature_status_skips_parent_epic_if_incomplete_children
 
 
 @pytest.mark.asyncio
-async def test_aggregate_feature_status_handles_jira_search_lag():
+async def test_aggregate_feature_status_handles_jira_search_lag(persistence):
     """Should transition Feature and parent Epic to Closed even if search returns incomplete statuses for currently-completed keys."""
     state = {
         "ticket_key": "FEAT-123",
@@ -216,9 +222,7 @@ async def test_aggregate_feature_status_handles_jira_search_lag():
         result = await aggregate_feature_status(state)
 
     # Asserts that transition_issue is called on the Feature key and the parent key
-    assert jira.transition_issue.call_count == 2
-    jira.transition_issue.assert_any_call("FEAT-123", JiraStatus.CLOSED.value)
-    jira.transition_issue.assert_any_call("EPIC-PARENT", JiraStatus.CLOSED.value)
+    assert _transition_targets(persistence) == ["FEAT-123", "EPIC-PARENT"]
 
     # Asserts that the updated state has feature_completed=True and current_node="complete"
     assert result["feature_completed"] is True
@@ -226,7 +230,7 @@ async def test_aggregate_feature_status_handles_jira_search_lag():
 
 
 @pytest.mark.asyncio
-async def test_aggregate_feature_status_handles_jira_search_lag_case_insensitive():
+async def test_aggregate_feature_status_handles_jira_search_lag_case_insensitive(persistence):
     """Should transition Feature and parent Epic to Closed even if search returns incomplete statuses and keys have different casing."""
     state = {
         "ticket_key": "feat-123",
@@ -262,9 +266,7 @@ async def test_aggregate_feature_status_handles_jira_search_lag_case_insensitive
         result = await aggregate_feature_status(state)
 
     # Asserts that transition_issue is called on the Feature key and the parent key
-    assert jira.transition_issue.call_count == 2
-    jira.transition_issue.assert_any_call("feat-123", JiraStatus.CLOSED.value)
-    jira.transition_issue.assert_any_call("epic-parent", JiraStatus.CLOSED.value)
+    assert _transition_targets(persistence) == ["feat-123", "epic-parent"]
 
     # Asserts that the updated state has feature_completed=True and current_node="complete"
     assert result["feature_completed"] is True

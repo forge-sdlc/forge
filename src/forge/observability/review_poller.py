@@ -85,7 +85,7 @@ class ReviewCyclePoller:
     Usage:
         poller = ReviewCyclePoller(
             workspace_path=Path("/workspace"),
-            step_name="implement_task",
+            step_name="implement_work",
         )
 
         # Start polling in background
@@ -109,7 +109,7 @@ class ReviewCyclePoller:
 
         Args:
             workspace_path: Path to the workspace root (where .forge/ is located).
-            step_name: Name of the step (e.g., "implement_task") for metrics.
+            step_name: Name of the step (e.g., "implement_work") for metrics.
             task_key: Jira task key (e.g., "AISOS-2126") for directory naming.
             skill_name: Skill name (e.g., "implement-task") for directory naming.
             settings: Application settings. Uses default if not provided.

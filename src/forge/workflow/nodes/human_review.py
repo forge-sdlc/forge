@@ -5,15 +5,18 @@ from typing import Any
 
 from langgraph.graph import END
 
-from forge.integrations.jira.client import JiraClient
-from forge.models.workflow import ForgeLabel, JiraStatus
-from forge.workflow.feature.state import FeatureState as WorkflowState
-from forge.workflow.utils import update_state_timestamp
-from forge.workflow.utils.jira_status import (
-    post_status_comment,
-    remove_implementing_label,
-    set_ci_pending_label,
+from forge.effects.jira import (
+    JIRA_COMMENT_OPERATION,
+    JIRA_LABEL_OPERATION,
+    JIRA_LABELS_REMOVE_OPERATION,
+    JIRA_TRANSITION_OPERATION,
 )
+from forge.models.workflow import ForgeLabel, JiraStatus
+from forge.workflow.effect_runtime import JiraClient
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.persistence import execute_persistence_actions
+from forge.workflow.stations.persistence import PersistenceAction
+from forge.workflow.utils import update_state_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -45,29 +48,49 @@ async def human_review_gate(state: WorkflowState) -> WorkflowState:
 
     updates: dict[str, Any] = {}
     if ci_status is None and not state.get("pr_created_comment_posted"):
-        jira = JiraClient()
-        try:
-            pr_number = state.get("current_pr_number")
-            if pr_number is not None:
-                pr_url = state.get("current_pr_url")
-                if not pr_url:
-                    pr_urls = state.get("pr_urls", [])
-                    pr_url = pr_urls[-1] if pr_urls else None
-                pr_label = f"Pull request #{pr_number}"
-                if pr_url:
-                    pr_label = f"[{pr_label}]({pr_url})"
-                message = (
-                    f"🚀 {pr_label} created and submitted. Waiting for CI checks and human review."
-                )
-            else:
-                message = (
-                    "🚀 Pull request created and submitted. Waiting for CI checks and human review."
-                )
-            await post_status_comment(jira, ticket_key, message)
-            await remove_implementing_label(jira, ticket_key)
-            await set_ci_pending_label(jira, ticket_key)
-        finally:
-            await jira.close()
+        pr_number = state.get("current_pr_number")
+        if pr_number is not None:
+            pr_url = state.get("current_pr_url")
+            if not pr_url:
+                pr_urls = state.get("pr_urls", [])
+                pr_url = pr_urls[-1] if pr_urls else None
+            pr_label = f"Pull request #{pr_number}"
+            if pr_url:
+                pr_label = f"[{pr_label}]({pr_url})"
+            message = (
+                f"🚀 {pr_label} created and submitted. Waiting for CI checks and human review."
+            )
+        else:
+            message = (
+                "🚀 Pull request created and submitted. Waiting for CI checks and human review."
+            )
+        await execute_persistence_actions(
+            state,
+            (
+                PersistenceAction(
+                    operation=JIRA_COMMENT_OPERATION,
+                    resource_type="issue",
+                    external_id=ticket_key,
+                    logical_action="pull-request-created",
+                    payload={"body": message},
+                ),
+                PersistenceAction(
+                    operation=JIRA_LABELS_REMOVE_OPERATION,
+                    resource_type="issue",
+                    external_id=ticket_key,
+                    logical_action="remove-implementing-label",
+                    payload={"labels": [ForgeLabel.TASK_IMPLEMENTING.value]},
+                ),
+                PersistenceAction(
+                    operation=JIRA_LABEL_OPERATION,
+                    resource_type="issue",
+                    external_id=ticket_key,
+                    logical_action="mark-ci-pending",
+                    payload={"label": ForgeLabel.TASK_CI_PENDING.value},
+                ),
+            ),
+            discriminator="human-review-entry",
+        )
         updates["pr_created_comment_posted"] = True
         logger.info(f"Pausing {ticket_key} at human_review_gate after PR creation")
     else:
@@ -134,16 +157,33 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
 
     logger.info(f"Completing {len(implemented_tasks)} Tasks for {ticket_key}")
 
-    jira = JiraClient()
     jira_completed_tasks: list[str] = []
 
     try:
         for task_key in implemented_tasks:
             try:
                 # Transition to Closed status and remove forge workflow labels
-                await jira.transition_issue(task_key, JiraStatus.CLOSED.value)
+                await execute_persistence_actions(
+                    state,
+                    (
+                        PersistenceAction(
+                            operation=JIRA_TRANSITION_OPERATION,
+                            resource_type="issue",
+                            external_id=task_key,
+                            logical_action="complete-implemented-task",
+                            payload={"transition": JiraStatus.CLOSED.value},
+                        ),
+                        PersistenceAction(
+                            operation=JIRA_LABEL_OPERATION,
+                            resource_type="issue",
+                            external_id=task_key,
+                            logical_action="mark-task-review-approved",
+                            payload={"label": ForgeLabel.TASK_REVIEW_APPROVED.value},
+                        ),
+                    ),
+                    discriminator=f"complete-task:{task_key}",
+                )
                 jira_completed_tasks.append(task_key)
-                await jira.set_workflow_label(task_key, ForgeLabel.TASK_REVIEW_APPROVED)
                 logger.info(f"Task {task_key} marked as Done")
             except Exception as e:
                 logger.warning(f"Failed to complete Task {task_key}: {e}")
@@ -166,8 +206,6 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
             "current_node": "complete_tasks",
             "retry_count": state.get("retry_count", 0) + 1,
         }
-    finally:
-        await jira.close()
 
 
 async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
@@ -203,7 +241,19 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
 
             if epic_done:
                 # Transition Epic to Closed status
-                await jira.transition_issue(epic_key, JiraStatus.CLOSED.value)
+                await execute_persistence_actions(
+                    state,
+                    (
+                        PersistenceAction(
+                            operation=JIRA_TRANSITION_OPERATION,
+                            resource_type="issue",
+                            external_id=epic_key,
+                            logical_action="complete-epic",
+                            payload={"transition": JiraStatus.CLOSED.value},
+                        ),
+                    ),
+                    discriminator=f"complete-epic:{epic_key}",
+                )
                 logger.info(f"Epic {epic_key} marked as Done")
             else:
                 all_epics_done = False
@@ -256,7 +306,19 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
 
     try:
         # Transition Feature to Closed status
-        await jira.transition_issue(ticket_key, JiraStatus.CLOSED.value)
+        await execute_persistence_actions(
+            state,
+            (
+                PersistenceAction(
+                    operation=JIRA_TRANSITION_OPERATION,
+                    resource_type="issue",
+                    external_id=ticket_key,
+                    logical_action="complete-feature",
+                    payload={"transition": JiraStatus.CLOSED.value},
+                ),
+            ),
+            discriminator="complete-feature",
+        )
         logger.info(f"Feature {ticket_key} marked as Done")
 
         # Transition parent Epic if present
@@ -280,7 +342,19 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
                     treat_empty_as_complete=False,
                 )
                 if parent_epic_done:
-                    await jira.transition_issue(feature_issue.parent_key, JiraStatus.CLOSED.value)
+                    await execute_persistence_actions(
+                        state,
+                        (
+                            PersistenceAction(
+                                operation=JIRA_TRANSITION_OPERATION,
+                                resource_type="issue",
+                                external_id=feature_issue.parent_key,
+                                logical_action="complete-parent-epic",
+                                payload={"transition": JiraStatus.CLOSED.value},
+                            ),
+                        ),
+                        discriminator=f"complete-parent:{feature_issue.parent_key}",
+                    )
                     logger.info(f"Transitioned parent Epic {feature_issue.parent_key} to Closed")
                 else:
                     logger.info(
@@ -291,8 +365,18 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
             logger.warning(f"Failed to fetch issue {ticket_key} or transition its parent Epic: {e}")
 
         # Add completion comment
-        await post_status_comment(
-            jira, ticket_key, "All Epics and Tasks completed. Feature implementation done."
+        await execute_persistence_actions(
+            state,
+            (
+                PersistenceAction(
+                    operation=JIRA_COMMENT_OPERATION,
+                    resource_type="issue",
+                    external_id=ticket_key,
+                    logical_action="feature-completion-summary",
+                    payload={"body": "All Epics and Tasks completed. Feature implementation done."},
+                ),
+            ),
+            discriminator="feature-completion-summary",
         )
 
         return update_state_timestamp(

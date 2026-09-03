@@ -50,7 +50,7 @@ class TestQAModeIntegration:
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent):
                 result = await answer_question(state)
 
         # Verify Jira comment was posted
@@ -188,7 +188,7 @@ class TestQAHandlerEdgeCases:
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.qa_handler.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.nodes.qa_handler.ForgeAgent", return_value=mock_agent):
+            with patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent):
                 result = await answer_question(state)
 
         # Should still clear question state and stay paused

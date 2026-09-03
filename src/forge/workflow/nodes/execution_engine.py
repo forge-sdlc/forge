@@ -6,13 +6,14 @@ This module owns the invariant execution mechanics once that context is known.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from forge.prompts import load_prompt
 from forge.sandbox.runner import ContainerRunner
 from forge.workflow.nodes.git_persistence import PushPersistenceError, push_to_fork_with_retry
 from forge.workflow.nodes.repository_scope import implementation_repository_scope
+from forge.workflow.sandbox_execution import execute_sandbox_station
+from forge.workflow.stations.sandbox_execution import SandboxExecutionInput
 from forge.workflow.utils import merge_review_exhaustion
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.handoff import capture_handoff
@@ -103,17 +104,22 @@ async def run_and_persist_execution(
     Push failures intentionally propagate for the calling node to apply its
     workflow-specific retry state.
     """
-    result = await runner.run(
-        workspace_path=Path(request.workspace_path),
-        task_summary=request.summary,
-        task_description=prompt,
-        ticket_key=request.ticket_key,
-        task_key=request.work_id,
-        repo_name=request.repository,
-        step_name=request.step_name,
-        policy_key=request.policy_key,
-        skill_name=request.skill_name,
-        **request.runner_options,
+    result = await execute_sandbox_station(
+        state,
+        SandboxExecutionInput(
+            workspace_path=request.workspace_path,
+            task_summary=request.summary,
+            task_description=prompt,
+            ticket_key=request.ticket_key,
+            task_key=request.work_id,
+            repo_name=request.repository,
+            step_name=request.step_name,
+            policy_key=request.policy_key,
+            skill_name=request.skill_name,
+            runner_options=dict(request.runner_options),
+        ),
+        runner=runner,
+        discriminator=f"{request.step_name}:{request.work_id}",
     )
     updated = merge_review_exhaustion(dict(state), result, request.work_id, request.step_name)
     updated = capture_handoff(

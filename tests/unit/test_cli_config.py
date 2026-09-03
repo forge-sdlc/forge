@@ -197,7 +197,7 @@ class TestCLIConfigExecution:
             skills_config=None,
             add_skill=None,
             model_policy=None,
-            model=["implement_task=vertex:gemini-pro"],
+            model=["implement_work=vertex:gemini-pro"],
             model_all=None,
         )
 
@@ -206,7 +206,7 @@ class TestCLIConfigExecution:
 
         assert code == 0
         written = jira.set_project_property.await_args.args[2]
-        assert set(written) == {"generate_prd", "implement_task"}
+        assert set(written) == {"generate_prd", "implement_work"}
 
     @pytest.mark.asyncio
     async def test_project_model_override_does_not_require_local_connections(self):

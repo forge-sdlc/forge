@@ -490,13 +490,6 @@ class QueueConsumer:
             tasks.append(self._consume_stream(JIRA_STREAM, EventSource.JIRA))
         if EventSource.SOURCE_CONTROL in self._handlers:
             tasks.append(self._consume_stream(SOURCE_CONTROL_STREAM, EventSource.SOURCE_CONTROL))
-            # LEGACY_SOURCE_CONTROL_STREAM (the pre-rename "forge:events:github")
-            # is intentionally not auto-consumed: those entries predate the
-            # NormalizedEvent/adapter cutover and have no normalized_event to
-            # deserialize, so the handler could only silently no-op and ack them
-            # -- discarding whatever CI/review/merge signal they carried instead
-            # of processing it. health_check reports its depth so a nonzero
-            # backlog is visible for a deliberate, out-of-band migration.
 
         if tasks:
             tasks.append(self._process_retry_queue())

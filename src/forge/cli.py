@@ -56,7 +56,16 @@ async def _get_compiled_workflow_for_ticket(ticket_key: str):
         if workflow_name:
             project_key = values.get("workflow_project_key") or issue.project_key
             workflow_instance = await load_project_workflow(
-                jira, project_key or ticket_key.split("-", 1)[0], workflow_name
+                jira,
+                project_key or ticket_key.split("-", 1)[0],
+                workflow_name,
+                pinned_revision=values.get(
+                    "workflow_definition_revision", values.get("workflow_revision")
+                ),
+                pinned_digest=values.get(
+                    "workflow_definition_digest", values.get("workflow_digest")
+                ),
+                pinned_definition=values.get("workflow_definition"),
             )
         else:
             workflow_instance = None
@@ -1701,9 +1710,63 @@ def main(argv: list[str] | None = None) -> int:
     workflow_validate.add_argument("file")
     workflow_validate.add_argument("--json", action="store_true", help="Print canonical JSON")
 
+    workflow_render = workflow_subparsers.add_parser(
+        "render", help="Render a validated workflow process manifest"
+    )
+    workflow_render.add_argument("file")
+    workflow_render.add_argument("--format", choices=("mermaid", "json"), default="mermaid")
+
+    workflow_diff = workflow_subparsers.add_parser(
+        "diff", help="Report structural and in-flight impact between revisions"
+    )
+    workflow_diff.add_argument("previous")
+    workflow_diff.add_argument("current")
+
+    workflow_simulate = workflow_subparsers.add_parser(
+        "simulate-migration",
+        help="Dry-run a definition change against active instance snapshots",
+    )
+    workflow_simulate.add_argument("previous")
+    workflow_simulate.add_argument("current")
+    workflow_simulate.add_argument("instances", help="JSON array of active checkpoint snapshots")
+
+    workflow_catalog = workflow_subparsers.add_parser(
+        "catalog", help="Show registered nodes, routers, contracts, and effect authority"
+    )
+    workflow_catalog.add_argument("state", choices=("feature", "bug", "task_takeover"))
+    workflow_catalog.add_argument("--json", action="store_true")
+
     workflow_publish = workflow_subparsers.add_parser("publish", help="Publish a YAML workflow")
     workflow_publish.add_argument("project_key")
     workflow_publish.add_argument("file")
+    workflow_publish.add_argument("--actor", default="forge-cli")
+    workflow_publish.add_argument("--reason", default="CLI publication")
+
+    workflow_activate = workflow_subparsers.add_parser(
+        "activate", help="Activate an already-published workflow revision"
+    )
+    workflow_activate.add_argument("project_key")
+    workflow_activate.add_argument("name")
+    workflow_activate.add_argument("revision", type=int)
+    workflow_activate.add_argument("--actor", default="forge-cli")
+    workflow_activate.add_argument("--reason", default="CLI activation")
+    workflow_activate.add_argument(
+        "--expected-active-digest",
+        help="Fail if the active definition digest has changed since it was read",
+    )
+
+    workflow_rollback = workflow_subparsers.add_parser(
+        "rollback", help="Activate a previously published compatible revision"
+    )
+    workflow_rollback.add_argument("project_key")
+    workflow_rollback.add_argument("name")
+    workflow_rollback.add_argument("revision", type=int)
+    workflow_rollback.add_argument("--actor", default="forge-cli")
+    workflow_rollback.add_argument("--reason", default="CLI rollback")
+    workflow_rollback.add_argument(
+        "--expected-active-digest",
+        help="Fail if the active definition digest has changed since it was read",
+    )
 
     workflow_show = workflow_subparsers.add_parser("show", help="Show one project workflow")
     workflow_show.add_argument("project_key")
@@ -1712,6 +1775,13 @@ def main(argv: list[str] | None = None) -> int:
 
     workflow_list = workflow_subparsers.add_parser("list", help="List project workflows")
     workflow_list.add_argument("project_key")
+
+    workflow_history = workflow_subparsers.add_parser(
+        "show-history", help="Show immutable publication and rollout audit history"
+    )
+    workflow_history.add_argument("project_key")
+    workflow_history.add_argument("name")
+    workflow_history.add_argument("--json", action="store_true")
 
     workflow_delete = workflow_subparsers.add_parser("delete", help="Delete a project workflow")
     workflow_delete.add_argument("project_key")

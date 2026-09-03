@@ -18,7 +18,7 @@ def resolver() -> ModelPolicyResolver:
                 "backend": "vertex-ai",
                 "project": "prod",
                 "allowed_models": ["gemini-pro", "gemini-flash"],
-                "capabilities": ["tools"],
+                "capabilities": ["structured_output", "tools"],
             },
             "locked": {
                 "backend": "anthropic",
@@ -46,7 +46,7 @@ def test_project_default_overrides_global_policy_but_not_explicit_project_stage(
     }
     project_default = {"connection": "vertex", "model": "gemini-flash"}
 
-    resolved_default = resolver.resolve("implement_task", overrides, project_default)
+    resolved_default = resolver.resolve("implement_work", overrides, project_default)
     resolved_explicit = resolver.resolve("generate_prd", overrides, project_default)
     assert resolved_default.model == "gemini-flash"
     assert resolved_default.policy_source == "project_default"
@@ -63,9 +63,9 @@ def test_project_policy_rejects_legacy_wildcard(resolver: ModelPolicyResolver) -
 
 
 def test_rejects_unauthorized_connection(resolver: ModelPolicyResolver) -> None:
-    override = {"implement_task": {"connection": "locked", "model": "claude-sonnet"}}
+    override = {"implement_work": {"connection": "locked", "model": "claude-sonnet"}}
     with pytest.raises(ValueError, match="not allowed for project overrides"):
-        resolver.resolve("implement_task", override)
+        resolver.resolve("implement_work", override)
 
 
 @pytest.mark.parametrize(
@@ -87,7 +87,7 @@ def test_invalid_project_targets_fail_closed(
     resolver: ModelPolicyResolver, target: dict, message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        resolver.resolve("implement_task", {"implement_task": target})
+        resolver.resolve("implement_work", {"implement_work": target})
 
 
 def test_stage_capabilities_cannot_be_weakened_by_project_policy() -> None:
@@ -99,19 +99,17 @@ def test_stage_capabilities_cannot_be_weakened_by_project_policy() -> None:
 
     with pytest.raises(ValueError, match="lacks required capabilities: tools"):
         resolver.resolve(
-            "implement_task",
-            {"implement_task": {"connection": "vertex", "model": "gemini-pro"}},
+            "implement_work",
+            {"implement_work": {"connection": "vertex", "model": "gemini-pro"}},
         )
 
 
 def test_tool_requirements_cover_every_agentic_stage() -> None:
-    tool_free = {
-        "automated_review_triage",
+    assert set(REQUIRED_CAPABILITIES_BY_POLICY_KEY) == set(KNOWN_MODEL_POLICY_KEYS) - {
         "generate_pr_description",
-        "proposal_review_triage",
         "sync_pr_description",
     }
-    assert set(REQUIRED_CAPABILITIES_BY_POLICY_KEY) == set(KNOWN_MODEL_POLICY_KEYS) - tool_free
+    assert REQUIRED_CAPABILITIES_BY_POLICY_KEY["automated_review_triage"] == {"structured_output"}
 
 
 def test_project_output_token_limit_is_bounded(resolver: ModelPolicyResolver) -> None:
@@ -218,7 +216,7 @@ def test_runtime_names_have_canonical_policy_keys(runtime_key: str, expected: st
 def test_every_advertised_policy_key_resolves(resolver: ModelPolicyResolver) -> None:
     resolved = resolver.resolve_all()
     assert set(resolved) == set(KNOWN_MODEL_POLICY_KEYS)
-    assert isinstance(resolved["implement_task"]["required_capabilities"], list)
+    assert isinstance(resolved["implement_work"]["required_capabilities"], list)
 
 
 def test_advertised_policy_keys_are_sorted() -> None:
