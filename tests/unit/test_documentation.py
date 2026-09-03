@@ -1,5 +1,6 @@
 """Unit tests for Getting Started documentation note integrity."""
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -175,3 +176,121 @@ For local development you have two options:
         match="The troubleshooting note was not found inside the 'forge-poller \\(recommended\\)'",
     ):
         validate_troubleshooting_note(bad_md)
+
+
+def is_path_in_allowed_directories(path_str: str) -> bool:
+    """Check if the given relative path is within the allowed directories (docs/ or tests/)."""
+    # Normalize path separator to forward slash
+    path_str = path_str.replace("\\", "/")
+    return path_str.startswith("docs/") or path_str.startswith("tests/")
+
+
+def parse_git_status_line(line: str) -> list[str]:
+    """Parse a single line from 'git status --porcelain' and return the file path(s) involved."""
+    if len(line) < 4:
+        return []
+    # In porcelain format, the status is the first 2 characters, followed by a space.
+    status = line[:2]
+    path_part = line[3:]
+
+    # Handle rename/copy which has " -> " separator
+    if (status.startswith("R") or status.startswith("C")) and " -> " in path_part:
+        parts = path_part.split(" -> ")
+        return [p.strip("\"' ") for p in parts]
+
+    return [path_part.strip("\"' ")]
+
+
+def check_exclusive_documentation_scope(git_status_output: str) -> None:
+    """Verifies that all modified or staged files are restricted to docs/ and tests/ directories.
+
+    Raises AssertionError if any file outside of docs/ and tests/ directories is modified or staged.
+    """
+    violating_files = []
+    for line in git_status_output.splitlines():
+        if not line.strip():
+            continue
+        paths = parse_git_status_line(line)
+        for path in paths:
+            if not is_path_in_allowed_directories(path):
+                violating_files.append((line, path))
+
+    if violating_files:
+        details = "\n".join(
+            f"- Line: '{line.strip()}' (Parsed Path: '{path}')" for line, path in violating_files
+        )
+        raise AssertionError(
+            f"Business Rule BR-002 Violation: Changes detected outside of docs/ and tests/ directories.\n"
+            f"The following violating files were modified or staged:\n{details}"
+        )
+
+
+def test_exclusive_documentation_scope() -> None:
+    """Verify that no files outside of docs/ and tests/ directories have been modified or staged (BR-002)."""
+    # Execute git status --porcelain
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    # Verify using our validator
+    check_exclusive_documentation_scope(result.stdout)
+
+
+def test_exclusive_scope_success_empty() -> None:
+    """Verify that empty git status output passes the scope validation."""
+    check_exclusive_documentation_scope("")
+
+
+def test_exclusive_scope_success_docs_and_tests() -> None:
+    """Verify that modifications restricted to docs/ and tests/ pass the scope validation."""
+    status_output = (
+        " M docs/getting-started.md\n"
+        "A  tests/unit/test_documentation.py\n"
+        "?? tests/unit/new_test_file.py\n"
+    )
+    check_exclusive_documentation_scope(status_output)
+
+
+def test_exclusive_scope_failure_src() -> None:
+    """Verify that modifications in src/ cause scope validation failure."""
+    status_output = " M docs/getting-started.md\n M src/forge/main.py\n"
+    with pytest.raises(
+        AssertionError,
+        match="Business Rule BR-002 Violation: Changes detected outside of docs/ and tests/ directories",
+    ) as exc_info:
+        check_exclusive_documentation_scope(status_output)
+
+    assert "src/forge/main.py" in str(exc_info.value)
+
+
+def test_exclusive_scope_failure_config() -> None:
+    """Verify that modifications in root configuration files cause scope validation failure."""
+    status_output = " M pyproject.toml\n"
+    with pytest.raises(
+        AssertionError,
+        match="Business Rule BR-002 Violation: Changes detected outside of docs/ and tests/ directories",
+    ) as exc_info:
+        check_exclusive_documentation_scope(status_output)
+
+    assert "pyproject.toml" in str(exc_info.value)
+
+
+def test_exclusive_scope_rename_success() -> None:
+    """Verify that renames restricted to docs/ pass the scope validation."""
+    status_output = "R  docs/old-doc.md -> docs/new-doc.md\n"
+    check_exclusive_documentation_scope(status_output)
+
+
+def test_exclusive_scope_rename_failure() -> None:
+    """Verify that renames moving files outside of docs/ and tests/ cause scope validation failure."""
+    status_output = "R  docs/getting-started.md -> src/getting-started.md\n"
+    with pytest.raises(
+        AssertionError,
+        match="Business Rule BR-002 Violation: Changes detected outside of docs/ and tests/ directories",
+    ) as exc_info:
+        check_exclusive_documentation_scope(status_output)
+
+    assert "src/getting-started.md" in str(exc_info.value)
