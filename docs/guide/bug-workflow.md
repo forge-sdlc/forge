@@ -57,7 +57,7 @@ Forge immediately acknowledges the ticket and evaluates it against a 7-field com
 
 ### 2. RCA Analysis
 
-Forge spawns a container that clones the relevant repo(s) and performs hypothesis-driven codebase exploration:
+Forge selects one configured repository for the RCA, applies its `repo:<owner>/<repo>` label after validation, and then performs hypothesis-driven codebase exploration against that repository:
 
 - Forms ranked candidate root causes
 - Investigates each with `grep`, `git blame`, and file reads
@@ -83,7 +83,7 @@ Plain comments (no prefix) are ignored by the workflow.
 
 ### 4. Planning
 
-After option selection, Forge spawns a container to produce a concrete implementation plan covering specific files, tests, and order of operations. Each involved repository is tagged `repo:<owner>/<name>` for automatic task decomposition.
+After option selection, Forge produces a concrete implementation plan covering specific files, tests, and order of operations. The selected repository is tagged `repo:<owner>/<name>` for validated task decomposition; a revision does not remove that retained repository assignment.
 
 The plan is posted as a Jira comment and `forge:plan-pending` is set.
 
@@ -156,3 +156,5 @@ Bug fix PRs are created from fork branches. If `main` advances while the PR is o
 | `forge:retry` | Human | Resume from the failed node |
 
 See [Jira Labels](labels.md) for the full reference.
+
+For blocked effects, provider-event conflicts, and safe replay, see [Operations](../operations.md).

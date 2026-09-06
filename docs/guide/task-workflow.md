@@ -91,7 +91,7 @@ Review the posted implementation plan before Forge changes code.
 | Ask a question | Comment with `?` or `@forge ask` |
 | Leave paused | Keep `forge:plan-pending` |
 
-Question comments route to Q&A mode and return to the same approval gate. Revision comments regenerate the plan with the previous plan and your feedback in context.
+Question comments route to Q&A mode and return to the same approval gate. Revision comments regenerate the plan with the previous plan and your feedback in context. Forge retains the validated `repo:<owner>/<repo>` assignment across a plan revision; it does not remove and re-add the same label as a revision side effect.
 
 !!! tip "YOLO mode"
     If `forge:yolo` is present, Forge auto-approves the task plan and proceeds to workspace setup. Human PR review still remains a gate.
@@ -187,5 +187,4 @@ If a stage fails, Forge records the error, sets `forge:blocked`, and posts an er
 
 To resume, add `forge:retry`. Forge resumes from the saved `current_node` instead of restarting the workflow from triage. For CI failures, retrying gives the workflow a fresh CI-fix budget.
 
-Planning and triage have bounded retry behavior. Qualitative review also has a bounded retry loop and will proceed to PR creation after the retry cap when it has a non-adequate verdict, preserving that state for reviewers.
-
+Planning and triage have bounded retry behavior. Qualitative review also has a bounded retry loop and will proceed to PR creation after the retry cap when it has a non-adequate verdict, preserving that state for reviewers. Use [Operations](../operations.md) when the Jira error indicates an unresolved effect or conflicting provider observation rather than an implementation issue.

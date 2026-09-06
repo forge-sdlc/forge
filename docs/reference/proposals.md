@@ -1,5 +1,10 @@
 # Proposals
 
+This page describes design proposals for changes to Forge itself. It is separate
+from [PRD and specification proposal review](config.md#proposal-review-configuration),
+which lets a Jira project review generated planning artifacts in a GitHub
+repository.
+
 Forge uses a lightweight proposal process for significant changes. Proposals live in the [`proposals/`](https://github.com/forge-sdlc/forge/tree/main/proposals) directory of the repository.
 
 ## Creating a Proposal

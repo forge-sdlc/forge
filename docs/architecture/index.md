@@ -7,6 +7,7 @@ For workflow details, see the [Feature](../guide/feature-workflow.md), [Bug](../
 
 | Part | Contents |
 |------|----------|
+| [Control-plane architecture](control-plane.md) | Ownership boundaries and safe project/core extension paths |
 | [System and components](overview.md) | Control-plane structure and component responsibilities |
 | [Runtime internals](internals.md) | State authority, reconciliation, stations, effects, and security |
 | [Reference](reference.md) | Architectural decisions, known limitations, workflow lifecycles |

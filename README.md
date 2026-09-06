@@ -225,7 +225,8 @@ See [Getting Started](https://Forge-sdlc.github.io/forge/getting-started/) for t
 - [Feature Workflow](https://Forge-sdlc.github.io/forge/guide/feature-workflow/): Understand the feature pipeline and approval gates.
 - [Bug Workflow](https://Forge-sdlc.github.io/forge/guide/bug-workflow/): Understand triage, RCA, fix options, and bug implementation.
 - [Task Workflow](https://Forge-sdlc.github.io/forge/guide/task-workflow/): Understand standalone Task and Epic implementation.
-- [PR Commands](https://Forge-sdlc.github.io/forge/guide/pr-commands/): Rebase PRs and handle CI gate skips.
+- [Workflow Management](https://Forge-sdlc.github.io/forge/guide/labels/): Control approvals, revisions, draft review, retries, and PR commands.
+- [Operations](https://Forge-sdlc.github.io/forge/operations/): Run services, inspect execution, recover effects, and respond to incidents.
 - [Configuration Reference](https://Forge-sdlc.github.io/forge/reference/config/): Environment variables and project configuration.
 - [Architecture](https://Forge-sdlc.github.io/forge/architecture/): Versioned workflows,
   reconciliation, typed stations, durable effects, and execution inspection.

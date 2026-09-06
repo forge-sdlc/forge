@@ -4,6 +4,10 @@ Forge project administrators can compose the nodes and state profiles shipped wi
 project-specific workflows. Definitions are selected by Jira label, validated before compilation,
 and compiled into LangGraph graphs at runtime. They cannot import Python or define expressions.
 
+This is project-level configuration, not a plugin system. A definition controls flow; trusted
+Forge code controls authority. To add a provider adapter, a station, a node, or an effect executor,
+use the [core-maintainer extension path](../architecture/control-plane.md#core-maintainers-trusted-capabilities).
+
 ## Author and publish
 
 Create a YAML file locally:
@@ -37,6 +41,17 @@ Validate and publish it:
 ```bash
 forge workflow validate workflow.yaml
 forge workflow publish MYPROJ workflow.yaml
+```
+
+Before authoring a definition, inspect the supported catalog and before activating a revision,
+inspect the resulting topology and migration impact:
+
+```bash
+forge workflow catalog feature
+forge workflow validate workflow.yaml --json
+forge workflow render workflow.yaml
+forge workflow diff previous.yaml workflow.yaml
+forge workflow simulate-migration previous.yaml workflow.yaml instances.json
 ```
 
 Publishing stores canonical JSON in the `forge.workflow.prd-only` Jira project property. Jira
@@ -134,3 +149,31 @@ forge workflow list MYPROJ
 forge workflow show MYPROJ prd-only
 forge workflow show-history MYPROJ prd-only
 ```
+
+## Configuration boundary
+
+Project authors can configure these flow-level choices:
+
+- the built-in state profile (`feature`, `bug`, or `task_takeover`);
+- registered steps, fixed edges, router branches, joins, dynamic fan-out, retry
+  bounds, and concurrency; and
+- revision/resume mappings for explicitly migratable saved positions.
+
+The trusted catalog, not a project definition, owns node kind, station contract,
+effect operations, required and mandatory policies, observation policy,
+preconditions, provider credentials, and external command handling. A definition
+cannot grant a node permission to push a branch, create a Jira issue, bypass an
+approval, or make arbitrary network, shell, or Python calls.
+
+## Safe revision checklist
+
+1. Start from a built-in definition with the same state profile.
+2. Run `forge workflow catalog STATE` and use only listed nodes and routers.
+3. Increment `metadata.revision` for every content change.
+4. Validate and render the candidate definition.
+5. Diff it against the active revision.
+6. When a saved node changes, add `spec.resume.fromRevisions` and run migration
+   simulation against representative active instances.
+7. Publish only after reviewing the resulting canonical JSON and migration
+   result. Existing tickets remain pinned to their prior definition unless a
+   declared migration applies.

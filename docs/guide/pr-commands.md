@@ -71,11 +71,11 @@ Merge `main` into the PR branch and resolve any merge conflicts using AI. Use th
 
 ## When Commands Are Active
 
-**Skip-gate and unskip-gate** only work when Forge's workflow is in a CI stage:
+**Skip-gate and unskip-gate** only work when Forge's workflow is at a CI or review gate:
 
-- `wait_for_ci_gate`
 - `ci_evaluator`
 - `attempt_ci_fix`
+- `human_review_gate`
 
 **Rebase** works from any workflow stage where a PR exists in the workflow state.
 
