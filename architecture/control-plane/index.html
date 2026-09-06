@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://forge-sdlc.github.io/forge/guide/bug-workflow/">
+        <link rel="canonical" href="https://forge-sdlc.github.io/forge/architecture/control-plane/">
       
       
-        <link rel="prev" href="../feature-workflow/">
+        <link rel="prev" href="../">
       
       
-        <link rel="next" href="../task-workflow/">
+        <link rel="next" href="../overview/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Bug Workflow - Forge SDLC Guide</title>
+        <title>Control-plane architecture - Forge SDLC Guide</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#bug-workflow" class="md-skip">
+        <a href="#control-plane-architecture" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Bug Workflow
+              Control-plane architecture
             
           </span>
         </div>
@@ -262,13 +262,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../feature-workflow/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../guide/feature-workflow/" class="md-tabs__link">
           
   
   User Guide
@@ -283,10 +281,12 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
+      <li class="md-tabs__item md-tabs__item--active">
         <a href="../../developer-guide/" class="md-tabs__link">
           
   
@@ -488,31 +488,28 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
             
   
   
@@ -529,7 +526,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -546,7 +543,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../feature-workflow/" class="md-nav__link">
+      <a href="../../guide/feature-workflow/" class="md-nav__link">
         
   
   
@@ -570,36 +567,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-  Bug Workflow
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="././" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../guide/bug-workflow/" class="md-nav__link">
         
   
   
@@ -614,165 +585,6 @@
   
 
       </a>
-      
-        
-
-
-<nav class="md-nav md-nav--secondary" aria-label="On this page">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      On this page
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Overview
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#triggering-a-bug-workflow" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Triggering a Bug Workflow
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stage-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Stage Reference
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Stage Reference">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#1-triage" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        1. Triage
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#2-rca-analysis" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        2. RCA Analysis
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#3-rca-option-gate" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        3. RCA Option Gate
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#4-planning" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        4. Planning
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#5-decompose-implementation" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        5. Decompose → Implementation
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#comment-syntax" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Comment Syntax
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#merge-conflicts" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Merge Conflicts
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#key-differences-from-feature-workflow" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Key Differences from Feature Workflow
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#labels" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Labels
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -785,7 +597,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../task-workflow/" class="md-nav__link">
+      <a href="../../guide/task-workflow/" class="md-nav__link">
         
   
   
@@ -812,7 +624,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../auto-review/" class="md-nav__link">
+      <a href="../../guide/auto-review/" class="md-nav__link">
         
   
   
@@ -839,7 +651,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../labels/" class="md-nav__link">
+      <a href="../../guide/labels/" class="md-nav__link">
         
   
   
@@ -866,7 +678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../pr-commands/" class="md-nav__link">
+      <a href="../../guide/pr-commands/" class="md-nav__link">
         
   
   
@@ -899,13 +711,10 @@
       
       
         
-          
-          
-        
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
@@ -914,7 +723,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_7" >
         
           
-          <label class="md-nav__link" for="__nav_5_7" id="__nav_5_7_label" tabindex="">
+          <label class="md-nav__link" for="__nav_5_7" id="__nav_5_7_label" tabindex="0">
             
   
   
@@ -1014,28 +823,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
-        
-          
-          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
             
   
   
@@ -1052,7 +864,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1093,28 +905,31 @@
                 
   
   
+    
   
   
+  
     
     
     
     
       
       
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--nested">
-      
-        
         
           
+          
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_2" >
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6_2" checked>
         
           
-          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="">
             
   
   
@@ -1131,7 +946,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1148,7 +963,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -1172,10 +987,36 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../architecture/control-plane/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Control-plane Architecture
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1190,6 +1031,138 @@
   
 
       </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ownership-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Ownership model
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#main-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Main boundaries
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Main boundaries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#observations-and-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Observations and commands
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pinned-declarative-definitions" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Pinned declarative definitions
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typed-stations" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Typed stations
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#durable-effects-and-read-models" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Durable effects and read models
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#extending-forge-safely" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Extending Forge safely
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extending Forge safely">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#project-administrators-declarative-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Project administrators: declarative configuration
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-maintainers-trusted-capabilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Core maintainers: trusted capabilities
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1202,7 +1175,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/overview/" class="md-nav__link">
+      <a href="../overview/" class="md-nav__link">
         
   
   
@@ -1229,7 +1202,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/internals/" class="md-nav__link">
+      <a href="../internals/" class="md-nav__link">
         
   
   
@@ -1256,7 +1229,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/structured-output/" class="md-nav__link">
+      <a href="../structured-output/" class="md-nav__link">
         
   
   
@@ -1283,7 +1256,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/reference/" class="md-nav__link">
+      <a href="../reference/" class="md-nav__link">
         
   
   
@@ -1378,10 +1351,13 @@
       
       
         
+          
+          
+        
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
@@ -1390,7 +1366,7 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_5" >
         
           
-          <label class="md-nav__link" for="__nav_6_5" id="__nav_6_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_6_5" id="__nav_6_5_label" tabindex="">
             
   
   
@@ -1888,10 +1864,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#overview" class="md-nav__link">
+  <a href="#ownership-model" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Overview
+        Ownership model
       </span>
     </span>
   </a>
@@ -1899,33 +1875,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#triggering-a-bug-workflow" class="md-nav__link">
+  <a href="#main-boundaries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Triggering a Bug Workflow
+        Main boundaries
       </span>
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#stage-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Stage Reference
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Stage Reference">
+    <nav class="md-nav" aria-label="Main boundaries">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#1-triage" class="md-nav__link">
+  <a href="#observations-and-commands" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        1. Triage
+        Observations and commands
       </span>
     </span>
   </a>
@@ -1933,10 +1898,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#2-rca-analysis" class="md-nav__link">
+  <a href="#pinned-declarative-definitions" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        2. RCA Analysis
+        Pinned declarative definitions
       </span>
     </span>
   </a>
@@ -1944,10 +1909,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-rca-option-gate" class="md-nav__link">
+  <a href="#typed-stations" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        3. RCA Option Gate
+        Typed stations
       </span>
     </span>
   </a>
@@ -1955,21 +1920,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4-planning" class="md-nav__link">
+  <a href="#durable-effects-and-read-models" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        4. Planning
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#5-decompose-implementation" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        5. Decompose → Implementation
+        Durable effects and read models
       </span>
     </span>
   </a>
@@ -1982,46 +1936,41 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#comment-syntax" class="md-nav__link">
+  <a href="#extending-forge-safely" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Comment Syntax
+        Extending Forge safely
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extending Forge safely">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#project-administrators-declarative-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Project administrators: declarative configuration
       </span>
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#merge-conflicts" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#core-maintainers-trusted-capabilities" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Merge Conflicts
+        Core maintainers: trusted capabilities
       </span>
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#key-differences-from-feature-workflow" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Key Differences from Feature Workflow
-      </span>
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#labels" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Labels
-      </span>
-    </span>
-  </a>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2040,7 +1989,7 @@
                 
                   
   
-    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/guide/bug-workflow.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/architecture/control-plane.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
     </a>
@@ -2048,189 +1997,136 @@
   
 
 
-<h1 id="bug-workflow">Bug Workflow<a class="headerlink" href="#bug-workflow" title="Permanent link">&para;</a></h1>
-<p>Bugs go through a structured five-stage pipeline that produces a root cause analysis, a concrete fix plan, and implementation — all within a single Forge-managed workflow.</p>
-<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
-<pre class="mermaid"><code>flowchart TD
-    A[Create Bug + forge:managed] --&gt; B[Triage Check]
-    B --&gt;|Fields missing| C[Triage Gate\nwait for reporter update]
-    C --&gt; B
-    B --&gt;|Sufficient| D[RCA Analysis\ncontainer]
-    D --&gt; E[RCA Reflection\nvalidation loop up to 3x]
-    E --&gt;|Invalid| D
-    E --&gt;|Valid| F[RCA Option Gate\nforge:rca-pending]
-    F --&gt;|'&gt;option N'| G[Plan Bug Fix\ncontainer]
-    F --&gt;|'! feedback'| D
-    G --&gt; H[Plan Approval Gate\nforge:plan-pending]
-    H --&gt;|forge:plan-approved| I[Decompose Plan\ncreate per-repo tasks]
-    H --&gt;|'! feedback'| G
-    I --&gt; J[Implementation\ncontainer per repo]
-    J --&gt; K[Qualitative Review\n7-item checklist]
-    K --&gt;|adequate| L[Update Docs → PR]
-    K --&gt;|needs work, retry &lt; 2| J
-    L --&gt; M[CI/CD + Review → Merge]
-    M --&gt; N[Post-merge Summary\nJira comment]</code></pre>
-<h2 id="triggering-a-bug-workflow">Triggering a Bug Workflow<a class="headerlink" href="#triggering-a-bug-workflow" title="Permanent link">&para;</a></h2>
-<p>Create a Jira issue with:</p>
-<ul>
-<li><strong>Issue type:</strong> Bug</li>
-<li><strong>Label:</strong> <code>forge:managed</code></li>
-</ul>
-<p>Forge detects the issue type and routes it through the bug pipeline.</p>
-<h2 id="stage-reference">Stage Reference<a class="headerlink" href="#stage-reference" title="Permanent link">&para;</a></h2>
-<h3 id="1-triage">1. Triage<a class="headerlink" href="#1-triage" title="Permanent link">&para;</a></h3>
-<p>Forge immediately acknowledges the ticket and evaluates it against a 7-field completeness checklist:</p>
-<ol>
-<li>Steps to reproduce</li>
-<li>Expected vs. actual behavior</li>
-<li>Environment</li>
-<li>Affected versions</li>
-<li>Error output</li>
-<li>Affected component</li>
-<li>Disambiguating context</li>
-</ol>
-<p><strong>If fields are missing:</strong> Forge posts a targeted comment listing only the absent fields and sets <code>forge:triage-pending</code>. Update the ticket — Forge re-evaluates automatically.</p>
-<p><strong>If sufficient:</strong> Forge posts confirmation and starts RCA analysis.</p>
-<hr />
-<h3 id="2-rca-analysis">2. RCA Analysis<a class="headerlink" href="#2-rca-analysis" title="Permanent link">&para;</a></h3>
-<p>Forge selects one configured repository for the RCA, applies its <code>repo:&lt;owner&gt;/&lt;repo&gt;</code> label after validation, and then performs hypothesis-driven codebase exploration against that repository:</p>
-<ul>
-<li>Forms ranked candidate root causes</li>
-<li>Investigates each with <code>grep</code>, <code>git blame</code>, and file reads</li>
-<li>Accepts or rejects each hypothesis with evidence</li>
-<li>Writes <code>.forge/rca.json</code> with summary, code location, mechanism, confidence, and 1–4 fix options</li>
-</ul>
-<p>The RCA then goes through a <strong>reflection loop</strong> (up to 3 iterations) where a second container validates it for correctness — confirming file/function existence, mechanism plausibility, distinct fix options, and git history attribution. Failures loop back to re-analysis with the critique.</p>
-<hr />
-<h3 id="3-rca-option-gate">3. RCA Option Gate<a class="headerlink" href="#3-rca-option-gate" title="Permanent link">&para;</a></h3>
-<p>Forge posts the validated RCA as a structured Jira comment with numbered fix options and sets <code>forge:rca-pending</code>.</p>
-<p><strong>Human actions:</strong>
-- <strong>Select an option:</strong> Reply with <code>&gt;option N</code> (e.g., <code>&gt;option 1</code>). Case-insensitive; can appear anywhere in the comment.
-- <strong>Request revision:</strong> Start a comment with <code>!</code> — Forge regenerates the RCA incorporating your input.
-- <strong>Ask a question:</strong> Prefix with <code>?</code> or <code>@forge ask</code> — Forge answers without advancing the workflow.</p>
-<p>Plain comments (no prefix) are ignored by the workflow.</p>
-<hr />
-<h3 id="4-planning">4. Planning<a class="headerlink" href="#4-planning" title="Permanent link">&para;</a></h3>
-<p>After option selection, Forge produces a concrete implementation plan covering specific files, tests, and order of operations. The selected repository is tagged <code>repo:&lt;owner&gt;/&lt;name&gt;</code> for validated task decomposition; a revision does not remove that retained repository assignment.</p>
-<p>The plan is posted as a Jira comment and <code>forge:plan-pending</code> is set.</p>
-<p><strong>Human actions:</strong>
-- <strong>Approve:</strong> Change label to <code>forge:plan-approved</code>.
-- <strong>Request revision:</strong> Start a comment with <code>!</code> — Forge regenerates the plan with your feedback.
-- <strong>Ask a question:</strong> Prefix with <code>?</code> or <code>@forge ask</code>.</p>
-<p>Plain comments (no prefix) are ignored by the workflow.</p>
-<hr />
-<h3 id="5-decompose-implementation">5. Decompose → Implementation<a class="headerlink" href="#5-decompose-implementation" title="Permanent link">&para;</a></h3>
-<p>After plan approval, Forge:</p>
-<ol>
-<li><strong>Decomposes</strong> the plan into one Jira Task per repository identified in the plan, each linked to the bug ticket.</li>
-<li><strong>Clones</strong> each repo into an isolated workspace.</li>
-<li><strong>Implements</strong> the fix using a container that follows the plan, using TDD with bidirectional test validation.</li>
-<li><strong>Qualitative review:</strong> A 7-item checklist verifies root-cause alignment, test proof, stability, plan scope adherence, call-site completeness, backward compatibility, and bidirectional validation. Up to 2 retry passes before proceeding.</li>
-<li><strong>Updates documentation</strong> (non-blocking).</li>
-<li><strong>Creates a fork-based PR</strong> with a release note section (Component, Fix, Root cause, Impact).</li>
-<li><strong>CI validation</strong> with automatic fix loop.</li>
-<li><strong>Human review</strong> gate.</li>
-<li><strong>Post-merge summary:</strong> After merge, Forge posts a fix summary and release note to the Jira ticket.</li>
-</ol>
-<div class="admonition note">
-<p class="admonition-title">PR Merge Reconciliation</p>
-<p>A merged pull request is terminally reconciled by its repository namespace and pull request number, not by its head SHA. This design ensures that merge detection remains robust and unaffected by commit rebuilds, squashing, or rebase operations during review.</p>
-</div>
-<hr />
-<h2 id="comment-syntax">Comment Syntax<a class="headerlink" href="#comment-syntax" title="Permanent link">&para;</a></h2>
-<p>At any approval gate, Forge classifies your comment by its prefix:</p>
-<ul>
-<li><strong><code>!</code> prefix</strong> — revision request: Forge regenerates the current artifact with your feedback</li>
-<li><strong><code>?</code> prefix or <code>@forge ask</code></strong> — question: Forge answers and stays paused</li>
-<li><strong><code>&gt;option N</code></strong> — RCA option selection (RCA Option Gate only)</li>
-<li><strong>No prefix</strong> — informational: ignored by the workflow</li>
-</ul>
-<hr />
-<h2 id="merge-conflicts">Merge Conflicts<a class="headerlink" href="#merge-conflicts" title="Permanent link">&para;</a></h2>
-<p>Bug fix PRs are created from fork branches. If <code>main</code> advances while the PR is open, merge conflicts can prevent CI from running. Post <code>/forge rebase</code> as a PR comment to trigger AI-assisted conflict resolution. See <a href="../pr-commands/">PR Commands</a> for details.</p>
-<hr />
-<h2 id="key-differences-from-feature-workflow">Key Differences from Feature Workflow<a class="headerlink" href="#key-differences-from-feature-workflow" title="Permanent link">&para;</a></h2>
+<h1 id="control-plane-architecture">Control-plane architecture<a class="headerlink" href="#control-plane-architecture" title="Permanent link">&para;</a></h1>
+<p>Forge coordinates distributed systems that can retry, race, fail mid-write, or
+disagree. Its control plane makes the ownership of external facts, workflow
+decisions, agent work, and provider mutations explicit.</p>
+<pre class="mermaid"><code>flowchart LR
+  E[Provider event] --&gt; A[Ingress adapter]
+  A --&gt; O[Versioned observation]
+  O --&gt; L[Reconciliation ledger]
+  L --&gt;|accepted| C[Workflow command]
+  L --&gt;|duplicate, stale, conflict| T[Execution timeline]
+  C --&gt; P[Pinned definition and checkpoint]
+  P --&gt; N[Graph node]
+  N --&gt; S[Typed station]
+  S --&gt; R[Validated reducer]
+  R --&gt; P
+  N --&gt; F[Effect command]
+  F --&gt; J[Durable effect journal]
+  J --&gt; X[Provider executor]</code></pre>
+<h2 id="ownership-model">Ownership model<a class="headerlink" href="#ownership-model" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th></th>
-<th>Feature</th>
-<th>Bug</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Planning stages</td>
-<td>4 (PRD → Spec → Epics → Tasks)</td>
-<td>5 (Triage → RCA → Options → Plan → Decompose)</td>
-</tr>
-<tr>
-<td>Approval labels</td>
-<td><code>prd-approved</code>, <code>spec-approved</code>, <code>plan-approved</code>, <code>task-approved</code></td>
-<td><code>plan-approved</code></td>
-</tr>
-<tr>
-<td>Implementation</td>
-<td>Multi-task, multi-repo, parallel capable</td>
-<td>Per-repo task, sequential</td>
-</tr>
-<tr>
-<td>Post-merge</td>
-<td>—</td>
-<td>Fix summary + release note posted to Jira</td>
-</tr>
-</tbody>
-</table>
-<hr />
-<h2 id="labels">Labels<a class="headerlink" href="#labels" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Label</th>
-<th>Set by</th>
+<th>Record</th>
+<th>Owner</th>
 <th>Purpose</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>forge:managed</code></td>
-<td>Human</td>
-<td>Activate Forge for this bug</td>
+<td>Observation</td>
+<td>Jira, source control, or poller</td>
+<td>A versioned external fact and delivery identity.</td>
 </tr>
 <tr>
-<td><code>forge:triage-pending</code></td>
+<td>Observation decision</td>
+<td>Reconciliation ledger</td>
+<td>Whether evidence is accepted, duplicate, stale, or conflicting.</td>
+</tr>
+<tr>
+<td>Workflow command</td>
+<td>Command boundary</td>
+<td>The semantic operation requested by accepted evidence.</td>
+</tr>
+<tr>
+<td>Definition and checkpoint</td>
 <td>Forge</td>
-<td>Ticket incomplete, waiting for reporter</td>
+<td>The immutable workflow revision, saved position, and workflow-owned state.</td>
 </tr>
 <tr>
-<td><code>forge:rca-pending</code></td>
+<td>Station attempt</td>
 <td>Forge</td>
-<td>RCA posted, waiting for option selection</td>
+<td>A bounded request, validated result, and owned state update.</td>
 </tr>
 <tr>
-<td><code>forge:plan-pending</code></td>
-<td>Forge</td>
-<td>Plan posted, waiting for approval</td>
+<td>Effect record</td>
+<td>Effect journal</td>
+<td>Intent, lease, attempts, provider evidence, and idempotent external write.</td>
 </tr>
 <tr>
-<td><code>forge:plan-approved</code></td>
-<td>Human</td>
-<td>Approve plan, trigger decompose + implementation</td>
-</tr>
-<tr>
-<td><code>forge:blocked</code></td>
-<td>Forge</td>
-<td>Workflow blocked, needs intervention</td>
-</tr>
-<tr>
-<td><code>forge:retry</code></td>
-<td>Human</td>
-<td>Resume from the failed node</td>
+<td>Execution timeline</td>
+<td>Read-model projection</td>
+<td>An explainable view of why a run is waiting, blocked, or complete.</td>
 </tr>
 </tbody>
 </table>
-<p>See <a href="../labels/">Jira Labels</a> for the full reference.</p>
-<p>For blocked effects, provider-event conflicts, and safe replay, see <a href="../../operations/">Operations</a>.</p>
+<p>External systems own their facts. Forge owns how those facts are reconciled and
+which process transition they authorize. A webhook payload must not mutate
+<code>current_node</code>, definition identity, approval state, or effect-journal fields.</p>
+<h2 id="main-boundaries">Main boundaries<a class="headerlink" href="#main-boundaries" title="Permanent link">&para;</a></h2>
+<h3 id="observations-and-commands">Observations and commands<a class="headerlink" href="#observations-and-commands" title="Permanent link">&para;</a></h3>
+<p>Ingress adapters normalize webhook and poller payloads into stable observations.
+The ledger is the precondition for command handling, so duplicate and
+out-of-order delivery converges instead of advancing a workflow twice. Commands
+are then checked against the active definition's transition policy.</p>
+<h3 id="pinned-declarative-definitions">Pinned declarative definitions<a class="headerlink" href="#pinned-declarative-definitions" title="Permanent link">&para;</a></h3>
+<p>Definitions provide the workflow topology: entry, nodes, edges, routed
+branches, joins, and flow execution settings. Each workflow instance pins its
+name, revision, digest, and canonical definition. Publishing a new definition
+changes future selection only; it cannot silently alter an in-flight ticket.</p>
+<p>The trusted catalog provides authority: node identity, station contracts,
+allowed effects, mandatory policies, preconditions, and observation behavior.
+Project authors configure flow with a declarative definition; they cannot grant
+new authority. See <a href="../../reference/declarative-workflows/">declarative workflows</a>.</p>
+<h3 id="typed-stations">Typed stations<a class="headerlink" href="#typed-stations" title="Permanent link">&para;</a></h3>
+<p>A projector creates a versioned, narrow station request from owned checkpoint
+fields. A station performs one bounded operation such as artifact generation,
+triage, review, task routing, implementation input resolution, or sandbox
+execution. Its reducer validates the outcome and writes only fields assigned to
+that station.</p>
+<p>Planning and review run on the host. Implementation runs in a rootless Podman
+container. Containers do not receive Jira, Redis, or source-control
+credentials; provider writes return through effects.</p>
+<h3 id="durable-effects-and-read-models">Durable effects and read models<a class="headerlink" href="#durable-effects-and-read-models" title="Permanent link">&para;</a></h3>
+<p>Nodes request external writes through <code>EffectCommand</code> values. The effect journal
+persists intent before contacting a provider, leases one executor, and retains
+attempt/provider evidence. Recovery reuses the effect's idempotency identity,
+which avoids repeating agent work after a crash.</p>
+<p>Read models join the checkpoint, definition, observations, commands, station
+attempts, and effects. They are diagnostic projections, never an alternate
+control path. See <a href="../../operations/">operations</a> for recovery procedures.</p>
+<h2 id="extending-forge-safely">Extending Forge safely<a class="headerlink" href="#extending-forge-safely" title="Permanent link">&para;</a></h2>
+<p>There are two distinct extension paths.</p>
+<h3 id="project-administrators-declarative-configuration">Project administrators: declarative configuration<a class="headerlink" href="#project-administrators-declarative-configuration" title="Permanent link">&para;</a></h3>
+<p>Project configuration can select a built-in or published workflow and compose
+catalog-registered nodes, routers, transitions, joins, concurrency, and resume
+mappings. It can configure repositories, proposal review, skills, and model
+policy. It cannot execute Python or shell code, store credentials, make provider
+calls, add an effect operation, or relax trusted policies.</p>
+<h3 id="core-maintainers-trusted-capabilities">Core maintainers: trusted capabilities<a class="headerlink" href="#core-maintainers-trusted-capabilities" title="Permanent link">&para;</a></h3>
+<p>Adding a lifecycle capability requires code and contract changes in this order:</p>
+<ol>
+<li>Classify the change as an external observation, semantic command, bounded
+   station operation, effect, or topology change.</li>
+<li>Define or update the versioned domain/station/structured-output contract.</li>
+<li>Add an ingress adapter and command mapping when external evidence begins the
+   behavior; provide stable identities and reconciliation semantics.</li>
+<li>Add a narrow projector, station, reducer, and contract tests for work that
+   consumes or changes workflow state.</li>
+<li>Add a stable effect operation and executor for every provider write, with
+   idempotency, retry, and provider-evidence tests.</li>
+<li>Register the trusted node/router/station/effect authority in the catalog,
+   then change the built-in definition or supported flow accordingly.</li>
+<li>Increment workflow revisions when topology changes, validate/render/diff the
+   definition, and simulate migration for saved positions.</li>
+<li>Ensure the observation, command, station, and effect evidence appears in the
+   execution timeline; test duplicate delivery and worker restart recovery.</li>
+</ol>
+<p>Avoid shortcuts: direct provider writes from nodes, webhook-driven graph
+updates, unrestricted agent access to checkpoints, or Python branches that
+silently change topology reintroduce the failure modes these boundaries prevent.</p>
 
 
 
