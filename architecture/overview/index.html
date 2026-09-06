@@ -27,7 +27,7 @@
     
     
       
-        <title>System & Components - Forge SDLC Guide</title>
+        <title>System and components - Forge SDLC Guide</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#system-components" class="md-skip">
+        <a href="#system-and-components" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              System &amp; Components
+              System and components
             
           </span>
         </div>
@@ -964,7 +964,7 @@
   <span class="md-ellipsis">
     
   
-  System & Components
+  System and Components
 
     
   </span>
@@ -981,7 +981,7 @@
   <span class="md-ellipsis">
     
   
-  System & Components
+  System and Components
 
     
   </span>
@@ -1007,10 +1007,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#system-context" class="md-nav__link">
+  <a href="#runtime-responsibilities" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        System Context
+        Runtime responsibilities
       </span>
     </span>
   </a>
@@ -1018,10 +1018,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#component-responsibilities" class="md-nav__link">
+  <a href="#process-ownership" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Component Responsibilities
+        Process ownership
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#model-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Model execution
       </span>
     </span>
   </a>
@@ -1051,7 +1062,34 @@
   <span class="md-ellipsis">
     
   
-  Internals
+  Runtime Internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../structured-output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Structured Model Output
 
     
   </span>
@@ -1679,10 +1717,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#system-context" class="md-nav__link">
+  <a href="#runtime-responsibilities" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        System Context
+        Runtime responsibilities
       </span>
     </span>
   </a>
@@ -1690,10 +1728,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#component-responsibilities" class="md-nav__link">
+  <a href="#process-ownership" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Component Responsibilities
+        Process ownership
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#model-execution" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Model execution
       </span>
     </span>
   </a>
@@ -1723,77 +1772,57 @@
   
 
 
-<h1 id="system-components">System &amp; Components<a class="headerlink" href="#system-components" title="Permanent link">&para;</a></h1>
-<h2 id="system-context">System Context<a class="headerlink" href="#system-context" title="Permanent link">&para;</a></h2>
-<p>Forge sits between project management (Jira), source control (GitHub), and LLM providers, orchestrating work from ticket creation through merged PR.</p>
+<h1 id="system-and-components">System and components<a class="headerlink" href="#system-and-components" title="Permanent link">&para;</a></h1>
+<p>Forge is a centralized, durable workflow engine for an agentic SDLC. Jira and source-control
+systems remain authoritative for their domain facts. Forge owns process interpretation: the
+versioned process definition, each run's pinned definition and position, transition decisions,
+station attempts, and external-effect history.</p>
 <pre class="mermaid"><code>flowchart LR
-    A["Jira / GitHub\n(webhooks)"] --&gt; B["Gateway\n(FastAPI)"]
-    B --&gt; C["Redis\n(Streams + State)"]
-    C --&gt; D["Workers\n(LangGraph)"]
-    D --&gt; E["Podman\nContainers"]
-    D &lt;--&gt; F["LLM\n(Claude / Gemini)"]
-    E &lt;--&gt; F
-    D --&gt; A</code></pre>
-<p><strong>External actors:</strong></p>
+    External["Jira / source control"] --&gt;|webhook or poller observation| Gateway["Gateway"]
+    Gateway --&gt; Queue["Redis Streams"]
+    Queue --&gt; Worker["Worker control plane"]
+    Worker --&gt; Ledger["Observation ledger"]
+    Worker --&gt; Engine["Pinned workflow instance"]
+    Engine --&gt; Station["Typed station"]
+    Station --&gt; Agent["Deep Agent / sandbox"]
+    Engine --&gt; Effects["Durable effect journal"]
+    Effects --&gt; External
+    Worker --&gt; ReadModel["Execution timeline and read model"]</code></pre>
+<h2 id="runtime-responsibilities">Runtime responsibilities<a class="headerlink" href="#runtime-responsibilities" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Jira</strong>: Source of ticket lifecycle events (issue and comment webhooks)</li>
-<li><strong>GitHub</strong>: Source of PR, CI, and code review events (PR, check suite, and review webhooks)</li>
-<li><strong>LLM providers</strong>: Anthropic (direct API) and Google Vertex AI (Claude and Gemini models)</li>
-<li><strong>Langfuse</strong>: Optional observability for LLM call tracing and cost tracking</li>
-<li><strong>Human reviewers</strong>: Approve or revise artifacts at defined workflow gates</li>
+<li><strong>Gateway</strong> authenticates Jira and source-control webhooks and enqueues their payloads. It
+  contains no process-routing rules.</li>
+<li><strong>Poller</strong> is a peer ingress source. Webhooks improve latency; polling supplies recovery. Both
+  become the same versioned <code>Observation</code> before process logic sees them.</li>
+<li><strong>Observation ledger</strong> deduplicates equivalent webhook/poller deliveries, rejects stale or
+  conflicting revisions, and prevents external observations from changing workflow-owned facts.</li>
+<li><strong>Worker</strong> adapts accepted observations into validated commands, resolves the workflow instance,
+  and invokes its pinned definition. It does not embed an independent per-ingress workflow.</li>
+<li><strong>Workflow engine</strong> compiles built-in or project-published definitions to LangGraph. An instance
+  pins the definition name, revision, digest, and current position in its durable checkpoint.</li>
+<li><strong>Stations</strong> implement bounded operations through Forge-owned typed requests and outcomes.
+  Projectors and reducers isolate station code from the complete checkpoint and graph runtime.</li>
+<li><strong>Effect service</strong> journals required Jira, source-control, and repository mutations before
+  execution and records attempts and provider evidence for safe recovery or operator replay.</li>
+<li><strong>Sandbox</strong> runs implementation work in an ephemeral rootless Podman container. It receives the
+  repository and model credentials, but not Jira, Redis, or source-control credentials.</li>
+<li><strong>Read models</strong> combine the pinned process manifest, checkpoint, observation decisions, station
+  attempts, and effects into an operator-facing execution status and timeline.</li>
 </ul>
-<h2 id="component-responsibilities">Component Responsibilities<a class="headerlink" href="#component-responsibilities" title="Permanent link">&para;</a></h2>
-<pre class="mermaid"><code>flowchart TD
-    subgraph External["External Systems"]
-        Jira
-        GitHub
-        Langfuse["Langfuse (Observability)"]
-    end
-
-    subgraph Gateway["FastAPI Gateway (:8000)"]
-        JiraWH["POST /api/v1/webhooks/jira"]
-        GitHubWH["POST /api/v1/webhooks/github"]
-    end
-
-    subgraph Queue["Redis"]
-        Streams["Streams: forge:events:jira\nforge:events:github"]
-        State["AsyncRedisSaver\nLangGraph checkpointing"]
-    end
-
-    subgraph Workers["Worker Processes (consumer group: forge-workers)"]
-        Router{"WorkflowRouter\nroute by issue type"}
-        Feature["FeatureWorkflow\n(Feature/Story)"]
-        Bug["BugWorkflow\n(Bug)"]
-        Task["TaskTakeoverWorkflow\n(Task/Epic)"]
-    end
-
-    subgraph Container["Podman Container (ephemeral)"]
-        Agent["Deep Agents + MCP\n/workspace (repo mounted)"]
-    end
-
-    LLM["LLM Backends\nAnthropic API (Claude)\nVertex AI (Claude/Gemini)"]
-
-    Jira -- webhooks --&gt; JiraWH
-    GitHub -- webhooks --&gt; GitHubWH
-    JiraWH --&gt; Streams
-    GitHubWH --&gt; Streams
-    Streams --&gt; Router
-    Router --&gt; Feature
-    Router --&gt; Bug
-    Router --&gt; Task
-    Feature --&gt; Container
-    Bug --&gt; Container
-    Task --&gt; Container
-    Workers &lt;--&gt; LLM
-    Container &lt;--&gt; LLM
-    Workers --&gt; Jira
-    Workers --&gt; GitHub
-    Workers --&gt; Langfuse</code></pre>
-<p><strong>Gateway (FastAPI)</strong>: Accepts webhooks over HTTPS, validates HMAC-SHA256 signatures, and publishes events to Redis Streams. Performs no workflow logic.</p>
-<p><strong>Worker</strong>: Consumes events from Redis Streams via the <code>forge-workers</code> consumer group. The <code>WorkflowRouter</code> resolves the target LangGraph workflow (Feature, Bug, or Task Takeover) based on Jira issue type and drives execution through planning, implementation, CI repair, and human review stages.</p>
-<p><strong>Redis</strong>: Event bus (Redis Streams), workflow state store (LangGraph <code>AsyncRedisSaver</code> checkpoints per ticket), retry queue, dead-letter queue, and supporting indexes (PR-to-ticket mapping, deduplication keys).</p>
-<p><strong>Podman Container</strong>: Ephemeral rootless containers that execute implementation tasks. Each container receives the repo at <code>/workspace</code> (read-write), a task file at <code>/task.json</code> (read-only), and LLM credentials. Runs Deep Agents with MCP tool access. The orchestrator handles pushing and PR creation after the container exits.</p>
-<p><strong>LLM Backends</strong>: Claude and Gemini models called by both orchestrator nodes (planning, review) and container agents (code generation). Supports Anthropic direct API and Google Vertex AI, selected automatically based on configured credentials.</p>
+<h2 id="process-ownership">Process ownership<a class="headerlink" href="#process-ownership" title="Permanent link">&para;</a></h2>
+<p>Forge ships immutable, versioned golden-path definitions for Feature/Story, Bug, and managed
+Task/Epic workflows. Project administrators can publish constrained definitions composed only from
+registered nodes, routes, gates, and stations. Effect authority is attached to those trusted nodes
+in the Forge catalog rather than granted by workflow authors. Definitions cannot execute arbitrary
+Python, expand node authority, or weaken mandatory policies. See
+<a href="../../reference/declarative-workflows/">Declarative workflows</a>.</p>
+<p>Exceptional user commands are handled outside lifecycle topology. For example, <code>/forge rebase</code>
+executes a trusted command operation and then resumes the saved workflow position; it is not a
+workflow node with branches to every possible return stage.</p>
+<h2 id="model-execution">Model execution<a class="headerlink" href="#model-execution" title="Permanent link">&para;</a></h2>
+<p>Planning and review stations use Deep Agents. Data-shaped decisions use strict Pydantic response
+contracts with provider-native structured output and a validated tool-strategy fallback; narrative
+artifacts remain Markdown. See <a href="../structured-output/">Structured model output</a>.</p>
 
 
 

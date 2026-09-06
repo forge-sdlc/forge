@@ -10,7 +10,7 @@
       
       
       
-        <link rel="canonical" href="https://forge-sdlc.github.io/forge/architecture/option-b-decoupling-plan/">
+        <link rel="canonical" href="https://forge-sdlc.github.io/forge/architecture/forge-2.0-control-plane-design/">
       
       
       
@@ -23,7 +23,7 @@
     
     
       
-        <title>Option B alignment and decoupling plan - Forge SDLC Guide</title>
+        <title>Forge 2.0 control-plane architecture for developers - Forge SDLC Guide</title>
       
     
     
@@ -79,7 +79,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#option-b-alignment-and-decoupling-plan" class="md-skip">
+        <a href="#forge-20-control-plane-architecture-for-developers" class="md-skip">
           Skip to content
         </a>
       
@@ -112,7 +112,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Option B alignment and decoupling plan
+              Forge 2.0 control-plane architecture for developers
             
           </span>
         </div>
@@ -943,7 +943,7 @@
   <span class="md-ellipsis">
     
   
-  System & Components
+  System and Components
 
     
   </span>
@@ -970,7 +970,34 @@
   <span class="md-ellipsis">
     
   
-  Internals
+  Runtime Internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../structured-output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Structured Model Output
 
     
   </span>
@@ -1595,10 +1622,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#target-architecture" class="md-nav__link">
+  <a href="#the-architectural-shift" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Target architecture
+        The architectural shift
       </span>
     </span>
   </a>
@@ -1606,10 +1633,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#impact-of-the-pending-dev-merge" class="md-nav__link">
+  <a href="#dependency-and-pr-map" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Impact of the pending <code>dev</code> merge
+        Dependency and PR map
       </span>
     </span>
   </a>
@@ -1617,121 +1644,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#architectural-rules" class="md-nav__link">
+  <a href="#layer-1-domain-contracts-and-provider-neutrality-pr-324" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Architectural rules
+        Layer 1: domain contracts and provider neutrality (PR 324)
       </span>
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#delivery-plan" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Delivery plan
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Delivery plan">
+    <nav class="md-nav" aria-label="Layer 1: domain contracts and provider neutrality (PR 324)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#phase-0-baseline-behavior-and-dependency-map" class="md-nav__link">
+  <a href="#consequences-for-new-providers" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Phase 0 — Baseline behavior and dependency map
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-1-establish-versioned-domain-contracts" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Phase 1 — Establish versioned domain contracts
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-2-split-event-interpretation-out-of-the-worker" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Phase 2 — Split event interpretation out of the worker
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-3-add-an-idempotent-effect-journal" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Phase 3 — Add an idempotent effect journal
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-4-migrate-nodes-into-independently-executable-stations" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Phase 4 — Migrate nodes into independently executable stations
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-5-make-graphs-purely-coordinative-and-governed" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Phase 5 — Make graphs purely coordinative and governed
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-6-formalize-poller-reconciliation-semantics" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Phase 6 — Formalize poller reconciliation semantics
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-7-add-process-and-execution-read-models" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Phase 7 — Add process and execution read models
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#phase-8-remove-compatibility-paths" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Phase 8 — Remove compatibility paths
+        Consequences for new providers
       </span>
     </span>
   </a>
@@ -1744,88 +1672,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#recommended-migration-order" class="md-nav__link">
+  <a href="#layer-2-commands-are-the-only-ingress-into-process-control-pr-325" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Recommended migration order
+        Layer 2: commands are the only ingress into process control (PR 325)
       </span>
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#implications-and-trade-offs" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Implications and trade-offs
-      </span>
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Implications and trade-offs">
+    <nav class="md-nav" aria-label="Layer 2: commands are the only ingress into process control (PR 325)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#product-and-governance" class="md-nav__link">
+  <a href="#development-rule" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Product and governance
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#engineering" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Engineering
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#runtime-and-data" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Runtime and data
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#operations-and-observability" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Operations and observability
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#security" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Security
-      </span>
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#performance-and-cost" class="md-nav__link">
-    <span class="md-ellipsis">
-      <span class="md-typeset">
-        Performance and cost
+        Development rule
       </span>
     </span>
   </a>
@@ -1838,10 +1700,205 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#program-level-completion-criteria" class="md-nav__link">
+  <a href="#layer-3-external-writes-are-durable-effects-pr-326" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Program-level completion criteria
+        Layer 3: external writes are durable effects (PR 326)
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 3: external writes are durable effects (PR 326)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-idempotency-is-non-negotiable" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Why idempotency is non-negotiable
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#development-rule_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Development rule
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-4-typed-stations-narrow-agent-and-execution-authority-pr-327" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Layer 4: typed stations narrow agent and execution authority (PR 327)
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 4: typed stations narrow agent and execution authority (PR 327)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#development-rule_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Development rule
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-5-workflows-are-governed-declarative-processes-pr-328" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Layer 5: workflows are governed, declarative processes (PR 328)
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 5: workflows are governed, declarative processes (PR 328)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#definition-authoring-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Definition authoring rule
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-6-reconciliation-makes-multiple-ingress-sources-converge-pr-331" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Layer 6: reconciliation makes multiple ingress sources converge (PR 331)
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 6: reconciliation makes multiple ingress sources converge (PR 331)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#architectural-consequence" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Architectural consequence
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-7-read-models-are-projections-not-an-alternate-control-path-pr-329" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Layer 7: read models are projections, not an alternate control path (PR 329)
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Layer 7: read models are projections, not an alternate control path (PR 329)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#development-rule_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Development rule
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#layer-8-the-cutover-is-intentionally-strict-prs-330-and-332" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Layer 8: the cutover is intentionally strict (PRs 330 and 332)
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-implement-a-change-after-the-cutover" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        How to implement a change after the cutover
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design-mistakes-the-new-architecture-is-meant-to-prevent" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Design mistakes the new architecture is meant to prevent
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#integration-fixes-validated-with-the-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Integration fixes validated with the stack
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architectural-bottom-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Architectural bottom line
       </span>
     </span>
   </a>
@@ -1863,7 +1920,7 @@
                 
                   
   
-    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/architecture/option-b-decoupling-plan.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/forge-sdlc/forge/edit/main/docs/architecture/forge-2.0-control-plane-design.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-file-pen" viewBox="0 0 24 24"><path d="M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34"/><path d="M14 2v5a1 1 0 0 0 1 1h5M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z"/></svg>
     </a>
@@ -1871,342 +1928,418 @@
   
 
 
-<h1 id="option-b-alignment-and-decoupling-plan">Option B alignment and decoupling plan<a class="headerlink" href="#option-b-alignment-and-decoupling-plan" title="Permanent link">&para;</a></h1>
-<p><strong>Status:</strong> Proposed</p>
-<p><strong>Scope:</strong> Forge control plane, workflow definitions, nodes, provider adapters, and the
-Forge–poller boundary</p>
-<p><strong>Intent:</strong> Preserve Forge as the authoritative, checkpointed workflow engine while
-reducing coupling between event ingestion, process coordination, station logic, and
-external side effects.</p>
-<h2 id="target-architecture">Target architecture<a class="headerlink" href="#target-architecture" title="Permanent link">&para;</a></h2>
-<p>Forge implements the centralized workflow-engine model. LangGraph and Forge-owned
-workflow definitions decide which transition is valid next. A workflow instance carries
-its position, version, gate outcomes, and references to durable artifacts. The sibling
-<code>forge-poller</code> project supplies reconciliation observations when webhooks are unavailable
-or missed; it does not determine workflow position or select the next station.</p>
-<p>The intended boundaries are:</p>
-<ol>
-<li><strong>Poller and webhook gateway:</strong> produce normalized, replayable observations.</li>
-<li><strong>Event adapters:</strong> translate observations into workflow commands without knowing graph
-   topology.</li>
-<li><strong>Workflow engine:</strong> owns process position, transition validity, policy gates,
-   checkpointing, concurrency, and definition versioning.</li>
-<li><strong>Stations:</strong> perform bounded domain operations through versioned input/output
-   contracts without reading or replacing the complete workflow state.</li>
-<li><strong>Effect handlers:</strong> perform Jira, source-control, execution, and notification writes
-   through idempotent commands outside station business logic.</li>
-<li><strong>Read models:</strong> explain workflow position, waiting reasons, transition history, and
-   external-resource status without changing execution state.</li>
-</ol>
-<p>This preserves Option B's single executable process definition while preventing the graph
-or worker from absorbing provider details and station implementation logic.</p>
-<h2 id="impact-of-the-pending-dev-merge">Impact of the pending <code>dev</code> merge<a class="headerlink" href="#impact-of-the-pending-dev-merge" title="Permanent link">&para;</a></h2>
-<p>The pending <code>dev</code> changes do not alter the target architecture or the rationale for this
-plan. They implement useful portions of it and therefore change the starting point and
-sequencing:</p>
-<ul>
-<li>The provider-neutral source-control contracts and GitHub adapter are the foundation for
-  effect handlers and source-control observations. Extend these contracts; do not add a
-  second generic provider interface.</li>
-<li><code>NormalizedEvent</code> and its Redis transport are the starting point for <code>Observation</code>.
-  Evolve or wrap that type with schema version, observed-resource revision, origin
-  (<code>webhook</code> or <code>poller</code>), and stable deduplication identity rather than introducing a
-  parallel event envelope.</li>
-<li>The source-control conformance suite is the model for station, effect-handler, and
-  poller/webhook conformance suites.</li>
-<li>The test preventing workflow code from importing the concrete GitHub client is an
-  initial architecture fitness check. Generalize it to all concrete providers and to
-  prohibited dependency directions.</li>
-<li>Shared post-PR graph wiring removes graph duplication and is a useful intermediate
-  step. It is not yet the final station boundary because its routers still read the broad
-  workflow-state dictionary.</li>
-<li>The concurrent CI/review work makes command validation and deterministic event handling
-  more important: CI, review, and merge observations can legitimately arrive in any
-  order, while the workflow graph remains authoritative for progression.</li>
-</ul>
-<p>Accordingly, Phase 0 and the source-control portions of Phases 1, 2, and 5 are partially
-delivered by <code>dev</code>. After merging, first reconcile the provider contracts, normalized
-event model, workflow state additions, and shared graph code with the declarative-workflow
-and layered-state branches. Then baseline the combined tree before further extraction.</p>
-<p>This is a semantic integration, not only a Git merge: both lines modify the worker,
-workflow base state, and the built-in graphs. Preserve <code>dev</code>'s provider-neutral contracts
-and normalized ingress while preserving the current branch's workflow revision,
-precondition, artifact, and work-unit semantics.</p>
-<h2 id="architectural-rules">Architectural rules<a class="headerlink" href="#architectural-rules" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Workflow position and definition version are authoritative inside Forge. Jira labels,
-  GitHub state, and poller events are observations or gate inputs, not an alternative
-  program counter.</li>
-<li>A station receives a station-specific input and returns a versioned outcome. It cannot
-  mutate arbitrary workflow fields.</li>
-<li>Graph routers use normalized outcomes and policy decisions, not provider payloads.</li>
-<li>External writes are expressed as idempotent effect commands with stable keys. A
-  transition is not considered operationally complete until its required effects have a
-  durable result.</li>
-<li>Provider-specific types stop at adapter boundaries.</li>
-<li>New declarative workflows compose registered station contracts, gates, and routers;
-  they cannot import implementation code or bypass mandatory policies.</li>
-<li>Built-in and declarative workflows use the same runtime contracts and migration rules.</li>
-</ul>
-<h2 id="delivery-plan">Delivery plan<a class="headerlink" href="#delivery-plan" title="Permanent link">&para;</a></h2>
-<h3 id="phase-0-baseline-behavior-and-dependency-map">Phase 0 — Baseline behavior and dependency map<a class="headerlink" href="#phase-0-baseline-behavior-and-dependency-map" title="Permanent link">&para;</a></h3>
-<p><strong>Status:</strong> Implemented. See
-<a href="../stage-0-integration-baseline/">Stage 0 integration baseline</a>.</p>
-<p>Document the state fields read and written by every node, all provider calls made by each
-node, graph routes, checkpoint boundaries, and side effects. Add characterization tests
-for the feature, bug, and task golden paths, including duplicate events, restarts between
-an external write and checkpointing, revision upgrades, and poller/webhook duplicates.</p>
-<p>Deliverables:</p>
-<ul>
-<li>A generated node-to-state/effect dependency report in CI.</li>
-<li>End-to-end fixtures for representative Jira, GitHub, and poller observations.</li>
-<li>Architecture fitness checks that reject new imports from provider clients into the
-  workflow-domain and station-contract packages.</li>
-<li>Baseline measures for worker size, fields touched per node, duplicate effects, recovery
-  time, and workflow migration failures.</li>
-</ul>
-<p>Exit criterion: later phases can demonstrate behavioral equivalence and quantify reduced
-coupling.</p>
-<h3 id="phase-1-establish-versioned-domain-contracts">Phase 1 — Establish versioned domain contracts<a class="headerlink" href="#phase-1-establish-versioned-domain-contracts" title="Permanent link">&para;</a></h3>
-<p>Introduce small, Forge-owned contracts independent of LangGraph and providers:</p>
-<ul>
-<li><code>Observation</code>: source, external identity, resource identity, observed revision/time,
-  normalized facts, and correlation metadata.</li>
-<li><code>WorkflowCommand</code>: start, resume, approve, reject, retry, cancel, or synchronize an
-  existing instance.</li>
-<li><code>StationRequest[T]</code>: workflow/run identity, station invocation identity, scoped inputs,
-  artifact references, policy context, and attempt metadata.</li>
-<li><code>StationOutcome[T]</code>: success, blocked, waiting, retryable failure, or terminal failure,
-  plus typed outputs and requested effects.</li>
-<li><code>EffectCommand</code> and <code>EffectResult</code>: stable idempotency key, expected precondition,
-  provider-neutral operation, and durable result.</li>
-</ul>
-<p>After the <code>dev</code> merge, these contracts must compose with the existing source-control
-contracts. <code>Observation</code> should be an evolution or provider-independent wrapper of
-<code>NormalizedEvent</code>; <code>EffectCommand</code> should use <code>SourceControlProvider</code> operations through
-handlers rather than duplicate them.</p>
-<p>Create explicit state projections for each station. Retain the existing <code>BaseState</code> as a
-checkpoint representation initially, but access it through projectors and reducers:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>checkpoint state -&gt; station input projector -&gt; station
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>station outcome   -&gt; validated reducer       -&gt; checkpoint update
+<h1 id="forge-20-control-plane-architecture-for-developers">Forge 2.0 control-plane architecture for developers<a class="headerlink" href="#forge-20-control-plane-architecture-for-developers" title="Permanent link">&para;</a></h1>
+<p>This is the developer and architect guide to the control-plane stack delivered
+by PRs 324–332. It explains the design intent, the ownership rules that replace
+the pre-2.0 implementation style, and how to extend Forge without bypassing
+the new correctness boundaries.</p>
+<p>For release, deployment, and operator procedures, see
+<a href="../../forge-2.0-control-plane-guide/"><code>../forge-2.0-control-plane-guide.md</code></a>.</p>
+<h2 id="the-architectural-shift">The architectural shift<a class="headerlink" href="#the-architectural-shift" title="Permanent link">&para;</a></h2>
+<p>Pre-2.0 Forge was principally a LangGraph application: queue deliveries entered
+the worker, nodes interpreted provider payloads, invoked agents, mutated the
+checkpoint, and called Jira or GitHub as needed. That worked for the golden
+path, but process correctness was distributed across node code, event handlers,
+provider adapters, and retry logic.</p>
+<p>Forge 2.0 makes Forge a <strong>durable workflow control plane</strong>. LangGraph remains
+the graph execution adapter; it is no longer the public definition of a Forge
+process. The following records are now first-class architectural boundaries:</p>
+<table>
+<thead>
+<tr>
+<th>Record</th>
+<th>Source of truth</th>
+<th>What it answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Observation</td>
+<td>Jira, source control, or poller</td>
+<td>What external fact was received?</td>
+</tr>
+<tr>
+<td>Observation decision</td>
+<td>Reconciliation ledger</td>
+<td>Is that fact accepted, duplicate, stale, or conflicting?</td>
+</tr>
+<tr>
+<td>Workflow command</td>
+<td>Command boundary</td>
+<td>What state transition or exceptional operation does the accepted fact request?</td>
+</tr>
+<tr>
+<td>Pinned definition/checkpoint</td>
+<td>Forge</td>
+<td>Which immutable process revision and position owns this run?</td>
+</tr>
+<tr>
+<td>Station attempt</td>
+<td>Forge</td>
+<td>What bounded operation was requested, and what validated result did it return?</td>
+</tr>
+<tr>
+<td>Effect record</td>
+<td>Effect journal</td>
+<td>Which external write was intended, attempted, and observed?</td>
+</tr>
+<tr>
+<td>Execution read model/timeline</td>
+<td>Forge projection</td>
+<td>Why is this run at its current state?</td>
+</tr>
+</tbody>
+</table>
+<p>The key rule is: <strong>external systems own their facts; Forge owns interpretation
+and process state.</strong> A Jira/GitHub payload cannot directly set <code>current_node</code>,
+pause/retry state, workflow identity, or an effect-journal field.</p>
+<pre class="mermaid"><code>flowchart LR
+  E[Provider event] --&gt; A[Ingress adapter]
+  A --&gt; O[Versioned Observation]
+  O --&gt; L[Reconciliation ledger]
+  L --&gt;|accepted| C[Workflow command]
+  L --&gt;|duplicate/stale/conflict| T[Timeline only]
+  C --&gt; P[Pinned definition + transition policy]
+  P --&gt; N[Graph node]
+  N --&gt; S[Typed station]
+  S --&gt; R[Validated reducer]
+  R --&gt; P
+  N --&gt; F[Effect command]
+  F --&gt; J[Durable effect journal]
+  J --&gt; X[Provider executor]</code></pre>
+<h2 id="dependency-and-pr-map">Dependency and PR map<a class="headerlink" href="#dependency-and-pr-map" title="Permanent link">&para;</a></h2>
+<p>The stack's dependency order is not entirely numerical:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>324 -&gt; 325 -&gt; 326 -&gt; 327 -&gt; 328 -&gt; 331 -&gt; 329 -&gt; 330 -&gt; 332
 </code></pre></div>
-<p>Exit criterion: a migrated station has no dependency on a complete feature, bug, or task
-state dictionary, and malformed outcomes fail before routing or side effects.</p>
-<h3 id="phase-2-split-event-interpretation-out-of-the-worker">Phase 2 — Split event interpretation out of the worker<a class="headerlink" href="#phase-2-split-event-interpretation-out-of-the-worker" title="Permanent link">&para;</a></h3>
-<p>Reduce <code>OrchestratorWorker</code> to queue consumption, instance locking, workflow resolution,
-checkpoint invocation, acknowledgement, and terminal failure handling. Extract:</p>
-<ul>
-<li>Jira observation adapters.</li>
-<li>GitHub observation adapters.</li>
-<li>Poller-origin normalization and deduplication.</li>
-<li>Approval/rejection/retry command derivation.</li>
-<li>PR-to-workflow correlation.</li>
-<li>Workflow-specific command handlers for exceptional interactions.</li>
-</ul>
-<p>Adapters return commands and evidence; they do not assign <code>current_node</code>. The workflow
-decides whether a command is valid at its current position. Invalid or irrelevant commands
-are durably recorded with a reason rather than silently changing state.</p>
-<p>The <code>dev</code> branch already normalizes source-control webhooks before queue transport. Retain
-that ingress normalization, then extract the still-central conversion from normalized
-events to workflow commands. Raw payload fallback should be treated as a compatibility
-path with an explicit removal milestone.</p>
-<p>Exit criterion: adding a provider event does not require editing the central worker, and
-event adapters can be tested without Redis, LangGraph, Jira, or GitHub clients.</p>
-<h3 id="phase-3-add-an-idempotent-effect-journal">Phase 3 — Add an idempotent effect journal<a class="headerlink" href="#phase-3-add-an-idempotent-effect-journal" title="Permanent link">&para;</a></h3>
-<p>Separate transition computation from external mutation. Persist effect intent before
-execution and persist its result after execution. Use a stable key derived from workflow
-instance, definition revision, transition/invocation identity, effect type, and logical
-target. Handlers implement provider-specific precondition checks and safe replay.</p>
-<p>Initially journal the highest-risk effects:</p>
+<p>PR 331 is an ancestor of PR 329; PR 330 depends on 329; PR 332 depends on 330.
+Architecturally, the stack implements eight layers:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>PR</th>
+<th>Design responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>324</td>
+<td>Versioned domain contracts and provider-neutral source-control observations</td>
+</tr>
+<tr>
+<td>2</td>
+<td>325</td>
+<td>Normalized ingress and semantic workflow commands</td>
+</tr>
+<tr>
+<td>3</td>
+<td>326</td>
+<td>Durable, recoverable external effects</td>
+</tr>
+<tr>
+<td>4</td>
+<td>327</td>
+<td>Typed station/projection/reducer execution boundary</td>
+</tr>
+<tr>
+<td>5</td>
+<td>328</td>
+<td>Governed, declarative, pinned process definitions</td>
+</tr>
+<tr>
+<td>6</td>
+<td>331</td>
+<td>Observation reconciliation across webhook and poller ingress</td>
+</tr>
+<tr>
+<td>7</td>
+<td>329</td>
+<td>Execution read models, timeline, and Org Pulse projection</td>
+</tr>
+<tr>
+<td>8</td>
+<td>330/332</td>
+<td>Removal of legacy paths; definitions as sole topology; strict structured outputs</td>
+</tr>
+</tbody>
+</table>
+<h2 id="layer-1-domain-contracts-and-provider-neutrality-pr-324">Layer 1: domain contracts and provider neutrality (PR 324)<a class="headerlink" href="#layer-1-domain-contracts-and-provider-neutrality-pr-324" title="Permanent link">&para;</a></h2>
+<p><code>src/forge/domain/</code> establishes versioned Pydantic contracts for observations,
+commands, effects, identities, interactions, and stations. Code crossing a
+system boundary should use these contracts rather than an ad-hoc <code>dict</code> or a
+provider SDK object.</p>
+<p>Source control is now represented by contracts and adapters under
+<code>src/forge/integrations/source_control/</code>. GitHub is an adapter implementation,
+not a workflow dependency. Its events are adapted into <code>Observation</code> values
+with a stable resource identity, provider revision, facts, correlation, and a
+delivery identity.</p>
+<h3 id="consequences-for-new-providers">Consequences for new providers<a class="headerlink" href="#consequences-for-new-providers" title="Permanent link">&para;</a></h3>
+<p>To support another source-control provider, add a conforming adapter and
+observation mapping. Do not add provider-specific conditionals to a workflow
+node. The adapter must define stable resource and delivery identities and,
+where the provider supports it, ordering/revision metadata. If the provider
+cannot provide safe ordering data, the system should surface ambiguity instead
+of inventing an ordering rule.</p>
+<h2 id="layer-2-commands-are-the-only-ingress-into-process-control-pr-325">Layer 2: commands are the only ingress into process control (PR 325)<a class="headerlink" href="#layer-2-commands-are-the-only-ingress-into-process-control-pr-325" title="Permanent link">&para;</a></h2>
+<p>Ingress adapters under <code>src/forge/orchestrator/event_adapters/</code> turn raw queue
+events into observations. <code>command_handlers.py</code> and the command-operation
+boundary derive a <code>WorkflowCommand</code> only after an observation is reconciled.
+This applies to Jira approval labels, comment commands, retry requests, review
+events, CI results, and exceptional actions such as <code>/forge rebase</code>.</p>
+<p>This separates three decisions that were formerly easy to conflate:</p>
 <ol>
-<li>PR creation and branch push.</li>
-<li>Jira issue creation and status/label changes.</li>
-<li>Jira and GitHub comments.</li>
-<li>Workspace/runtime creation and teardown.</li>
-<li>CI/review follow-up operations.</li>
+<li>Did the provider report a coherent, sufficiently new external fact?</li>
+<li>What semantic action does that fact express?</li>
+<li>Does the currently pinned workflow allow that action at its saved position?</li>
 </ol>
-<p>Use an outbox worker or an equivalent durable executor. The graph may wait for required
-effect results, but station code must not call provider clients directly.</p>
-<p>Exit criterion: crashing after an external write but before the next graph checkpoint
-does not duplicate that write, and operators can inspect and retry effects independently.</p>
-<h3 id="phase-4-migrate-nodes-into-independently-executable-stations">Phase 4 — Migrate nodes into independently executable stations<a class="headerlink" href="#phase-4-migrate-nodes-into-independently-executable-stations" title="Permanent link">&para;</a></h3>
-<p>Migrate one vertical slice at a time, beginning with a low-side-effect planning station,
-then implementation, review, and publication stages. Each registered station provides:</p>
-<ul>
-<li>Contract name and semantic version.</li>
-<li>Input and output schemas.</li>
-<li>Required capabilities and effects.</li>
-<li>Retry and timeout classification.</li>
-<li>Compatibility declarations.</li>
-<li>A local runner and fixtures.</li>
-<li>Contract and conformance tests.</li>
-</ul>
-<p>Keep station execution in-process where appropriate; independence is a contract property,
-not a requirement to create a service or container for every node. Expensive or untrusted
-stations can use an execution driver without changing graph semantics.</p>
-<p>Exit criterion: every golden-path station can be invoked by the local harness from a
-fixture and returns the same validated outcome used by LangGraph.</p>
-<h3 id="phase-5-make-graphs-purely-coordinative-and-governed">Phase 5 — Make graphs purely coordinative and governed<a class="headerlink" href="#phase-5-make-graphs-purely-coordinative-and-governed" title="Permanent link">&para;</a></h3>
-<p>Update built-in and declarative graphs so nodes are thin station invocations or explicit
-policy gates. Route only on typed outcome categories and documented domain fields. Extend
-declarative workflow validation to check:</p>
-<ul>
-<li>Station contract and state-schema compatibility.</li>
-<li>Required organizational gates and policies.</li>
-<li>Complete outcome routing.</li>
-<li>Concurrency and join semantics.</li>
-<li>Effect capability requirements.</li>
-<li>Removed/reordered station migration coverage.</li>
-<li>Workflow and station version compatibility.</li>
-</ul>
-<p>Use <code>dev</code>'s shared post-PR lifecycle as the first migration target: preserve the common
-subgraph, replace broad-state routers with typed CI/review outcomes, and register the same
-contracts for built-in and declarative workflows.</p>
-<p>Pin new workflow instances to a definition revision. Apply backward-compatible station
-updates under an explicit compatibility policy. Require an operator-visible migration or
-an explicit opt-in policy before an in-flight instance adopts a structurally newer graph.</p>
-<p>Exit criterion: the graph is the readable, versioned source of coordination truth, while
-station implementation changes do not require graph changes unless their contract or
-process role changes.</p>
-<h3 id="phase-6-formalize-poller-reconciliation-semantics">Phase 6 — Formalize poller reconciliation semantics<a class="headerlink" href="#phase-6-formalize-poller-reconciliation-semantics" title="Permanent link">&para;</a></h3>
-<p>Keep polling in <code>forge-poller</code>, but define and test the cross-project contract:</p>
-<ul>
-<li>Polling and webhooks produce the same normalized observation schema.</li>
-<li>Observation identity is stable across both paths when they describe the same external
-  revision.</li>
-<li>Duplicates and older observations are harmless.</li>
-<li>A newer authoritative observation may update external facts but cannot skip a workflow
-  transition or overwrite workflow position.</li>
-<li>Drift is classified as expected, reconcilable, policy-blocking, or requiring operator
-  intervention.</li>
-<li>Poller cursors are not Forge workflow checkpoints; losing a cursor affects load and
-  latency, not correctness.</li>
-</ul>
-<p>Add cross-repository contract tests that replay captured provider states through both the
-webhook and polling paths and assert identical Forge commands.</p>
-<p>Exit criterion: loss, duplication, or reordering on either ingress path converges to the
-same workflow state without duplicate effects.</p>
-<h3 id="phase-7-add-process-and-execution-read-models">Phase 7 — Add process and execution read models<a class="headerlink" href="#phase-7-add-process-and-execution-read-models" title="Permanent link">&para;</a></h3>
-<p>Build projections from checkpoints, transition decisions, station invocations, effect
-results, and observations. Expose:</p>
-<ul>
-<li>Current workflow definition and pinned revision.</li>
-<li>Current position and permitted commands.</li>
-<li>Why the instance is waiting or blocked.</li>
-<li>Last observation and whether external state is stale or conflicting.</li>
-<li>Station attempts, outcomes, effects, and recovery actions.</li>
-<li>Migration eligibility and incompatibilities.</li>
-</ul>
-<p>Do not make dashboards infer position from Jira labels or reconstruct the graph from log
-messages.</p>
-<p>Exit criterion: an operator can answer “why has this not advanced?” and “what will run
-next?” from durable records without reading worker logs.</p>
-<h3 id="phase-8-remove-compatibility-paths">Phase 8 — Remove compatibility paths<a class="headerlink" href="#phase-8-remove-compatibility-paths" title="Permanent link">&para;</a></h3>
-<p>After all golden paths use contracts, reducers, and the effect journal:</p>
-<ul>
-<li>Remove direct provider calls from stations and graph routers.</li>
-<li>Remove legacy broad-state access where projections exist.</li>
-<li>Remove event-to-node routing from the worker.</li>
-<li>Version or migrate legacy checkpoints, with a documented rollback window.</li>
-<li>Turn dependency-report warnings into enforced architecture checks.</li>
-</ul>
-<p>Exit criterion: the old paths are deleted, rather than retained as a second execution
-model.</p>
-<h2 id="recommended-migration-order">Recommended migration order<a class="headerlink" href="#recommended-migration-order" title="Permanent link">&para;</a></h2>
-<p>Use vertical slices rather than rewriting the whole engine:</p>
+<h3 id="development-rule">Development rule<a class="headerlink" href="#development-rule" title="Permanent link">&para;</a></h3>
+<p>Never advance a graph from a webhook handler, a poller payload, or a label
+parser. Add/extend an observation adapter, command derivation, and the relevant
+workflow transition policy. An unrecognized command must remain observable but
+must not mutate workflow state.</p>
+<h2 id="layer-3-external-writes-are-durable-effects-pr-326">Layer 3: external writes are durable effects (PR 326)<a class="headerlink" href="#layer-3-external-writes-are-durable-effects-pr-326" title="Permanent link">&para;</a></h2>
+<p><code>src/forge/effects/</code> replaces best-effort direct mutation with the effect
+journal/executor/service pattern:</p>
 <ol>
-<li>Integrate <code>dev</code> with the declarative-workflow and layered-state changes, resolve the
-   overlapping event/state contracts, and establish combined characterization tests.</li>
-<li>Migrate the shared post-PR CI/review lifecycle, proving normalized observation to
-   command translation under concurrent and out-of-order events.</li>
-<li>Migrate PR creation, proving that the existing source-control adapter can sit behind
-   the effect journal with idempotent replay.</li>
-<li>Migrate PRD generation and approval, proving station contracts and command handling.</li>
-<li>Migrate task-takeover planning, proving reusable station contracts across workflow
-   profiles.</li>
-<li>Migrate workspace setup and implementation, proving execution-driver isolation.</li>
-<li>Migrate multi-repository fan-out/join and aggregate completion.</li>
-<li>Migrate remaining feature and bug stages, followed by legacy removal.</li>
+<li>Construct a stable <code>EffectCommand</code> with workflow identity, operation,
+   target, and idempotency identity.</li>
+<li>Submit it to the Redis-backed journal <em>before</em> contacting a provider.</li>
+<li>Claim a lease so only one executor owns the attempt.</li>
+<li>Execute the registered provider executor.</li>
+<li>Persist the resulting provider evidence, status, and attempt history.</li>
 </ol>
-<p>Each slice should run the old and new decision code in shadow comparison where safe, then
-switch one project or workflow revision at a time.</p>
-<h2 id="implications-and-trade-offs">Implications and trade-offs<a class="headerlink" href="#implications-and-trade-offs" title="Permanent link">&para;</a></h2>
-<h3 id="product-and-governance">Product and governance<a class="headerlink" href="#product-and-governance" title="Permanent link">&para;</a></h3>
+<p>The journal states distinguish pending/running work from retryable,
+precondition, terminal, and successful results. Transient failures use bounded
+backoff. A recovery sweep executes due records. A workflow-critical effect can
+wait for a concurrent sweep owner to settle; it does not treat exclusive lease
+ownership as a failure. Retryable and terminal outcomes nevertheless fail
+closed and prevent an unsafe process advance.</p>
+<h3 id="why-idempotency-is-non-negotiable">Why idempotency is non-negotiable<a class="headerlink" href="#why-idempotency-is-non-negotiable" title="Permanent link">&para;</a></h3>
+<p>The sequence “provider mutated successfully, worker died before checkpoint
+write” is unavoidable in distributed systems. Retrying the agent or node may
+create duplicate comments, branches, issues, or PRs. Retrying a stable effect
+identity instead converges on the intended mutation and preserves its history.</p>
+<h3 id="development-rule_1">Development rule<a class="headerlink" href="#development-rule_1" title="Permanent link">&para;</a></h3>
+<p>Do not instantiate a Jira/GitHub/repository client to make a workflow-visible
+write from a node, station, or command handler. Register an executor and emit
+an allowed <code>EffectCommand</code> through <code>effect_runtime</code>. Reads may still use the
+appropriate adapter. New effect operations must be declared in the trusted
+effect catalog and granted only to the relevant trusted nodes.</p>
+<h2 id="layer-4-typed-stations-narrow-agent-and-execution-authority-pr-327">Layer 4: typed stations narrow agent and execution authority (PR 327)<a class="headerlink" href="#layer-4-typed-stations-narrow-agent-and-execution-authority-pr-327" title="Permanent link">&para;</a></h2>
+<p>The station runtime separates orchestration from work execution:</p>
 <ul>
-<li>Forge becomes more explicitly responsible for the golden-path process, compatibility
-  policy, mandatory gates, and workflow migrations. This requires product/process
-  ownership in addition to infrastructure ownership.</li>
-<li>Project-specific composition becomes safer but more constrained. Teams may combine only
-  registered compatible stations and cannot bypass organization policy through arbitrary
-  graph code.</li>
-<li>Workflow revisions become release artifacts requiring review, rollout notes, and
-  migration support.</li>
+<li>A <strong>projector</strong> selects the permitted fields from the checkpoint and creates
+  a versioned <code>StationRequest</code>.</li>
+<li>A <strong>station</strong> performs one bounded operation: approval classification,
+  artifact generation, triage, task routing, agent operation, implementation
+  input resolution, sandbox execution, or persistence.</li>
+<li>A <strong>reducer</strong> validates the <code>StationOutcome</code> and applies only the state fields
+  owned by that station.</li>
 </ul>
-<h3 id="engineering">Engineering<a class="headerlink" href="#engineering" title="Permanent link">&para;</a></h3>
+<p>Station definitions and the registry live under <code>src/forge/workflow/stations/</code>;
+projectors and reducers live in their corresponding packages. The node remains
+responsible for orchestration and routing, not for open-ended provider access.</p>
+<p>This preserves the product split: planning/review agents execute on the host;
+implementation runs in the rootless Podman sandbox. The sandbox receives
+repository/model execution material but not Jira, Redis, or source-control
+credentials. Provider writes return to the host durable-effect boundary.</p>
+<h3 id="development-rule_2">Development rule<a class="headerlink" href="#development-rule_2" title="Permanent link">&para;</a></h3>
+<p>When adding a new agent or sandbox operation, define a typed input/output
+contract first. Keep it narrow, version it, project only owned input, and add a
+reducer that rejects malformed or unauthorized output. Do not pass the entire
+LangGraph state into a new agent as a convenience.</p>
+<h2 id="layer-5-workflows-are-governed-declarative-processes-pr-328">Layer 5: workflows are governed, declarative processes (PR 328)<a class="headerlink" href="#layer-5-workflows-are-governed-declarative-processes-pr-328" title="Permanent link">&para;</a></h2>
+<p><code>src/forge/workflow/declarative/</code> owns definition parsing, validation,
+publication, resolution, manifest generation, catalog lookup, compilation, and
+migration analysis. Built-in Feature, Bug, and Task Takeover definitions are
+canonical JSON artifacts in <code>definitions/</code>; human-authored project definitions
+are YAML or JSON and are published as canonical JSON to Jira project properties.</p>
+<p>A definition is intentionally flow-only:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">metadata</span><span class="p">:</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd-only</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span><span class="nt">revision</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">spec</span><span class="p">:</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span><span class="nt">state</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">feature</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span><span class="nt">entry</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generate_prd</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span><span class="nt">steps</span><span class="p">:</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="nt">generate_prd</span><span class="p">:</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">      </span><span class="nt">next</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prd_approval_gate</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="nt">prd_approval_gate</span><span class="p">:</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">      </span><span class="nt">route</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">route_prd_approval</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">      </span><span class="nt">branches</span><span class="p">:</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">        </span><span class="nt">generate_spec</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">__end__</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">        </span><span class="nt">regenerate_prd</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">generate_prd</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">        </span><span class="nt">__end__</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">__end__</span>
+</code></pre></div>
+<p>The definition determines topology: state profile, entry, nodes, fixed edges,
+routed branches, dynamic fan-out, joins, and retry/concurrency flow settings.
+The trusted catalog determines execution authority: node identity, station
+contract, effect capabilities, required policies, preconditions, and
+observation behavior. A project author cannot grant itself an effect capability
+or weaken a mandatory policy by editing YAML.</p>
+<p>Each created workflow pins the selected definition name, revision, digest, and
+canonical payload in the checkpoint. Publication changes what future tickets
+select; it does not silently rewrite a running ticket.</p>
+<h3 id="definition-authoring-rule">Definition authoring rule<a class="headerlink" href="#definition-authoring-rule" title="Permanent link">&para;</a></h3>
+<p>Run <code>forge workflow catalog &lt;feature|bug|task_takeover&gt;</code> before authoring and
+use only reported nodes/routers. Then run <code>validate</code>, <code>render</code>, and <code>diff</code>.
+Every static router outcome must appear in its <code>branches</code> map. If a saved node
+is renamed/removed, increment <code>metadata.revision</code>, provide
+<code>spec.resume.fromRevisions</code>, and run <code>simulate-migration</code> against real or
+representative checkpoints. Valid YAML alone does not prove resumption safety.</p>
+<h2 id="layer-6-reconciliation-makes-multiple-ingress-sources-converge-pr-331">Layer 6: reconciliation makes multiple ingress sources converge (PR 331)<a class="headerlink" href="#layer-6-reconciliation-makes-multiple-ingress-sources-converge-pr-331" title="Permanent link">&para;</a></h2>
+<p>The Redis observation ledger is the precondition for command interpretation.
+It tracks resource identity, delivery identity, provider revision, decision,
+drift class, and per-run history. Equivalent webhook and poller deliveries
+therefore become one logical external observation.</p>
+<p>The ledger classifies observations as accepted, duplicate, stale, or conflict.
+It also blocks attempts by an external payload to assert workflow-owned facts.
+An orderable provider revision is preferred. When a provider supplies opaque or
+unversioned revisions that cannot safely be ordered, Forge records the reason
+and does not pretend the event is newer.</p>
+<h3 id="architectural-consequence">Architectural consequence<a class="headerlink" href="#architectural-consequence" title="Permanent link">&para;</a></h3>
+<p>At-least-once delivery is expected, not exceptional. A new integration must be
+correct under duplicate delivery, out-of-order delivery, and a poller/webhook
+race. “The handler is idempotent in practice” is insufficient: it must produce
+a stable observation identity and let the ledger make the ordering decision.</p>
+<h2 id="layer-7-read-models-are-projections-not-an-alternate-control-path-pr-329">Layer 7: read models are projections, not an alternate control path (PR 329)<a class="headerlink" href="#layer-7-read-models-are-projections-not-an-alternate-control-path-pr-329" title="Permanent link">&para;</a></h2>
+<p><code>src/forge/read_models/</code> composes independent durable records into an
+operator-facing execution model and timeline. It does not execute nodes or read
+current Jira labels to infer process state. Its sources are the pinned
+definition/checkpoint, observation decisions, station attempts, and effects.</p>
+<p>The gateway exposes:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>GET /api/v1/workflows/{ticket_key}/execution
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>GET /api/v1/workflows/{ticket_key}/execution/timeline
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>GET /api/v1/org-pulse/workflows/{ticket_key}
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>GET /api/v1/effects/workflow/{run_id}
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>GET /api/v1/effects/{idempotency_key}
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>POST /api/v1/effects/{idempotency_key}/replay
+</code></pre></div>
+<p>The APIs are protected by <code>FORGE_OPERATOR_TOKEN</code>. The replay endpoint is the
+only mutation endpoint in this group, and it only requeues an eligible terminal
+effect; it does not rerun a station or advance the graph.</p>
+<h3 id="development-rule_3">Development rule<a class="headerlink" href="#development-rule_3" title="Permanent link">&para;</a></h3>
+<p>Add diagnostic data at its authoritative boundary (observation decision,
+station attempt, effect result, checkpoint transition), then project it into
+the timeline. Do not add an API endpoint that recalculates workflow state from
+provider data or performs hidden recovery work in a GET request.</p>
+<h2 id="layer-8-the-cutover-is-intentionally-strict-prs-330-and-332">Layer 8: the cutover is intentionally strict (PRs 330 and 332)<a class="headerlink" href="#layer-8-the-cutover-is-intentionally-strict-prs-330-and-332" title="Permanent link">&para;</a></h2>
+<p>The final PRs remove Phase 8 compatibility paths, move observation transitions
+behind policy, make definitions the sole source of graph topology, complete
+built-in effect-capability declarations, and enforce structured model outputs.
+Structured stages use Pydantic output contracts with provider-native structured
+output and validated fallback strategy; narrative artifacts remain Markdown.</p>
+<p>The strictness is intentional:</p>
 <ul>
-<li>There will initially be more types, adapters, reducers, and translation code. The payoff
-  is smaller change blast radius and independently testable components.</li>
-<li>A dual-model migration temporarily increases complexity. It must be time-bounded, with
-  per-slice removal criteria, or adapters will become permanent duplication.</li>
-<li>Typed contracts expose ambiguous legacy behavior. Some migrations will require explicit
-  product decisions rather than mechanical refactoring.</li>
-<li>LangGraph remains replaceable only if Forge owns the contracts, reducers, workflow
-  representation, and history schema rather than exposing LangGraph internals as public
-  interfaces.</li>
+<li>an undeclared router outcome is an error, not an inferred transition;</li>
+<li>an unknown workflow label/definition blocks instead of falling back;</li>
+<li>invalid structured output is rejected and retried/escalated according to the
+  workflow rather than parsed optimistically;</li>
+<li>a node cannot emit an effect operation absent from its trusted capability set;</li>
+<li>external facts cannot overwrite process-owned checkpoint facts.</li>
 </ul>
-<h3 id="runtime-and-data">Runtime and data<a class="headerlink" href="#runtime-and-data" title="Permanent link">&para;</a></h3>
+<p>This is a Forge 2.0 major-version boundary. Old direct-mutation extensions and
+legacy checkpoints should be drained, resolved, or explicitly migrated rather
+than assumed resumable.</p>
+<h2 id="how-to-implement-a-change-after-the-cutover">How to implement a change after the cutover<a class="headerlink" href="#how-to-implement-a-change-after-the-cutover" title="Permanent link">&para;</a></h2>
+<p>Use this sequence for a new lifecycle capability:</p>
+<ol>
+<li><strong>Classify the boundary.</strong> Is it a provider fact, a semantic user/provider
+   command, a workflow topology change, a bounded station operation, or an
+   external effect? One feature can require several, but do not collapse them.</li>
+<li><strong>Define versioned contracts.</strong> Add/change domain, station, or structured
+   output models before implementation.</li>
+<li><strong>Adapt and reconcile ingress.</strong> For external input, create a stable
+   observation and command mapping, then define how transition policy consumes
+   the command.</li>
+<li><strong>Use a station for work.</strong> Add projector, station, reducer, and contract
+   tests. Preserve ownership boundaries in the reducer.</li>
+<li><strong>Use an effect for writes.</strong> Add a stable operation, executor, catalog
+   capability, and retry/idempotency tests.</li>
+<li><strong>Change topology declaratively.</strong> Update the trusted catalog/built-in
+   definition as appropriate, increment definition revision, and validate,
+   render, diff, and simulate migration.</li>
+<li><strong>Expose evidence.</strong> Ensure the resulting observation/command/station/effect
+   is visible in the execution timeline and that operator errors are actionable.</li>
+<li><strong>Test convergence.</strong> Cover replay, duplicate/out-of-order ingress, worker
+   restart around effects, unauthorized output/effects, and pinned-definition
+   behavior—not only the happy-path graph execution.</li>
+</ol>
+<h2 id="design-mistakes-the-new-architecture-is-meant-to-prevent">Design mistakes the new architecture is meant to prevent<a class="headerlink" href="#design-mistakes-the-new-architecture-is-meant-to-prevent" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Avoid</th>
+<th>Use instead</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Calling Jira/GitHub directly in a node</td>
+<td>Effect command and registered executor</td>
+<td>Provides idempotency, recovery, audit, and authority checks.</td>
+</tr>
+<tr>
+<td>Routing directly from a webhook</td>
+<td>Observation -&gt; ledger -&gt; command -&gt; policy</td>
+<td>Makes duplicate and stale delivery safe.</td>
+</tr>
+<tr>
+<td>Adding a Python branch to change a workflow's flow</td>
+<td>Definition/catalog change</td>
+<td>Keeps topology inspectable, versioned, and migratable.</td>
+</tr>
+<tr>
+<td>Giving an agent the full checkpoint</td>
+<td>Projected station request</td>
+<td>Limits authority and makes output ownership auditable.</td>
+</tr>
+<tr>
+<td>Treating an LLM JSON string as trusted</td>
+<td>Structured output contract plus reducer validation</td>
+<td>Rejects malformed or unauthorized state changes.</td>
+</tr>
+<tr>
+<td>Retrying the whole workflow after a provider failure</td>
+<td>Replay/repair the individual effect</td>
+<td>Avoids repeating agent work and duplicating writes.</td>
+</tr>
+<tr>
+<td>Deriving status from live Jira labels in an API</td>
+<td>Durable execution read model</td>
+<td>Preserves causal process history.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="integration-fixes-validated-with-the-stack">Integration fixes validated with the stack<a class="headerlink" href="#integration-fixes-validated-with-the-stack" title="Permanent link">&para;</a></h2>
+<p>The integration branch contains production fixes found while exercising all
+three workflows. These are not separate architectural layers, but they clarify
+how the boundaries should work in practice:</p>
 <ul>
-<li>The effect journal adds storage, an executor, retention policy, and operational states
-  such as pending or indeterminate. It materially improves replay safety but introduces
-  eventual completion between a transition and its external effects.</li>
-<li>Workflow revision pinning increases the number of definitions supported concurrently.
-  Retention and maximum-supported-version policies are required.</li>
-<li>Checkpoint migrations become first-class production operations and require backups,
-  dry-run reports, rollback plans, and failure-injection tests.</li>
-<li>Strong per-instance serialization must work across workers; an in-process lock is not
-  sufficient once the control plane scales horizontally.</li>
+<li>Gate resumption schedules the definition's declared next transition.</li>
+<li>Workspace setup and implementation persistence declare their required
+  repository effect capabilities.</li>
+<li>Shared <code>implement_work</code> resolves and persists a repository-scoped work unit
+  for both task-based and taskless execution.</li>
+<li>A merged PR is a terminal source-control observation even when its head SHA
+  is no longer available or differs from a tracked head.</li>
+<li>Feature decomposition keeps its draft in checkpoint state, avoiding a second
+  Jira attachment authority.</li>
+<li>Repository labels are reconciled without removing/readding a retained label,
+  which would defeat durable-effect deduplication.</li>
+<li>Bug RCA structured output selects one configured repository and only then
+  writes the matching <code>repo:&lt;owner&gt;/&lt;repo&gt;</code> label.</li>
 </ul>
-<h3 id="operations-and-observability">Operations and observability<a class="headerlink" href="#operations-and-observability" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Operators gain precise transition and effect history, but must monitor more queues and
-  states: observation ingress, workflow commands, station attempts, and effect execution.</li>
-<li>Dead-letter handling must distinguish an invalid observation, invalid command, station
-  failure, graph incompatibility, and effect failure.</li>
-<li>The poller remains independently deployable, but schema-version compatibility and
-  end-to-end service-level objectives become shared responsibilities across repositories.</li>
-</ul>
-<h3 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Central effect handlers improve credential isolation because stations no longer require
-  Jira or source-control credentials.</li>
-<li>Station registration and declarative composition become trust boundaries. Schema
-  validation, capability allowlists, signed/versioned packages where applicable, and
-  policy enforcement must fail closed.</li>
-</ul>
-<h3 id="performance-and-cost">Performance and cost<a class="headerlink" href="#performance-and-cost" title="Permanent link">&para;</a></h3>
-<ul>
-<li>Validation, journaling, and projections add modest latency and storage use.</li>
-<li>In-process stations avoid unnecessary network overhead; separate execution should be
-  reserved for isolation, scaling, or runtime needs.</li>
-<li>Better idempotency and checkpoint recovery reduce repeated inference and duplicate
-  external operations, partially offsetting the additional control-plane work.</li>
-</ul>
-<h2 id="program-level-completion-criteria">Program-level completion criteria<a class="headerlink" href="#program-level-completion-criteria" title="Permanent link">&para;</a></h2>
-<p>The decoupling effort is complete when:</p>
-<ul>
-<li>The central worker contains no workflow-stage-specific event logic.</li>
-<li>Every station declares and passes versioned input/output conformance tests.</li>
-<li>No station directly performs provider mutations.</li>
-<li>Every consequential external effect is journaled and replay-safe.</li>
-<li>Graphs and gates alone determine valid progression, using typed outcomes.</li>
-<li>Workflow instances have explicit definition-version and migration behavior.</li>
-<li>Poller and webhook observations converge under duplicate, missing, and reordered event
-  tests.</li>
-<li>A local harness can execute any station without Redis, the worker, or a running graph.</li>
-<li>Operators can inspect position, eligibility, waiting reason, effects, and supported
-  recovery from durable read models.</li>
-<li>Legacy broad-state and direct-side-effect paths have been removed.</li>
-</ul>
+<h2 id="architectural-bottom-line">Architectural bottom line<a class="headerlink" href="#architectural-bottom-line" title="Permanent link">&para;</a></h2>
+<p>The new system has more explicit components because Forge is coordinating
+unreliable distributed actors: providers, queues, agents, containers, and
+workers. Those components are not optional abstraction layers. They assign one
+owner to each fact, decision, mutation, and transition. Future development
+should preserve that separation; bypassing it may restore a short path locally,
+but reintroduces the duplicate, crash-recovery, and unexplained-state failures
+the Forge 2.0 stack is designed to eliminate.</p>
 
 
 

@@ -949,7 +949,7 @@
   <span class="md-ellipsis">
     
   
-  System & Components
+  System and Components
 
     
   </span>
@@ -976,7 +976,34 @@
   <span class="md-ellipsis">
     
   
-  Internals
+  Runtime Internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/structured-output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Structured Model Output
 
     
   </span>
@@ -1553,6 +1580,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#operator-execution-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Operator execution API
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1828,6 +1866,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#operator-execution-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Operator execution API
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2000,6 +2049,39 @@
 </tr>
 </tbody>
 </table>
+<h3 id="operator-execution-api">Operator execution API<a class="headerlink" href="#operator-execution-api" title="Permanent link">&para;</a></h3>
+<p>Execution inspection is a read-only API protected by the bearer token configured
+as <code>FORGE_OPERATOR_TOKEN</code>. Requests without a configured token return <code>503</code>; an
+invalid or missing bearer token returns <code>401</code>. The token is never accepted as a
+query parameter.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="err">GET /api/v1/workflows/{ticket_key}/execution</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="err">GET /api/v1/workflows/{ticket_key}/execution/timeline?cursor=0&amp;limit=50</span>
+</code></pre></div>
+<p>Execution responses are versioned with <code>schema_version</code> (<code>1.0</code>). The timeline
+uses a deterministic integer cursor and returns <code>next_cursor</code> until the end;
+clients should treat cursors as opaque offsets and request no more than 200
+entries at a time. The response is a projection of durable Forge records and
+does not consult current Jira labels.</p>
+<p>The compact contract intended for Org Pulse is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="err">GET /api/v1/org-pulse/workflows/{ticket_key}</span>
+</code></pre></div>
+<p>It returns the execution status, current position, waiting/blocking information,
+retry count, observation freshness/conflict state, and migration eligibility.
+Org Pulse must preserve <code>schema_version</code>, tolerate additive fields, and treat
+<code>null</code> as “not available” (for example, legacy checkpoints have no migration
+decision). This endpoint is read-only and uses the same operator token.</p>
+<p>Timeline and terminal effect records are subject to the deployment's retention
+policy. Retention must not remove pending or running effects; consumers should
+not assume an old timeline event is available forever.</p>
+<p><strong>Operational metrics:</strong> <code>forge_read_model_latency_seconds</code> measures API
+latency; <code>forge_execution_waiting_age_seconds</code>,
+<code>forge_execution_retry_count</code>, <code>forge_execution_drift_state</code>,
+<code>forge_execution_blocked_state</code>, and <code>forge_execution_migration_eligibility</code>
+expose waiting age, sampled retry count, drift, blocking codes, and migration
+eligibility. The retry, drift, blocked, and migration metrics are gauges for the
+most recently sampled execution; they are not event counters and repeated GETs
+do not inflate totals. <code>forge_read_model_latency_seconds</code> and waiting age are
+request/sample histograms by design.</p>
 <p>Worker metrics are available separately at <code>http://localhost:8001/metrics</code>.</p>
 <h2 id="webhook-configuration">Webhook Configuration<a class="headerlink" href="#webhook-configuration" title="Permanent link">&para;</a></h2>
 <h3 id="jira">Jira<a class="headerlink" href="#jira" title="Permanent link">&para;</a></h3>

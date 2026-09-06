@@ -27,7 +27,7 @@
     
     
       
-        <title>Forge Architecture - Forge SDLC Guide</title>
+        <title>Forge architecture - Forge SDLC Guide</title>
       
     
     
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Forge Architecture
+              Forge architecture
             
           </span>
         </div>
@@ -965,7 +965,7 @@
   <span class="md-ellipsis">
     
   
-  System & Components
+  System and Components
 
     
   </span>
@@ -992,7 +992,34 @@
   <span class="md-ellipsis">
     
   
-  Internals
+  Runtime Internals
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./structured-output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Structured Model Output
 
     
   </span>
@@ -1629,8 +1656,9 @@
   
 
 
-<h1 id="forge-architecture">Forge Architecture<a class="headerlink" href="#forge-architecture" title="Permanent link">&para;</a></h1>
-<p>Architecture reference for Forge, an AI-powered SDLC orchestrator. Covers system structure, runtime topology, state management, failure modes, security boundaries, and key design decisions.</p>
+<h1 id="forge-architecture">Forge architecture<a class="headerlink" href="#forge-architecture" title="Permanent link">&para;</a></h1>
+<p>Architecture reference for Forge's versioned workflow control plane, typed stations, reconciliation,
+durable effects, execution inspection, and model-output boundaries.</p>
 <p>For workflow details, see the <a href="../guide/feature-workflow/">Feature</a>, <a href="../guide/bug-workflow/">Bug</a>, and <a href="../guide/task-workflow/">Task</a> guides. For API reference, see the OpenAPI spec at <code>/docs</code> when the gateway is running.</p>
 <table>
 <thead>
@@ -1641,16 +1669,20 @@
 </thead>
 <tbody>
 <tr>
-<td><a href="overview/">System &amp; Components</a></td>
-<td>System context, external actors, component responsibilities</td>
+<td><a href="overview/">System and components</a></td>
+<td>Control-plane structure and component responsibilities</td>
 </tr>
 <tr>
-<td><a href="internals/">Internals</a></td>
-<td>Runtime topology, state and concurrency, failure recovery, security</td>
+<td><a href="internals/">Runtime internals</a></td>
+<td>State authority, reconciliation, stations, effects, and security</td>
 </tr>
 <tr>
 <td><a href="reference/">Reference</a></td>
 <td>Architectural decisions, known limitations, workflow lifecycles</td>
+</tr>
+<tr>
+<td><a href="structured-output/">Structured model output</a></td>
+<td>Typed model responses and provider fallback behavior</td>
 </tr>
 </tbody>
 </table>

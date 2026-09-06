@@ -16,7 +16,7 @@
         <link rel="prev" href="../overview/">
       
       
-        <link rel="next" href="../reference/">
+        <link rel="next" href="../structured-output/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Internals - Forge SDLC Guide</title>
+        <title>Runtime internals - Forge SDLC Guide</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#internals" class="md-skip">
+        <a href="#runtime-internals" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Internals
+              Runtime internals
             
           </span>
         </div>
@@ -955,7 +955,7 @@
   <span class="md-ellipsis">
     
   
-  System & Components
+  System and Components
 
     
   </span>
@@ -991,7 +991,7 @@
   <span class="md-ellipsis">
     
   
-  Internals
+  Runtime Internals
 
     
   </span>
@@ -1008,7 +1008,7 @@
   <span class="md-ellipsis">
     
   
-  Internals
+  Runtime Internals
 
     
   </span>
@@ -1034,10 +1034,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#runtime-topology" class="md-nav__link">
+  <a href="#state-and-correctness-boundaries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Runtime Topology
+        State and correctness boundaries
       </span>
     </span>
   </a>
@@ -1045,10 +1045,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#state-and-event-processing" class="md-nav__link">
+  <a href="#delivery-and-concurrency" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        State and Event Processing
+        Delivery and concurrency
       </span>
     </span>
   </a>
@@ -1056,10 +1056,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#failure-and-recovery" class="md-nav__link">
+  <a href="#station-execution" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Failure and Recovery
+        Station execution
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-effects-and-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        External effects and recovery
       </span>
     </span>
   </a>
@@ -1070,7 +1081,7 @@
   <a href="#security-boundaries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Security Boundaries
+        Security boundaries
       </span>
     </span>
   </a>
@@ -1081,6 +1092,33 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../structured-output/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Structured Model Output
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1701,10 +1739,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#runtime-topology" class="md-nav__link">
+  <a href="#state-and-correctness-boundaries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Runtime Topology
+        State and correctness boundaries
       </span>
     </span>
   </a>
@@ -1712,10 +1750,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#state-and-event-processing" class="md-nav__link">
+  <a href="#delivery-and-concurrency" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        State and Event Processing
+        Delivery and concurrency
       </span>
     </span>
   </a>
@@ -1723,10 +1761,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#failure-and-recovery" class="md-nav__link">
+  <a href="#station-execution" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Failure and Recovery
+        Station execution
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#external-effects-and-recovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        External effects and recovery
       </span>
     </span>
   </a>
@@ -1737,7 +1786,7 @@
   <a href="#security-boundaries" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        Security Boundaries
+        Security boundaries
       </span>
     </span>
   </a>
@@ -1767,106 +1816,86 @@
   
 
 
-<h1 id="internals">Internals<a class="headerlink" href="#internals" title="Permanent link">&para;</a></h1>
-<h2 id="runtime-topology">Runtime Topology<a class="headerlink" href="#runtime-topology" title="Permanent link">&para;</a></h2>
-<p>Forge runs as two process types plus Redis:</p>
+<h1 id="runtime-internals">Runtime internals<a class="headerlink" href="#runtime-internals" title="Permanent link">&para;</a></h1>
+<h2 id="state-and-correctness-boundaries">State and correctness boundaries<a class="headerlink" href="#state-and-correctness-boundaries" title="Permanent link">&para;</a></h2>
+<p>Forge deliberately keeps four kinds of durable state separate:</p>
+<table>
+<thead>
+<tr>
+<th>Record</th>
+<th>Authority</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Observation ledger</td>
+<td>External resource revisions</td>
+<td>Deduplicate, order, and classify webhook and poller evidence</td>
+</tr>
+<tr>
+<td>Workflow checkpoint</td>
+<td>Forge process instance</td>
+<td>Pin the definition and retain process position and station state</td>
+</tr>
+<tr>
+<td>Effect journal</td>
+<td>Forge external-write intent</td>
+<td>Make mutations recoverable and idempotent across crashes</td>
+</tr>
+<tr>
+<td>Execution timeline</td>
+<td>Operational history</td>
+<td>Explain observations, transitions, attempts, effects, and operator actions</td>
+</tr>
+</tbody>
+</table>
+<p>External facts do not directly overwrite process position. An accepted observation is interpreted
+as a command, validated, and applied through the selected workflow's transition policy. Conversely,
+a checkpoint does not claim ownership of Jira issue content, pull-request state, or CI results; a
+new provider revision can cause those facts to be reconciled and re-evaluated.</p>
+<h2 id="delivery-and-concurrency">Delivery and concurrency<a class="headerlink" href="#delivery-and-concurrency" title="Permanent link">&para;</a></h2>
+<p>Queue delivery is at least once. The observation <code>delivery_identity</code> makes equivalent webhook and
+poller deliveries converge before command handling. The ledger uses monotonic provider revisions
+and records duplicate, stale, conflict, and accepted decisions. Where a provider supplies no stable
+revision, Forge requires a stable event identity and reports ambiguity instead of guessing.</p>
+<p>Workflow state is persisted through LangGraph's Redis checkpointer. Definitions are pinned by
+revision and digest, so publication or activation of a newer revision cannot silently change an
+in-flight run. Compatibility analysis and explicit migration mappings govern intentional moves.</p>
+<h2 id="station-execution">Station execution<a class="headerlink" href="#station-execution" title="Permanent link">&para;</a></h2>
+<p>A graph node projects the permitted checkpoint fields into a versioned station request. The station
+returns a typed outcome; a reducer validates and applies only the fields that station owns. The same
+request can run through the local station runner without Redis, LangGraph, or provider clients,
+except where the station's declared capability explicitly requires an adapter.</p>
+<p>Agent operations resolve a model connection through stage policy and declared capabilities such as
+<code>tools</code> and <code>structured_output</code>. Structured stages preserve the full Deep Agent tool loop, validate
+the final object, and retry with a tool-based schema strategy when native structured output fails.</p>
+<h2 id="external-effects-and-recovery">External effects and recovery<a class="headerlink" href="#external-effects-and-recovery" title="Permanent link">&para;</a></h2>
+<p>Required external mutations are stable <code>EffectCommand</code> values. Forge records an intent before
+calling Jira or source control, leases execution, and stores attempt history and provider evidence.
+Reprocessing the same logical action reuses its idempotency identity. Indeterminate and failed
+effects are visible through the operator API and can be replayed without rerunning the whole station.</p>
+<p>The operator endpoints expose:</p>
 <ul>
-<li><strong>Gateway</strong>: Single FastAPI/Uvicorn process. Stateless; can be load-balanced.</li>
-<li><strong>Worker(s)</strong>: One or more <code>OrchestratorWorker</code> processes. Each joins the Redis consumer group. <strong>Must run on a host with Podman installed.</strong> Each worker handles up to 20 concurrent tasks (configurable via <code>QUEUE_MAX_CONCURRENT_TASKS</code>).</li>
-<li><strong>Redis</strong>: Single-instance server. No built-in HA; must be provided externally if required.</li>
+<li><code>GET /api/v1/workflows/{ticket_key}/execution</code></li>
+<li><code>GET /api/v1/workflows/{ticket_key}/execution/timeline</code></li>
+<li><code>GET /api/v1/effects/workflow/{run_id}</code></li>
+<li><code>POST /api/v1/effects/{idempotency_key}/replay</code></li>
 </ul>
-<p>Gateway and Worker communicate only through Redis and can be deployed on separate hosts. Horizontal Worker scaling has a limitation: per-ticket event serialization uses an in-process <code>asyncio.Lock</code>, not a distributed lock (see <a href="../reference/#known-limitations">Known Limitations</a>).</p>
-<h2 id="state-and-event-processing">State and Event Processing<a class="headerlink" href="#state-and-event-processing" title="Permanent link">&para;</a></h2>
-<p><strong>Delivery guarantee:</strong> At-least-once. Messages are acknowledged (<code>XACK</code>) only after successful processing. The system does not provide exactly-once semantics.</p>
-<p><strong>Checkpointing:</strong> LangGraph workflow state is persisted via <code>AsyncRedisSaver</code>, keyed by Jira ticket key (e.g., <code>AISOS-123</code>). Checkpoints are written after each graph node completes. When a new event arrives for an existing ticket, the workflow resumes from its last checkpoint.</p>
-<p><strong>Idempotency:</strong> A <code>DeduplicationService</code> exists but is not yet wired into the webhook routes. Branch creation and label operations are naturally idempotent; Jira comment posting is not.</p>
-<p><strong>Consistency caveat:</strong> Checkpoint writes and external side effects (Jira comments, GitHub PRs) are not transactional. A crash between a side effect and its checkpoint write can cause duplicate actions on retry.</p>
-<h2 id="failure-and-recovery">Failure and Recovery<a class="headerlink" href="#failure-and-recovery" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Component</th>
-<th>Failure impact</th>
-<th>Recovery</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Gateway</td>
-<td>Incoming webhooks dropped</td>
-<td>Jira/GitHub retry delivery per their own policies</td>
-</tr>
-<tr>
-<td>Worker</td>
-<td>In-flight messages stay in Redis PEL</td>
-<td>Restart consumes new messages; PEL requires manual <code>XCLAIM</code></td>
-</tr>
-<tr>
-<td>Redis</td>
-<td>Complete system outage; all state at risk</td>
-<td>Configure Redis persistence (RDB/AOF) externally</td>
-</tr>
-<tr>
-<td>LLM provider</td>
-<td>Planning/code generation fails</td>
-<td>Retried up to 3 times, then moved to dead-letter queue</td>
-</tr>
-<tr>
-<td>Container</td>
-<td>Non-zero exit captured by orchestrator</td>
-<td>Retry mechanism determines re-attempt</td>
-</tr>
-</tbody>
-</table>
-<p><strong>Retry policy:</strong> Up to 3 attempts with exponential backoff (30s initial, 2x multiplier, capped at 1 hour). Failed messages go to a dead-letter queue for manual investigation.</p>
-<p><strong>Blocked workflows:</strong> The <code>forge:blocked</code> label is applied to Jira tickets in error state. Adding <code>forge:retry</code> triggers re-entry at the failed step.</p>
-<p><strong>Approval gates:</strong> Workflows pause indefinitely at human review gates. There is no automatic timeout or escalation.</p>
-<h2 id="security-boundaries">Security Boundaries<a class="headerlink" href="#security-boundaries" title="Permanent link">&para;</a></h2>
-<p><strong>Webhook authentication:</strong> HMAC-SHA256 validation via <code>hmac.compare_digest()</code>. Validation is conditional: it only runs when secrets are configured (<code>JIRA_WEBHOOK_SECRET</code>, <code>GITHUB_WEBHOOK_SECRET</code>). <strong>Always configure secrets in production.</strong></p>
-<p><strong>Credential distribution:</strong></p>
-<table>
-<thead>
-<tr>
-<th>Credential</th>
-<th>Worker</th>
-<th>Container</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Redis</td>
-<td>Yes</td>
-<td>No</td>
-</tr>
-<tr>
-<td>Jira API token</td>
-<td>Yes</td>
-<td>No</td>
-</tr>
-<tr>
-<td>GitHub App credentials</td>
-<td>Yes</td>
-<td>No</td>
-</tr>
-<tr>
-<td>LLM provider (API key or Vertex AI)</td>
-<td>Yes</td>
-<td>Yes</td>
-</tr>
-<tr>
-<td>Langfuse</td>
-<td>Yes</td>
-<td>Yes (when enabled)</td>
-</tr>
-<tr>
-<td>Git identity</td>
-<td>No</td>
-<td>Yes</td>
-</tr>
-</tbody>
-</table>
-<p>Containers do not receive Jira, GitHub, or Redis credentials. All external platform operations are performed by the orchestrator after the container exits.</p>
-<p><strong>Container isolation:</strong> Rootless Podman with configurable network mode (<code>slirp4netns</code> default), memory limit (4GB), CPU limit (2 cores), and 30-minute timeout. Workspace mounted read-write at <code>/workspace</code>; task file read-only at <code>/task.json</code>.</p>
+<p>These views do not advance workflow state.</p>
+<h2 id="security-boundaries">Security boundaries<a class="headerlink" href="#security-boundaries" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Webhook signatures are validated when the corresponding secret is configured; production must
+  configure both Jira and source-control secrets.</li>
+<li>Operator execution/effect routes require their configured bearer token and fail closed when the
+  token is absent.</li>
+<li>Rootless Podman constrains implementation execution with configured CPU, memory, network, and
+  timeout limits.</li>
+<li>Containers do not receive Jira, Redis, or source-control credentials. Those writes pass through
+  the host-side durable effect boundary.</li>
+<li>Custom workflow definitions select registered capabilities; they cannot embed credentials,
+  provider-specific calls, arbitrary HTTP, shell code, or Python imports.</li>
+</ul>
 
 
 
