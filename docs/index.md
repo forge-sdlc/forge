@@ -47,9 +47,12 @@ graph TD
 - [Feature Workflow](guide/feature-workflow.md) — How features flow through Forge
 - [Bug Workflow](guide/bug-workflow.md) — How bug diagnosis and implementation flow through Forge
 - [Task Workflow](guide/task-workflow.md) — How standalone Tasks and Epics become PRs
+- [Workflow Management](guide/labels.md) — Approvals, revisions, retries, and Jira/PR controls
+- [Operations](operations.md) — Services, execution inspection, recovery, and incident response
 - [Developer Guide](developer-guide.md) — Full local development reference
 - [Architecture](architecture/index.md) — How workflow state, reconciliation, stations, and effects fit together
 - [Declarative Workflows](reference/declarative-workflows.md) — Compose registered Forge stages safely
+- [Configuration](reference/config.md) — Repository, model, proposal, and deployment settings
 - [Skills System](skills/index.md) — Customize Forge for your stack
 - [Contributing](dev/contributing.md) — How to contribute
 
@@ -91,4 +94,4 @@ Tailored for already-scoped, standalone tickets or task takeovers that bypass th
 : Customizable per-project AI behavior. Override only what's specific to your stack; defaults cover the rest.
 
 **Resumable Workflows**
-: LangGraph checkpoints state to Redis after every step. Use `forge:retry` to resume from the exact node that failed.
+: Forge records checkpoints, observations, and external effects durably. Use `forge:retry` to resume from the saved failed position after addressing the cause; use the [operations guide](operations.md) to inspect execution evidence first.

@@ -228,6 +228,16 @@ global stage mapping, then the global default, and finally the legacy
 |----------|---------|-------------|
 | `REDIS_URL` | `redis://localhost:6380/0` | Redis connection URL |
 
+### Operator APIs
+
+| Variable | Description |
+| --- | --- |
+| `FORGE_OPERATOR_TOKEN` | Bearer token required for execution and Org Pulse read APIs. The routes are disabled when it is empty. |
+| `EFFECT_OPERATOR_TOKEN` | Bearer token required for durable-effect inspection and replay APIs. The routes are disabled when it is unset. |
+
+Use distinct values when different operators should have workflow-read versus
+effect-replay authority. See [operations](../operations.md) for recovery rules.
+
 ## Per-Project Repository Configuration
 
 !!! warning "Production requirement"
@@ -263,6 +273,31 @@ curl -X PUT \
   -u "you@example.com:YOUR_API_TOKEN" \
   -d '"org/repo1"'
 ```
+
+Repository labels on managed tickets use `repo:<owner>/<repo>`. Forge validates
+that assignment against the project's configured repositories before workspace
+setup or implementation. A missing or invalid assignment blocks the workflow
+instead of selecting a repository implicitly.
+
+If the deployment uses `FORGE_REPOS_CONFIG_PATH` to load a `repos.yaml`
+registry, the process caches that registry for its lifetime. Restart the gateway
+and every worker after changing the file. See [operations](../operations.md)
+for the safe deployment and recovery model.
+
+## Proposal review configuration
+
+Projects can opt into GitHub pull-request review for PRDs and specifications.
+Set `forge.prd_proposals_repo` to an `owner/repo` repository and optionally set
+`forge.prd_proposals_path` to a base directory. Forge then creates `prd.md` and
+`design.md` under `{path}/{TICKET}/` on separate proposal branches; merge is
+approval and review feedback requests regeneration.
+
+Use `forge project-setup MYPROJ --prd-proposals-repo owner/repo` to configure
+the repository and `--prd-proposals-path path` to configure the base path. Set
+either option to an empty value to remove/reset it. When project configuration
+is not required, `PRD_PROPOSALS_REPO` and `PRD_PROPOSALS_PATH` provide global
+fallbacks. See [proposal review](proposals.md) for the distinction between this
+workflow behavior and core-project design proposals.
 
 ## Local Development Overrides
 

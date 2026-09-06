@@ -1,5 +1,8 @@
 # Runtime internals
 
+This page is the component-level reference. Read [Control-plane architecture](control-plane.md)
+first for the system ownership model and the safe extension paths.
+
 ## State and correctness boundaries
 
 Forge deliberately keeps four kinds of durable state separate:

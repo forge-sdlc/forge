@@ -68,7 +68,7 @@ Forge breaks the feature into logical epics — high-level areas of work that ma
 
 By default, Forge uses an interactive **Draft Review Flow** at this stage (unless YOLO mode is active):
 1. Instead of creating Jira tickets immediately, Forge stores the proposed epics in durable workflow state.
-2. Forge posts a markdown table comment on the Feature ticket outlining the proposed Epics.
+2. Forge posts a markdown table comment on the Feature ticket outlining the proposed Epics. The comment is a review view; the workflow checkpoint is the authoritative draft.
 3. The workflow pauses at `plan_approval_gate`.
 
 **Human action:** Review the epic plan draft. You have several options at this stage:
@@ -104,7 +104,7 @@ Forge generates granular implementation tasks scoped to individual repositories.
 
 By default, Forge uses an interactive **Draft Review Flow** at this stage (unless YOLO mode is active):
 1. Instead of creating Jira tickets immediately, Forge stores the proposed tasks in durable workflow state.
-2. Forge posts a markdown table comment on the Feature ticket outlining the proposed Tasks.
+2. Forge posts a markdown table comment on the Feature ticket outlining the proposed Tasks. The comment is a review view; the workflow checkpoint is the authoritative draft.
 3. The workflow pauses at `task_approval_gate`.
 
 **Human action:** Review the task draft. You have several options at this stage:
@@ -225,7 +225,7 @@ If a stage fails, Forge:
 1. Sets the `forge:blocked` label
 2. Posts a comment tagging the reporter and assignee with the error
 
-To retry, add the `forge:retry` label. Forge resumes from the exact node that failed — not from the beginning.
+To retry, add the `forge:retry` label. Forge resumes from the exact node that failed — not from the beginning. For an unresolved provider write, conflicting event, or effect replay, inspect the [operations guide](../operations.md) before retrying.
 
 !!! tip "CI retries"
     If CI fix attempts are exhausted, `forge:retry` resets the attempt counter for a fresh budget of retries.

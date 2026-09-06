@@ -138,6 +138,23 @@ request/sample histograms by design.
 
 Worker metrics are available separately at `http://localhost:8001/metrics`.
 
+### Durable effect API
+
+Effect inspection and replay are deliberately separate from execution reads.
+They require `EFFECT_OPERATOR_TOKEN` as a Bearer token; the routes return `503`
+when it is unset and `401` for a missing or invalid token.
+
+```http
+GET  /api/v1/effects/workflow/{run_id}
+GET  /api/v1/effects/{idempotency_key}
+POST /api/v1/effects/{idempotency_key}/replay
+```
+
+Replay is an operator recovery action. It requeues one eligible terminal effect
+using its existing idempotency identity; it does not rerun an agent or advance a
+workflow. Inspect the effect's attempts and provider evidence before replaying.
+See [Operations](../operations.md) for effect states and blocked-workflow triage.
+
 ## Webhook Configuration
 
 ### Jira

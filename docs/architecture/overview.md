@@ -5,6 +5,9 @@ systems remain authoritative for their domain facts. Forge owns process interpre
 versioned process definition, each run's pinned definition and position, transition decisions,
 station attempts, and external-effect history.
 
+For ownership rules and the distinction between project configuration and core
+extensions, see [Control-plane architecture](control-plane.md).
+
 ```mermaid
 flowchart LR
     External["Jira / source control"] -->|webhook or poller observation| Gateway["Gateway"]

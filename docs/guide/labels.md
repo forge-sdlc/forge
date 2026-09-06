@@ -82,6 +82,8 @@ For stages using the draft-based review flow (Epic Plan and Tasks), you can post
 
 **Handling failures:** When `forge:blocked` appears, read the Forge comment for the error. Fix the underlying issue if needed, then add `forge:retry`.
 
+For failures involving provider writes, duplicate/stale/conflicting events, or operator effect replay, use the [operations guide](../operations.md) before adding `forge:retry`. Retry resumes from Forge's durable saved position; it is not a request to rerun the whole lifecycle.
+
 **Resetting contested reviews:** If the workflow is paused at `review_response_gate` due to contested comments, adding `forge:retry` will transition the workflow back to `human_review_gate`, clearing the contested comments and resetting the review state to await a fresh review.
 
 !!! warning "Don't remove `forge:managed`"
