@@ -8,12 +8,13 @@ from typing import Any
 from langgraph.graph import END
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
+from forge.workflow.effect_runtime import JiraClient, push_repository
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_description
 from forge.workflow.nodes.workspace_setup import prepare_workspace
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import merge_review_exhaustion, set_paused, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.review_decisions import (
@@ -303,7 +304,10 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
         analysis_prompt = load_prompt("implement-review", ticket_key=ticket_key)
 
         runner = ContainerRunner(settings)
-        result = await runner.run(
+        result = await execute_sandbox_kwargs(
+            state,
+            runner=runner,
+            discriminator="implement_review",
             workspace_path=Path(workspace_path),
             task_summary=f"Analyze PR review feedback for {ticket_key}",
             task_description=analysis_prompt,
@@ -356,7 +360,10 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
 
             runner = ContainerRunner(settings)
             fix_started = True
-            result = await runner.run(
+            result = await execute_sandbox_kwargs(
+                state,
+                runner=runner,
+                discriminator="implement_review",
                 workspace_path=Path(workspace_path),
                 task_summary=f"Implement PR review plan for {ticket_key}",
                 task_description=fix_prompt,
@@ -402,10 +409,7 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             if review_result is not None:
                 state = merge_review_exhaustion(state, review_result, ticket_key, "code_review")
 
-            if fork_owner and fork_repo:
-                git.push_to_fork(force=False)
-            else:
-                git.push(force=False)
+            await push_repository(git, use_fork=bool(fork_owner and fork_repo))
             logger.info(f"Review implementation pushed for {ticket_key}")
 
             await sync_pr_description(

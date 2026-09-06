@@ -124,14 +124,31 @@ class BaseState(TypedDict, total=False):
     # Message history
     messages: Annotated[list[Any], add_messages]
     context: dict[str, Any]
+    # Durable ingress audit trail. Entries are provider-neutral command decisions,
+    # bounded by the worker to keep checkpoint growth predictable.
+    command_decisions: list[dict[str, Any]]
+    # Normalized observation decisions are retained for read-model rebuilds;
+    # unlike provider payloads they contain only contract metadata and reason.
+    observation_history: list[dict[str, Any]]
 
     # Declarative workflow identity. Built-in workflows leave these unset.
     workflow_name: str
     workflow_revision: int
     workflow_digest: str
+    # Canonical names for the immutable process artifact.  The shorter
+    # workflow_* fields above remain for checkpoint compatibility.
+    workflow_definition_revision: int
+    workflow_definition_digest: str
+    workflow_definition: dict[str, Any]
+    workflow_pin_status: str
     workflow_state_profile: str
     workflow_project_key: str
     workflow_transition_count: int
+    workflow_node_attempts: dict[str, int]
+    transition_history: list[dict[str, Any]]
+    station_history: list[dict[str, Any]]
+    migration_history: list[dict[str, Any]]
+    operator_actions: list[dict[str, Any]]
 
     # Generic node-contract capabilities and durable precondition audit trail.
     # Missing capability keys preserve legacy inference; explicit booleans are

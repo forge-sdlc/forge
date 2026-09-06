@@ -52,7 +52,7 @@ def _normalized_from_payload(event_type: str, payload: dict) -> NormalizedEvent:
     """Build the NormalizedEvent a GitHub webhook payload would produce.
 
     Mirrors GitHubAdapter.parse_webhook for the event types exercised here so the
-    typed detection in _handle_resume_event runs against realistic data while the
+    typed detection in _apply_observation_transition runs against realistic data while the
     raw payload is still carried for the triage blocks that read it.
     """
     base_type = event_type.split(":", 1)[0]
@@ -236,6 +236,7 @@ def worker():
         w = OrchestratorWorker.__new__(OrchestratorWorker)
         w._post_terminal_error_comment = AsyncMock()
         w._post_resume_ack_comment = AsyncMock()
+        w.effect_service = MagicMock(execute_required=AsyncMock())
         w._forge_github_logins = {}
         return w
 
@@ -269,15 +270,20 @@ class TestHandleSpecPrMerge:
             mock_jira.close = AsyncMock()
             MockJira.return_value = mock_jira
 
-            result = await worker._handle_resume_event(msg, state)
+            result = await worker._apply_observation_transition(msg, state)
 
         assert result["is_paused"] is False
-        mock_jira.set_workflow_label.assert_called_once()
-        mock_jira.update_custom_field.assert_called_once_with(
-            "TEST-123",
-            "customfield_12345",
-            "# Spec",
-        )
+        commands = [call.args[0] for call in worker.effect_service.execute_required.await_args_list]
+        assert [command.operation for command in commands] == [
+            "jira.label.set",
+            "jira.custom_field.update",
+        ]
+        assert commands[1].payload == {
+            "field": "customfield_12345",
+            "value": "# Spec",
+        }
+        mock_jira.set_workflow_label.assert_not_called()
+        mock_jira.update_custom_field.assert_not_called()
         mock_jira.add_structured_comment.assert_not_called()
         mock_jira.add_attachment.assert_not_called()
 
@@ -300,11 +306,11 @@ async def test_satisfied_bot_spec_review_stays_paused(worker):
     with (
         _patch_adapter(_repo_ref_for("org/proposals"), mock_adapter),
         patch(
-            "forge.orchestrator.worker.triage_automated_review",
+            "forge.orchestrator.review_enrichment.triage_automated_review",
             new=AsyncMock(return_value=AutomatedReviewDecision("satisfied")),
         ) as triage,
     ):
-        result = await worker._handle_resume_event(msg, state)
+        result = await worker._apply_observation_transition(msg, state)
 
     assert result == state
     triage.assert_awaited_once()
@@ -341,7 +347,7 @@ class TestSpecPrReviewTypedFields:
         mock_adapter = AsyncMock()
         mock_adapter.get_review_thread_comments.return_value = []
         with _patch_adapter(_repo_ref_for("acme/payments"), mock_adapter):
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["revision_requested"] is True
         assert "please fix X" in updated["feedback_comment"]
@@ -369,6 +375,6 @@ class TestSpecPrReviewTypedFields:
         with patch("forge.orchestrator.worker.JiraClient") as MockJira:
             MockJira.return_value.set_workflow_label = AsyncMock()
             MockJira.return_value.close = AsyncMock()
-            updated = await worker._handle_resume_event(message, current_state)
+            updated = await worker._apply_observation_transition(message, current_state)
 
         assert updated["is_paused"] is False

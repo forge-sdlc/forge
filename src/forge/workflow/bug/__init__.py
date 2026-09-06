@@ -1,4 +1,4 @@
-"""Bug workflow implementation."""
+"""Locally runnable bug workflow adapter and state contract."""
 
 from typing import Any
 
@@ -10,7 +10,7 @@ from forge.workflow.bug.state import BugState, create_initial_bug_state
 
 
 class BugWorkflow(BaseWorkflow):
-    """Workflow for Bug tickets."""
+    """Local harness adapter; runtime uses the governed definition."""
 
     name = "bug"
     description = "Bug workflow: Analyze -> RCA -> Fix -> PR -> Review"
@@ -23,8 +23,7 @@ class BugWorkflow(BaseWorkflow):
         return ticket_type == TicketType.BUG
 
     def build_graph(self) -> StateGraph:
-        # Lazy import to avoid circular dependency
-        from forge.workflow.bug.graph import build_bug_graph
+        from forge.workflow.bug.routing import build_bug_graph
 
         return build_bug_graph()
 

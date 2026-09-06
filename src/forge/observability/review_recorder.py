@@ -33,14 +33,14 @@ class ReviewCycleRecorder:
 
     Usage:
         recorder = ReviewCycleRecorder(
-            step_name="implement_task",
+            step_name="implement_work",
             mode="log",
         )
         recorder.record(cycle_data)
 
         # Or for copy mode
         recorder = ReviewCycleRecorder(
-            step_name="implement_task",
+            step_name="implement_work",
             mode="copy",
             recording_dir=Path("/recordings"),
         )
@@ -56,7 +56,7 @@ class ReviewCycleRecorder:
         """Initialize the review cycle recorder.
 
         Args:
-            step_name: Name of the step (e.g., "implement_task") for file organization.
+            step_name: Name of the step (e.g., "implement_work") for file organization.
             mode: Recording mode - "log", "copy", or None (disabled).
             recording_dir: Base directory for copying files (required for copy mode).
 

@@ -1,6 +1,6 @@
 """Unit tests for blocked-state and forge:retry worker behaviour."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -111,7 +111,7 @@ class TestWorkerTerminalBlockedCheck:
 
 
 class TestRetryHandlerClearsBlockedState:
-    """_handle_resume_event clears is_blocked and resets ci_fix_attempts on retry."""
+    """_apply_observation_transition clears is_blocked and resets ci_fix_attempts on retry."""
 
     @pytest.mark.asyncio
     async def test_retry_clears_is_blocked(self, worker, base_message):
@@ -129,7 +129,9 @@ class TestRetryHandlerClearsBlockedState:
             "context": {},
         }
 
-        result = await worker._handle_resume_event(_make_retry_message(base_message), blocked_state)
+        result = await worker._apply_observation_transition(
+            _make_retry_message(base_message), blocked_state
+        )
 
         assert result.get("is_blocked") is False
 
@@ -149,7 +151,9 @@ class TestRetryHandlerClearsBlockedState:
             "context": {},
         }
 
-        result = await worker._handle_resume_event(_make_retry_message(base_message), blocked_state)
+        result = await worker._apply_observation_transition(
+            _make_retry_message(base_message), blocked_state
+        )
 
         assert result.get("ci_fix_attempt") == 0
 
@@ -169,7 +173,9 @@ class TestRetryHandlerClearsBlockedState:
             "context": {},
         }
 
-        result = await worker._handle_resume_event(_make_retry_message(base_message), blocked_state)
+        result = await worker._apply_observation_transition(
+            _make_retry_message(base_message), blocked_state
+        )
 
         assert result.get("last_error") is None
 
@@ -189,7 +195,9 @@ class TestRetryHandlerClearsBlockedState:
             "context": {},
         }
 
-        result = await worker._handle_resume_event(_make_retry_message(base_message), blocked_state)
+        result = await worker._apply_observation_transition(
+            _make_retry_message(base_message), blocked_state
+        )
 
         assert result.get("current_node") == "ci_evaluator"
 
@@ -209,7 +217,9 @@ class TestRetryHandlerClearsBlockedState:
             "context": {},
         }
 
-        result = await worker._handle_resume_event(_make_retry_message(base_message), blocked_state)
+        result = await worker._apply_observation_transition(
+            _make_retry_message(base_message), blocked_state
+        )
 
         assert result.get("context", {}).get("force_fresh_invoke") is True
 
@@ -224,7 +234,7 @@ class TestRetryHandlerClearsBlockedState:
             "last_error": "Implementation failed",
             "context": {},
         }
-        await worker._handle_resume_event(_make_retry_message(base_message), blocked_state)
+        await worker._apply_observation_transition(_make_retry_message(base_message), blocked_state)
 
         worker._post_retry_acknowledgement.assert_awaited_once_with(
             "TEST-123", "execute_task_changes"
@@ -233,44 +243,28 @@ class TestRetryHandlerClearsBlockedState:
     @pytest.mark.asyncio
     async def test_retry_acknowledgement_failure_does_not_raise(self, worker):
         """Jira acknowledgement failures must not block workflow resumption."""
-        jira = MagicMock()
-        jira.close = AsyncMock()
-        with (
-            patch("forge.orchestrator.worker.JiraClient", return_value=jira),
-            patch(
-                "forge.orchestrator.worker.post_status_comment",
-                new=AsyncMock(side_effect=RuntimeError("Jira unavailable")),
-            ),
-        ):
-            await OrchestratorWorker._post_retry_acknowledgement(
-                worker, "TEST-123", "execute_task_changes"
-            )
-
-        jira.close.assert_awaited_once()
+        worker.effect_service = MagicMock()
+        worker.effect_service.execute_required = AsyncMock(
+            side_effect=RuntimeError("Jira unavailable")
+        )
+        await OrchestratorWorker._post_retry_acknowledgement(
+            worker, "TEST-123", "execute_task_changes"
+        )
+        worker.effect_service.execute_required.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_retry_acknowledgement_names_resumed_node(self, worker):
         """The Jira acknowledgement tells the user where Forge resumed."""
-        jira = MagicMock()
-        jira.close = AsyncMock()
-        with (
-            patch("forge.orchestrator.worker.JiraClient", return_value=jira),
-            patch(
-                "forge.orchestrator.worker.post_status_comment",
-                new_callable=AsyncMock,
-            ) as post_comment,
-        ):
-            await OrchestratorWorker._post_retry_acknowledgement(
-                worker, "TEST-123", "execute_task_changes"
-            )
-
-        post_comment.assert_awaited_once_with(
-            jira,
-            "TEST-123",
-            "Forge accepted the `forge:retry` request and is resuming "
-            "the workflow from `execute_task_changes`.",
+        worker.effect_service = MagicMock()
+        worker.effect_service.execute_required = AsyncMock()
+        await OrchestratorWorker._post_retry_acknowledgement(
+            worker, "TEST-123", "execute_task_changes"
         )
-        jira.close.assert_awaited_once()
+        command = worker.effect_service.execute_required.await_args.args[0]
+        assert command.payload["body"] == (
+            "Forge accepted the `forge:retry` request and is resuming "
+            "the workflow from `execute_task_changes`."
+        )
 
 
 class TestRetryOnStuckNonTerminalNode:
@@ -292,7 +286,9 @@ class TestRetryOnStuckNonTerminalNode:
             "context": {},
         }
 
-        result = await worker._handle_resume_event(_make_retry_message(base_message), stuck_state)
+        result = await worker._apply_observation_transition(
+            _make_retry_message(base_message), stuck_state
+        )
 
         assert result.get("is_paused") is False
         assert result.get("last_error") is None
@@ -320,7 +316,7 @@ class TestRetryOnHappyPathTerminalPostsComment:
 
         worker._post_terminal_error_comment = AsyncMock()
 
-        result = await worker._handle_resume_event(
+        result = await worker._apply_observation_transition(
             _make_retry_message(base_message), terminal_state
         )
 
@@ -351,7 +347,9 @@ class TestRetryAtTaskPlanApprovalGate:
             "context": {},
         }
 
-        result = await worker._handle_resume_event(_make_retry_message(base_message), state)
+        result = await worker._apply_observation_transition(
+            _make_retry_message(base_message), state
+        )
 
         assert result.get("is_paused") is False
         assert result.get("revision_requested") is True

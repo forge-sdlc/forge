@@ -81,7 +81,7 @@ def test_queue_message_from_redis_maps_legacy_github_source():
         "1-0",
         {
             "event_id": "evt-1",
-            "source": "github",
+            "source": "source_control",
             "event_type": "cr_opened",
             "ticket_key": "PROJ-1",
             "payload": "{}",

@@ -2,8 +2,8 @@
 
 
 from forge.models.workflow import TicketType
-from forge.workflow.bug.graph import route_entry
-from forge.workflow.feature.graph import route_by_ticket_type
+from forge.workflow.bug.routing import route_entry
+from forge.workflow.feature.routing import route_by_ticket_type
 from tests.fixtures.workflow_states import (
     make_workflow_state,
 )
@@ -228,7 +228,7 @@ class TestRetryResumesAtCorrectNode:
         assert result == "ci_evaluator"
 
     def test_bug_retry_from_implement_resumes_there(self):
-        """Bug workflow blocked at implement_bug_fix resumes there after retry."""
+        """A removed legacy bug implementation node restarts at triage."""
         state = make_workflow_state(
             ticket_key="TEST-456",
             current_node="implement_bug_fix",
@@ -238,7 +238,7 @@ class TestRetryResumesAtCorrectNode:
 
         result = route_entry(state)  # type: ignore[arg-type]
 
-        assert result == "implement_bug_fix"
+        assert result == "triage_check"
 
 
 class TestAutoRetryTransientErrors:

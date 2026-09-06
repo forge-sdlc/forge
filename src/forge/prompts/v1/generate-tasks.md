@@ -32,25 +32,6 @@ Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
 - Prefer additional codebase exploration only for missing implementation details. Reuse grounded Epic context when applicable, and broaden the search when needed to understand the change safely. Do not inspect project-management metadata such as unrelated branches, open issues, pull requests, milestones, or release boards unless the Epic explicitly asks for them.
 - Each Task should follow nearby source/test patterns when the repo establishes them
 
-## Output Format
-
-You MUST use this exact format for each Task. The parser depends on these exact prefixes:
-
-```
-TASK: [Concise task title - max 100 chars]
-REPO: [owner/repo - inherit from Epic if not specified]
-DESCRIPTION:
-[What needs to be implemented, including:]
-- Specific grounded files to create/modify
-- Functions/classes to implement, using names verified from the Epic plan or repository
-- Integration points
-- Relevant existing source or test pattern when clear
-- Repository standards to follow for architecture, tests, docs, and local workflow
-ACCEPTANCE_CRITERIA:
-- [ ] Criterion 1
-- [ ] Criterion 2
-- [ ] Tests pass
----
-```
-
-Separate each Task with `---` on its own line. Include 3-8 Tasks total.
+For each of the 3–8 Tasks, provide a concise `summary` and a complete `description` that
+includes grounded files and symbols, integration points, nearby patterns, repository
+standards, and explicit acceptance criteria including tests.

@@ -1,4 +1,4 @@
-"""Tests for >option N detection in the orchestrator worker's _handle_resume_event."""
+"""Tests for >option N detection in the orchestrator worker's _apply_observation_transition."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -11,7 +11,9 @@ from forge.queue.models import QueueMessage
 
 @pytest.fixture
 def worker() -> OrchestratorWorker:
-    return OrchestratorWorker(consumer_name="test-worker")
+    instance = OrchestratorWorker(consumer_name="test-worker")
+    instance.effect_service = AsyncMock()
+    return instance
 
 
 def _make_option_message(comment_body: str) -> QueueMessage:
@@ -55,7 +57,7 @@ class TestOptionNDetection:
         message = _make_option_message(">option 2")
         state = _make_rca_gate_state()
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["selected_fix_option"] == 2
         assert result["selected_fix_approach"] == state["rca_options"][1]
@@ -67,7 +69,7 @@ class TestOptionNDetection:
         message = _make_option_message(">Option 2")
         state = _make_rca_gate_state()
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["selected_fix_option"] == 2
 
@@ -77,7 +79,7 @@ class TestOptionNDetection:
         message = _make_option_message("let's go with >option 1 based on discussion")
         state = _make_rca_gate_state()
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["selected_fix_option"] == 1
         assert result["selected_fix_approach"] == state["rca_options"][0]
@@ -88,7 +90,7 @@ class TestOptionNDetection:
         message = _make_option_message(">option 1\n>option 2")
         state = _make_rca_gate_state()
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["selected_fix_option"] == 1
 
@@ -97,15 +99,10 @@ class TestOptionNDetection:
         """>option 5 when only 2 options → clarifying comment posted."""
         message = _make_option_message(">option 5")
         state = _make_rca_gate_state()
-        mock_jira = AsyncMock()
-        mock_jira.add_comment = AsyncMock()
-        mock_jira.close = AsyncMock()
+        await worker._apply_observation_transition(message, state)
 
-        with patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira):
-            await worker._handle_resume_event(message, state)
-
-        mock_jira.add_comment.assert_called_once()
-        comment_text = mock_jira.add_comment.call_args[0][1]
+        command = worker.effect_service.execute_required.await_args.args[0]
+        comment_text = command.payload["body"]
         assert "option" in comment_text.lower() and ("1" in comment_text and "2" in comment_text)
 
     @pytest.mark.asyncio
@@ -113,12 +110,7 @@ class TestOptionNDetection:
         """>option 5 when only 2 options → selected_fix_option remains None."""
         message = _make_option_message(">option 5")
         state = _make_rca_gate_state()
-        mock_jira = AsyncMock()
-        mock_jira.add_comment = AsyncMock()
-        mock_jira.close = AsyncMock()
-
-        with patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira):
-            result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result["selected_fix_option"] is None
         assert result is state  # Should return current_state unchanged
@@ -136,7 +128,7 @@ class TestOptionNDetection:
             patch("forge.orchestrator.worker.JiraClient", return_value=mock_jira),
             patch("forge.orchestrator.worker.post_status_comment", new_callable=AsyncMock),
         ):
-            result = await worker._handle_resume_event(message, state)
+            result = await worker._apply_observation_transition(message, state)
 
         assert result["revision_requested"] is True
         assert result["selected_fix_option"] is None
@@ -147,6 +139,6 @@ class TestOptionNDetection:
         message = _make_option_message(">option 1")
         state = _make_rca_gate_state(current_node="prd_approval_gate")
 
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
 
         assert result.get("selected_fix_option") is None

@@ -26,8 +26,9 @@ nav = [
     {"Overview" = "developer-guide.md"},
     {"Architecture" = [
       {"Overview" = "architecture/index.md"},
-      {"System & Components" = "architecture/overview.md"},
-      {"Internals" = "architecture/internals.md"},
+      {"System and Components" = "architecture/overview.md"},
+      {"Runtime Internals" = "architecture/internals.md"},
+      {"Structured Model Output" = "architecture/structured-output.md"},
       {"Reference" = "architecture/reference.md"},
     ]},
     {"Local Setup" = "dev/setup.md"},

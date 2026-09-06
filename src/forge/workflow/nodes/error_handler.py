@@ -6,9 +6,9 @@ Provides helpers for posting error notifications to Jira with user mentions.
 import logging
 from typing import Any
 
-from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.errors import SourceControlError
 from forge.utils.redaction import redact_secrets
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils.source_control import get_adapter, identity_for
 

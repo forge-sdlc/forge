@@ -1,0 +1,170 @@
+{
+  "apiVersion": "forge/v1",
+  "kind": "Workflow",
+  "metadata": {
+    "description": "Forge supported task-takeover golden path",
+    "name": "task_takeover",
+    "revision": 5
+  },
+  "spec": {
+    "entry": "triage_check",
+    "resume": {
+      "fromRevisions": {}
+    },
+    "state": "task_takeover",
+    "steps": {
+      "answer_question": {
+        "branches": {
+          "task_plan_approval_gate": "task_plan_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_answer"
+      },
+      "attempt_ci_fix": {
+        "branches": {
+          "attempt_ci_fix": "escalate_blocked",
+          "ci_evaluator": "ci_evaluator",
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate"
+        },
+        "dynamicRoute": false,
+        "retryBound": 5,
+        "route": "route_current_node"
+      },
+      "ci_evaluator": {
+        "branches": {
+          "attempt_ci_fix": "attempt_ci_fix",
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_ci_evaluation"
+      },
+      "complete_task_takeover": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "__end__"
+      },
+      "create_pr": {
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "teardown_workspace": "teardown_workspace"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_pr_creation"
+      },
+      "escalate_blocked": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "__end__"
+      },
+    "implement_work": {
+      "branches": {
+        "escalate_blocked": "escalate_blocked",
+        "implement_work": "implement_work",
+          "run_qualitative_review": "run_qualitative_review"
+        },
+        "dynamicRoute": false,
+        "retryBound": 100,
+        "route": "route_after_execution"
+      },
+      "generate_plan": {
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "generate_plan": "generate_plan",
+          "task_plan_approval_gate": "task_plan_approval_gate"
+        },
+        "dynamicRoute": false,
+        "retryBound": 3,
+        "route": "route_after_generate_plan"
+      },
+      "human_review_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "ci_evaluator": "ci_evaluator",
+          "complete_task_takeover": "complete_task_takeover",
+          "complete_tasks": "complete_task_takeover",
+          "implement_review": "implement_review"
+        },
+        "dynamicRoute": false,
+        "route": "route_human_review_task_takeover"
+      },
+      "implement_review": {
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate",
+          "implement_review": "implement_review",
+          "review_response_gate": "review_response_gate"
+        },
+        "dynamicRoute": false,
+        "retryBound": 3,
+        "route": "route_current_node"
+      },
+      "review_response_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "human_review_gate": "human_review_gate",
+          "implement_review": "implement_review"
+        },
+        "dynamicRoute": false,
+        "route": "route_review_response"
+      },
+    "run_qualitative_review": {
+        "branches": {
+          "create_pr": "create_pr",
+          "escalate_blocked": "escalate_blocked",
+        "implement_work": "implement_work",
+          "run_qualitative_review": "run_qualitative_review"
+        },
+        "dynamicRoute": false,
+        "retryBound": 3,
+        "route": "route_after_qualitative_review"
+      },
+    "setup_workspace": {
+      "branches": {
+        "escalate_blocked": "escalate_blocked",
+        "implement_work": "implement_work"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_workspace_setup"
+      },
+      "task_plan_approval_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "answer_question": "answer_question",
+          "regenerate_plan": "generate_plan",
+          "setup_workspace": "setup_workspace"
+        },
+        "dynamicRoute": false,
+        "route": "route_task_plan_approval"
+      },
+      "teardown_workspace": {
+        "branches": {
+          "human_review_gate": "human_review_gate",
+          "setup_workspace": "setup_workspace"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_teardown"
+      },
+      "triage_check": {
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "generate_plan": "generate_plan",
+          "triage_check": "triage_check",
+          "triage_gate": "triage_gate"
+        },
+        "dynamicRoute": false,
+        "retryBound": 3,
+        "route": "route_after_triage_check"
+      },
+      "triage_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "triage_check": "triage_check"
+        },
+        "dynamicRoute": false,
+        "route": "route_triage_gate"
+      }
+    }
+  }
+}

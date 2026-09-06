@@ -6,7 +6,7 @@ import pytest
 from langgraph.graph import END, START, StateGraph
 
 from forge.models.workflow import TicketType
-from forge.workflow.bug.graph import (
+from forge.workflow.bug.routing import (
     _answer_question_bug,
     _route_after_answer_bug,
     _route_after_decompose_plan,
@@ -44,7 +44,7 @@ async def test_answer_question_node_receives_bug_rca_artifact_fields():
     }
 
     with patch(
-        "forge.workflow.bug.graph.answer_question", new_callable=AsyncMock
+        "forge.workflow.bug.routing.answer_question", new_callable=AsyncMock
     ) as mock_answer:
         mock_answer.side_effect = lambda received: received
         await graph.compile().ainvoke(state)
@@ -92,7 +92,7 @@ class TestRouteEntry:
         ("regenerate_rca", "regenerate_rca"),
         # Preserved existing nodes
         ("setup_workspace", "setup_workspace"),
-        ("implement_bug_fix", "implement_bug_fix"),
+        ("implement_work", "implement_work"),
         ("local_review", "local_review"),
         ("update_documentation", "update_documentation"),
         ("create_pr", "create_pr"),
@@ -311,20 +311,20 @@ class TestLocalReviewRouting:
 
     def test_tests_incomplete_routes_to_implement(self):
         state = _bug_state(local_review_verdict="tests_incomplete", qualitative_retry_count=0)
-        assert _route_after_local_review(state) == "implement_bug_fix"
+        assert _route_after_local_review(state) == "implement_work"
 
     def test_symptom_only_routes_to_implement(self):
         state = _bug_state(local_review_verdict="symptom_only", qualitative_retry_count=0)
-        assert _route_after_local_review(state) == "implement_bug_fix"
+        assert _route_after_local_review(state) == "implement_work"
 
     def test_retry_cap_routes_to_update_documentation(self):
         state = _bug_state(local_review_verdict="tests_incomplete", qualitative_retry_count=2)
         assert _route_after_local_review(state) == "update_documentation"
 
     def test_first_retry_allows_second_attempt(self):
-        """qualitative_retry_count=1 (< _QUALITATIVE_CAP=2) still routes back to implement_bug_fix."""
+        """qualitative_retry_count=1 (< _QUALITATIVE_CAP=2) still routes back to implement_work."""
         state = _bug_state(local_review_verdict="tests_incomplete", qualitative_retry_count=1)
-        assert _route_after_local_review(state) == "implement_bug_fix"
+        assert _route_after_local_review(state) == "implement_work"
 
     def test_retry_at_cap_routes_to_update_documentation(self):
         """qualitative_retry_count=2 (== _QUALITATIVE_CAP) caps the loop and routes to update_documentation."""
@@ -394,15 +394,7 @@ class TestGraphCompilation:
         targets = {e.target for e in compiled.get_graph().edges if e.source == "attempt_ci_fix"}
         assert "escalate_blocked" in targets
 
-    def test_rebase_can_return_to_post_pr_nodes(self):
+    def test_rebase_is_not_a_workflow_node(self):
         graph = build_bug_graph()
         compiled = graph.compile()
-        targets = {e.target for e in compiled.get_graph().edges if e.source == "rebase_pr"}
-
-        assert {
-            "ci_evaluator",
-            "implement_review",
-            "review_response_gate",
-            "create_pr",
-            "teardown_workspace",
-        }.issubset(targets)
+        assert "rebase_pr" not in compiled.get_graph().nodes

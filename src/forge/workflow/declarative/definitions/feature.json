@@ -1,0 +1,296 @@
+{
+  "apiVersion": "forge/v1",
+  "kind": "Workflow",
+  "metadata": {
+    "description": "Forge supported feature golden path",
+    "name": "feature",
+    "revision": 4
+  },
+  "spec": {
+    "entry": "generate_prd",
+    "resume": {
+      "fromRevisions": {}
+    },
+    "state": "feature",
+    "steps": {
+      "aggregate_epic_status": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "aggregate_feature_status"
+      },
+      "aggregate_feature_status": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "__end__"
+      },
+      "answer_question": {
+        "branches": {
+          "plan_approval_gate": "plan_approval_gate",
+          "prd_approval_gate": "prd_approval_gate",
+          "spec_approval_gate": "spec_approval_gate",
+          "task_approval_gate": "task_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_answer"
+      },
+      "attempt_ci_fix": {
+        "branches": {
+          "attempt_ci_fix": "escalate_blocked",
+          "ci_evaluator": "ci_evaluator",
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate"
+        },
+        "dynamicRoute": false,
+        "retryBound": 5,
+        "route": "route_current_node"
+      },
+      "ci_evaluator": {
+        "branches": {
+          "attempt_ci_fix": "attempt_ci_fix",
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_ci_evaluation"
+      },
+      "complete_tasks": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "aggregate_epic_status"
+      },
+      "create_pr": {
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "teardown_workspace": "teardown_workspace"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_pr_creation"
+      },
+      "decompose_epics": {
+        "branches": {
+          "__end__": "__end__",
+          "plan_approval_gate": "plan_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_epic_decomposition"
+      },
+      "escalate_blocked": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "__end__"
+      },
+      "generate_prd": {
+        "branches": {
+          "__end__": "__end__",
+          "prd_approval_gate": "prd_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_generation"
+      },
+      "generate_spec": {
+        "branches": {
+          "__end__": "__end__",
+          "spec_approval_gate": "spec_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_spec_generation"
+      },
+      "generate_tasks": {
+        "branches": {
+          "__end__": "__end__",
+          "task_approval_gate": "task_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_task_generation"
+      },
+      "human_review_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "ci_evaluator": "ci_evaluator",
+          "complete_tasks": "complete_tasks",
+          "implement_review": "implement_review"
+        },
+        "dynamicRoute": false,
+        "route": "route_human_review"
+      },
+      "implement_review": {
+        "branches": {
+          "escalate_blocked": "escalate_blocked",
+          "human_review_gate": "human_review_gate",
+          "implement_review": "implement_review",
+          "review_response_gate": "review_response_gate"
+        },
+        "dynamicRoute": false,
+        "retryBound": 3,
+        "route": "route_current_node"
+      },
+    "implement_work": {
+      "branches": {
+        "escalate_blocked": "escalate_blocked",
+        "implement_work": "implement_work",
+          "local_review": "local_review"
+        },
+        "dynamicRoute": false,
+        "retryBound": 100,
+        "route": "route_implementation"
+      },
+      "local_review": {
+        "branches": {
+          "create_pr": "update_documentation",
+          "escalate_blocked": "escalate_blocked",
+          "local_review": "local_review"
+        },
+        "dynamicRoute": false,
+        "retryBound": 2,
+        "route": "route_current_node"
+      },
+      "plan_approval_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "answer_question": "answer_question",
+          "generate_tasks": "generate_tasks",
+          "provision_epics": "provision_epics",
+          "regenerate_all_epics": "regenerate_all_epics",
+          "update_single_epic": "update_single_epic"
+        },
+        "dynamicRoute": false,
+        "route": "route_plan_approval"
+      },
+      "provision_epics": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "generate_tasks"
+      },
+      "prd_approval_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "answer_question": "answer_question",
+          "generate_spec": "generate_spec",
+          "regenerate_prd": "regenerate_prd"
+        },
+        "dynamicRoute": false,
+        "route": "route_prd_approval"
+      },
+      "regenerate_all_epics": {
+        "branches": {
+          "__end__": "__end__",
+          "plan_approval_gate": "plan_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_epic_regeneration"
+      },
+      "regenerate_all_tasks": {
+        "branches": {
+          "__end__": "__end__",
+          "task_approval_gate": "task_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_task_regeneration"
+      },
+      "regenerate_epic_tasks": {
+        "branches": {
+          "__end__": "__end__",
+          "task_approval_gate": "task_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_epic_task_regeneration"
+      },
+      "regenerate_prd": {
+        "branches": {
+          "__end__": "__end__",
+          "prd_approval_gate": "prd_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_prd_regeneration"
+      },
+      "regenerate_spec": {
+        "branches": {
+          "__end__": "__end__",
+          "spec_approval_gate": "spec_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_spec_regeneration"
+      },
+      "review_response_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "human_review_gate": "human_review_gate",
+          "implement_review": "implement_review"
+        },
+        "dynamicRoute": false,
+        "route": "route_review_response"
+      },
+    "setup_workspace": {
+      "branches": {
+        "escalate_blocked": "escalate_blocked",
+        "implement_work": "implement_work"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_workspace_setup"
+      },
+      "spec_approval_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "answer_question": "answer_question",
+          "decompose_epics": "decompose_epics",
+          "regenerate_spec": "regenerate_spec"
+        },
+        "dynamicRoute": false,
+        "route": "route_spec_approval"
+      },
+      "task_approval_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "answer_question": "answer_question",
+          "regenerate_all_tasks": "regenerate_all_tasks",
+          "regenerate_epic_tasks": "regenerate_epic_tasks",
+          "provision_tasks": "provision_tasks",
+          "task_router": "task_router",
+          "update_single_task": "update_single_task"
+        },
+        "dynamicRoute": false,
+        "route": "route_task_approval"
+      },
+      "provision_tasks": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "task_router"
+      },
+      "task_router": {
+        "branches": {},
+        "dynamicRoute": true,
+        "maxConcurrency": 16,
+        "route": "route_tasks_parallel"
+      },
+      "teardown_workspace": {
+        "branches": {
+          "human_review_gate": "human_review_gate",
+          "setup_workspace": "setup_workspace"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_teardown"
+      },
+      "update_documentation": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "create_pr"
+      },
+      "update_single_epic": {
+        "branches": {
+          "__end__": "__end__",
+          "plan_approval_gate": "plan_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_single_epic_update"
+      },
+      "update_single_task": {
+        "branches": {
+          "__end__": "__end__",
+          "task_approval_gate": "task_approval_gate"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_single_task_update"
+      }
+    }
+  }
+}

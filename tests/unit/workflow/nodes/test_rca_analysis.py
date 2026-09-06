@@ -36,6 +36,7 @@ def base_bug_state():
 
 
 SAMPLE_RCA_JSON = {
+    "repository": "acme/backend",
     "summary": "Password validation rejects special characters.",
     "code_location": {
         "file": "src/auth/validators.py",
@@ -82,6 +83,9 @@ def _make_mock_jira(summary="Bug summary", description="Bug description", repos=
     issue.project_key = "BUG"
     jira.get_issue = AsyncMock(return_value=issue)
     jira.get_project_repos = AsyncMock(return_value=repos or ["acme/backend"])
+    jira.get_labels = AsyncMock(return_value=[])
+    jira.add_labels = AsyncMock()
+    jira.remove_labels = AsyncMock()
     jira.add_comment = AsyncMock()
     jira.close = AsyncMock()
     return jira
@@ -225,6 +229,26 @@ class TestAnalyzeBug:
         assert result["rca_repos"] == ["acme/backend"]
         assert result["rca_content"] is not None
         assert len(result["rca_content"]) > 0
+        mock_jira.add_labels.assert_awaited_once_with("BUG-123", ["repo:acme/backend"])
+
+    @pytest.mark.asyncio
+    async def test_invalid_rca_repository_triggers_retry_without_changing_labels(self, base_bug_state):
+        mock_jira = _make_mock_jira()
+        invalid_rca = {**SAMPLE_RCA_JSON, "repository": "other/service"}
+
+        with (
+            patch("forge.workflow.nodes.rca_analysis.JiraClient", return_value=mock_jira),
+            patch(
+                "forge.workflow.nodes.rca_analysis.ContainerRunner",
+                return_value=_make_mock_runner_success(rca_data=invalid_rca),
+            ),
+        ):
+            result = await analyze_bug(base_bug_state)
+
+        assert result["current_node"] == "analyze_bug"
+        assert "repository must be one of the configured" in result["last_error"]
+        mock_jira.add_labels.assert_not_awaited()
+        mock_jira.remove_labels.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_rca_options_has_required_keys(self, base_bug_state):

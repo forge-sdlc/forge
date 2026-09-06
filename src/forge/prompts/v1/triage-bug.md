@@ -10,5 +10,5 @@
 
 ---
 
-Evaluate this ticket using the triage-bug skill.
-Output only the bare string `sufficient` or a bare JSON array of missing field names — no markdown, no explanation.
+Evaluate this ticket using the triage-bug skill. Set `sufficient` to whether implementation
+can be planned safely and list only genuinely blocking information in `missing_fields`.

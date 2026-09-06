@@ -6,12 +6,11 @@ import pytest
 from langgraph.graph import END
 
 from forge.models.workflow import TicketType
-from forge.workflow.bug.graph import (
+from forge.workflow.bug.routing import (
     _route_after_analyze_bug,
     _route_after_answer_bug,
     _route_after_implementation,
     _route_after_local_review,
-    route_after_pr_creation,
     _route_after_reflect_rca,
     _route_after_triage_check,
     _route_after_workspace_setup,
@@ -21,6 +20,7 @@ from forge.workflow.bug.graph import (
 from forge.workflow.bug.state import create_initial_bug_state
 from forge.workflow.nodes.plan_bug_fix import route_plan_approval
 from forge.workflow.nodes.rca_option_gate import route_rca_option
+from forge.workflow.post_pr import route_after_pr_creation
 from tests.fixtures.workflow_states import (
     STATE_BUG_PLAN_PENDING,
     STATE_RCA_OPTION_PENDING,
@@ -68,14 +68,14 @@ class TestBugWorkflowEntry:
         assert route_entry(state) == "rca_option_gate"
 
     def test_resume_at_implement_routes_there(self):
-        """Resuming at implement_bug_fix returns to that node."""
+        """A removed legacy implementation node restarts at triage."""
         state = make_workflow_state(
             ticket_key="TEST-456",
             current_node="implement_bug_fix",
             ticket_type=TicketType.BUG,
         )
 
-        assert route_entry(state) == "implement_bug_fix"
+        assert route_entry(state) == "triage_check"
 
     def test_terminal_state_routes_to_end(self):
         """A completed bug workflow returns END on resume attempt."""
@@ -114,7 +114,7 @@ class TestBugImplementationRouting:
             retry_count=0,
         )
 
-        assert _route_after_implementation(state) == "implement_bug_fix"
+        assert _route_after_implementation(state) == "implement_work"
 
     def test_error_at_retry_cap_escalates(self):
         """Implementation failure at retry cap escalates to blocked."""
@@ -132,21 +132,24 @@ class TestBugImplementationRouting:
 class TestBugWorkflowResumeRouting:
     """route_entry correctly resumes a bug workflow at any node."""
 
-    @pytest.mark.parametrize("node,expected", [
-        ("analyze_bug", "analyze_bug"),
-        ("regenerate_rca", "regenerate_rca"),  # reruns cleanup+setup before analyze_bug
-        ("rca_approval_gate", "rca_option_gate"),  # backward compat: old gate maps to new
-        ("setup_workspace", "setup_workspace"),
-        ("implement_bug_fix", "implement_bug_fix"),
-        ("create_pr", "create_pr"),
-        ("teardown_workspace", "teardown_workspace"),
-        ("ci_evaluator", "ci_evaluator"),
-        ("attempt_ci_fix", "ci_evaluator"),
-        ("local_review", "local_review"),
-        ("ai_review", "human_review_gate"),
-        ("human_review_gate", "human_review_gate"),
-        ("escalate_blocked", "escalate_blocked"),
-    ])
+    @pytest.mark.parametrize(
+        "node,expected",
+        [
+            ("analyze_bug", "analyze_bug"),
+            ("regenerate_rca", "regenerate_rca"),  # reruns cleanup+setup before analyze_bug
+            ("rca_approval_gate", "rca_option_gate"),  # backward compat: old gate maps to new
+            ("setup_workspace", "setup_workspace"),
+            ("implement_bug_fix", "triage_check"),
+            ("create_pr", "create_pr"),
+            ("teardown_workspace", "teardown_workspace"),
+            ("ci_evaluator", "ci_evaluator"),
+            ("attempt_ci_fix", "ci_evaluator"),
+            ("local_review", "local_review"),
+            ("ai_review", "human_review_gate"),
+            ("human_review_gate", "human_review_gate"),
+            ("escalate_blocked", "escalate_blocked"),
+        ],
+    )
     def test_resume_routing(self, node, expected):
         """route_entry maps each node to the correct resume target."""
         state = make_workflow_state(
@@ -158,8 +161,7 @@ class TestBugWorkflowResumeRouting:
         result = route_entry(state)
 
         assert result == expected, (
-            f"route_entry with current_node='{node}' returned '{result}', "
-            f"expected '{expected}'"
+            f"route_entry with current_node='{node}' returned '{result}', expected '{expected}'"
         )
 
 
@@ -184,14 +186,20 @@ class TestBackwardCompatFlow:
             "is_paused": False,
         }
         result = route_entry(minimal_old_state)
-        assert result == "implement_bug_fix"
+        assert result == "triage_check"
 
     def test_all_new_current_node_values_are_handled(self):
         """Every new current_node value from the redesign has a route_entry mapping."""
         new_nodes = [
-            "triage_check", "triage_gate", "reflect_rca",
-            "rca_option_gate", "plan_bug_fix", "plan_approval_gate",
-            "regenerate_plan", "decompose_plan", "post_merge_summary",
+            "triage_check",
+            "triage_gate",
+            "reflect_rca",
+            "rca_option_gate",
+            "plan_bug_fix",
+            "plan_approval_gate",
+            "regenerate_plan",
+            "decompose_plan",
+            "post_merge_summary",
         ]
         for node in new_nodes:
             state = make_workflow_state(
@@ -227,18 +235,21 @@ class TestNewStateFixturesInFlow:
 class TestNewResumeRoutingCases:
     """New pipeline nodes resume correctly at the right point."""
 
-    @pytest.mark.parametrize("node,expected", [
-        ("triage_check", "triage_check"),
-        ("triage_gate", "triage_gate"),
-        ("reflect_rca", "reflect_rca"),
-        ("rca_option_gate", "rca_option_gate"),
-        ("plan_bug_fix", "plan_bug_fix"),
-        ("plan_approval_gate", "plan_approval_gate"),
-        ("regenerate_plan", "regenerate_plan"),
-        ("decompose_plan", "decompose_plan"),
-        ("post_merge_summary", "post_merge_summary"),
-        ("rca_approval_gate", "rca_option_gate"),  # backward compat
-    ])
+    @pytest.mark.parametrize(
+        "node,expected",
+        [
+            ("triage_check", "triage_check"),
+            ("triage_gate", "triage_gate"),
+            ("reflect_rca", "reflect_rca"),
+            ("rca_option_gate", "rca_option_gate"),
+            ("plan_bug_fix", "plan_bug_fix"),
+            ("plan_approval_gate", "plan_approval_gate"),
+            ("regenerate_plan", "regenerate_plan"),
+            ("decompose_plan", "decompose_plan"),
+            ("post_merge_summary", "post_merge_summary"),
+            ("rca_approval_gate", "rca_option_gate"),  # backward compat
+        ],
+    )
     def test_resume_routing_new_pipeline_nodes(self, node, expected):
         """route_entry maps each new current_node to the correct resume target."""
         state = make_workflow_state(
@@ -273,21 +284,29 @@ class TestTriageLoopFlow:
         mock_jira = MagicMock()
         mock_jira.add_comment = AsyncMock()
         mock_jira.set_workflow_label = AsyncMock()
-        mock_jira.get_issue = AsyncMock(return_value=MagicMock(
-            summary="Login fails",
-            description="Short desc",
-            project_key="BUG",
-        ))
+        mock_jira.get_issue = AsyncMock(
+            return_value=MagicMock(
+                summary="Login fails",
+                description="Short desc",
+                project_key="BUG",
+            )
+        )
         mock_jira.get_comments = AsyncMock(return_value=[])
         mock_jira.close = AsyncMock()
 
         mock_agent = MagicMock()
-        mock_agent.run_task = AsyncMock(return_value='["steps_to_reproduce", "error_output"]')
+        from forge.workflow.stations.triage import TriageOutput
+
+        mock_agent.run_structured_task = AsyncMock(
+            return_value=TriageOutput(
+                sufficient=False, missing_fields=("steps_to_reproduce", "error_output")
+            )
+        )
         mock_agent.close = AsyncMock()
 
         with (
             patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.triage.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent),
         ):
             result = await triage_check(state)
 
@@ -309,20 +328,25 @@ class TestTriageLoopFlow:
 
         mock_jira = MagicMock()
         mock_jira.add_comment = AsyncMock()
-        mock_jira.get_issue = AsyncMock(return_value=MagicMock(
-            summary="Login fails with $", description="Full description with all fields",
-            project_key="BUG",
-        ))
+        mock_jira.get_issue = AsyncMock(
+            return_value=MagicMock(
+                summary="Login fails with $",
+                description="Full description with all fields",
+                project_key="BUG",
+            )
+        )
         mock_jira.get_comments = AsyncMock(return_value=[])
         mock_jira.close = AsyncMock()
 
         mock_agent = MagicMock()
-        mock_agent.run_task = AsyncMock(return_value="sufficient")
+        from forge.workflow.stations.triage import TriageOutput
+
+        mock_agent.run_structured_task = AsyncMock(return_value=TriageOutput(sufficient=True))
         mock_agent.close = AsyncMock()
 
         with (
             patch("forge.workflow.nodes.triage.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.triage.ForgeAgent", return_value=mock_agent),
+            patch("forge.workflow.stations.triage.ForgeAgent", return_value=mock_agent),
         ):
             result = await triage_check(state)
 
@@ -344,7 +368,9 @@ class TestReflectionCapFlow:
             ticket_type=TicketType.BUG,
             is_paused=False,
             rca_content="## Root Cause\nBug is in validators.py",
-            rca_options=[{"title": "Fix regex", "description": "Update pattern", "tradeoffs": "Low risk"}],
+            rca_options=[
+                {"title": "Fix regex", "description": "Update pattern", "tradeoffs": "Low risk"}
+            ],
             reflection_count=2,  # Will become 3 after this run
             reflection_critique=None,
         )
@@ -379,7 +405,8 @@ class TestQualitativeRetryCapFlow:
 
     def test_qualitative_retry_count_two_routes_to_create_pr(self):
         """_route_after_local_review with qualitative_retry_count=2 → create_pr."""
-        from forge.workflow.bug.graph import _route_after_local_review
+        from forge.workflow.bug.routing import _route_after_local_review
+
         state = make_workflow_state(
             ticket_key="BUG-Q1",
             current_node="local_review",
@@ -390,8 +417,9 @@ class TestQualitativeRetryCapFlow:
         assert _route_after_local_review(state) == "update_documentation"
 
     def test_symptom_only_first_retry_routes_to_implement(self):
-        """_route_after_local_review with symptom_only + retry=0 → implement_bug_fix."""
-        from forge.workflow.bug.graph import _route_after_local_review
+        """_route_after_local_review with symptom_only + retry=0 → implement_work."""
+        from forge.workflow.bug.routing import _route_after_local_review
+
         state = make_workflow_state(
             ticket_key="BUG-Q2",
             current_node="local_review",
@@ -399,7 +427,7 @@ class TestQualitativeRetryCapFlow:
             local_review_verdict="symptom_only",
             qualitative_retry_count=0,
         )
-        assert _route_after_local_review(state) == "implement_bug_fix"
+        assert _route_after_local_review(state) == "implement_work"
 
 
 # ---------------------------------------------------------------------------
@@ -412,25 +440,33 @@ class TestRouteAfterTriageCheck:
 
     def test_missing_fields_routes_to_triage_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-TC1", ticket_type=TicketType.BUG, current_node="triage_gate",
+            ticket_key="BUG-TC1",
+            ticket_type=TicketType.BUG,
+            current_node="triage_gate",
         )
         assert _route_after_triage_check(state) == "triage_gate"
 
     def test_sufficient_ticket_routes_to_analyze_bug(self):
         state = make_workflow_state(
-            ticket_key="BUG-TC2", ticket_type=TicketType.BUG, current_node="analyze_bug",
+            ticket_key="BUG-TC2",
+            ticket_type=TicketType.BUG,
+            current_node="analyze_bug",
         )
         assert _route_after_triage_check(state) == "analyze_bug"
 
     def test_error_routes_to_escalate_blocked(self):
         state = make_workflow_state(
-            ticket_key="BUG-TC3", ticket_type=TicketType.BUG, current_node="escalate_blocked",
+            ticket_key="BUG-TC3",
+            ticket_type=TicketType.BUG,
+            current_node="escalate_blocked",
         )
         assert _route_after_triage_check(state) == "escalate_blocked"
 
     def test_unknown_node_defaults_to_triage_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-TC4", ticket_type=TicketType.BUG, current_node="something_unknown",
+            ticket_key="BUG-TC4",
+            ticket_type=TicketType.BUG,
+            current_node="something_unknown",
         )
         assert _route_after_triage_check(state) == "triage_gate"
 
@@ -440,19 +476,25 @@ class TestRouteAfterAnalyzeBug:
 
     def test_success_routes_to_reflect_rca(self):
         state = make_workflow_state(
-            ticket_key="BUG-AB1", ticket_type=TicketType.BUG, current_node="reflect_rca",
+            ticket_key="BUG-AB1",
+            ticket_type=TicketType.BUG,
+            current_node="reflect_rca",
         )
         assert _route_after_analyze_bug(state) == "reflect_rca"
 
     def test_too_many_failures_routes_to_escalate(self):
         state = make_workflow_state(
-            ticket_key="BUG-AB2", ticket_type=TicketType.BUG, current_node="escalate_blocked",
+            ticket_key="BUG-AB2",
+            ticket_type=TicketType.BUG,
+            current_node="escalate_blocked",
         )
         assert _route_after_analyze_bug(state) == "escalate_blocked"
 
     def test_container_failure_terminates_invocation(self):
         state = make_workflow_state(
-            ticket_key="BUG-AB3", ticket_type=TicketType.BUG, current_node="analyze_bug",
+            ticket_key="BUG-AB3",
+            ticket_type=TicketType.BUG,
+            current_node="analyze_bug",
         )
         assert _route_after_analyze_bug(state) == END
 
@@ -462,48 +504,67 @@ class TestRouteAfterReflectRca:
 
     def test_failure_state_routes_to_escalate(self):
         state = make_workflow_state(
-            ticket_key="BUG-RR1", ticket_type=TicketType.BUG, current_node="escalate_blocked",
+            ticket_key="BUG-RR1",
+            ticket_type=TicketType.BUG,
+            current_node="escalate_blocked",
         )
         assert _route_after_reflect_rca(state) == "escalate_blocked"
 
     def test_container_failure_terminates(self):
         state = make_workflow_state(
-            ticket_key="BUG-RR2", ticket_type=TicketType.BUG, current_node="reflect_rca",
+            ticket_key="BUG-RR2",
+            ticket_type=TicketType.BUG,
+            current_node="reflect_rca",
         )
         assert _route_after_reflect_rca(state) == END
 
     def test_reflection_cap_routes_to_rca_option_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-RR3", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            reflection_count=3, reflection_critique="still needs depth",
+            ticket_key="BUG-RR3",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            reflection_count=3,
+            reflection_critique="still needs depth",
         )
         assert _route_after_reflect_rca(state) == "rca_option_gate"
 
     def test_critique_below_cap_loops_to_analyze_bug(self):
         state = make_workflow_state(
-            ticket_key="BUG-RR4", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            reflection_count=1, reflection_critique="needs more depth on auth flow",
+            ticket_key="BUG-RR4",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            reflection_count=1,
+            reflection_critique="needs more depth on auth flow",
         )
         assert _route_after_reflect_rca(state) == "analyze_bug"
 
     def test_no_critique_routes_to_rca_option_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-RR5", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            reflection_count=1, reflection_critique=None,
+            ticket_key="BUG-RR5",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            reflection_count=1,
+            reflection_critique=None,
         )
         assert _route_after_reflect_rca(state) == "rca_option_gate"
 
     def test_empty_critique_routes_to_rca_option_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-RR6", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            reflection_count=1, reflection_critique="",
+            ticket_key="BUG-RR6",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            reflection_count=1,
+            reflection_critique="",
         )
         assert _route_after_reflect_rca(state) == "rca_option_gate"
 
     def test_whitespace_only_critique_routes_to_rca_option_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-RR7", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            reflection_count=1, reflection_critique="   ",
+            ticket_key="BUG-RR7",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            reflection_count=1,
+            reflection_critique="   ",
         )
         assert _route_after_reflect_rca(state) == "rca_option_gate"
 
@@ -513,49 +574,68 @@ class TestRouteRcaOption:
 
     def test_question_routes_to_answer_question(self):
         state = make_workflow_state(
-            ticket_key="BUG-RO1", ticket_type=TicketType.BUG, current_node="rca_option_gate",
+            ticket_key="BUG-RO1",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
             is_question=True,
         )
         assert route_rca_option(state) == "answer_question"
 
     def test_question_takes_priority_over_selection(self):
         state = make_workflow_state(
-            ticket_key="BUG-RO2", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            is_question=True, selected_fix_option=1, is_paused=False,
+            ticket_key="BUG-RO2",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            is_question=True,
+            selected_fix_option=1,
+            is_paused=False,
         )
         assert route_rca_option(state) == "answer_question"
 
     def test_option_selected_routes_to_plan_bug_fix(self):
         state = make_workflow_state(
-            ticket_key="BUG-RO3", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            selected_fix_option=1, is_paused=False,
+            ticket_key="BUG-RO3",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            selected_fix_option=1,
+            is_paused=False,
         )
         assert route_rca_option(state) == "plan_bug_fix"
 
     def test_option_selected_while_paused_routes_to_end(self):
         state = make_workflow_state(
-            ticket_key="BUG-RO4", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            selected_fix_option=1, is_paused=True,
+            ticket_key="BUG-RO4",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            selected_fix_option=1,
+            is_paused=True,
         )
         assert route_rca_option(state) == END
 
     def test_revision_requested_routes_to_regenerate_rca(self):
         state = make_workflow_state(
-            ticket_key="BUG-RO5", ticket_type=TicketType.BUG, current_node="rca_option_gate",
-            revision_requested=True, is_paused=False,
+            ticket_key="BUG-RO5",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
+            revision_requested=True,
+            is_paused=False,
         )
         assert route_rca_option(state) == "regenerate_rca"
 
     def test_paused_routes_to_end(self):
         state = make_workflow_state(
-            ticket_key="BUG-RO6", ticket_type=TicketType.BUG, current_node="rca_option_gate",
+            ticket_key="BUG-RO6",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
             is_paused=True,
         )
         assert route_rca_option(state) == END
 
     def test_no_signals_routes_to_end(self):
         state = make_workflow_state(
-            ticket_key="BUG-RO7", ticket_type=TicketType.BUG, current_node="rca_option_gate",
+            ticket_key="BUG-RO7",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
             is_paused=False,
         )
         assert route_rca_option(state) == END
@@ -566,36 +646,49 @@ class TestRoutePlanApproval:
 
     def test_question_routes_to_answer_question(self):
         state = make_workflow_state(
-            ticket_key="BUG-PA1", ticket_type=TicketType.BUG, current_node="plan_approval_gate",
+            ticket_key="BUG-PA1",
+            ticket_type=TicketType.BUG,
+            current_node="plan_approval_gate",
             is_question=True,
         )
         assert route_plan_approval(state) == "answer_question"
 
     def test_paused_routes_to_end(self):
         state = make_workflow_state(
-            ticket_key="BUG-PA2", ticket_type=TicketType.BUG, current_node="plan_approval_gate",
+            ticket_key="BUG-PA2",
+            ticket_type=TicketType.BUG,
+            current_node="plan_approval_gate",
             is_paused=True,
         )
         assert route_plan_approval(state) == END
 
     def test_revision_requested_routes_to_regenerate_plan(self):
         state = make_workflow_state(
-            ticket_key="BUG-PA3", ticket_type=TicketType.BUG, current_node="plan_approval_gate",
-            revision_requested=True, is_paused=False,
+            ticket_key="BUG-PA3",
+            ticket_type=TicketType.BUG,
+            current_node="plan_approval_gate",
+            revision_requested=True,
+            is_paused=False,
         )
         assert route_plan_approval(state) == "regenerate_plan"
 
     def test_approved_routes_to_decompose_plan(self):
         state = make_workflow_state(
-            ticket_key="BUG-PA4", ticket_type=TicketType.BUG, current_node="plan_approval_gate",
-            is_paused=False, revision_requested=False,
+            ticket_key="BUG-PA4",
+            ticket_type=TicketType.BUG,
+            current_node="plan_approval_gate",
+            is_paused=False,
+            revision_requested=False,
         )
         assert route_plan_approval(state) == "decompose_plan"
 
     def test_question_takes_priority_over_paused(self):
         state = make_workflow_state(
-            ticket_key="BUG-PA5", ticket_type=TicketType.BUG, current_node="plan_approval_gate",
-            is_question=True, is_paused=True,
+            ticket_key="BUG-PA5",
+            ticket_type=TicketType.BUG,
+            current_node="plan_approval_gate",
+            is_question=True,
+            is_paused=True,
         )
         assert route_plan_approval(state) == "answer_question"
 
@@ -605,29 +698,41 @@ class TestRouteAfterWorkspaceSetup:
 
     def test_success_routes_to_implement(self):
         state = make_workflow_state(
-            ticket_key="BUG-WS1", ticket_type=TicketType.BUG, current_node="setup_workspace",
-            workspace_path="/tmp/forge-ws", last_error=None,
+            ticket_key="BUG-WS1",
+            ticket_type=TicketType.BUG,
+            current_node="setup_workspace",
+            workspace_path="/tmp/forge-ws",
+            last_error=None,
         )
-        assert _route_after_workspace_setup(state) == "implement_bug_fix"
+        assert _route_after_workspace_setup(state) == "implement_work"
 
     def test_no_workspace_path_escalates(self):
         state = make_workflow_state(
-            ticket_key="BUG-WS2", ticket_type=TicketType.BUG, current_node="setup_workspace",
-            workspace_path=None, last_error=None,
+            ticket_key="BUG-WS2",
+            ticket_type=TicketType.BUG,
+            current_node="setup_workspace",
+            workspace_path=None,
+            last_error=None,
         )
         assert _route_after_workspace_setup(state) == "escalate_blocked"
 
     def test_error_escalates(self):
         state = make_workflow_state(
-            ticket_key="BUG-WS3", ticket_type=TicketType.BUG, current_node="setup_workspace",
-            workspace_path="/tmp/forge-ws", last_error="clone failed",
+            ticket_key="BUG-WS3",
+            ticket_type=TicketType.BUG,
+            current_node="setup_workspace",
+            workspace_path="/tmp/forge-ws",
+            last_error="clone failed",
         )
         assert _route_after_workspace_setup(state) == "escalate_blocked"
 
     def test_empty_workspace_path_escalates(self):
         state = make_workflow_state(
-            ticket_key="BUG-WS4", ticket_type=TicketType.BUG, current_node="setup_workspace",
-            workspace_path="", last_error=None,
+            ticket_key="BUG-WS4",
+            ticket_type=TicketType.BUG,
+            current_node="setup_workspace",
+            workspace_path="",
+            last_error=None,
         )
         assert _route_after_workspace_setup(state) == "escalate_blocked"
 
@@ -637,36 +742,51 @@ class TestRouteAfterImplementation:
 
     def test_no_error_routes_to_local_review(self):
         state = make_workflow_state(
-            ticket_key="BUG-IM1", ticket_type=TicketType.BUG, current_node="implement_bug_fix",
-            last_error=None, retry_count=0,
+            ticket_key="BUG-IM1",
+            ticket_type=TicketType.BUG,
+            current_node="implement_bug_fix",
+            last_error=None,
+            retry_count=0,
         )
         assert _route_after_implementation(state) == "local_review"
 
     def test_error_below_cap_retries(self):
         state = make_workflow_state(
-            ticket_key="BUG-IM2", ticket_type=TicketType.BUG, current_node="implement_bug_fix",
-            last_error="timeout", retry_count=1,
+            ticket_key="BUG-IM2",
+            ticket_type=TicketType.BUG,
+            current_node="implement_bug_fix",
+            last_error="timeout",
+            retry_count=1,
         )
-        assert _route_after_implementation(state) == "implement_bug_fix"
+        assert _route_after_implementation(state) == "implement_work"
 
     def test_error_at_cap_escalates(self):
         state = make_workflow_state(
-            ticket_key="BUG-IM3", ticket_type=TicketType.BUG, current_node="implement_bug_fix",
-            last_error="timeout", retry_count=3,
+            ticket_key="BUG-IM3",
+            ticket_type=TicketType.BUG,
+            current_node="implement_bug_fix",
+            last_error="timeout",
+            retry_count=3,
         )
         assert _route_after_implementation(state) == "escalate_blocked"
 
     def test_error_above_cap_escalates(self):
         state = make_workflow_state(
-            ticket_key="BUG-IM4", ticket_type=TicketType.BUG, current_node="implement_bug_fix",
-            last_error="timeout", retry_count=5,
+            ticket_key="BUG-IM4",
+            ticket_type=TicketType.BUG,
+            current_node="implement_bug_fix",
+            last_error="timeout",
+            retry_count=5,
         )
         assert _route_after_implementation(state) == "escalate_blocked"
 
     def test_no_error_ignores_high_retry_count(self):
         state = make_workflow_state(
-            ticket_key="BUG-IM5", ticket_type=TicketType.BUG, current_node="implement_bug_fix",
-            last_error=None, retry_count=5,
+            ticket_key="BUG-IM5",
+            ticket_type=TicketType.BUG,
+            current_node="implement_bug_fix",
+            last_error=None,
+            retry_count=5,
         )
         assert _route_after_implementation(state) == "local_review"
 
@@ -676,43 +796,61 @@ class TestRouteAfterLocalReview:
 
     def test_adequate_verdict_routes_to_update_docs(self):
         state = make_workflow_state(
-            ticket_key="BUG-LR1", ticket_type=TicketType.BUG, current_node="local_review",
-            local_review_verdict="adequate", qualitative_retry_count=0,
+            ticket_key="BUG-LR1",
+            ticket_type=TicketType.BUG,
+            current_node="local_review",
+            local_review_verdict="adequate",
+            qualitative_retry_count=0,
         )
         assert _route_after_local_review(state) == "update_documentation"
 
     def test_tests_incomplete_routes_to_implement(self):
         state = make_workflow_state(
-            ticket_key="BUG-LR2", ticket_type=TicketType.BUG, current_node="local_review",
-            local_review_verdict="tests_incomplete", qualitative_retry_count=0,
+            ticket_key="BUG-LR2",
+            ticket_type=TicketType.BUG,
+            current_node="local_review",
+            local_review_verdict="tests_incomplete",
+            qualitative_retry_count=0,
         )
-        assert _route_after_local_review(state) == "implement_bug_fix"
+        assert _route_after_local_review(state) == "implement_work"
 
     def test_symptom_only_routes_to_implement(self):
         state = make_workflow_state(
-            ticket_key="BUG-LR3", ticket_type=TicketType.BUG, current_node="local_review",
-            local_review_verdict="symptom_only", qualitative_retry_count=0,
+            ticket_key="BUG-LR3",
+            ticket_type=TicketType.BUG,
+            current_node="local_review",
+            local_review_verdict="symptom_only",
+            qualitative_retry_count=0,
         )
-        assert _route_after_local_review(state) == "implement_bug_fix"
+        assert _route_after_local_review(state) == "implement_work"
 
     def test_tests_incomplete_at_cap_routes_to_update_docs(self):
         state = make_workflow_state(
-            ticket_key="BUG-LR4", ticket_type=TicketType.BUG, current_node="local_review",
-            local_review_verdict="tests_incomplete", qualitative_retry_count=2,
+            ticket_key="BUG-LR4",
+            ticket_type=TicketType.BUG,
+            current_node="local_review",
+            local_review_verdict="tests_incomplete",
+            qualitative_retry_count=2,
         )
         assert _route_after_local_review(state) == "update_documentation"
 
     def test_no_verdict_mechanical_at_cap_routes_to_update_docs(self):
         state = make_workflow_state(
-            ticket_key="BUG-LR5", ticket_type=TicketType.BUG, current_node="local_review",
-            local_review_verdict=None, local_review_attempts=2,
+            ticket_key="BUG-LR5",
+            ticket_type=TicketType.BUG,
+            current_node="local_review",
+            local_review_verdict=None,
+            local_review_attempts=2,
         )
         assert _route_after_local_review(state) == "update_documentation"
 
     def test_no_verdict_mechanical_below_cap_falls_back_to_current_node(self):
         state = make_workflow_state(
-            ticket_key="BUG-LR6", ticket_type=TicketType.BUG, current_node="local_review",
-            local_review_verdict=None, local_review_attempts=0,
+            ticket_key="BUG-LR6",
+            ticket_type=TicketType.BUG,
+            current_node="local_review",
+            local_review_verdict=None,
+            local_review_attempts=0,
         )
         assert _route_after_local_review(state) == "local_review"
 
@@ -722,29 +860,41 @@ class TestRouteAfterPrCreation:
 
     def test_success_routes_to_teardown(self):
         state = make_workflow_state(
-            ticket_key="BUG-PR1", ticket_type=TicketType.BUG, current_node="create_pr",
-            last_error=None, pr_urls=["https://github.com/org/repo/pull/1"],
+            ticket_key="BUG-PR1",
+            ticket_type=TicketType.BUG,
+            current_node="create_pr",
+            last_error=None,
+            pr_urls=["https://github.com/org/repo/pull/1"],
         )
         assert route_after_pr_creation(state) == "teardown_workspace"
 
     def test_error_with_no_pr_urls_escalates(self):
         state = make_workflow_state(
-            ticket_key="BUG-PR2", ticket_type=TicketType.BUG, current_node="create_pr",
-            last_error="PR creation failed", pr_urls=[],
+            ticket_key="BUG-PR2",
+            ticket_type=TicketType.BUG,
+            current_node="create_pr",
+            last_error="PR creation failed",
+            pr_urls=[],
         )
         assert route_after_pr_creation(state) == "escalate_blocked"
 
     def test_error_with_existing_pr_urls_routes_to_teardown(self):
         state = make_workflow_state(
-            ticket_key="BUG-PR3", ticket_type=TicketType.BUG, current_node="create_pr",
-            last_error="partial failure", pr_urls=["https://github.com/org/repo/pull/1"],
+            ticket_key="BUG-PR3",
+            ticket_type=TicketType.BUG,
+            current_node="create_pr",
+            last_error="partial failure",
+            pr_urls=["https://github.com/org/repo/pull/1"],
         )
         assert route_after_pr_creation(state) == "teardown_workspace"
 
     def test_no_error_no_pr_urls_routes_to_teardown(self):
         state = make_workflow_state(
-            ticket_key="BUG-PR4", ticket_type=TicketType.BUG, current_node="create_pr",
-            last_error=None, pr_urls=[],
+            ticket_key="BUG-PR4",
+            ticket_type=TicketType.BUG,
+            current_node="create_pr",
+            last_error=None,
+            pr_urls=[],
         )
         assert route_after_pr_creation(state) == "teardown_workspace"
 
@@ -754,36 +904,53 @@ class TestRouteHumanReviewBug:
 
     def test_pr_merged_routes_to_post_merge_summary(self):
         state = make_workflow_state(
-            ticket_key="BUG-HR1", ticket_type=TicketType.BUG, current_node="human_review_gate",
+            ticket_key="BUG-HR1",
+            ticket_type=TicketType.BUG,
+            current_node="human_review_gate",
             pr_merged=True,
         )
         assert _route_human_review_bug(state) == "post_merge_summary"
 
     def test_revision_requested_routes_to_implement_review(self):
         state = make_workflow_state(
-            ticket_key="BUG-HR2", ticket_type=TicketType.BUG, current_node="human_review_gate",
-            pr_merged=False, revision_requested=True, feedback_comment="fix the tests",
+            ticket_key="BUG-HR2",
+            ticket_type=TicketType.BUG,
+            current_node="human_review_gate",
+            pr_merged=False,
+            revision_requested=True,
+            feedback_comment="fix the tests",
         )
         assert _route_human_review_bug(state) == "implement_review"
 
     def test_paused_routes_to_end(self):
         state = make_workflow_state(
-            ticket_key="BUG-HR3", ticket_type=TicketType.BUG, current_node="human_review_gate",
-            pr_merged=False, is_paused=True,
+            ticket_key="BUG-HR3",
+            ticket_type=TicketType.BUG,
+            current_node="human_review_gate",
+            pr_merged=False,
+            is_paused=True,
         )
         assert _route_human_review_bug(state) == END
 
     def test_not_merged_not_paused_routes_to_complete_tasks(self):
         state = make_workflow_state(
-            ticket_key="BUG-HR4", ticket_type=TicketType.BUG, current_node="human_review_gate",
-            pr_merged=False, is_paused=False, revision_requested=False,
+            ticket_key="BUG-HR4",
+            ticket_type=TicketType.BUG,
+            current_node="human_review_gate",
+            pr_merged=False,
+            is_paused=False,
+            revision_requested=False,
         )
         assert _route_human_review_bug(state) == "complete_tasks"
 
     def test_pr_merged_takes_priority_over_revision(self):
         state = make_workflow_state(
-            ticket_key="BUG-HR5", ticket_type=TicketType.BUG, current_node="human_review_gate",
-            pr_merged=True, revision_requested=True, feedback_comment="fix",
+            ticket_key="BUG-HR5",
+            ticket_type=TicketType.BUG,
+            current_node="human_review_gate",
+            pr_merged=True,
+            revision_requested=True,
+            feedback_comment="fix",
         )
         assert _route_human_review_bug(state) == "post_merge_summary"
 
@@ -793,30 +960,40 @@ class TestRouteAfterAnswerBug:
 
     def test_returns_to_triage_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-AQ1", ticket_type=TicketType.BUG, current_node="triage_gate",
+            ticket_key="BUG-AQ1",
+            ticket_type=TicketType.BUG,
+            current_node="triage_gate",
         )
         assert _route_after_answer_bug(state) == "triage_gate"
 
     def test_returns_to_rca_option_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-AQ2", ticket_type=TicketType.BUG, current_node="rca_option_gate",
+            ticket_key="BUG-AQ2",
+            ticket_type=TicketType.BUG,
+            current_node="rca_option_gate",
         )
         assert _route_after_answer_bug(state) == "rca_option_gate"
 
     def test_returns_to_plan_approval_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-AQ3", ticket_type=TicketType.BUG, current_node="plan_approval_gate",
+            ticket_key="BUG-AQ3",
+            ticket_type=TicketType.BUG,
+            current_node="plan_approval_gate",
         )
         assert _route_after_answer_bug(state) == "plan_approval_gate"
 
     def test_unknown_node_defaults_to_rca_option_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-AQ4", ticket_type=TicketType.BUG, current_node="implement_bug_fix",
+            ticket_key="BUG-AQ4",
+            ticket_type=TicketType.BUG,
+            current_node="implement_bug_fix",
         )
         assert _route_after_answer_bug(state) == "rca_option_gate"
 
     def test_empty_node_defaults_to_rca_option_gate(self):
         state = make_workflow_state(
-            ticket_key="BUG-AQ5", ticket_type=TicketType.BUG, current_node="",
+            ticket_key="BUG-AQ5",
+            ticket_type=TicketType.BUG,
+            current_node="",
         )
         assert _route_after_answer_bug(state) == "rca_option_gate"

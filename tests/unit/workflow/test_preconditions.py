@@ -9,6 +9,7 @@ from forge.workflow.preconditions import (
     Requirement,
     evaluate_preconditions,
     has_capability,
+    project_capabilities,
     with_preconditions,
 )
 
@@ -22,13 +23,22 @@ def test_explicit_capability_overrides_compatibility_inference() -> None:
     assert not has_capability(state, CapabilityName.WORKSPACE)
 
 
-def test_builtin_predicates_infer_existing_state() -> None:
-    assert has_capability({"current_repo": "owner/repo"}, CapabilityName.REPOSITORIES)
-    assert has_capability({"pr_urls": ["https://example.test/pr/1"]}, CapabilityName.PULL_REQUEST)
-    assert not has_capability({"pr_urls": []}, CapabilityName.PULL_REQUEST)
+def test_capabilities_must_be_projected_before_evaluation() -> None:
+    repository_state = {"current_repo": "owner/repo"}
+    pull_request_state = {"pr_urls": ["https://example.test/pr/1"]}
+
+    assert not has_capability(repository_state, CapabilityName.REPOSITORIES)
+    assert has_capability(
+        {**repository_state, "capabilities": project_capabilities(repository_state)},
+        CapabilityName.REPOSITORIES,
+    )
+    assert has_capability(
+        {**pull_request_state, "capabilities": project_capabilities(pull_request_state)},
+        CapabilityName.PULL_REQUEST,
+    )
 
 
-def test_repository_capability_is_inferred_from_jira_event_labels() -> None:
+def test_repository_capability_is_explicitly_projected_from_jira_event_labels() -> None:
     state = {
         "context": {
             "payload": {
@@ -41,6 +51,7 @@ def test_repository_capability_is_inferred_from_jira_event_labels() -> None:
         }
     }
 
+    state["capabilities"] = project_capabilities(state)
     assert has_capability(state, CapabilityName.REPOSITORIES)
 
 
@@ -72,7 +83,9 @@ async def test_satisfied_contract_runs_sync_node() -> None:
         return {**state, "called": True}
 
     contract = NodeContract(requires=(Requirement(CapabilityName.WORKSPACE),))
-    result = await with_preconditions(node, contract)({"workspace_path": "/tmp/workspace"})
+    state = {"workspace_path": "/tmp/workspace"}
+    state["capabilities"] = project_capabilities(state)
+    result = await with_preconditions(node, contract)(state)
 
     assert result["called"] is True
     assert "precondition_result" not in result

@@ -10,7 +10,6 @@ import contextlib
 import logging
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
     ChangeRequestIdentity,
     RepositoryRef,
@@ -18,11 +17,13 @@ from forge.integrations.source_control.contracts import (
 )
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
+from forge.workflow.effect_runtime import JiraClient, push_repository
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.workspace_setup import (
     get_workspace_manager,
     write_workspace_identity,
 )
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.source_control import get_adapter, identity_for
@@ -126,10 +127,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
 
             # Clean merge — push it
             logger.info(f"{ticket_key}: clean merge with main, pushing")
-            if use_fork:
-                git.push_to_fork(force=True)
-            else:
-                git.push(force=True, check_conflicts=False)
+            await push_repository(git, use_fork=use_fork, force=True, check_conflicts=False)
 
             await adapter.create_comment(
                 repo_ref,
@@ -184,7 +182,10 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         )
 
         runner = ContainerRunner(settings)
-        result = await runner.run(
+        result = await execute_sandbox_kwargs(
+            state,
+            runner=runner,
+            discriminator="rebase",
             workspace_path=workspace.path,
             task_summary=f"Resolve merge conflicts with main for {ticket_key}",
             task_description=prompt,
@@ -240,10 +241,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
             git.stage_all()
             git.commit(f"[{ticket_key}] merge: resolve conflicts with main")
 
-        if use_fork:
-            git.push_to_fork(force=True)
-        else:
-            git.push(force=True, check_conflicts=False)
+        await push_repository(git, use_fork=use_fork, force=True, check_conflicts=False)
         logger.info(f"{ticket_key}: conflicts resolved and pushed")
 
         await adapter.create_comment(

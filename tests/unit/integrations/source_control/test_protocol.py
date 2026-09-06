@@ -49,6 +49,9 @@ class _CompleteFakeProvider:
     async def create_comment(self, _repo_ref: object, _identity: object, _body: object) -> object:
         raise NotImplementedError
 
+    async def get_change_request_comments(self, _repo_ref: object, _identity: object) -> object:
+        raise NotImplementedError
+
     async def reply_to_comment(
         self, _repo_ref: object, _identity: object, _comment_id: object, _body: object
     ) -> object:

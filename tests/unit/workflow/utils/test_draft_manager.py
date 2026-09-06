@@ -8,29 +8,21 @@ import pytest
 
 from forge.integrations.jira import JiraClient
 from forge.models.draft import DraftItem, ForgeDecompositionDraft
-from forge.workflow.utils.draft_manager import (
-    FORGE_EPICS_DRAFT_FILENAME,
-    FORGE_TASKS_DRAFT_FILENAME,
-    DraftManager,
-)
+from forge.workflow.utils.draft_manager import DraftManager
 
 
 @pytest.fixture(
-    params=[
-        ("epics", FORGE_EPICS_DRAFT_FILENAME),
-        ("tasks", FORGE_TASKS_DRAFT_FILENAME),
-    ]
+    params=["epics", "tasks"]
 )
-def draft_config(request: pytest.FixtureRequest) -> tuple[str, str]:
-    """Return a tuple of (phase, filename) representing draft configurations."""
-    val: tuple[str, str] = request.param
-    return val
+def draft_config(request: pytest.FixtureRequest) -> str:
+    """Return a draft phase."""
+    return str(request.param)
 
 
 @pytest.fixture
-def sample_draft(draft_config: tuple[str, str]) -> ForgeDecompositionDraft:
+def sample_draft(draft_config: str) -> ForgeDecompositionDraft:
     """Return a valid ForgeDecompositionDraft instance matching the draft configuration."""
-    phase, _ = draft_config
+    phase = draft_config
     now = datetime.now(UTC)
     return ForgeDecompositionDraft(
         parent_key="PROJ-123",
@@ -51,39 +43,7 @@ def sample_draft(draft_config: tuple[str, str]) -> ForgeDecompositionDraft:
 
 
 class TestDraftManager:
-    """Test cases for DraftManager CRUD operations on Jira parent tickets."""
-
-    @pytest.mark.asyncio
-    async def test_delete_draft_attachment_success(self, draft_config: tuple[str, str]) -> None:
-        """Should delete all matching attachments if found."""
-        _, filename = draft_config
-        mock_jira = MagicMock(spec=JiraClient)
-        mock_jira.delete_attachments_by_name = AsyncMock(return_value=2)
-
-        await DraftManager.delete_draft_attachment(mock_jira, "PROJ-123", filename)
-
-        mock_jira.delete_attachments_by_name.assert_called_once_with("PROJ-123", filename)
-
-    @pytest.mark.asyncio
-    async def test_delete_draft_attachment_not_found(self, draft_config: tuple[str, str]) -> None:
-        """Should do nothing and succeed if no matching attachment found."""
-        _, filename = draft_config
-        mock_jira = MagicMock(spec=JiraClient)
-        mock_jira.delete_attachments_by_name = AsyncMock(return_value=0)
-
-        await DraftManager.delete_draft_attachment(mock_jira, "PROJ-123", filename)
-
-        mock_jira.delete_attachments_by_name.assert_called_once_with("PROJ-123", filename)
-
-    @pytest.mark.asyncio
-    async def test_delete_draft_attachment_failure(self, draft_config: tuple[str, str]) -> None:
-        """Should propagate delete_attachments_by_name exception."""
-        _, filename = draft_config
-        mock_jira = MagicMock(spec=JiraClient)
-        mock_jira.delete_attachments_by_name = AsyncMock(side_effect=Exception("Delete Error"))
-
-        with pytest.raises(Exception, match="Delete Error"):
-            await DraftManager.delete_draft_attachment(mock_jira, "PROJ-123", filename)
+    """Test cases for state-backed draft formatting and editing."""
 
     def test_format_review_comment_handles_pipes_without_table_cells(self) -> None:
         """Pipe characters should not corrupt the review summary structure."""
@@ -288,54 +248,3 @@ class TestDraftManager:
         assert "### 📋 Proposed Tasks Drafts by Epic" in feature_call[0][1]
         assert "EPIC-101" in feature_call[0][1]
         assert "EPIC-102" in feature_call[0][1]
-
-    @pytest.mark.asyncio
-    async def test_get_draft_attachment_success(self) -> None:
-        """Verify get_draft_attachment retrieves and parses the correct attachment successfully."""
-        mock_jira = MagicMock(spec=JiraClient)
-        mock_jira.get_attachments = AsyncMock(
-            return_value=[
-                {"id": "att-1", "filename": "other.json", "content_url": "http://other"},
-                {
-                    "id": "att-2",
-                    "filename": "forge-epics-draft.json",
-                    "content_url": "http://epics",
-                },
-            ]
-        )
-        now = datetime.now(UTC)
-        draft = ForgeDecompositionDraft(
-            parent_key="FEATURE-1",
-            phase="epics",
-            items=[],
-            created_at=now,
-            updated_at=now,
-        )
-        mock_jira.download_attachment = AsyncMock(
-            return_value=draft.model_dump_json().encode("utf-8")
-        )
-
-        res = await DraftManager.get_draft_attachment(
-            mock_jira, "FEATURE-1", "forge-epics-draft.json"
-        )
-        assert res is not None
-        assert res.parent_key == "FEATURE-1"
-        assert res.phase == "epics"
-        mock_jira.get_attachments.assert_called_once_with("FEATURE-1")
-        mock_jira.download_attachment.assert_called_once_with("http://epics")
-
-    @pytest.mark.asyncio
-    async def test_get_draft_attachment_not_found(self) -> None:
-        """Verify get_draft_attachment returns None if the target attachment doesn't exist."""
-        mock_jira = MagicMock(spec=JiraClient)
-        mock_jira.get_attachments = AsyncMock(
-            return_value=[
-                {"id": "att-1", "filename": "other.json", "content_url": "http://other"},
-            ]
-        )
-
-        res = await DraftManager.get_draft_attachment(
-            mock_jira, "FEATURE-1", "forge-epics-draft.json"
-        )
-        assert res is None
-        mock_jira.get_attachments.assert_called_once_with("FEATURE-1")

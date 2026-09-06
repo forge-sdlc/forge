@@ -359,25 +359,23 @@ def _legacy_state() -> dict:
     }
 
 
-def test_event_targets_pull_request_matches_legacy_bare_repo_key() -> None:
+def test_event_does_not_match_unmigrated_bare_repo_key() -> None:
     state = _legacy_state()
     event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
 
-    assert event_targets_pull_request(state, event)
+    assert not event_targets_pull_request(state, event)
 
 
-def test_activate_pull_request_for_event_hydrates_from_legacy_bare_repo_key() -> None:
+def test_activate_requires_migrated_pull_request_key() -> None:
     state = _legacy_state()
     event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
 
     activated = activate_pull_request_for_event(state, event)
 
-    assert activated["current_repo"] == "acme/legacy"
-    assert activated["current_pr_number"] == 99
-    assert activated["ci_status"] == "pending"
+    assert activated == state
 
 
-def test_save_migrates_legacy_bare_repo_key_to_numbered_key() -> None:
+def test_save_does_not_implicitly_migrate_bare_repo_key() -> None:
     state = _legacy_state()
     event = _event(repo="acme/legacy", native_id=99, url="https://github.com/acme/legacy/pull/99")
     activated = activate_pull_request_for_event(state, event)
@@ -385,9 +383,9 @@ def test_save_migrates_legacy_bare_repo_key_to_numbered_key() -> None:
 
     saved = save_active_pull_request(activated)
 
-    assert "acme/legacy" not in saved["pull_requests"]
-    assert saved["pull_requests"]["acme/legacy:99"]["ci_status"] == "passed"
-    assert saved["pull_requests"]["acme/legacy:99"]["lifecycle_node"] == "ci_evaluator"
+    assert "acme/legacy:99" not in saved["pull_requests"]
+    assert saved["pull_requests"]["acme/legacy"]["ci_status"] == "pending"
+    assert saved["pull_requests"]["acme/legacy"]["lifecycle_node"] == "ci_evaluator"
 
 
 def test_reconciliation_is_independent_of_head_sha() -> None:

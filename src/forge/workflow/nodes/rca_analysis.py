@@ -6,18 +6,21 @@ import tempfile
 from pathlib import Path
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient, MissingProjectConfig
+from forge.integrations.jira.client import MissingProjectConfig
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
 from forge.workflow.bug.state import BugState
+from forge.workflow.effect_runtime import JiraClient
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
-from forge.workflow.utils.repo_resolution import ensure_repo_labels, get_effective_repos
+from forge.workflow.utils.repo_resolution import get_effective_repos, reconcile_repo_labels
 
 logger = logging.getLogger(__name__)
 
 _RCA_REQUIRED_KEYS = {
+    "repository",
     "summary",
     "code_location",
     "mechanism",
@@ -87,12 +90,6 @@ async def analyze_bug(state: BugState) -> BugState:
                 "current_node": "analyze_bug",
             }
 
-        await ensure_repo_labels(
-            jira,
-            issue,
-            "\n\n".join([issue.summary or "", issue.description or ""]),
-        )
-
         task_description = load_prompt(
             "analyze-bug",
             ticket_key=ticket_key,
@@ -106,7 +103,10 @@ async def analyze_bug(state: BugState) -> BugState:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace_path = Path(tmpdir)
             runner = ContainerRunner(settings)
-            result = await runner.run(
+            result = await execute_sandbox_kwargs(
+                state,
+                runner=runner,
+                discriminator="rca_analysis",
                 workspace_path=workspace_path,
                 task_summary=f"RCA analysis for {ticket_key}",
                 task_description=task_description,
@@ -126,12 +126,19 @@ async def analyze_bug(state: BugState) -> BugState:
 
             data = _harvest_rca_json(workspace_path)
 
+        repository = data["repository"]
+        if not isinstance(repository, str) or repository not in repos:
+            raise ValueError(
+                f"rca.json repository must be one of the configured project repositories: {repos}"
+            )
+        await reconcile_repo_labels(jira, ticket_key, [repository])
+
         return update_state_timestamp(
             {
                 **state,
                 "rca_options": data["options"],
                 "rca_data": data,
-                "rca_repos": repos,
+                "rca_repos": [repository],
                 "rca_content": _format_rca_content(data),
                 "reproducibility_assessment": _format_reproducibility(data),
                 "current_node": "reflect_rca",
@@ -263,7 +270,10 @@ async def reflect_rca(state: BugState) -> BugState:
             workspace_path = Path(tmpdir)
             runner = ContainerRunner(settings)
             task_key = f"{ticket_key}-reflect"
-            result = await runner.run(
+            result = await execute_sandbox_kwargs(
+                state,
+                runner=runner,
+                discriminator="rca_analysis",
                 workspace_path=workspace_path,
                 task_summary=f"RCA reflection for {ticket_key}",
                 task_description=task_description,

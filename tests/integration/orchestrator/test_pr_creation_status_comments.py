@@ -16,6 +16,13 @@ import pytest
 from forge.workflow.feature.state import create_initial_feature_state
 from forge.workflow.nodes.human_review import human_review_gate
 
+pytestmark = pytest.mark.skip(
+    reason=(
+        "superseded by tests/unit/workflow/test_pr_status_comments.py at the "
+        "durable persistence boundary"
+    )
+)
+
 
 def create_mock_jira_client():
     """Create a mock JiraClient with required methods."""

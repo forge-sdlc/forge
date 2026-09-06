@@ -346,7 +346,7 @@ class Settings(BaseSettings):
             "allowed_models": list(dict.fromkeys([self.llm_model, self.container_model])),
             # Legacy Forge agents already rely on provider tool calling. This
             # implicit connection is not exposed to Jira project overrides.
-            "capabilities": ["tools"],
+            "capabilities": ["structured_output", "tools"],
         }
         if self.llm_backend == "vertex-ai":
             connection.update(
@@ -429,6 +429,10 @@ class Settings(BaseSettings):
     disable_openapi_docs: bool = Field(
         default=False,
         description="Disable /docs, /redoc, and /openapi.json endpoints",
+    )
+    forge_operator_token: SecretStr = Field(
+        default=SecretStr(""),
+        description="Bearer token required by workflow execution/operator APIs",
     )
 
     @property
@@ -601,6 +605,13 @@ class Settings(BaseSettings):
     worker_metrics_enabled: bool = Field(
         default=True,
         description="Enable Prometheus metrics endpoint in worker",
+    )
+    effect_operator_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Bearer token for durable-effect inspection and replay endpoints. "
+            "The endpoints remain disabled when unset."
+        ),
     )
 
     # OpenTelemetry Configuration

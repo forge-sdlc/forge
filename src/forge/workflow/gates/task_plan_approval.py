@@ -15,8 +15,11 @@ from typing import Any, cast
 from langgraph.graph import END
 
 from forge.api.routes.metrics import record_approval, record_revision_requested
+from forge.workflow.projections.approval import project_approval
+from forge.workflow.reducers.approval import reduce_approval_gate
+from forge.workflow.stations.approval import ApprovalDisposition, run_approval_station
 from forge.workflow.task_takeover.state import TaskTakeoverState
-from forge.workflow.utils import set_paused
+from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
 
 logger = logging.getLogger(__name__)
@@ -33,10 +36,13 @@ def task_plan_approval_gate(state: TaskTakeoverState) -> TaskTakeoverState:
     """
     ticket_key = state.get("ticket_key", "unknown")
     logger.info(f"Task plan approval gate: pausing workflow for {ticket_key}")
-    return cast(
-        TaskTakeoverState,
-        set_paused(cast(dict[str, Any], state), "task_plan_approval_gate"),
+    raw = cast(dict[str, Any], state)
+    request = project_approval(raw, "task_plan")
+    outcome = run_approval_station(request)
+    updates = reduce_approval_gate(
+        raw, request, outcome, "task_plan_approval_gate", "generate_plan"
     )
+    return cast(TaskTakeoverState, update_state_timestamp({**raw, **updates}))
 
 
 def route_task_plan_approval(state: TaskTakeoverState) -> str:
@@ -61,32 +67,35 @@ def route_task_plan_approval(state: TaskTakeoverState) -> str:
         elif comment_type == CommentType.FEEDBACK:
             revision_requested = True
 
-    # 1. Q&A Mode
-    if is_question:
+    evaluation_state = cast(dict[str, Any], state) | {
+        "is_question": is_question,
+        "revision_requested": revision_requested,
+    }
+    outcome = run_approval_station(project_approval(evaluation_state, "task_plan"))
+    assert outcome.output is not None
+    disposition = outcome.output.disposition
+    if disposition is ApprovalDisposition.QUESTION:
         logger.info(f"Q&A mode: routing to answer_question for {ticket_key}")
         return "answer_question"
 
     # 2. Revision/Feedback requested (comment starting with !)
-    if revision_requested:
+    if disposition is ApprovalDisposition.REVISION:
         logger.info(f"Revision requested for {ticket_key}: routing to regenerate_plan")
         record_revision_requested("task_plan")
         return "regenerate_plan"
 
     # 3. YOLO Mode
-    if state.get("yolo_mode"):
+    if disposition is ApprovalDisposition.APPROVED:
         logger.info(f"YOLO mode: auto-approving task plan for {ticket_key}")
         record_approval("task_plan")
         return "setup_workspace"
 
     # 4. If still paused, remain in paused state
-    if state.get("is_paused"):
+    if disposition is ApprovalDisposition.WAITING:
         logger.info(
             f"Task plan approval gate: workflow paused for {ticket_key}, "
             "waiting for approval webhook/label update"
         )
         return END
 
-    # 5. Approved -> route to isolated execution setup node (setup_workspace)
-    logger.info(f"Task plan approved for {ticket_key}, proceeding to workspace setup")
-    record_approval("task_plan")
-    return "setup_workspace"
+    return END

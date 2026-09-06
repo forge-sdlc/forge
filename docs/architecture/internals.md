@@ -1,56 +1,68 @@
-# Internals
+# Runtime internals
 
-## Runtime Topology
+## State and correctness boundaries
 
-Forge runs as two process types plus Redis:
+Forge deliberately keeps four kinds of durable state separate:
 
-- **Gateway**: Single FastAPI/Uvicorn process. Stateless; can be load-balanced.
-- **Worker(s)**: One or more `OrchestratorWorker` processes. Each joins the Redis consumer group. **Must run on a host with Podman installed.** Each worker handles up to 20 concurrent tasks (configurable via `QUEUE_MAX_CONCURRENT_TASKS`).
-- **Redis**: Single-instance server. No built-in HA; must be provided externally if required.
+| Record | Authority | Purpose |
+| --- | --- | --- |
+| Observation ledger | External resource revisions | Deduplicate, order, and classify webhook and poller evidence |
+| Workflow checkpoint | Forge process instance | Pin the definition and retain process position and station state |
+| Effect journal | Forge external-write intent | Make mutations recoverable and idempotent across crashes |
+| Execution timeline | Operational history | Explain observations, transitions, attempts, effects, and operator actions |
 
-Gateway and Worker communicate only through Redis and can be deployed on separate hosts. Horizontal Worker scaling has a limitation: per-ticket event serialization uses an in-process `asyncio.Lock`, not a distributed lock (see [Known Limitations](reference.md#known-limitations)).
+External facts do not directly overwrite process position. An accepted observation is interpreted
+as a command, validated, and applied through the selected workflow's transition policy. Conversely,
+a checkpoint does not claim ownership of Jira issue content, pull-request state, or CI results; a
+new provider revision can cause those facts to be reconciled and re-evaluated.
 
-## State and Event Processing
+## Delivery and concurrency
 
-**Delivery guarantee:** At-least-once. Messages are acknowledged (`XACK`) only after successful processing. The system does not provide exactly-once semantics.
+Queue delivery is at least once. The observation `delivery_identity` makes equivalent webhook and
+poller deliveries converge before command handling. The ledger uses monotonic provider revisions
+and records duplicate, stale, conflict, and accepted decisions. Where a provider supplies no stable
+revision, Forge requires a stable event identity and reports ambiguity instead of guessing.
 
-**Checkpointing:** LangGraph workflow state is persisted via `AsyncRedisSaver`, keyed by Jira ticket key (e.g., `AISOS-123`). Checkpoints are written after each graph node completes. When a new event arrives for an existing ticket, the workflow resumes from its last checkpoint.
+Workflow state is persisted through LangGraph's Redis checkpointer. Definitions are pinned by
+revision and digest, so publication or activation of a newer revision cannot silently change an
+in-flight run. Compatibility analysis and explicit migration mappings govern intentional moves.
 
-**Idempotency:** A `DeduplicationService` exists but is not yet wired into the webhook routes. Branch creation and label operations are naturally idempotent; Jira comment posting is not.
+## Station execution
 
-**Consistency caveat:** Checkpoint writes and external side effects (Jira comments, GitHub PRs) are not transactional. A crash between a side effect and its checkpoint write can cause duplicate actions on retry.
+A graph node projects the permitted checkpoint fields into a versioned station request. The station
+returns a typed outcome; a reducer validates and applies only the fields that station owns. The same
+request can run through the local station runner without Redis, LangGraph, or provider clients,
+except where the station's declared capability explicitly requires an adapter.
 
-## Failure and Recovery
+Agent operations resolve a model connection through stage policy and declared capabilities such as
+`tools` and `structured_output`. Structured stages preserve the full Deep Agent tool loop, validate
+the final object, and retry with a tool-based schema strategy when native structured output fails.
 
-| Component | Failure impact | Recovery |
-|-----------|---------------|----------|
-| Gateway | Incoming webhooks dropped | Jira/GitHub retry delivery per their own policies |
-| Worker | In-flight messages stay in Redis PEL | Restart consumes new messages; PEL requires manual `XCLAIM` |
-| Redis | Complete system outage; all state at risk | Configure Redis persistence (RDB/AOF) externally |
-| LLM provider | Planning/code generation fails | Retried up to 3 times, then moved to dead-letter queue |
-| Container | Non-zero exit captured by orchestrator | Retry mechanism determines re-attempt |
+## External effects and recovery
 
-**Retry policy:** Up to 3 attempts with exponential backoff (30s initial, 2x multiplier, capped at 1 hour). Failed messages go to a dead-letter queue for manual investigation.
+Required external mutations are stable `EffectCommand` values. Forge records an intent before
+calling Jira or source control, leases execution, and stores attempt history and provider evidence.
+Reprocessing the same logical action reuses its idempotency identity. Indeterminate and failed
+effects are visible through the operator API and can be replayed without rerunning the whole station.
 
-**Blocked workflows:** The `forge:blocked` label is applied to Jira tickets in error state. Adding `forge:retry` triggers re-entry at the failed step.
+The operator endpoints expose:
 
-**Approval gates:** Workflows pause indefinitely at human review gates. There is no automatic timeout or escalation.
+- `GET /api/v1/workflows/{ticket_key}/execution`
+- `GET /api/v1/workflows/{ticket_key}/execution/timeline`
+- `GET /api/v1/effects/workflow/{run_id}`
+- `POST /api/v1/effects/{idempotency_key}/replay`
 
-## Security Boundaries
+These views do not advance workflow state.
 
-**Webhook authentication:** HMAC-SHA256 validation via `hmac.compare_digest()`. Validation is conditional: it only runs when secrets are configured (`JIRA_WEBHOOK_SECRET`, `GITHUB_WEBHOOK_SECRET`). **Always configure secrets in production.**
+## Security boundaries
 
-**Credential distribution:**
-
-| Credential | Worker | Container |
-|------------|--------|-----------|
-| Redis | Yes | No |
-| Jira API token | Yes | No |
-| GitHub App credentials | Yes | No |
-| LLM provider (API key or Vertex AI) | Yes | Yes |
-| Langfuse | Yes | Yes (when enabled) |
-| Git identity | No | Yes |
-
-Containers do not receive Jira, GitHub, or Redis credentials. All external platform operations are performed by the orchestrator after the container exits.
-
-**Container isolation:** Rootless Podman with configurable network mode (`slirp4netns` default), memory limit (4GB), CPU limit (2 cores), and 30-minute timeout. Workspace mounted read-write at `/workspace`; task file read-only at `/task.json`.
+- Webhook signatures are validated when the corresponding secret is configured; production must
+  configure both Jira and source-control secrets.
+- Operator execution/effect routes require their configured bearer token and fail closed when the
+  token is absent.
+- Rootless Podman constrains implementation execution with configured CPU, memory, network, and
+  timeout limits.
+- Containers do not receive Jira, Redis, or source-control credentials. Those writes pass through
+  the host-side durable effect boundary.
+- Custom workflow definitions select registered capabilities; they cannot embed credentials,
+  provider-specific calls, arbitrary HTTP, shell code, or Python imports.

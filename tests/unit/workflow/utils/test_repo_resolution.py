@@ -10,6 +10,7 @@ from forge.workflow.utils.repo_resolution import (
     ensure_repo_labels,
     get_effective_default_repo,
     get_effective_repos,
+    reconcile_repo_labels,
     repos_from_labels,
 )
 
@@ -135,3 +136,43 @@ async def test_ensure_repo_labels_adds_all_structured_plan_repositories() -> Non
 
     assert resolved == ["owner/two", "owner/one"]
     jira.add_labels.assert_awaited_once_with("PROJ-1", ["repo:owner/two"])
+
+
+@pytest.mark.asyncio
+async def test_ensure_repo_labels_passes_reconciliation_scope() -> None:
+    jira = AsyncMock()
+    jira.get_project_repos.return_value = ["owner/repo"]
+    issue = SimpleNamespace(
+        key="PROJ-1",
+        project_key="PROJ",
+        summary="Change owner/repo",
+        description="",
+        labels=["forge:managed"],
+    )
+    settings = MagicMock(forge_require_project_config=True)
+
+    with patch("forge.workflow.utils.repo_resolution.get_settings", return_value=settings):
+        await ensure_repo_labels(
+            jira,
+            issue,
+            issue.summary,
+            effect_scope="generate_spec",
+        )
+
+    jira.add_labels.assert_awaited_once_with(
+        "PROJ-1",
+        ["repo:owner/repo"],
+        effect_scope="generate_spec",
+    )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_repo_labels_replaces_stale_label_without_readding_retained_label() -> None:
+    jira = AsyncMock()
+    jira.get_labels.return_value = ["forge:managed", "repo:owner/old", "repo:owner/two"]
+
+    selected = await reconcile_repo_labels(jira, "PROJ-1", ["owner/two"])
+
+    assert selected == ["owner/two"]
+    jira.remove_labels.assert_awaited_once_with("PROJ-1", ["repo:owner/old"])
+    jira.add_labels.assert_not_awaited()

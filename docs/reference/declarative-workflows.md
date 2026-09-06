@@ -49,15 +49,43 @@ definitions block execution instead of silently falling back.
 
 ## Format
 
+The checked-in built-in definitions are canonical JSON because that is the exact artifact Forge
+pins and stores. They are not intended to be read as raw topology. Render one as Mermaid or as a
+compact process manifest instead:
+
+```bash
+forge workflow render src/forge/workflow/declarative/definitions/feature.json
+forge workflow render src/forge/workflow/declarative/definitions/feature.json --format json
+```
+
+Authors may use YAML, as in the example above; publishing converts it to canonical JSON. In either
+format, the fields that describe the process are `spec.entry` and `spec.steps`. Each step declares
+either a fixed `next` step or a named `route` with possible `branches`.
+
+Repository users can ask a compatible coding agent to use the generic
+`.agents/skills/forge-workflow-authoring` skill to create, explain, change, or review a definition.
+The skill authors YAML and uses Forge's validator, renderer, diff, and migration simulation rather
+than asking users to edit canonical JSON directly.
+
 - `metadata.name` is lowercase and becomes both the property and label suffix.
 - `metadata.revision` must increase whenever content changes.
 - `spec.state` is `feature`, `bug`, or `task_takeover` and controls the available node catalog.
 - Each step name is a canonical, registered Forge node. A step has either `next` or `route` with a
   complete branch map. Use `__end__` to stop the current invocation.
+- Node kind, station contract, effect authority, mandatory policies, observation handling, and
+  precondition contracts are owned by the trusted state-profile catalog. They are not workflow
+  authoring fields. Older pinned definitions containing this metadata remain readable.
+- Exceptional commands such as `/forge rebase` execute through the command-operation boundary;
+  they are not lifecycle steps and do not add branches to the process graph.
+- `retryBound`, `dynamicRoute`, joins, and concurrency remain in the definition because they
+  change how the flow executes. A dynamic router's possible targets are capabilities of its
+  trusted implementation and are derived from the catalog rather than repeated in the workflow.
 - Graphs may contain a cycle only when it crosses an approved human/CI pause boundary.
-- An active ticket keeps its workflow name but adopts newer revisions when it resumes.
+- A new instance pins the selected definition's name, revision, digest, and canonical artifact.
+  Publishing or activating a newer revision does not silently change an active instance.
 
-If a newer revision removes the node saved in a checkpoint, add an explicit migration:
+To move a pinned instance when a newer revision removes or renames its saved node, add an explicit
+migration mapping and run compatibility simulation before activation:
 
 ```yaml
 spec:
@@ -68,8 +96,8 @@ spec:
 ```
 
 State-profile changes, revision rollback, and content changes without a revision increment are
-rejected. Removing the project property blocks active runs, so delete definitions only after their
-checkpoints have finished or been cleared.
+rejected. Published revisions are immutable and retained for pinned instances. Removing an active
+pointer prevents new selection but does not mutate an existing checkpoint.
 
 ## Operational safeguards
 
@@ -77,6 +105,9 @@ Definitions are strict and unknown fields are rejected. Runtime reads JSON rathe
 nodes and routers come from a static allowlist, unreachable nodes and unguarded cycles are rejected,
 and executions are limited to 100 LangGraph transitions per invocation and 500 transitions per
 checkpoint lifetime. Existing node-level repository restrictions and sandboxing continue to apply.
+Run `forge workflow catalog feature` (or `bug`/`task_takeover`) to inspect the registered nodes,
+routers, station contracts, mandatory policies, observation behavior, and effective effect
+authority. This derived metadata is inspectable but is not copied into workflows.
 
 Allowlisted nodes may also carry built-in precondition contracts. Forge evaluates these before
 running a node and records decisions in `precondition_history`. Contracts are shared with built-in
@@ -84,9 +115,9 @@ graphs: workspace setup requires a resolved repository, pull-request creation re
 and workspace, and CI evaluation requires an existing pull request. Missing structural inputs block
 before the node performs external side effects.
 
-Lifecycle capabilities are tri-state. An absent capability preserves compatibility with existing
-checkpoints; an explicit `true` or `false` value is authoritative. This permits safe optional PR and
-CI stages once implementation has durably recorded whether code changes and a PR are expected.
+Lifecycle capabilities are tri-state. An absent capability preserves compatibility with older
+state; an explicit `true` or `false` value is authoritative. This permits safe optional PR and CI
+stages once implementation has durably recorded whether code changes and a PR are expected.
 
 For taskless execution, use the allowlisted `implement_work` node after `setup_workspace`. It
 resolves implementation input in descending specificity: the current Jira Task, a pending Task for
@@ -95,10 +126,11 @@ then the root ticket. More general artifacts remain supporting context rather th
 selected work unit. The resolution, artifact digests, and internal work-unit identity are persisted
 in the checkpoint.
 
-Use these commands to inspect or remove definitions:
+Use these commands to inspect definitions:
 
 ```bash
+forge workflow catalog feature
 forge workflow list MYPROJ
 forge workflow show MYPROJ prd-only
-forge workflow delete MYPROJ prd-only --yes
+forge workflow show-history MYPROJ prd-only
 ```

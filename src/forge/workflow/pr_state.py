@@ -47,7 +47,6 @@ _PR_LIFECYCLE_NODES = {
     "human_review_gate",
     "implement_review",
     "review_response_gate",
-    "rebase_pr",
 }
 
 
@@ -67,11 +66,6 @@ def _lookup_record(
     """Find a PR record for ``repo``, preferring the per-PR numbered key and
     falling back to a URL-keyed record for a PR saved before its number was known.
 
-    Also falls back to the legacy bare-``repo`` key from before per-PR keying
-    was introduced, so a workflow checkpointed mid-CI/mid-review at deploy
-    time doesn't get stranded — its record still lives under ``repo`` alone
-    until the next ``save_active_pull_request`` migrates it to a per-PR key.
-
     Returns ``(key, record)`` or ``(None, None)`` when no record matches.
     """
     if number is not None:
@@ -82,9 +76,6 @@ def _lookup_record(
         record = pull_requests.get(_url_key(repo, url))
         if isinstance(record, dict):
             return _url_key(repo, url), record
-    record = pull_requests.get(repo)
-    if isinstance(record, dict):
-        return repo, record
     return None, None
 
 
@@ -125,6 +116,12 @@ def save_active_pull_request(state: dict[str, Any]) -> dict[str, Any]:
     # lookup that stale url-keyed record would be missed and a fresh, empty
     # record created in its place, orphaning fields like lifecycle_node.
     existing_key, existing_record = _lookup_record(pull_requests, repo, number, url)
+    # A bare repository key belongs to the retired single-PR representation.
+    # Do not silently turn it into a numbered record: this runtime cannot know
+    # whether its scalar fields still describe that historical PR.  It must be
+    # migrated explicitly rather than allowing a later event to overwrite it.
+    if existing_key is None and isinstance(pull_requests.get(repo), dict):
+        return state
     record = deepcopy(existing_record) if existing_record is not None else {}
     if existing_key is not None and existing_key != key:
         del pull_requests[existing_key]

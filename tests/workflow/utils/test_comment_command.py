@@ -57,11 +57,14 @@ def test_parse_exclude_command_failures() -> None:
     assert result["command"] == "exclude"
 
 
-def test_parse_approve_command_removed() -> None:
-    """Test that approve command is no longer recognized and returns None."""
-    assert parse_comment_command("/forge approve") is None
-    assert parse_comment_command("  /FORGE approve  ") is None
-    assert parse_comment_command("/forge approve 1") is None
+def test_parse_approve_command() -> None:
+    """Test parsing the draft approval command."""
+    assert parse_comment_command("/forge approve") == {"command": "approve"}
+    assert parse_comment_command("  /FORGE approve  ") == {"command": "approve"}
+    assert parse_comment_command("/forge approve 1") == {
+        "command": "approve",
+        "error": "The approve command does not accept parameters",
+    }
 
 
 def test_parse_add_command_success() -> None:

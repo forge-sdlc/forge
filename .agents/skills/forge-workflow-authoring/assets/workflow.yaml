@@ -1,0 +1,21 @@
+apiVersion: forge/v1
+kind: Workflow
+metadata:
+  name: example-workflow
+  revision: 1
+  description: Replace with the purpose of this workflow
+spec:
+  state: feature
+  entry: generate_prd
+  steps:
+    generate_prd:
+      next: prd_approval_gate
+    prd_approval_gate:
+      route: route_prd_approval
+      branches:
+        generate_spec: __end__
+        regenerate_prd: generate_prd
+        answer_question: answer_question
+        __end__: __end__
+    answer_question:
+      next: prd_approval_gate

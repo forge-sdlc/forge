@@ -131,6 +131,7 @@ async def ensure_repo_labels(
     artifact_text: str = "",
     current_repos: list[str] | None = None,
     issue_key: str | None = None,
+    effect_scope: str | None = None,
 ) -> list[str]:
     """Resolve repositories with existing rules and persist them as Jira labels.
 
@@ -163,5 +164,33 @@ async def ensure_repo_labels(
     existing = set(repos_from_labels(getattr(issue, "labels", []) or []))
     labels_to_add = [f"{_REPO_LABEL_PREFIX}{repo}" for repo in selected if repo not in existing]
     if labels_to_add:
-        await jira.add_labels(issue_key or issue.key, labels_to_add)
+        if effect_scope:
+            await jira.add_labels(
+                issue_key or issue.key,
+                labels_to_add,
+                effect_scope=effect_scope,
+            )
+        else:
+            await jira.add_labels(issue_key or issue.key, labels_to_add)
+    return selected
+
+
+async def reconcile_repo_labels(jira: Any, issue_key: str, repos: list[str]) -> list[str]:
+    """Make ``repo:`` labels exactly match the validated repository selection.
+
+    Use this for structured workflow outputs whose repository selection is
+    authoritative.  In particular, it avoids remove-and-readd of a retained
+    label, which would conflict with the durable effect journal.
+    """
+    selected = list(dict.fromkeys(repo for repo in repos if "/" in repo))
+    desired = {f"{_REPO_LABEL_PREFIX}{repo}" for repo in selected}
+    existing = await jira.get_labels(issue_key)
+    stale = [
+        label for label in existing if label.startswith(_REPO_LABEL_PREFIX) and label not in desired
+    ]
+    if stale:
+        await jira.remove_labels(issue_key, stale)
+    to_add = [label for label in desired if label not in existing]
+    if to_add:
+        await jira.add_labels(issue_key, to_add)
     return selected

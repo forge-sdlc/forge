@@ -8,7 +8,6 @@ from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
 from forge.prompts import load_prompt
 from forge.sandbox.runner import ContainerRunner
-from forge.workflow.implementation_input import resolve_implementation_input
 from forge.workflow.nodes.execution_engine import (
     ExecutionArtifact,
     ExecutionPersistenceError,
@@ -23,7 +22,9 @@ from forge.workflow.nodes.git_persistence import (
     use_fork_remote,
 )
 from forge.workflow.nodes.workspace_setup import prepare_workspace
-from forge.workflow.planning_state import repository_compatibility_update
+from forge.workflow.projections.implementation_input import project_implementation_input
+from forge.workflow.reducers.implementation_input import reduce_implementation_input
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.task_takeover.state import TaskTakeoverState
 from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.references import fetch_and_inject_references
@@ -41,9 +42,8 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
     Returns:
         Updated TaskTakeoverState.
     """
-    state = cast(TaskTakeoverState, {**state, **repository_compatibility_update(state)})
     ticket_key = state["ticket_key"]
-    current_repo = state.get("current_repository") or ""
+    current_repo = state.get("current_repository") or state.get("current_repo") or ""
     current_task = state.get("current_task_key") or ticket_key
     container_started = False
     recorded_workspace = state.get("workspace_path")
@@ -104,12 +104,16 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
                 "last_error": None,
             }
 
-        resolved = await resolve_implementation_input(
+        request = await project_implementation_input(
             {**state, "current_task_key": current_task},
             jira,
         )
-        state = cast(TaskTakeoverState, {**state, **resolved.state_update(state)})
-        primary_id = resolved.work_unit["source_artifact_ids"][0]
+        outcome = await invoke_builtin_station(request)
+        assert outcome.output is not None
+        state = cast(
+            TaskTakeoverState, {**state, **reduce_implementation_input(state, request, outcome)}
+        )
+        primary_id = outcome.output.work_unit["source_artifact_ids"][0]
         artifact_titles = {
             "epic_plan": "Approved Implementation Plan",
             "plan": "Approved Implementation Plan",
@@ -126,7 +130,7 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
                 ),
                 str(artifact.get("content", "")),
             )
-            for artifact in resolved.context_artifacts
+            for artifact in outcome.output.context_artifacts
             if artifact.get("id") != primary_id and artifact.get("content")
         )
 
@@ -136,7 +140,7 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
             repository=current_repo,
             workspace_path=workspace_path,
             summary=f"Execute task takeover changes for {current_task}",
-            description=resolved.instructions,
+            description=outcome.output.instructions,
             description_title="Task Description",
             node_name="execute_task_changes",
             step_name="task_takeover_execution",
@@ -190,7 +194,7 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
         )
         if execution_succeeded:
             for unit in completed_units:
-                if unit.get("id") == resolved.work_unit["id"]:
+                if unit.get("id") == outcome.output.work_unit["id"]:
                     unit["status"] = "completed"
         return cast(
             TaskTakeoverState,
@@ -199,7 +203,7 @@ async def execute_task_changes(state: TaskTakeoverState) -> TaskTakeoverState:
                     **execution_state,
                     "work_units": completed_units,
                     "current_work_unit_id": (
-                        None if execution_succeeded else resolved.work_unit["id"]
+                        None if execution_succeeded else outcome.output.work_unit["id"]
                     ),
                     "implementation_push_pending": False,
                     "implementation_push_pending_task": None,

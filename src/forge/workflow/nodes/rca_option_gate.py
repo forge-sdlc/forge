@@ -4,9 +4,9 @@ import logging
 
 from langgraph.graph import END
 
-from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.workflow.bug.state import BugState
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.utils import set_paused, update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 

@@ -76,17 +76,15 @@ KNOWN_MODEL_POLICY_KEYS = (
     "generate_prd",
     "generate_spec",
     "generate_tasks",
-    "implement_bug_fix",
     "implement_review_analysis",
     "implement_review_fix",
-    "implement_task",
+    "implement_work",
     "local_code_review",
     "plan_bug_fix",
     "proposal_review_triage",
     "rebase",
     "reflect_rca",
     "sync_pr_description",
-    "task_takeover_execution",
     "task_takeover_planning",
     "task_takeover_question",
     "task_takeover_review",
@@ -107,6 +105,18 @@ REQUIRED_CAPABILITIES_BY_POLICY_KEY: dict[str, frozenset[str]] = {
     for key in KNOWN_MODEL_POLICY_KEYS
     if key not in _TOOL_FREE_POLICY_KEYS
 }
+_STRUCTURED_OUTPUT_POLICY_KEYS = {
+    "automated_review_triage",
+    "bug_triage",
+    "decompose_epics",
+    "generate_tasks",
+    "proposal_review_triage",
+    "task_takeover_triage",
+}
+for _key in _STRUCTURED_OUTPUT_POLICY_KEYS:
+    REQUIRED_CAPABILITIES_BY_POLICY_KEY[_key] = REQUIRED_CAPABILITIES_BY_POLICY_KEY.get(
+        _key, frozenset()
+    ) | {"structured_output"}
 
 _POLICY_KEY_ALIASES = {
     "analyze-ci": "ci_analysis",

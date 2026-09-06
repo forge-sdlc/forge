@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from forge.sandbox.runner import ContainerConfig, ContainerResult, ContainerRunner
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workspace.git_ops import GitOperations
 
 logger = logging.getLogger(__name__)
@@ -147,7 +148,12 @@ async def run_review_container(
         kwargs["skill_name"] = skill_name
     if policy_key is not None:
         kwargs["policy_key"] = policy_key
-    result = await runner.run(**kwargs)
+    result = await execute_sandbox_kwargs(
+        {"ticket_key": ticket_key},
+        runner=runner,
+        discriminator=f"review:{step_name or skill_name or task_key}",
+        **kwargs,
+    )
     output = collect_review_output(
         workspace_path,
         task_key,

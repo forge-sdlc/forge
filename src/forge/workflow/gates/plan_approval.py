@@ -9,18 +9,28 @@ To request revision: Add a comment starting with ! (keep forge:plan-pending)
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from langgraph.graph import END
 
 from forge.api.routes.metrics import record_approval, record_revision_requested
 from forge.workflow.feature.state import FeatureState as WorkflowState
-from forge.workflow.utils import check_direct_mode, check_yolo_mode, set_paused
+from forge.workflow.projections.approval import project_approval
+from forge.workflow.reducers.approval import reduce_approval_gate
+from forge.workflow.stations.approval import ApprovalDisposition, run_approval_station
+from forge.workflow.utils import update_state_timestamp
 
 if TYPE_CHECKING:
-    from forge.integrations.jira.client import JiraClient
+    from forge.workflow.effect_runtime import JiraClient
 
 logger = logging.getLogger(__name__)
+
+
+def _draft_item_count(draft: object) -> int:
+    if isinstance(draft, Mapping):
+        return len(draft.get("items", []))
+    return len(getattr(draft, "items", []))
 
 
 def plan_approval_gate(state: WorkflowState) -> WorkflowState:
@@ -39,30 +49,18 @@ def plan_approval_gate(state: WorkflowState) -> WorkflowState:
     """
     ticket_key = state["ticket_key"]
     epic_keys = state.get("epic_keys", [])
-    epic_count = len(epic_keys)
+    draft = state.get("plan_draft")
+    epic_count = len(epic_keys) or _draft_item_count(draft)
 
-    # Validate that we actually have epics to approve
-    if epic_count == 0 and (check_yolo_mode(state) or check_direct_mode(state)):
-        logger.error(
-            f"Plan approval gate reached with 0 Epics for {ticket_key}. "
-            "This indicates epic decomposition failed. Routing back to retry."
-        )
-        return cast(
-            WorkflowState,
-            {
-                **state,
-                "last_error": "No Epics generated - decomposition may have failed",
-                "current_node": "decompose_epics",
-                "retry_count": state.get("retry_count", 0) + 1,
-            },
-        )
-
+    request = project_approval(state, "plan", item_count=epic_count)
+    outcome = run_approval_station(request)
+    updates = reduce_approval_gate(state, request, outcome, "plan_approval_gate", "decompose_epics")
     logger.info(f"Plan approval gate: pausing workflow for {ticket_key} ({epic_count} Epics)")
 
-    return cast(WorkflowState, set_paused(cast(dict[str, Any], state), "plan_approval_gate"))
+    return update_state_timestamp({**state, **updates})
 
 
-async def route_plan_approval(state: WorkflowState) -> str:
+def route_plan_approval(state: WorkflowState) -> str:
     """Route based on plan approval status.
 
     Args:
@@ -71,149 +69,92 @@ async def route_plan_approval(state: WorkflowState) -> str:
     Returns:
         Next node name or END.
     """
-    if state.get("current_node") == "decompose_epics":
-        return "decompose_epics"
-
-    # Check if this is a question (Q&A mode) - check FIRST
-    if state.get("is_question") and state.get("feedback_comment"):
+    epic_keys = state.get("epic_keys") or []
+    draft = state.get("plan_draft")
+    item_count = len(epic_keys) or _draft_item_count(draft)
+    outcome = run_approval_station(project_approval(state, "plan", item_count=item_count))
+    assert outcome.output is not None
+    disposition = outcome.output.disposition
+    if disposition is ApprovalDisposition.QUESTION:
         logger.info(f"Q&A mode: routing to answer_question for {state['ticket_key']}")
         return "answer_question"
 
     # YOLO mode: auto-approve without human input
-    if check_yolo_mode(state):
+    if disposition is ApprovalDisposition.APPROVED:
         logger.info(f"YOLO mode: auto-approving plan for {state['ticket_key']}")
         record_approval("plan")
         return "provision_epics"
 
     # Check if revision requested
-    if state.get("revision_requested"):
-        feedback = state.get("feedback_comment", "")
-        current_epic = state.get("current_epic_key")
-
-        if current_epic:
+    if disposition is ApprovalDisposition.REVISION:
+        if outcome.output.revision_scope in {"item", "epic"}:
             # Single Epic update
-            logger.info(f"Single Epic revision requested for {current_epic}")
+            logger.info("Single Epic revision requested for %s", state.get("current_epic_key"))
             record_revision_requested("plan")
             return "update_single_epic"
-        elif feedback:
+        else:
             # Feature-level regeneration
             logger.info(f"Full Epic regeneration requested for {state['ticket_key']}")
             record_revision_requested("plan")
             return "regenerate_all_epics"
 
     # Check if still paused - END and wait for approval webhook
-    if state.get("is_paused"):
+    if disposition is ApprovalDisposition.WAITING:
         logger.info(
             f"Plan approval gate: workflow paused for {state['ticket_key']}, "
             "waiting for approval webhook"
         )
         return END
 
-    # All Epics approved, proceed to standard epic provisioning node
-    logger.info(f"Epics approved for {state['ticket_key']}, proceeding to epic provisioning node")
-    record_approval("plan")
-    return "provision_epics"
+    return END
 
 
 async def provision_epics(state: WorkflowState) -> WorkflowState:
-    """Standard LangGraph node to provision Epics from draft.
+    """Create approved Epic drafts before task planning begins."""
+    if state.get("epic_keys"):
+        return state
 
-    Args:
-        state: Current workflow state.
+    from forge.workflow.effect_runtime import JiraClient
 
-    Returns:
-        Updated workflow state with epic_keys.
-    """
-    ticket_key = state["ticket_key"]
-    if not state.get("epic_keys"):
-        from forge.integrations.jira.client import JiraClient
-
-        jira = JiraClient()
-        try:
-            epic_keys = await provision_epics_from_draft(state, jira)
-            state = {**state, "epic_keys": epic_keys}
-        except Exception as e:
-            logger.error(
-                f"Failed ticket provisioning during plan approval for {ticket_key}: {e}",
-                exc_info=True,
-            )
-            raise
-        finally:
-            await jira.close()
-
-    return state
+    jira = JiraClient()
+    try:
+        epic_keys = await provision_epics_from_draft(state, jira)
+        return {**state, "epic_keys": epic_keys}
+    finally:
+        await jira.close()
 
 
 async def provision_epics_from_draft(state: WorkflowState, jira: "JiraClient") -> list[str]:
-    """Provision Epics from the plan draft attachment on Jira.
-
-    Args:
-        state: The workflow state dictionary.
-        jira: An active JiraClient instance.
-
-    Returns:
-        List of created Epic ticket keys.
-    """
-    ticket_key = state["ticket_key"]
+    """Materialize the approved workflow-state draft as Jira Epics."""
+    from forge.models.draft import ForgeDecompositionDraft
     from forge.models.workflow import ForgeLabel
-    from forge.workflow.utils.draft_manager import FORGE_EPICS_DRAFT_FILENAME, DraftManager
 
-    # Idempotency guard: check if Epics already exist on Jira with this parent label
-    jql = f'labels = "forge:parent:{ticket_key}" AND issuetype = Epic'
-    existing_issues = await jira.search_issues(jql)
-    if isinstance(existing_issues, list) and existing_issues:
-        existing_keys = [issue.key for issue in existing_issues]
-        logger.info(
-            f"Idempotency Guard: Found {len(existing_keys)} existing Epics for parent {ticket_key}: {existing_keys}. "
-            f"Skipping duplicate ticket creation, deleting draft and returning existing keys."
-        )
-        try:
-            await DraftManager.delete_draft_attachment(jira, ticket_key, FORGE_EPICS_DRAFT_FILENAME)
-        except Exception as e:
-            logger.warning(f"Draft deletion skipped or failed during idempotency recovery: {e}")
-        return existing_keys
+    ticket_key = state["ticket_key"]
+    existing = await jira.search_issues(
+        f'labels = "forge:parent:{ticket_key}" AND issuetype = Epic'
+    )
+    if existing:
+        return [issue.key for issue in existing]
 
-    logger.info(f"Retrieving plan draft for {ticket_key} from state")
-    draft_raw = state.get("plan_draft")
-    if not draft_raw:
-        raise ValueError(
-            f"Approved draft 'plan_draft' not found in workflow state for {ticket_key}"
-        )
-    if isinstance(draft_raw, dict):
-        from forge.models.draft import ForgeDecompositionDraft
-
-        draft = ForgeDecompositionDraft.model_validate(draft_raw)
-    else:
-        draft = draft_raw
-
-    parent_issue = await jira.get_issue(ticket_key)
-    project_key = parent_issue.project_key
-
-    epic_keys = []
+    raw = state.get("plan_draft")
+    if not raw:
+        raise ValueError(f"Approved plan_draft not found for {ticket_key}")
+    draft = ForgeDecompositionDraft.model_validate(raw) if isinstance(raw, dict) else raw
+    project_key = (await jira.get_issue(ticket_key)).project_key
+    epic_keys: list[str] = []
     for item in draft.items:
         if item.excluded:
-            logger.info(f"Skipping excluded plan item {item.id}: {item.summary}")
             continue
-
-        labels = [
-            ForgeLabel.FORGE_MANAGED.value,
-            f"forge:parent:{ticket_key}",
-        ]
+        labels = [ForgeLabel.FORGE_MANAGED.value, f"forge:parent:{ticket_key}"]
         if item.repo and "/" in item.repo:
             labels.append(f"repo:{item.repo}")
-
-        epic_key = await jira.create_epic(
-            project_key=project_key,
-            summary=item.summary,
-            description=item.description,
-            parent_key=ticket_key,
-            labels=labels,
+        epic_keys.append(
+            await jira.create_epic(
+                project_key=project_key,
+                summary=item.summary,
+                description=item.description,
+                parent_key=ticket_key,
+                labels=labels,
+            )
         )
-        epic_keys.append(epic_key)
-
-    # Delete the draft only after 100% successful ticket creation
-    await DraftManager.delete_draft_attachment(jira, ticket_key, FORGE_EPICS_DRAFT_FILENAME)
-    logger.info(
-        f"Successfully provisioned {len(epic_keys)} Epics for {ticket_key} and deleted draft"
-    )
     return epic_keys

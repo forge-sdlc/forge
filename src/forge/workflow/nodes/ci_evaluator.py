@@ -9,7 +9,6 @@ from typing import Any
 
 from forge.api.routes.metrics import record_ci_fix_attempt
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import (
     CheckConclusion,
     CheckRun,
@@ -21,11 +20,13 @@ from forge.integrations.source_control.errors import NotFoundError
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.sandbox import ContainerRunner
+from forge.workflow.effect_runtime import JiraClient, push_repository
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_description
 from forge.workflow.nodes.error_handler import notify_error
 from forge.workflow.nodes.workspace_setup import prepare_workspace
 from forge.workflow.pr_state import find_active_pull_request
+from forge.workflow.sandbox_execution import execute_sandbox_kwargs
 from forge.workflow.utils import merge_review_exhaustion, update_state_timestamp
 from forge.workflow.utils.jira_status import (
     post_status_comment,
@@ -344,7 +345,10 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         # default instead of silently reusing stale attribution.
         attribution_file.unlink(missing_ok=True)
         runner = ContainerRunner(settings)
-        await runner.run(
+        await execute_sandbox_kwargs(
+            state,
+            runner=runner,
+            discriminator="ci_evaluator",
             workspace_path=Path(workspace_path),
             task_summary=f"Attribute CI failure (attempt {ci_fix_attempt})",
             task_description=attribution_prompt,
@@ -414,7 +418,10 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             attempt=ci_fix_attempt,
         )
         runner = ContainerRunner(settings)
-        result = await runner.run(
+        result = await execute_sandbox_kwargs(
+            state,
+            runner=runner,
+            discriminator="ci_evaluator",
             workspace_path=Path(workspace_path),
             task_summary=f"Analyze CI failures (attempt {ci_fix_attempt})",
             task_description=analysis_prompt,
@@ -446,7 +453,10 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         fix_prompt = load_prompt("fix-ci", fix_plan=fix_plan)
         runner = ContainerRunner(settings)
         fix_started = True
-        result = await runner.run(
+        result = await execute_sandbox_kwargs(
+            state,
+            runner=runner,
+            discriminator="ci_evaluator",
             workspace_path=Path(workspace_path),
             task_summary=f"Apply CI fix plan (attempt {ci_fix_attempt})",
             task_description=fix_prompt,
@@ -496,11 +506,9 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             )
             if review_result is not None:
                 state = merge_review_exhaustion(state, review_result, ticket_key, "code_review")
-            if fork_owner and fork_repo:
-                git.push_to_fork(force=False)
-            else:
+            if not (fork_owner and fork_repo):
                 logger.warning("Fork info not in state — pushing to origin instead")
-                git.push(force=False)
+            await push_repository(git, use_fork=bool(fork_owner and fork_repo))
             logger.info(f"CI fix pushed for {ticket_key} (attempt {ci_fix_attempt})")
             record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="pushed")
 

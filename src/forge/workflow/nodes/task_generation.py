@@ -2,17 +2,25 @@
 
 import asyncio
 import logging
-import re
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from forge.config import get_settings  # noqa: F401
-from forge.integrations.agents import ForgeAgent
-from forge.integrations.jira.client import JiraClient, MissingProjectConfig
+from forge.integrations.jira.client import MissingProjectConfig
 from forge.models.draft import DraftItem, ForgeDecompositionDraft
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
+from forge.workflow.effect_runtime import JiraClient
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.projections.agent_operation import project_agent_operation
+from forge.workflow.projections.artifact_generation import project_artifact_generation
+from forge.workflow.stations.agent_operation import (
+    AgentOperation,
+    AgentOperationInput,
+)
+from forge.workflow.stations.artifact_generation import (
+    ArtifactKind,
+)
+from forge.workflow.stations.runner import invoke_builtin_station
 from forge.workflow.utils import check_direct_mode, check_yolo_mode, update_state_timestamp
 from forge.workflow.utils.draft_manager import DraftManager
 from forge.workflow.utils.jira_status import post_status_comment
@@ -41,6 +49,18 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
     ticket_key = state["ticket_key"]
     epic_keys = state.get("epic_keys", [])
 
+    # Revision-3 workflows created before draft provisioning became an
+    # explicit declarative node route approval directly to generate_tasks.
+    if not epic_keys and state.get("plan_draft"):
+        from forge.workflow.gates.plan_approval import provision_epics_from_draft
+
+        jira = JiraClient()
+        try:
+            epic_keys = await provision_epics_from_draft(state, jira)
+            state = {**state, "epic_keys": epic_keys}
+        finally:
+            await jira.close()
+
     if not epic_keys:
         logger.warning(f"No Epics found for task generation on {ticket_key}")
         return {
@@ -52,7 +72,6 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
     logger.info(f"Generating Tasks for {len(epic_keys)} Epics on {ticket_key}")
 
     jira = JiraClient()
-    agent = ForgeAgent()
 
     await post_status_comment(
         jira,
@@ -139,7 +158,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
             # Generate Tasks using Deep Agents - primary operation
             tasks_data = await _generate_tasks_for_epic(
-                agent,
+                state,
                 epic_plan,
                 epic_summary,
                 context,
@@ -266,8 +285,8 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                     "- ❓ **Ask a question:** add a Jira comment starting with `?`.\n\n"
                     "### Supported Workflow Modes\n"
                     "1. **Default Draft Review Flow:** Forge attaches a draft JSON and posts a detailed markdown preview. Users can use `/forge` commands or comment starting with `!` to revise, and approve via `/forge approve` or adding the `forge:task-approved` label.\n"
-                    "2. **Direct Mode (`forge:direct-mode`):** Forge bypasses draft attachments and directly creates the Task issues in Jira immediately, then pauses awaiting human approval (adding `forge:task-approved` label).\n"
-                    "3. **YOLO Mode (`forge:yolo`):** Forge bypasses draft attachments and human approval gates, automatically creating the Task issues in Jira and auto-advancing without pausing.",
+                    "2. **Direct Mode (`forge:direct-mode`):** Forge directly creates the Task issues in Jira, then pauses awaiting human approval (adding `forge:task-approved` label).\n"
+                    "3. **YOLO Mode (`forge:yolo`):** Forge bypasses human approval gates, automatically creating the Task issues in Jira and auto-advancing without pausing.",
                 )
                 return cast(
                     WorkflowState,
@@ -386,11 +405,10 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
         return cast(WorkflowState, result_state)
     finally:
         await jira.close()
-        await agent.close()
 
 
 async def _generate_tasks_for_epic(
-    agent: ForgeAgent,
+    state: WorkflowState,
     epic_plan: str,
     epic_summary: str,
     context: dict[str, Any],
@@ -401,7 +419,7 @@ async def _generate_tasks_for_epic(
     """Generate Tasks for a single Epic.
 
     Args:
-        agent: Deep Agent client.
+        state: Workflow checkpoint used only to derive stable station identity.
         epic_plan: Epic implementation plan.
         epic_summary: Epic title/summary.
         context: Additional context.
@@ -432,14 +450,26 @@ async def _generate_tasks_for_epic(
             f"Please incorporate this feedback when creating the tasks."
         )
 
-    result = await agent.run_task(
-        task="generate-tasks",
-        policy_key="generate_tasks",
-        prompt=prompt,
-        context=context,
+    outcome = await invoke_builtin_station(
+        project_agent_operation(
+            state,
+            AgentOperationInput(
+                operation=AgentOperation.RUN_TASK,
+                task="generate-tasks",
+                policy_key="generate_tasks",
+                prompt=prompt,
+                context=context,
+                response_schema="generate_tasks",
+            ),
+            discriminator=f"generate-tasks:{epic_summary}",
+        )
     )
+    assert outcome.output is not None
 
-    return _parse_tasks_response(result)
+    structured = outcome.output.structured
+    if not isinstance(structured, dict) or not isinstance(structured.get("tasks"), list):
+        raise ValueError("Task generation returned no structured tasks")
+    return [dict(task) for task in structured["tasks"]]
 
 
 def _format_sibling_epics(sibling_epics: list[dict[str, str]] | None) -> str:
@@ -497,75 +527,6 @@ def _format_existing_tasks(existing_tasks: list[dict[str, str]] | None) -> str:
         lines.append("")
 
     return "\n".join(lines)
-
-
-def _parse_tasks_response(response: str) -> list[dict[str, str]]:
-    """Parse Task generation response into structured data.
-
-    Args:
-        response: Raw response from the configured LLM backend.
-
-    Returns:
-        List of Task dicts.
-    """
-    tasks = []
-    current_task: dict[str, str] = {}
-    current_section = None
-    section_lines: list[str] = []
-
-    for line in response.split("\n"):
-        stripped = line.strip()
-
-        if stripped.startswith("---"):
-            # Save previous task if exists
-            if current_task.get("summary"):
-                if current_section == "description":
-                    current_task["description"] = "\n".join(section_lines).strip()
-                elif current_section == "acceptance_criteria":
-                    # Append acceptance criteria to description
-                    criteria = "\n".join(section_lines).strip()
-                    current_task["description"] = (
-                        current_task.get("description", "")
-                        + "\n\nAcceptance Criteria:\n"
-                        + criteria
-                    ).strip()
-                tasks.append(current_task)
-                current_task = {}
-                section_lines = []
-            continue
-
-        if stripped.startswith("TASK:"):
-            current_task["summary"] = stripped[5:].strip()
-            current_section = "summary"
-        elif stripped.startswith("REPO:"):
-            repo = stripped[5:].strip().lower()
-            # Clean up repo name
-            repo = re.sub(r"[^a-z0-9/._-]", "", repo)
-            current_task["repo"] = repo if repo else "unknown"
-        elif stripped.startswith("DESCRIPTION:"):
-            current_section = "description"
-            section_lines = []
-        elif stripped.startswith("ACCEPTANCE_CRITERIA:"):
-            # Save description first
-            if current_section == "description":
-                current_task["description"] = "\n".join(section_lines).strip()
-            current_section = "acceptance_criteria"
-            section_lines = []
-        elif current_section in ("description", "acceptance_criteria"):
-            section_lines.append(line)
-
-    # Don't forget the last task
-    if current_task.get("summary"):
-        if current_section == "description":
-            current_task["description"] = "\n".join(section_lines).strip()
-        elif current_section == "acceptance_criteria":
-            criteria = "\n".join(section_lines).strip()
-            current_task["description"] = (
-                current_task.get("description", "") + "\n\nAcceptance Criteria:\n" + criteria
-            ).strip()
-        tasks.append(current_task)
-
-    return tasks
 
 
 def extract_repo_from_labels(labels: list[str]) -> str:
@@ -669,7 +630,6 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
     logger.info(f"Regenerating tasks for Epic {epic_key} on {ticket_key} with feedback")
 
     jira = JiraClient()
-    agent = ForgeAgent()
 
     try:
         # Identify which tasks belong to this epic (fetched concurrently)
@@ -764,7 +724,7 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
         spec_content = await fetch_and_inject_references(state, jira, spec_content)
 
         tasks_data = await _generate_tasks_for_epic(
-            agent,
+            state,
             epic_plan,
             epic_summary,
             context,
@@ -920,7 +880,6 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
         )
     finally:
         await jira.close()
-        await agent.close()
 
 
 async def update_single_task(state: WorkflowState) -> WorkflowState:
@@ -945,7 +904,6 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
     logger.info(f"Updating Task {task_key} with feedback")
 
     jira = JiraClient()
-    agent = ForgeAgent()
 
     try:
         # Get current Task description
@@ -957,19 +915,23 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         )
 
         # Regenerate description with feedback
-        new_description = await agent.regenerate_with_feedback(
-            original_content=original_description_with_refs,
-            feedback=feedback,
-            content_type="task",
-            ticket_key=ticket_key,
-            context={
-                "ticket_type": state.get("ticket_type", ""),
-                "current_node": state.get("current_node", ""),
-                "event_type": state.get("event_type", ""),
-                "event_source": state.get("context", {}).get("source", ""),
-                "retry_count": state.get("retry_count", 0),
-            },
+        outcome = await invoke_builtin_station(
+            project_artifact_generation(
+                state,
+                kind=ArtifactKind.TASK,
+                source_content=original_description_with_refs,
+                feedback=feedback,
+                context={
+                    "ticket_type": state.get("ticket_type", ""),
+                    "current_node": state.get("current_node", ""),
+                    "event_type": state.get("event_type", ""),
+                    "event_source": state.get("context", {}).get("source", ""),
+                    "retry_count": state.get("retry_count", 0),
+                },
+            )
         )
+        assert outcome.output is not None
+        new_description = str(outcome.output.content)
 
         # Update Task in Jira
         await jira.update_description(task_key, new_description)
@@ -1024,4 +986,3 @@ async def update_single_task(state: WorkflowState) -> WorkflowState:
         )
     finally:
         await jira.close()
-        await agent.close()

@@ -1,17 +1,15 @@
 """Tests for the generic task-first implementation node."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from forge.workflow.implementation_input import (
-    NoPendingImplementationWork,
-    ResolvedImplementationInput,
-)
 from forge.workflow.nodes.implement_work import implement_work
+from forge.workflow.stations.implementation_input import NoPendingImplementationWork
 
 
-def resolved_task() -> ResolvedImplementationInput:
+def resolved_task():
     artifact = {
         "id": "jira:TASK-1:task",
         "kind": "task",
@@ -20,18 +18,20 @@ def resolved_task() -> ResolvedImplementationInput:
         "repository": "acme/api",
         "digest": "sha256:task",
     }
-    return ResolvedImplementationInput(
-        work_unit={
-            "id": "TASK-1",
-            "kind": "task",
-            "key": "TASK-1",
-            "repository": "acme/api",
-            "status": "pending",
-            "source_artifact_ids": [artifact["id"]],
-        },
-        context_artifacts=(artifact,),
-        instructions=artifact["content"],
-        summary="Implement endpoint",
+    return SimpleNamespace(
+        output=SimpleNamespace(
+            work_unit={
+                "id": "TASK-1",
+                "kind": "task",
+                "key": "TASK-1",
+                "repository": "acme/api",
+                "status": "pending",
+                "source_artifact_ids": [artifact["id"]],
+            },
+            context_artifacts=(artifact,),
+            instructions=artifact["content"],
+            summary="Implement endpoint",
+        ),
     )
 
 
@@ -51,8 +51,20 @@ async def test_implements_resolved_task_and_marks_normalized_work_complete() -> 
             AsyncMock(return_value=("/tmp/ws", git)),
         ),
         patch(
-            "forge.workflow.nodes.implement_work.resolve_implementation_input",
+            "forge.workflow.nodes.implement_work.project_implementation_input",
+            AsyncMock(return_value=MagicMock()),
+        ),
+        patch(
+            "forge.workflow.nodes.implement_work.invoke_builtin_station",
             AsyncMock(return_value=resolved_task()),
+        ),
+        patch(
+            "forge.workflow.nodes.implement_work.reduce_implementation_input",
+            return_value={
+                "artifacts": [resolved_task().output.context_artifacts[0]],
+                "work_units": [resolved_task().output.work_unit],
+                "work_resolution": {"strategy": "task_first"},
+            },
         ),
         patch(
             "forge.workflow.nodes.implement_work.fetch_and_inject_references",
@@ -86,7 +98,7 @@ async def test_no_pending_work_routes_to_local_review() -> None:
             AsyncMock(return_value=("/tmp/ws", MagicMock())),
         ),
         patch(
-            "forge.workflow.nodes.implement_work.resolve_implementation_input",
+            "forge.workflow.nodes.implement_work.project_implementation_input",
             AsyncMock(side_effect=NoPendingImplementationWork("complete")),
         ),
     ):

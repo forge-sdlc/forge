@@ -41,22 +41,6 @@ Fewer Epics is better. Only split when work is genuinely independent and paralle
 Avoid artificial separation like "Config Epic" + "Validation Epic" + "Tests Epic" -
 these belong together in one cohesive Epic.
 
-## Output Format
-
-You MUST use this exact format for each Epic. The parser depends on these exact prefixes:
-
-```
-EPIC: [Concise epic title - max 100 chars]
-REPO: [owner/repo from the available repositories]
-PLAN:
-[Detailed implementation plan with:]
-- Technical approach and architecture decisions, including relevant existing patterns when clear
-- Key components/files to create or modify, using grounded repository paths
-- Repository standards followed, including relevant architecture, test, docs, and workflow conventions; keep this concise and do not repeat the same repository context across Epics
-- Dependencies and integration points
-- Testing strategy
-- Estimated complexity (S/M/L)
----
-```
-
-Separate each Epic with `---` on its own line.
+For every Epic, provide a concise `summary`, the exact target `repository`, and a detailed
+`plan` covering technical approach, grounded files, repository standards, dependencies,
+testing strategy, and estimated complexity.

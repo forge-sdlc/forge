@@ -3,7 +3,7 @@
 import pytest
 
 from forge.models.workflow import TicketType
-from forge.workflow.feature.graph import route_by_ticket_type
+from forge.workflow.feature.routing import route_by_ticket_type
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 from tests.fixtures.workflow_states import (
     STATE_COMPLETED,
@@ -86,8 +86,7 @@ class TestFeatureWorkflowPhases:
 
         assert next_node == "decompose_epics"
 
-    @pytest.mark.asyncio
-    async def test_plan_approved_to_task_generation(self):
+    def test_plan_approved_to_task_generation(self):
         """Approved plan progresses to task generation when resumed."""
         state = make_workflow_state(
             ticket_key="TEST-123",
@@ -98,7 +97,7 @@ class TestFeatureWorkflowPhases:
 
         from forge.workflow.gates import route_plan_approval
 
-        next_node = await route_plan_approval(state)
+        next_node = route_plan_approval(state)
 
         assert next_node == "provision_epics"
 
@@ -145,8 +144,7 @@ class TestMultiEpicFeature:
         """Multiple epics are tracked in state."""
         assert len(multi_epic_state["epic_keys"]) == 4
 
-    @pytest.mark.asyncio
-    async def test_all_epics_must_be_approved(self, multi_epic_state):
+    def test_all_epics_must_be_approved(self, multi_epic_state):
         """All epics must be approved for plan approval - workflow pauses to wait."""
         # Workflow is paused waiting for approval
         multi_epic_state["is_paused"] = True
@@ -155,7 +153,7 @@ class TestMultiEpicFeature:
 
         from forge.workflow.gates import route_plan_approval
 
-        result = await route_plan_approval(multi_epic_state)
+        result = route_plan_approval(multi_epic_state)
 
         # Should wait (END) until approved via webhook
         assert result == END

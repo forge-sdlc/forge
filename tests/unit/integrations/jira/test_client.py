@@ -192,17 +192,16 @@ class TestJiraClientEpicChildren:
 
         first_response = MagicMock()
         first_response.json.return_value = {
-            "startAt": 0,
             "maxResults": 50,
-            "total": 51,
             "issues": [issue(number) for number in range(1, 51)],
+            "nextPageToken": "page-2",
+            "isLast": False,
         }
         second_response = MagicMock()
         second_response.json.return_value = {
-            "startAt": 50,
             "maxResults": 50,
-            "total": 51,
             "issues": [issue(51)],
+            "isLast": True,
         }
         http = AsyncMock()
         http.get = AsyncMock(side_effect=[first_response, second_response])
@@ -212,8 +211,8 @@ class TestJiraClientEpicChildren:
 
         assert len(children) == 51
         assert children[-1].key == "TASK-51"
-        assert http.get.await_args_list[0].kwargs["params"]["startAt"] == 0
-        assert http.get.await_args_list[1].kwargs["params"]["startAt"] == 50
+        assert "nextPageToken" not in http.get.await_args_list[0].kwargs["params"]
+        assert http.get.await_args_list[1].kwargs["params"]["nextPageToken"] == "page-2"
 
 
 class TestJiraClientLabels:
@@ -1087,3 +1086,35 @@ class TestJiraClientListProjectProperties:
 
             result = await jira_client.list_project_properties("MYPROJ")
             assert result == []
+
+
+class TestJiraClientSearchIssues:
+    @pytest.mark.asyncio
+    async def test_uses_enhanced_jql_search_and_token_pagination(self, jira_client):
+        first = MagicMock()
+        first.raise_for_status = MagicMock()
+        first.json.return_value = {
+            "issues": [{"id": "1", "key": "PROJ-1", "fields": {"summary": "First"}}],
+            "nextPageToken": "next-token",
+            "isLast": False,
+        }
+        second = MagicMock()
+        second.raise_for_status = MagicMock()
+        second.json.return_value = {
+            "issues": [{"id": "2", "key": "PROJ-2", "fields": {"summary": "Second"}}],
+            "isLast": True,
+        }
+        http = AsyncMock()
+        http.get = AsyncMock(side_effect=[first, second])
+
+        with patch.object(jira_client, "_get_client", return_value=http):
+            issues = await jira_client.search_issues(
+                'project = "PROJ"', fields=["summary", "labels"], max_results=None
+            )
+
+        assert [issue.key for issue in issues] == ["PROJ-1", "PROJ-2"]
+        first_call, second_call = http.get.await_args_list
+        assert first_call.args[0] == "/search/jql"
+        assert "nextPageToken" not in first_call.kwargs["params"]
+        assert second_call.args[0] == "/search/jql"
+        assert second_call.kwargs["params"]["nextPageToken"] == "next-token"

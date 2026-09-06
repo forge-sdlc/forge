@@ -495,6 +495,18 @@ class GitHubClient:
         logger.info(f"Created comment on issue #{issue_number}")
         return response.json()
 
+    async def get_issue_comments(
+        self, owner: str, repo: str, issue_number: int
+    ) -> list[dict[str, Any]]:
+        """Get general issue/PR conversation comments."""
+        client = await self._get_client()
+        response = await client.get(
+            f"/repos/{owner}/{repo}/issues/{issue_number}/comments",
+            params={"per_page": 100},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def get_check_runs(self, owner: str, repo: str, ref: str) -> list[dict[str, Any]]:
         """Get all CI results for a commit, combining check runs and commit statuses.
 

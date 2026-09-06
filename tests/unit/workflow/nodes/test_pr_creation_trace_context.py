@@ -37,7 +37,7 @@ async def test_generate_pr_body_splits_prompt_context_from_trace_context() -> No
     state["workspace_path"] = str(Path("/tmp/test-workspace"))
     state["context"] = {"source": "jira"}
 
-    with patch("forge.workflow.nodes.pr_creation.ForgeAgent", return_value=mock_agent):
+    with patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=mock_agent):
         result = await _generate_pr_body_with_agent(
             state,
             mock_git,

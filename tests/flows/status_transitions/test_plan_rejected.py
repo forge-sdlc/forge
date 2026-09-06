@@ -25,8 +25,7 @@ class TestPlanRejectedFullRegen:
         state["epic_keys"] = ["TEST-124", "TEST-125", "TEST-126"]
         return state
 
-    @pytest.mark.asyncio
-    async def test_feature_level_rejection_regenerates_all(self, plan_pending_state):
+    def test_feature_level_rejection_regenerates_all(self, plan_pending_state):
         """Feature-level rejection regenerates all epics."""
         plan_pending_state["context"] = {
             "labels": ["forge:managed", "forge:plan-pending"],
@@ -35,12 +34,11 @@ class TestPlanRejectedFullRegen:
         plan_pending_state["feedback_comment"] = "The entire breakdown is wrong. Start over."
         plan_pending_state["revision_requested"] = True
 
-        result = await route_plan_approval(plan_pending_state)
+        result = route_plan_approval(plan_pending_state)
 
         assert result == "regenerate_all_epics"
 
-    @pytest.mark.asyncio
-    async def test_all_epics_will_be_deleted(self, plan_pending_state):
+    def test_all_epics_will_be_deleted(self, plan_pending_state):
         """Full regeneration implies all existing epics deleted."""
         plan_pending_state["context"] = {
             "labels": ["forge:managed", "forge:plan-pending"],
@@ -52,7 +50,7 @@ class TestPlanRejectedFullRegen:
         # Verify all epic keys exist before regeneration decision
         assert len(plan_pending_state["epic_keys"]) == 3
 
-        result = await route_plan_approval(plan_pending_state)
+        result = route_plan_approval(plan_pending_state)
         assert result == "regenerate_all_epics"
 
 
@@ -73,8 +71,7 @@ class TestPlanRejectedSingleEpic:
         state["current_epic_key"] = "TEST-125"  # The problematic epic
         return state
 
-    @pytest.mark.asyncio
-    async def test_single_epic_rejection_updates_only_that_epic(self, plan_with_epic_issue):
+    def test_single_epic_rejection_updates_only_that_epic(self, plan_with_epic_issue):
         """Single epic rejection only updates that epic."""
         plan_with_epic_issue["context"] = {
             "labels": ["forge:managed", "forge:plan-pending"],
@@ -84,12 +81,11 @@ class TestPlanRejectedSingleEpic:
         plan_with_epic_issue["feedback_comment"] = "Epic 2 scope is too narrow."
         plan_with_epic_issue["revision_requested"] = True
 
-        result = await route_plan_approval(plan_with_epic_issue)
+        result = route_plan_approval(plan_with_epic_issue)
 
         assert result == "update_single_epic"
 
-    @pytest.mark.asyncio
-    async def test_other_epics_preserved(self, plan_with_epic_issue):
+    def test_other_epics_preserved(self, plan_with_epic_issue):
         """Other epics are preserved when one is revised."""
         plan_with_epic_issue["context"] = {
             "labels": ["forge:managed", "forge:plan-pending"],
@@ -103,7 +99,7 @@ class TestPlanRejectedSingleEpic:
         assert "TEST-124" in plan_with_epic_issue["epic_keys"]
         assert "TEST-126" in plan_with_epic_issue["epic_keys"]
 
-        result = await route_plan_approval(plan_with_epic_issue)
+        result = route_plan_approval(plan_with_epic_issue)
         assert result == "update_single_epic"
 
 
@@ -123,8 +119,7 @@ class TestPlanPartialApproval:
         state["epic_keys"] = ["TEST-124", "TEST-125", "TEST-126"]
         return state
 
-    @pytest.mark.asyncio
-    async def test_some_approved_one_rejected(self, plan_partial_approval):
+    def test_some_approved_one_rejected(self, plan_partial_approval):
         """Some epics approved, one needs revision."""
         plan_partial_approval["context"] = {
             "labels": ["forge:managed", "forge:plan-pending"],
@@ -136,17 +131,16 @@ class TestPlanPartialApproval:
         plan_partial_approval["feedback_comment"] = "Epic 3 needs more detail."
         plan_partial_approval["revision_requested"] = True
 
-        result = await route_plan_approval(plan_partial_approval)
+        result = route_plan_approval(plan_partial_approval)
 
         assert result == "update_single_epic"
 
-    @pytest.mark.asyncio
-    async def test_all_approved_routes_to_tasks(self, plan_partial_approval):
+    def test_all_approved_routes_to_tasks(self, plan_partial_approval):
         """All epics approved routes to task generation when resumed."""
         # Workflow is resumed from pause on approval webhook
         plan_partial_approval["is_paused"] = False
 
-        result = await route_plan_approval(plan_partial_approval)
+        result = route_plan_approval(plan_partial_approval)
 
         assert result == "provision_epics"
 
@@ -175,13 +169,12 @@ class TestPlanRejectedBackToSpec:
         state["revision_requested"] = True
         return state
 
-    @pytest.mark.asyncio
-    async def test_spec_scope_feedback_noted(self, plan_with_spec_issue):
+    def test_spec_scope_feedback_noted(self, plan_with_spec_issue):
         """Feedback targeting spec is noted but routes to plan regen."""
         # The feedback mentions spec issues
         assert "Spec" in plan_with_spec_issue["feedback_comment"]
 
-        result = await route_plan_approval(plan_with_spec_issue)
+        result = route_plan_approval(plan_with_spec_issue)
 
         # Currently routes to regenerate (future: could escalate)
         assert result in ["regenerate_all_epics", "update_single_epic"]

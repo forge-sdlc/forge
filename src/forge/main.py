@@ -12,7 +12,15 @@ from fastapi.middleware.cors import CORSMiddleware
 import forge.integrations.source_control.github  # noqa: F401  (registers GitHub adapter factory)
 from forge import __version__
 from forge.api.middleware.correlation import CorrelationIdMiddleware
-from forge.api.routes import github_router, health_router, jira_router, metrics_router
+from forge.api.routes import (
+    effects_router,
+    executions_router,
+    github_router,
+    health_router,
+    jira_router,
+    metrics_router,
+    org_pulse_router,
+)
 from forge.config import get_settings
 from forge.integrations.source_control.registry import get_registry
 from forge.observability.config import configure_tracing, shutdown_tracing
@@ -138,8 +146,11 @@ All webhook endpoints verify signatures:
     # Register routes
     app.include_router(health_router)
     app.include_router(metrics_router)
+    app.include_router(effects_router)
     app.include_router(jira_router)
     app.include_router(github_router)
+    app.include_router(executions_router)
+    app.include_router(org_pulse_router)
 
     return app
 

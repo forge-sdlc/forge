@@ -10,11 +10,7 @@ from forge.workflow.utils.comment_classifier import (
     classify_comment,
     parse_comment_command,
 )
-from forge.workflow.utils.draft_manager import (
-    FORGE_EPICS_DRAFT_FILENAME,
-    FORGE_TASKS_DRAFT_FILENAME,
-    DraftManager,
-)
+from forge.workflow.utils.draft_manager import DraftManager
 from forge.workflow.utils.jira_status import (
     post_status_comment,
     remove_implementing_label,
@@ -42,7 +38,6 @@ _SHARED_RESUME_MAP: dict[str, str] = {
     "review_response_gate": "review_response_gate",
     "ci_evaluator": "ci_evaluator",
     "attempt_ci_fix": "ci_evaluator",
-    "rebase_pr": "rebase_pr",
     # wait_for_ci_gate was merged into human_review_gate so CI and review run
     # concurrently; this compatibility alias lets a ticket already
     # checkpointed at wait_for_ci_gate before that merge resume correctly
@@ -154,7 +149,5 @@ __all__ = [
     "set_review_pending_label",
     "transition_tasks_to_in_progress",
     "update_state_timestamp",
-    "FORGE_EPICS_DRAFT_FILENAME",
-    "FORGE_TASKS_DRAFT_FILENAME",
     "DraftManager",
 ]

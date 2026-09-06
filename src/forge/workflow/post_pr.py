@@ -65,7 +65,6 @@ def add_post_pr_nodes(graph: StateGraph) -> None:
     )
     from forge.workflow.nodes.human_review import human_review_gate
     from forge.workflow.nodes.implement_review import implement_review, review_response_gate
-    from forge.workflow.nodes.rebase import rebase_pr
 
     graph.add_node("ci_evaluator", contracted_node("ci_evaluator", evaluate_ci_status))
     graph.add_node("attempt_ci_fix", attempt_ci_fix)
@@ -73,7 +72,6 @@ def add_post_pr_nodes(graph: StateGraph) -> None:
     graph.add_node("human_review_gate", human_review_gate)
     graph.add_node("implement_review", implement_review)
     graph.add_node("review_response_gate", review_response_gate)
-    graph.add_node("rebase_pr", rebase_pr)
 
 
 def add_post_pr_edges(

@@ -183,10 +183,10 @@ Each review cycle writes its results to:
 ```
 
 Where:
-- `{step-name}` is the workflow step (e.g., `implement_task`, `local_code_review`)
+- `{step-name}` is the workflow step (e.g., `implement_work`, `local_code_review`)
 - `N` is the 1-indexed cycle number
 
-**Example:** `.forge/implement_task/review_cycle_1.json`
+**Example:** `.forge/implement_work/review_cycle_1.json`
 
 **JSON schema:**
 

@@ -2,6 +2,7 @@
 
 import pytest
 
+from forge.models.events import EventSource
 from forge.models.workflow import ForgeLabel
 from forge.queue.models import QueueMessage
 from forge.workflow.bug.state import create_initial_bug_state
@@ -48,25 +49,21 @@ class TestBuildInitialStateYoloMode:
         return worker
 
     def _make_message(self, labels: list):
-        from unittest.mock import MagicMock
-
-        from forge.models.events import EventSource
-
-        msg = MagicMock()
-        msg.ticket_key = "TEST-1"
-        msg.source = EventSource.JIRA
-        msg.event_type = "jira:issue_updated"
-        msg.event_id = "evt-1"
-        msg.retry_count = 0
-        msg.payload = {
-            "issue": {
-                "fields": {
-                    "issuetype": {"name": "Feature"},
-                    "labels": labels,
+        return QueueMessage(
+            message_id="message-1",
+            ticket_key="TEST-1",
+            source=EventSource.JIRA,
+            event_type="jira:issue_updated",
+            event_id="evt-1",
+            payload={
+                "issue": {
+                    "fields": {
+                        "issuetype": {"name": "Feature"},
+                        "labels": labels,
+                    }
                 }
-            }
-        }
-        return msg
+            },
+        )
 
     def test_yolo_mode_true_when_label_present(self):
         worker = self._make_worker()
@@ -87,17 +84,14 @@ class TestBuildInitialStateYoloMode:
         assert state["yolo_mode"] is False
 
     def test_yolo_mode_false_for_github_source(self):
-        from unittest.mock import MagicMock
-
-        from forge.models.events import EventSource
-
-        msg = MagicMock()
-        msg.ticket_key = "TEST-1"
-        msg.source = EventSource.SOURCE_CONTROL
-        msg.event_type = "pull_request"
-        msg.event_id = "evt-1"
-        msg.retry_count = 0
-        msg.payload = {"pull_request": {"number": 1}}
+        msg = QueueMessage(
+            message_id="message-1",
+            ticket_key="TEST-1",
+            source=EventSource.SOURCE_CONTROL,
+            event_type="pull_request",
+            event_id="evt-1",
+            payload={"pull_request": {"number": 1}},
+        )
         worker = self._make_worker()
         state = worker._build_initial_state(msg)
         assert state["yolo_mode"] is False
@@ -156,7 +150,7 @@ class TestYoloLabelAddedMidWorkflow:
             previous_labels="forge:managed",
         )
         state = self._make_gate_state("prd_approval_gate")
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
         assert result["yolo_mode"] is True
         assert result["is_paused"] is False
 
@@ -170,7 +164,7 @@ class TestYoloLabelAddedMidWorkflow:
             previous_labels="forge:managed",
         )
         state = self._make_gate_state("generate_spec")
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
         # Not at a gate — is_yolo flag should not fire; workflow must stay paused
         assert result.get("yolo_mode") is False
         assert result.get("is_paused") is True
@@ -186,7 +180,7 @@ class TestYoloLabelAddedMidWorkflow:
             previous_labels="forge:yolo forge:prd-pending",
         )
         state = self._make_gate_state("prd_approval_gate", yolo_mode=True)
-        result = await worker._handle_resume_event(message, state)
+        result = await worker._apply_observation_transition(message, state)
         # forge:yolo was already present — is_yolo should not re-trigger
         # yolo_mode stays True (copied from state), is_paused is False (prd-approved fired)
         assert result["yolo_mode"] is True  # preserved from input state
@@ -217,19 +211,17 @@ class TestYoloGateRouting:
         state = self._feature_state("spec_approval_gate", spec_content="# Spec")
         assert route_spec_approval(state) == "decompose_epics"
 
-    @pytest.mark.asyncio
-    async def test_plan_route_auto_approves_in_yolo_mode(self):
+    def test_plan_route_auto_approves_in_yolo_mode(self):
         from forge.workflow.gates.plan_approval import route_plan_approval
 
         state = self._feature_state("plan_approval_gate", epic_keys=["EPIC-1"])
-        assert await route_plan_approval(state) == "provision_epics"
+        assert route_plan_approval(state) == "provision_epics"
 
-    @pytest.mark.asyncio
-    async def test_task_route_auto_approves_in_yolo_mode(self):
+    def test_task_route_auto_approves_in_yolo_mode(self):
         from forge.workflow.gates.task_approval import route_task_approval
 
         state = self._feature_state("task_approval_gate", task_keys=["TASK-1"])
-        assert await route_task_approval(state) == "provision_tasks"
+        assert route_task_approval(state) == "provision_tasks"
 
     def test_yolo_false_still_pauses_at_prd_gate(self):
         from langgraph.graph import END

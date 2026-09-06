@@ -33,7 +33,7 @@ native credential environment variables.
     ```bash
     GOOGLE_CLOUD_PROJECT=your-gcp-project
     GOOGLE_CLOUD_LOCATION=global
-    MODEL_CONNECTIONS={"vertex-prod":{"backend":"vertex-ai","project":"your-gcp-project","location":"global","allowed_models":["gemini-3.5-flash"],"capabilities":["tools"]}}
+    MODEL_CONNECTIONS={"vertex-prod":{"backend":"vertex-ai","project":"your-gcp-project","location":"global","allowed_models":["gemini-3.5-flash"],"capabilities":["structured_output","tools"]}}
     MODEL_DEFAULT={"connection":"vertex-prod","model":"gemini-3.5-flash"}
     ```
 
@@ -41,7 +41,7 @@ native credential environment variables.
 
     ```bash
     GOOGLE_API_KEY=your-google-api-key
-    MODEL_CONNECTIONS={"gemini-api":{"backend":"google-genai","allowed_models":["gemini-3.5-flash"],"capabilities":["tools"]}}
+    MODEL_CONNECTIONS={"gemini-api":{"backend":"google-genai","allowed_models":["gemini-3.5-flash"],"capabilities":["structured_output","tools"]}}
     MODEL_DEFAULT={"connection":"gemini-api","model":"gemini-3.5-flash"}
     ```
 
@@ -49,7 +49,7 @@ native credential environment variables.
 
     ```bash
     ANTHROPIC_API_KEY=your-anthropic-api-key
-    MODEL_CONNECTIONS={"anthropic-prod":{"backend":"anthropic","allowed_models":["claude-sonnet-4-6"],"capabilities":["tools"]}}
+    MODEL_CONNECTIONS={"anthropic-prod":{"backend":"anthropic","allowed_models":["claude-sonnet-4-6"],"capabilities":["structured_output","tools"]}}
     MODEL_DEFAULT={"connection":"anthropic-prod","model":"claude-sonnet-4-6"}
     ```
 
@@ -78,7 +78,7 @@ recommended connection configuration. Jira projects can then set
 `forge.model_policy`, restricted to those connections and models:
 
 ```bash
-MODEL_CONNECTIONS={"vertex-global":{"backend":"vertex-ai","project":"my-gcp-project","location":"global","allowed_models":["gemini-3.5-flash","claude-sonnet-5"],"capabilities":["tools"]}}
+MODEL_CONNECTIONS={"vertex-global":{"backend":"vertex-ai","project":"my-gcp-project","location":"global","allowed_models":["gemini-3.5-flash","claude-sonnet-5"],"capabilities":["structured_output","tools"]}}
 MODEL_DEFAULT={"connection":"vertex-global","model":"gemini-3.5-flash"}
 MODEL_POLICY={"generate_prd":{"connection":"vertex-global","model":"claude-sonnet-5"},"generate_spec":{"connection":"vertex-global","model":"gemini-3.5-flash"}}
 ```
@@ -86,7 +86,7 @@ MODEL_POLICY={"generate_prd":{"connection":"vertex-global","model":"claude-sonne
 ```bash
 forge project-setup MYPROJ \
   --model generate_prd=vertex-production:gemini-3.5-pro \
-  --model implement_task=anthropic-production:claude-sonnet-4-6
+  --model implement_work=anthropic-production:claude-sonnet-4-6
 
 # Set a separate project-wide fallback (individual --model overrides still win)
 forge project-setup MYPROJ \
@@ -129,14 +129,12 @@ graph-node names are not accepted in Jira configuration:
 | `proposal_review_triage` | Classification of proposal review threads |
 | `task_takeover_triage` | Existing-task takeover triage |
 | `task_takeover_planning` | Existing-task implementation planning |
-| `task_takeover_execution` | Existing-task container implementation |
+| `implement_work` | Container implementation for feature, bug, and task-takeover workflows |
 | `task_takeover_review` | Existing-task qualitative review |
 | `task_takeover_question` | Questions about task-takeover artifacts |
 | `analyze_bug` | Root-cause analysis |
 | `reflect_rca` | Root-cause analysis reflection |
 | `plan_bug_fix` | Bug-fix planning |
-| `implement_bug_fix` | Bug-fix container implementation |
-| `implement_task` | Feature-task container implementation |
 | `bug_local_review` | Local qualitative review of a bug fix |
 | `local_code_review` | Local feature code review |
 | `code_review` | Pull-request code review |

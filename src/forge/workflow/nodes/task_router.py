@@ -10,6 +10,15 @@ from typing import Literal
 from langgraph.types import Send
 
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.projections.task_routing import (
+    project_repository_aggregation,
+    project_task_routing,
+)
+from forge.workflow.reducers.task_routing import (
+    reduce_repository_aggregation,
+    reduce_task_routing,
+)
+from forge.workflow.stations.runner import invoke_builtin_station_sync
 from forge.workflow.utils import update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -31,36 +40,30 @@ async def route_tasks_by_repo(state: WorkflowState) -> WorkflowState:
     Returns:
         Updated state ready for workspace setup.
     """
-    ticket_key = state["ticket_key"]
-    tasks_by_repo = state.get("tasks_by_repo", {})
+    # Preserve resume compatibility with revision-3 definitions, which route
+    # approved drafts directly to task_router.
+    if not state.get("task_keys") and state.get("tasks_draft"):
+        from forge.workflow.effect_runtime import JiraClient
+        from forge.workflow.gates.task_approval import provision_tasks_from_draft
 
-    if not tasks_by_repo:
-        logger.warning(f"No tasks grouped by repo for {ticket_key}")
-        return {
-            **state,
-            "last_error": "No tasks available for routing",
-            "current_node": "route_tasks",
-        }
+        jira = JiraClient()
+        try:
+            task_keys, tasks_by_repo = await provision_tasks_from_draft(state, jira)
+            state = {**state, "task_keys": task_keys, "tasks_by_repo": tasks_by_repo}
+        finally:
+            await jira.close()
 
-    repo_count = len(tasks_by_repo)
-    total_tasks = sum(len(tasks) for tasks in tasks_by_repo.values())
-
-    logger.info(f"Routing {total_tasks} tasks across {repo_count} repos for {ticket_key}")
-
-    # Initialize tracking state
-    repos_to_process = list(tasks_by_repo.keys())
-
-    return update_state_timestamp(
-        {
-            **state,
-            "repos_to_process": repos_to_process,
-            "current_repo": repos_to_process[0] if repos_to_process else None,
-            "repos_completed": [],
-            "implemented_tasks": [],
-            "current_node": "setup_workspace",
-            "last_error": None,
-        }
-    )
+    request = project_task_routing(state)
+    outcome = invoke_builtin_station_sync(request)
+    update = reduce_task_routing(state, request, outcome)
+    if outcome.output is not None:
+        logger.info(
+            "Routing %s tasks across %s repos for %s",
+            outcome.output.task_count,
+            len(outcome.output.repositories),
+            state["ticket_key"],
+        )
+    return update_state_timestamp({**state, **update})
 
 
 def route_after_pr(
@@ -185,45 +188,18 @@ def aggregate_parallel_results(states: list[WorkflowState]) -> WorkflowState:
     if not states:
         return {}
 
-    # Use first state as base
     base_state = states[0]
-    ticket_key = base_state["ticket_key"]
-
-    # Aggregate results
-    all_pr_urls: list[str] = []
-    all_repos_completed: list[str] = []
-    all_implemented_tasks: list[str] = []
-    errors: list[str] = []
-
-    for state in states:
-        pr_urls = state.get("pr_urls", [])
-        all_pr_urls.extend(pr_urls)
-
-        repos_done = state.get("repos_completed", [])
-        all_repos_completed.extend(repos_done)
-
-        tasks_done = state.get("implemented_tasks", [])
-        all_implemented_tasks.extend(tasks_done)
-
-        if state.get("last_error"):
-            errors.append(state["last_error"])
+    request = project_repository_aggregation(states)
+    outcome = invoke_builtin_station_sync(request)
+    update = reduce_repository_aggregation(base_state, request, outcome)
 
     logger.info(
-        f"Aggregated {len(all_pr_urls)} PRs from {len(all_repos_completed)} repos for {ticket_key}"
+        "Aggregated %s PRs from %s repos for %s",
+        len(update["pr_urls"]),
+        len(update["repos_completed"]),
+        base_state["ticket_key"],
     )
-
-    return update_state_timestamp(
-        {
-            **base_state,
-            "pr_urls": all_pr_urls,
-            "repos_completed": list(set(all_repos_completed)),
-            "implemented_tasks": list(set(all_implemented_tasks)),
-            "parallel_branch_id": None,
-            "parallel_total_branches": None,
-            "last_error": "; ".join(errors) if errors else None,
-            "current_node": "ci_evaluator",
-        }
-    )
+    return update_state_timestamp({**base_state, **update})
 
 
 def should_use_parallel_execution(state: WorkflowState) -> bool:

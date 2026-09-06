@@ -3,8 +3,8 @@
 import logging
 
 from forge.config import get_settings
-from forge.integrations.jira.client import JiraClient
 from forge.workflow.bug.state import BugState
+from forge.workflow.effect_runtime import JiraClient
 
 logger = logging.getLogger(__name__)
 

@@ -41,8 +41,10 @@ def _make_mock_jira(summary="Implement user session logout", project_key="TASK",
     issue.labels = labels or []
     jira.get_issue = AsyncMock(return_value=issue)
     jira.get_comments = AsyncMock(return_value=[])
+    jira.get_labels = AsyncMock(return_value=labels or [])
     jira.add_comment = AsyncMock()
     jira.add_labels = AsyncMock()
+    jira.remove_labels = AsyncMock()
     jira.set_workflow_label = AsyncMock()
     jira.get_project_default_repo = AsyncMock(return_value="owner/project")
     jira.get_project_repos = AsyncMock(return_value=["owner/project"])
@@ -106,7 +108,7 @@ class TestGeneratePlan:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
@@ -140,7 +142,7 @@ class TestGeneratePlan:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
@@ -158,7 +160,7 @@ class TestGeneratePlan:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             await generate_plan(base_task_state)
 
@@ -175,7 +177,7 @@ class TestGeneratePlan:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
@@ -204,7 +206,7 @@ class TestRegeneratePlanFlow:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(state)
 
@@ -212,6 +214,32 @@ class TestRegeneratePlanFlow:
         assert result["revision_requested"] is False
         assert result["feedback_comment"] is None
         assert result["current_node"] == "task_plan_approval_gate"
+
+    @pytest.mark.asyncio
+    async def test_regenerate_plan_preserves_unchanged_repo_label(
+        self, base_task_state: TaskTakeoverState
+    ) -> None:
+        state = {
+            **base_task_state,
+            "revision_requested": True,
+            "feedback_comment": "Clarify the plan.",
+            "plan_content": "## Plan\n\nrepo:forge-sdlc/forge",
+        }
+        mock_jira = _make_mock_jira(
+            project_key="AISOS",
+            labels=["forge:managed", "repo:forge-sdlc/forge"],
+        )
+        mock_jira.get_project_repos = AsyncMock(return_value=["forge-sdlc/forge"])
+        agent = _make_mock_agent_success("## Revised Plan\n\nrepo:forge-sdlc/forge")
+
+        with (
+            patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
+        ):
+            await generate_plan(state)
+
+        mock_jira.remove_labels.assert_not_awaited()
+        mock_jira.add_labels.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_generate_plan_does_not_fallback_to_first_project_repo(
@@ -229,7 +257,7 @@ class TestRegeneratePlanFlow:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
@@ -252,7 +280,7 @@ class TestRegeneratePlanFlow:
 
         with (
             patch("forge.workflow.nodes.task_takeover_planning.JiraClient", return_value=mock_jira),
-            patch("forge.workflow.nodes.task_takeover_planning.ForgeAgent", return_value=agent),
+            patch("forge.workflow.stations.agent_operation.ForgeAgent", return_value=agent),
         ):
             result = await generate_plan(base_task_state)
 
