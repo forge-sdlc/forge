@@ -148,6 +148,60 @@ class TestCLIVersionParserAndRouting:
                 root_logger.addHandler(h)
             root_logger.setLevel(old_level)
 
+    def test_setup_logging_configures_auxiliary_loggers(self):
+        """setup_logging ensures auxiliary loggers with StreamHandler(sys.stdout) are rerouted to sys.stderr."""
+        import logging
+        import sys
+
+        from forge.cli import setup_logging
+
+        root_logger = logging.getLogger()
+        old_handlers = list(root_logger.handlers)
+        old_level = root_logger.level
+        root_logger.handlers.clear()
+
+        # Set up an auxiliary logger with a stdout handler
+        aux_logger = logging.getLogger("test_auxiliary_logger")
+        aux_handler = logging.StreamHandler(sys.stdout)
+        aux_logger.addHandler(aux_handler)
+
+        # Keep track of old state of the auxiliary logger
+        old_aux_handlers = list(aux_logger.handlers)
+        old_aux_propagate = aux_logger.propagate
+
+        try:
+            # First, check behavior when propagate is True
+            aux_logger.propagate = True
+            setup_logging(verbose=False)
+
+            # The stdout handler should have been removed because propagate is True
+            assert aux_handler not in aux_logger.handlers
+
+            # Re-add and set propagate to False
+            aux_logger.addHandler(aux_handler)
+            aux_logger.propagate = False
+
+            setup_logging(verbose=False)
+
+            # The stdout handler stream should have been redirected to sys.stderr
+            assert aux_handler in aux_logger.handlers
+            assert aux_handler.stream is sys.stderr
+
+        finally:
+            # Restore
+            aux_logger.handlers.clear()
+            for h in old_aux_handlers:
+                # Make sure to reset stream if we mutated it
+                if isinstance(h, logging.StreamHandler):
+                    h.stream = sys.stdout
+                aux_logger.addHandler(h)
+            aux_logger.propagate = old_aux_propagate
+
+            root_logger.handlers.clear()
+            for h in old_handlers:
+                root_logger.addHandler(h)
+            root_logger.setLevel(old_level)
+
     @pytest.mark.asyncio
     async def test_cmd_version_no_json_attribute_defaults_to_text(self, capsys):
         """When args does not contain a 'json' attribute, cmd_version defaults to plain text."""
@@ -184,14 +238,16 @@ class TestCLIVersionParserAndRouting:
         assert data == {"version": __version__}
         assert captured.err == ""
 
-    def test_main_version_plain_text(self, capsys):
+    @patch("forge.cli.setup_logging")
+    def test_main_version_plain_text(self, _mock_setup_logging, capsys):
         """Calling main(['version']) prints the correct plain text to stdout and exits 0."""
         code = main(["version"])
         assert code == 0
         captured = capsys.readouterr()
         assert captured.out == f"Forge v{__version__}\n"
 
-    def test_main_version_verbose_plain_text(self, capsys):
+    @patch("forge.cli.setup_logging")
+    def test_main_version_verbose_plain_text(self, _mock_setup_logging, capsys):
         """Calling main(['-v', 'version']) prints the correct plain text to stdout and exits 0."""
         code = main(["-v", "version"])
         assert code == 0

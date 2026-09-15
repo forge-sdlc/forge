@@ -30,6 +30,18 @@ def setup_logging(verbose: bool = False) -> None:
 
     root_logger.addHandler(handler)
 
+    # Ensure all auxiliary loggers and standard console handlers default strictly to stderr
+    for logger_obj in list(logging.root.manager.loggerDict.values()):
+        if isinstance(logger_obj, logging.Logger):
+            for h in list(logger_obj.handlers):
+                if isinstance(h, logging.StreamHandler) and (
+                    h.stream is sys.stdout or h.stream == sys.stdout
+                ):
+                    if logger_obj.propagate:
+                        logger_obj.removeHandler(h)
+                    else:
+                        h.stream = sys.stderr
+
 
 async def _get_compiled_workflow_for_ticket(ticket_key: str):
     """Helper to get compiled workflow for a ticket (used by CLI commands).
