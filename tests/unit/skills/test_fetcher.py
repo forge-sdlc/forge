@@ -161,15 +161,17 @@ class TestResolveRefShaErrors:
         """asyncio.TimeoutError is converted to RefResolutionError; process is killed."""
         process = MagicMock()
         process.kill = MagicMock()
-        # communicate() hangs forever
-        process.communicate = AsyncMock(side_effect=asyncio.TimeoutError)
+
+        async def communicate_forever():
+            await asyncio.Event().wait()
+
+        process.communicate = MagicMock(side_effect=communicate_forever)
 
         with (
             patch("asyncio.create_subprocess_exec", return_value=process),
-            patch("asyncio.wait_for", side_effect=asyncio.TimeoutError),
             pytest.raises(RefResolutionError, match="timed out"),
         ):
-            await resolve_ref_sha(REPO_URL, "main", timeout=1)
+            await resolve_ref_sha(REPO_URL, "main", timeout=0.01)
 
         process.kill.assert_called_once()
 
