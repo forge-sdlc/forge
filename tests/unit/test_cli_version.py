@@ -104,6 +104,50 @@ class TestCLIVersionParserAndRouting:
                 root_logger.addHandler(h)
             root_logger.setLevel(old_level)
 
+    def test_setup_logging_clears_handlers_and_routes_to_stderr(self):
+        """setup_logging clears existing handlers and attaches a StreamHandler(sys.stderr) with correct level and formatter."""
+        import logging
+        import sys
+
+        from forge.cli import setup_logging
+
+        root_logger = logging.getLogger()
+        old_handlers = list(root_logger.handlers)
+        old_level = root_logger.level
+        root_logger.handlers.clear()
+
+        # Add a dummy handler to verify it gets cleared
+        dummy_handler = logging.NullHandler()
+        root_logger.addHandler(dummy_handler)
+        assert dummy_handler in root_logger.handlers
+
+        try:
+            # Test non-verbose logging setup
+            setup_logging(verbose=False)
+            assert dummy_handler not in root_logger.handlers
+            assert len(root_logger.handlers) == 1
+            handler = root_logger.handlers[0]
+            assert isinstance(handler, logging.StreamHandler)
+            assert handler.stream is sys.stderr
+            assert root_logger.level == logging.INFO
+            assert handler.level == logging.INFO
+            assert handler.formatter is not None
+            assert handler.formatter._fmt == "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+            # Test verbose logging setup
+            setup_logging(verbose=True)
+            assert len(root_logger.handlers) == 1
+            handler = root_logger.handlers[0]
+            assert isinstance(handler, logging.StreamHandler)
+            assert handler.stream is sys.stderr
+            assert root_logger.level == logging.DEBUG
+            assert handler.level == logging.DEBUG
+        finally:
+            root_logger.handlers.clear()
+            for h in old_handlers:
+                root_logger.addHandler(h)
+            root_logger.setLevel(old_level)
+
     @pytest.mark.asyncio
     async def test_cmd_version_no_json_attribute_defaults_to_text(self, capsys):
         """When args does not contain a 'json' attribute, cmd_version defaults to plain text."""

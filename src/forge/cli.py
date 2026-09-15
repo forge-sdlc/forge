@@ -13,12 +13,22 @@ from forge.config import get_settings
 
 def setup_logging(verbose: bool = False) -> None:
     """Configure logging for CLI usage."""
+    root_logger = logging.getLogger()
+    # Clear any pre-existing logging handlers registered on the root logger
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        stream=sys.stderr,
-    )
+    root_logger.setLevel(level)
+
+    # Instantiate and attach a new logging.StreamHandler(sys.stderr)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(level)
+
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+
+    root_logger.addHandler(handler)
 
 
 async def _get_compiled_workflow_for_ticket(ticket_key: str):
