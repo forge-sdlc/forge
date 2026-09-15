@@ -1,6 +1,7 @@
 """Unit tests for the forge version CLI command."""
 
 import argparse
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -14,7 +15,7 @@ class TestCLIVersionParserAndRouting:
 
     @patch("forge.cli.cmd_version", new_callable=AsyncMock)
     @patch("forge.cli.setup_logging")
-    def test_routing_version(self, _mock_setup_logging, mock_cmd):
+    def test_routing_version(self, _mock_setup_logging: Any, mock_cmd: Any) -> None:
         """Calling main(['version']) routes to cmd_version."""
         mock_cmd.return_value = 0
         code = main(["version"])
@@ -24,7 +25,7 @@ class TestCLIVersionParserAndRouting:
         assert args.command == "version"
 
     @pytest.mark.asyncio
-    async def test_cmd_version_execution(self, capsys):
+    async def test_cmd_version_execution(self, capsys: Any) -> None:
         """cmd_version prints the correct version string and exits with 0."""
         args = argparse.Namespace()
         code = await cmd_version(args)
@@ -34,7 +35,7 @@ class TestCLIVersionParserAndRouting:
 
     @patch("forge.cli.cmd_version", new_callable=AsyncMock)
     @patch("forge.cli.setup_logging")
-    def test_routing_version_json(self, _mock_setup_logging, mock_cmd):
+    def test_routing_version_json(self, _mock_setup_logging: Any, mock_cmd: Any) -> None:
         """Calling main(['version', '--json']) routes to cmd_version with args.json=True."""
         mock_cmd.return_value = 0
         code = main(["version", "--json"])
@@ -45,7 +46,7 @@ class TestCLIVersionParserAndRouting:
         assert args.json is True
 
     @pytest.mark.asyncio
-    async def test_cmd_version_json_execution(self, capsys):
+    async def test_cmd_version_json_execution(self, capsys: Any) -> None:
         """cmd_version with json=True prints compact JSON and exits with 0."""
         import json
 
@@ -63,7 +64,7 @@ class TestCLIVersionParserAndRouting:
         assert captured.err == ""
 
     @pytest.mark.asyncio
-    async def test_cmd_version_logging_isolation(self, capsys):
+    async def test_cmd_version_logging_isolation(self, capsys: Any) -> None:
         """When verbose logging is set, log output is routed to stderr, and only JSON goes to stdout."""
         import json
         import logging
@@ -104,7 +105,7 @@ class TestCLIVersionParserAndRouting:
                 root_logger.addHandler(h)
             root_logger.setLevel(old_level)
 
-    def test_setup_logging_clears_handlers_and_routes_to_stderr(self):
+    def test_setup_logging_clears_handlers_and_routes_to_stderr(self) -> None:
         """setup_logging clears existing handlers and attaches a StreamHandler(sys.stderr) with correct level and formatter."""
         import logging
         import sys
@@ -148,7 +149,7 @@ class TestCLIVersionParserAndRouting:
                 root_logger.addHandler(h)
             root_logger.setLevel(old_level)
 
-    def test_setup_logging_configures_auxiliary_loggers(self):
+    def test_setup_logging_configures_auxiliary_loggers(self) -> None:
         """setup_logging ensures auxiliary loggers with StreamHandler(sys.stdout) are rerouted to sys.stderr."""
         import logging
         import sys
@@ -203,7 +204,7 @@ class TestCLIVersionParserAndRouting:
             root_logger.setLevel(old_level)
 
     @pytest.mark.asyncio
-    async def test_cmd_version_no_json_attribute_defaults_to_text(self, capsys):
+    async def test_cmd_version_no_json_attribute_defaults_to_text(self, capsys: Any) -> None:
         """When args does not contain a 'json' attribute, cmd_version defaults to plain text."""
         args = argparse.Namespace()
         code = await cmd_version(args)
@@ -212,7 +213,7 @@ class TestCLIVersionParserAndRouting:
         assert captured.out == f"Forge v{__version__}\n"
 
     @pytest.mark.asyncio
-    async def test_cmd_version_json_explicit_false(self, capsys):
+    async def test_cmd_version_json_explicit_false(self, capsys: Any) -> None:
         """When args has 'json' explicitly set to False, cmd_version prints plain text."""
         args = argparse.Namespace(json=False)
         code = await cmd_version(args)
@@ -221,7 +222,7 @@ class TestCLIVersionParserAndRouting:
         assert captured.out == f"Forge v{__version__}\n"
 
     @patch("forge.cli.setup_logging")
-    def test_main_version_json_isolated(self, mock_setup_logging, capsys):
+    def test_main_version_json_isolated(self, mock_setup_logging: Any, capsys: Any) -> None:
         """Calling main(['-v', 'version', '--json']) prints the correct compact json to stdout and exits 0."""
         import json
 
@@ -239,7 +240,7 @@ class TestCLIVersionParserAndRouting:
         assert captured.err == ""
 
     @patch("forge.cli.setup_logging")
-    def test_main_version_plain_text(self, _mock_setup_logging, capsys):
+    def test_main_version_plain_text(self, _mock_setup_logging: Any, capsys: Any) -> None:
         """Calling main(['version']) prints the correct plain text to stdout and exits 0."""
         code = main(["version"])
         assert code == 0
@@ -247,14 +248,14 @@ class TestCLIVersionParserAndRouting:
         assert captured.out == f"Forge v{__version__}\n"
 
     @patch("forge.cli.setup_logging")
-    def test_main_version_verbose_plain_text(self, _mock_setup_logging, capsys):
+    def test_main_version_verbose_plain_text(self, _mock_setup_logging: Any, capsys: Any) -> None:
         """Calling main(['-v', 'version']) prints the correct plain text to stdout and exits 0."""
         code = main(["-v", "version"])
         assert code == 0
         captured = capsys.readouterr()
         assert captured.out == f"Forge v{__version__}\n"
 
-    def test_default_version_stream_isolation(self, capsys):
+    def test_default_version_stream_isolation(self, capsys: Any) -> None:
         """Execute main(['version']) and verify stdout contains exactly 'Forge v<version>' while stderr remains empty."""
         import logging
 
@@ -275,7 +276,7 @@ class TestCLIVersionParserAndRouting:
                 root_logger.addHandler(h)
             root_logger.setLevel(old_level)
 
-    def test_verbose_version_stream_isolation(self, capsys):
+    def test_verbose_version_stream_isolation(self, capsys: Any) -> None:
         """Execute main(['-v', 'version']) and assert that stdout has only the version payload, while stderr captures verbose logging messages."""
         import logging
 
@@ -297,7 +298,7 @@ class TestCLIVersionParserAndRouting:
                 root_logger.addHandler(h)
             root_logger.setLevel(old_level)
 
-    def test_verbose_json_version_stream_isolation(self, capsys):
+    def test_verbose_json_version_stream_isolation(self, capsys: Any) -> None:
         """Verify that main(['-v', 'version', '--json']) prints a clean, parseable JSON payload on stdout and all auxiliary logs on stderr."""
         import json
         import logging
