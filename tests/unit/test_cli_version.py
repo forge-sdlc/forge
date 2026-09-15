@@ -326,3 +326,82 @@ class TestCLIVersionParserAndRouting:
             for h in old_handlers:
                 root_logger.addHandler(h)
             root_logger.setLevel(old_level)
+
+    def test_subprocess_version_plain_text(self) -> None:
+        """Verify stream separation for 'python -m forge version' under actual subprocess execution."""
+        import os
+        import subprocess
+        import sys
+
+        env = os.environ.copy()
+        # Add src/ to PYTHONPATH to be absolutely sure the module can be imported
+        if "PYTHONPATH" in env:
+            env["PYTHONPATH"] = f"src{os.pathsep}{env['PYTHONPATH']}"
+        else:
+            env["PYTHONPATH"] = "src"
+
+        res = subprocess.run(
+            [sys.executable, "-m", "forge", "version"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert res.returncode == 0
+        assert res.stdout == f"Forge v{__version__}\n"
+        assert res.stderr == ""
+
+    def test_subprocess_version_verbose_plain_text(self) -> None:
+        """Verify stream separation for 'python -m forge -v version' under actual subprocess execution."""
+        import os
+        import subprocess
+        import sys
+
+        env = os.environ.copy()
+        if "PYTHONPATH" in env:
+            env["PYTHONPATH"] = f"src{os.pathsep}{env['PYTHONPATH']}"
+        else:
+            env["PYTHONPATH"] = "src"
+
+        res = subprocess.run(
+            [sys.executable, "-m", "forge", "-v", "version"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert res.returncode == 0
+        assert res.stdout == f"Forge v{__version__}\n"
+        # Since verbose is enabled, some debug/verbose logs must be captured on stderr, but stdout remains clean
+        assert res.stderr != ""
+
+    def test_subprocess_version_verbose_json(self) -> None:
+        """Verify stream separation for 'python -m forge -v version --json' under actual subprocess execution."""
+        import json
+        import os
+        import subprocess
+        import sys
+
+        env = os.environ.copy()
+        if "PYTHONPATH" in env:
+            env["PYTHONPATH"] = f"src{os.pathsep}{env['PYTHONPATH']}"
+        else:
+            env["PYTHONPATH"] = "src"
+
+        res = subprocess.run(
+            [sys.executable, "-m", "forge", "-v", "version", "--json"],
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+        assert res.returncode == 0
+
+        # Verify stdout contains exactly the clean JSON payload with a single trailing newline
+        assert res.stdout.endswith("\n")
+        assert res.stdout.count("\n") == 1
+        data = json.loads(res.stdout.strip())
+        assert data == {"version": __version__}
+
+        # Verify stderr captures verbose logging messages, but stdout remains free of logs
+        assert res.stderr != ""
