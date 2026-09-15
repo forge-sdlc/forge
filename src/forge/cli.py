@@ -17,6 +17,7 @@ def setup_logging(verbose: bool = False) -> None:
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        stream=sys.stderr,
     )
 
 
@@ -1423,11 +1424,16 @@ async def cmd_smoke_test(_args: argparse.Namespace) -> int:
     return await run_smoke_test(settings)
 
 
-async def cmd_version(_args: argparse.Namespace) -> int:
+async def cmd_version(args: argparse.Namespace) -> int:
     """Print the installed Forge package version."""
     from forge import __version__
 
-    print(f"Forge v{__version__}")
+    if getattr(args, "json", False):
+        import json
+
+        print(json.dumps({"version": __version__}))
+    else:
+        print(f"Forge v{__version__}")
     return 0
 
 
@@ -1553,9 +1559,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # version command
-    subparsers.add_parser(
+    version_parser = subparsers.add_parser(
         "version",
         help="Print the installed Forge package version",
+    )
+    version_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print version information as a JSON object",
     )
 
     # test-skill subparser group
