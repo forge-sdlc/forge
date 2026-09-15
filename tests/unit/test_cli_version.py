@@ -253,3 +253,75 @@ class TestCLIVersionParserAndRouting:
         assert code == 0
         captured = capsys.readouterr()
         assert captured.out == f"Forge v{__version__}\n"
+
+    def test_default_version_stream_isolation(self, capsys):
+        """Execute main(['version']) and verify stdout contains exactly 'Forge v<version>' while stderr remains empty."""
+        import logging
+
+        root_logger = logging.getLogger()
+        old_handlers = list(root_logger.handlers)
+        old_level = root_logger.level
+        root_logger.handlers.clear()
+
+        try:
+            code = main(["version"])
+            assert code == 0
+            captured = capsys.readouterr()
+            assert captured.out == f"Forge v{__version__}\n"
+            assert captured.err == ""
+        finally:
+            root_logger.handlers.clear()
+            for h in old_handlers:
+                root_logger.addHandler(h)
+            root_logger.setLevel(old_level)
+
+    def test_verbose_version_stream_isolation(self, capsys):
+        """Execute main(['-v', 'version']) and assert that stdout has only the version payload, while stderr captures verbose logging messages."""
+        import logging
+
+        root_logger = logging.getLogger()
+        old_handlers = list(root_logger.handlers)
+        old_level = root_logger.level
+        root_logger.handlers.clear()
+
+        try:
+            code = main(["-v", "version"])
+            assert code == 0
+            captured = capsys.readouterr()
+            assert captured.out == f"Forge v{__version__}\n"
+            # Since verbose is enabled, some debug/verbose logs must be captured on stderr
+            assert captured.err != ""
+        finally:
+            root_logger.handlers.clear()
+            for h in old_handlers:
+                root_logger.addHandler(h)
+            root_logger.setLevel(old_level)
+
+    def test_verbose_json_version_stream_isolation(self, capsys):
+        """Verify that main(['-v', 'version', '--json']) prints a clean, parseable JSON payload on stdout and all auxiliary logs on stderr."""
+        import json
+        import logging
+
+        root_logger = logging.getLogger()
+        old_handlers = list(root_logger.handlers)
+        old_level = root_logger.level
+        root_logger.handlers.clear()
+
+        try:
+            code = main(["-v", "version", "--json"])
+            assert code == 0
+            captured = capsys.readouterr()
+
+            # Verify stdout contains exactly the clean JSON payload with a single trailing newline
+            assert captured.out.endswith("\n")
+            assert captured.out.count("\n") == 1
+            data = json.loads(captured.out.strip())
+            assert data == {"version": __version__}
+
+            # Verify stderr captures verbose logging messages
+            assert captured.err != ""
+        finally:
+            root_logger.handlers.clear()
+            for h in old_handlers:
+                root_logger.addHandler(h)
+            root_logger.setLevel(old_level)
