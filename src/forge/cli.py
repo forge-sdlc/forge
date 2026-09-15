@@ -13,11 +13,34 @@ from forge.config import get_settings
 
 def setup_logging(verbose: bool = False) -> None:
     """Configure logging for CLI usage."""
+    root_logger = logging.getLogger()
+    # Clear any pre-existing logging handlers registered on the root logger
+    for handler in list(root_logger.handlers):
+        root_logger.removeHandler(handler)
+
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    root_logger.setLevel(level)
+
+    # Instantiate and attach a new logging.StreamHandler(sys.stderr)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(level)
+
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    handler.setFormatter(formatter)
+
+    root_logger.addHandler(handler)
+
+    # Ensure all auxiliary loggers and standard console handlers default strictly to stderr
+    for logger_obj in list(logging.root.manager.loggerDict.values()):
+        if isinstance(logger_obj, logging.Logger):
+            for h in list(logger_obj.handlers):
+                if isinstance(h, logging.StreamHandler) and (
+                    h.stream is sys.stdout or h.stream == sys.stdout
+                ):
+                    if logger_obj.propagate:
+                        logger_obj.removeHandler(h)
+                    else:
+                        h.stream = sys.stderr
 
 
 async def _get_compiled_workflow_for_ticket(ticket_key: str):
@@ -1434,11 +1457,16 @@ async def cmd_smoke_test(_args: argparse.Namespace) -> int:
     return await run_smoke_test(settings)
 
 
-async def cmd_version(_args: argparse.Namespace) -> int:
+async def cmd_version(args: argparse.Namespace) -> int:
     """Print the installed Forge package version."""
     from forge import __version__
 
-    print(f"Forge v{__version__}")
+    if getattr(args, "json", False):
+        import json
+
+        print(json.dumps({"version": __version__}))
+    else:
+        print(f"Forge v{__version__}")
     return 0
 
 
@@ -1564,9 +1592,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # version command
-    subparsers.add_parser(
+    version_parser = subparsers.add_parser(
         "version",
         help="Print the installed Forge package version",
+    )
+    version_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print version information as a JSON object",
     )
 
     # test-skill subparser group

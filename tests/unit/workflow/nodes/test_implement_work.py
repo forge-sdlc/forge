@@ -1,6 +1,7 @@
 """Tests for the generic task-first implementation node."""
 
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,7 +10,7 @@ from forge.workflow.nodes.implement_work import implement_work
 from forge.workflow.stations.implementation_input import NoPendingImplementationWork
 
 
-def resolved_task():
+def resolved_task() -> SimpleNamespace:
     artifact = {
         "id": "jira:TASK-1:task",
         "kind": "task",
@@ -41,7 +42,7 @@ async def test_implements_resolved_task_and_marks_normalized_work_complete() -> 
     jira.close = AsyncMock()
     git = MagicMock()
 
-    async def execute(state, *_args, **_kwargs):
+    async def execute(state: dict[str, Any], *_args: Any, **_kwargs: Any) -> dict[str, Any]:
         return {**state, "last_error": None, "commit_info": {"committed": True}}
 
     with (
@@ -71,6 +72,10 @@ async def test_implements_resolved_task_and_marks_normalized_work_complete() -> 
             AsyncMock(side_effect=lambda _state, _jira, prompt: prompt),
         ),
         patch("forge.workflow.nodes.implement_work.post_status_comment", AsyncMock()),
+        patch(
+            "forge.workflow.nodes.implement_work.ContainerRunner",
+            return_value=MagicMock(),
+        ),
         patch(
             "forge.workflow.nodes.implement_work.run_and_persist_execution",
             AsyncMock(side_effect=execute),

@@ -723,17 +723,31 @@ For workflows paused at `review_response_gate` (due to contested comments):
 
 ### Forge Version Command
 
-To print the currently installed Forge package version, run:
+To print the currently installed Forge package version in plain text, run:
 
 ```bash
 uv run forge version
 ```
 
-This will print the package version in the format `Forge v<version>` (e.g., `Forge v1.0.0`) and exit with a success status code.
+This will print the package version in the format `Forge v<version>` (e.g., `Forge v2.0.0`) and exit with a success status code.
+
+To print the version information as a JSON object, run:
+
+```bash
+uv run forge version --json
+```
+
+This will print the version metadata in compact JSON format (e.g., `{"version": "2.0.0"}`) directly to standard output.
+
+Alternatively, you can run Forge as a module using the `python -m` option:
+
+```bash
+python -m forge version
+```
 
 ### Worker logs
 
-The worker logs to stdout. Useful log entries to grep for:
+The worker logs strictly to stderr to prevent log messages from polluting standard output. Useful log entries to grep for:
 
 ```bash
 # Watch for a specific ticket
