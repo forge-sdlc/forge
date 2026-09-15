@@ -57,6 +57,10 @@ uv run forge worker
 
 # Print Forge version
 uv run forge version
+uv run forge version --json
+
+# Run Forge as a module
+python -m forge version
 
 # Build container
 podman build -t forge-dev:latest containers/
