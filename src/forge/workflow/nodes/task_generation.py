@@ -5,7 +5,6 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from forge.integrations.jira.client import MissingProjectConfig
 from forge.models.draft import DraftItem, ForgeDecompositionDraft
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
@@ -25,7 +24,6 @@ from forge.workflow.utils import check_direct_mode, check_yolo_mode, update_stat
 from forge.workflow.utils.draft_manager import DraftManager
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.references import fetch_and_inject_references
-from forge.workflow.utils.repo_resolution import get_effective_default_repo
 from forge.workflow.utils.workflow_identity import workflow_identity_labels
 
 logger = logging.getLogger(__name__)
@@ -173,22 +171,15 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 description = task.get("description", "")
                 repo = task.get("repo", "")
 
-                # Repo priority: task-level > epic-level > default config
+                # Repo priority: task-level > Epic label.  Do not silently
+                # route work to a project default repository.
                 if not repo or repo == "unknown" or "/" not in repo:
                     repo = epic_repo  # Inherit from Epic
-
-                if not repo or repo == "unknown" or "/" not in repo:
-                    try:
-                        repo = await get_effective_default_repo(jira, project_key)
-                    except MissingProjectConfig:
-                        repo = ""
 
                 if not repo or "/" not in repo:
                     logger.warning(
                         f"Task '{summary}' has no valid repo. "
-                        "Set repo labels on Feature/Epic or configure the default repository "
-                        "for the active mode (`forge.default_repo` in Jira or "
-                        "`GITHUB_DEFAULT_REPO` for local development)."
+                        f"Set a repo:<owner>/<repo> label on Task data or parent Epic {epic_key}."
                     )
                     repo = "unknown"
 
@@ -213,6 +204,20 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
                         all_task_keys.append(task_key)
 
+                        if repo == "unknown":
+                            try:
+                                await jira.add_comment(
+                                    task_key,
+                                    "⚠️ Forge could not assign this Task to a repository. "
+                                    f"The Task has no `repo:<owner>/<repo>` value and parent Epic "
+                                    f"{epic_key} has no valid `repo:<owner>/<repo>` label. "
+                                    "Add a repository label to this Task or its parent Epic, then retry routing.",
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    "Failed to report missing repository on Task %s: %s", task_key, exc
+                                )
+
                         # Assign the model tier for the newly created Task (BR-011).
                         # Comment/label failures MUST NOT fail Task creation
                         # (BR-013 / SC-001): log but continue.
@@ -222,9 +227,8 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                             logger.warning(f"Failed to assign model tier to Task {task_key}: {e}")
 
                         # Track by repository
-                        if repo not in tasks_by_repo:
-                            tasks_by_repo[repo] = []
-                        tasks_by_repo[repo].append(task_key)
+                        if repo != "unknown":
+                            tasks_by_repo.setdefault(repo, []).append(task_key)
 
                         # Track for context in subsequent epic task generation
                         created_tasks_context.append(
@@ -279,13 +283,13 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 await jira.add_comment(
                     ticket_key,
                     "## 🤖 Forge interaction options\n\n"
-                    f"- ✅ **Approve:** add `{ForgeLabel.TASK_APPROVED.value}` to continue.\n"
+                    f"- ✅ **Approve:** replace `{ForgeLabel.TASK_PENDING.value}` with `{ForgeLabel.TASK_APPROVED.value}` to continue.\n"
                     "- ♻️ **Revise all tasks:** add a comment starting with `!` on this ticket.\n"
                     "- 🔧 **Revise a single task:** add a comment starting with `!` on the Task.\n"
                     "- ❓ **Ask a question:** add a Jira comment starting with `?`.\n\n"
                     "### Supported Workflow Modes\n"
-                    "1. **Default Draft Review Flow:** Forge attaches a draft JSON and posts a detailed markdown preview. Users can use `/forge` commands or comment starting with `!` to revise, and approve via `/forge approve` or adding the `forge:task-approved` label.\n"
-                    "2. **Direct Mode (`forge:direct-mode`):** Forge directly creates the Task issues in Jira, then pauses awaiting human approval (adding `forge:task-approved` label).\n"
+                    "1. **Default Draft Review Flow:** Forge attaches a draft JSON and posts a detailed markdown preview. Users can use `/forge` commands or comment starting with `!` to revise, and approve via `/forge approve` or replacing `forge:task-pending` with `forge:task-approved`.\n"
+                    "2. **Direct Mode (`forge:direct-mode`):** Forge directly creates the Task issues in Jira, then pauses awaiting human approval (replace `forge:task-pending` with `forge:task-approved`).\n"
                     "3. **YOLO Mode (`forge:yolo`):** Forge bypasses human approval gates, automatically creating the Task issues in Jira and auto-advancing without pausing.",
                 )
                 return cast(
@@ -755,11 +759,6 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
 
             if not repo or repo == "unknown" or "/" not in repo:
                 repo = epic_repo
-            if not repo or repo == "unknown" or "/" not in repo:
-                try:
-                    repo = await get_effective_default_repo(jira, project_key)
-                except MissingProjectConfig:
-                    repo = ""
             if not repo or "/" not in repo:
                 repo = "unknown"
 
@@ -781,6 +780,20 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 )
                 new_task_keys.append(task_key)
 
+                if repo == "unknown":
+                    try:
+                        await jira.add_comment(
+                            task_key,
+                            "⚠️ Forge could not assign this Task to a repository. "
+                            f"The Task has no `repo:<owner>/<repo>` value and parent Epic "
+                            f"{epic_key} has no valid `repo:<owner>/<repo>` label. "
+                            "Add a repository label to this Task or its parent Epic, then retry routing.",
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to report missing repository on Task %s: %s", task_key, exc
+                        )
+
                 # Assign the model tier for the newly created Task (BR-011).
                 # Comment/label failures MUST NOT fail Task creation
                 # (BR-013 / SC-001): log but continue.
@@ -789,7 +802,8 @@ async def regenerate_epic_tasks(state: WorkflowState) -> WorkflowState:
                 except Exception as e:
                     logger.warning(f"Failed to assign model tier to Task {task_key}: {e}")
 
-                remaining_tasks_by_repo.setdefault(repo, []).append(task_key)
+                if repo != "unknown":
+                    remaining_tasks_by_repo.setdefault(repo, []).append(task_key)
                 logger.info(f"Created Task {task_key}: {summary} (repo: {repo})")
             except Exception as e:
                 jira_error = str(e)

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from forge.integrations.agents.structured_outputs import ArtifactDocument
 from forge.models.workflow import TicketType
 from forge.workflow.feature.state import create_initial_feature_state
 
@@ -12,6 +13,10 @@ from forge.workflow.feature.state import create_initial_feature_state
 def create_mock_jira_client():
     """Create a mock JiraClient with required methods."""
     mock = MagicMock()
+    mock.get_project_repos = AsyncMock(return_value=["org/repo"])
+    mock.get_labels = AsyncMock(return_value=[])
+    mock.add_labels = AsyncMock()
+    mock.remove_labels = AsyncMock()
     mock.close = AsyncMock()
     mock.update_description = AsyncMock()
     mock.add_structured_comment = AsyncMock()
@@ -55,7 +60,7 @@ class TestPRDGenerationContext:
 
         mock_agent = create_mock_forge_agent()
         mock_agent.generate_prd = AsyncMock(
-            return_value="# Generated PRD\n\nContent here."
+            return_value=ArtifactDocument(content="# Generated PRD\n\nContent here.", repositories=["org/repo"])
         )
 
         state = create_initial_feature_state(
@@ -104,7 +109,7 @@ class TestPRDGenerationContext:
 
         mock_agent = create_mock_forge_agent()
         mock_agent.generate_prd = AsyncMock(
-            return_value="# PRD Content"
+            return_value=ArtifactDocument(content="# PRD Content", repositories=["org/repo"])
         )
 
         state = create_initial_feature_state(
@@ -142,7 +147,7 @@ class TestSpecGenerationContext:
         mock_jira = create_mock_jira_client()
         mock_agent = create_mock_forge_agent()
         mock_agent.generate_spec = AsyncMock(
-            return_value="# Generated Spec\n\nContent here."
+            return_value=ArtifactDocument(content="# Generated Spec\n\nContent here.", repositories=["org/repo"])
         )
 
         state = create_initial_feature_state(
@@ -183,7 +188,7 @@ class TestSpecGenerationContext:
         mock_jira = create_mock_jira_client()
         mock_agent = create_mock_forge_agent()
         mock_agent.generate_spec = AsyncMock(
-            return_value="# Spec Content"
+            return_value=ArtifactDocument(content="# Spec Content", repositories=["org/repo"])
         )
 
         state = create_initial_feature_state(

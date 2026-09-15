@@ -241,13 +241,13 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
                 await jira.add_comment(
                     ticket_key,
                     "## 🤖 Forge interaction options\n\n"
-                    f"- ✅ **Approve:** add `{ForgeLabel.PLAN_APPROVED.value}` to continue.\n"
+                    f"- ✅ **Approve:** replace `{ForgeLabel.PLAN_PENDING.value}` with `{ForgeLabel.PLAN_APPROVED.value}` to continue.\n"
                     "- ♻️ **Revise all epics:** add a comment starting with `!` on this ticket.\n"
                     "- 🔧 **Revise a single epic:** add a comment starting with `!` on the Epic.\n"
                     "- ❓ **Ask a question:** add a Jira comment starting with `?`.\n\n"
                     "### Supported Workflow Modes\n"
-                    "1. **Default Draft Review Flow:** Forge stores the draft in workflow state and posts a detailed markdown preview. Users can use `/forge` commands or comment starting with `!` to revise, and approve via `/forge approve` or adding the `forge:plan-approved` label.\n"
-                    "2. **Direct Mode (`forge:direct-mode`):** Forge directly creates the Epic issues in Jira, then pauses awaiting human approval (adding `forge:plan-approved` label).\n"
+                    "1. **Default Draft Review Flow:** Forge stores the draft in workflow state and posts a detailed markdown preview. Users can use `/forge` commands or comment starting with `!` to revise, and approve via `/forge approve` or replacing `forge:plan-pending` with `forge:plan-approved`.\n"
+                    "2. **Direct Mode (`forge:direct-mode`):** Forge directly creates the Epic issues in Jira, then pauses awaiting human approval (replace `forge:plan-pending` with `forge:plan-approved`).\n"
                     "3. **YOLO Mode (`forge:yolo`):** Forge bypasses human approval gates, automatically creating the Epic issues in Jira and auto-advancing without pausing.",
                 )
 

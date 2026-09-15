@@ -604,7 +604,17 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
             print(f"[OK] forge.repos = {parsed_repos}")
 
         # forge.default_repo
-        if args.default_repo:
+        remove_default_repo = getattr(args, "remove_default_repo", False)
+        if remove_default_repo and args.default_repo:
+            print(
+                "Error: --remove-default-repo cannot be combined with --default-repo",
+                file=sys.stderr,
+            )
+            return 1
+        if remove_default_repo:
+            await jira.delete_project_property(project_key, "forge.default_repo")
+            print("[OK] forge.default_repo removed")
+        elif args.default_repo:
             if "/" not in args.default_repo:
                 print(
                     f"Error: --default-repo must be owner/repo, got: {args.default_repo!r}",
@@ -898,6 +908,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 add_repos,
                 remove_repos,
                 args.default_repo,
+                remove_default_repo,
                 args.prd_proposals_repo is not None,
                 args.prd_proposals_path is not None,
                 args.skills_config,
@@ -918,7 +929,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
         ):
             print(
                 "Nothing to set — specify at least one of: "
-                "--repo, --add-repo, --remove-repo, --default-repo, "
+                "--repo, --add-repo, --remove-repo, --default-repo, --remove-default-repo, "
                 "--prd-proposals-repo, --remove-prd-proposals-repo, "
                 "--prd-proposals-path, --remove-prd-proposals-path, "
                 "--skills-config, --add-skill, --remove-skills"
@@ -1056,10 +1067,10 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
                 val = settings.github_default_repo or None
                 effective_config["forge.default_repo"] = {
                     "value": val,
-                    "source": "global" if val else "unset/required",
+                    "source": "global" if val else "unset",
                 }
             else:
-                effective_config["forge.default_repo"] = {"value": None, "source": "unset/required"}
+                effective_config["forge.default_repo"] = {"value": None, "source": "unset"}
 
         # 3. forge.prd_proposals_repo
         prd_repo_val = project_properties.get("forge.prd_proposals_repo")
@@ -1073,12 +1084,12 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
                 val = settings.prd_proposals_repo or None
                 effective_config["forge.prd_proposals_repo"] = {
                     "value": val,
-                    "source": "global" if val else "unset/required",
+                    "source": "global" if val else "unset",
                 }
             else:
                 effective_config["forge.prd_proposals_repo"] = {
                     "value": None,
-                    "source": "unset/required",
+                    "source": "unset",
                 }
 
         # 4. forge.prd_proposals_path
@@ -1838,6 +1849,11 @@ Examples:
         "--default-repo",
         metavar="OWNER/REPO",
         help="Primary GitHub repo (sets forge.default_repo)",
+    )
+    setup_parser.add_argument(
+        "--remove-default-repo",
+        action="store_true",
+        help="Remove the forge.default_repo project property",
     )
     setup_parser.add_argument(
         "--prd-proposals-repo",

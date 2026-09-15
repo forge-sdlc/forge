@@ -1,8 +1,10 @@
 import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from forge.domain import StationOutcomeStatus
+from forge.workflow.nodes.task_router import route_tasks_by_repo
 from forge.workflow.projections.task_routing import (
     project_repository_aggregation,
     project_task_routing,
@@ -81,8 +83,23 @@ def test_empty_mapping_returns_structured_blocked_outcome() -> None:
     assert outcome.failure is not None
     assert outcome.failure.code == "no_tasks"
     assert update["last_error"] == "No tasks available for routing"
-    assert update["current_node"] == "route_tasks"
+    assert update["current_node"] == "task_router"
     assert update["station_history"][0]["status"] == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_router_rebuilds_empty_mapping_for_existing_tasks() -> None:
+    state = _state(tasks_by_repo={}, task_keys=["FORGE-2"])
+
+    with patch(
+        "forge.workflow.gates.task_approval.provision_tasks_from_draft",
+        new_callable=AsyncMock,
+        return_value=(["FORGE-2"], {"acme/api": ["FORGE-2"]}),
+    ):
+        result = await route_tasks_by_repo(state)
+
+    assert result["tasks_by_repo"] == {"acme/api": ["FORGE-2"]}
+    assert result["current_node"] == "setup_workspace"
 
 
 def test_stale_outcome_is_rejected() -> None:

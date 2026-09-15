@@ -27,7 +27,7 @@ from forge.workflow.utils import update_state_timestamp
 from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.proposal_review_threads import reply_to_proposal_decisions
 from forge.workflow.utils.references import fetch_and_inject_references
-from forge.workflow.utils.repo_resolution import ensure_repo_labels
+from forge.workflow.utils.repo_resolution import get_effective_repos, reconcile_repo_labels
 
 logger = logging.getLogger(__name__)
 
@@ -152,12 +152,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
                 "current_node": "generate_prd",
             }
 
-        resolved_repos = await ensure_repo_labels(
-            jira,
-            issue,
-            raw_requirements,
-            effect_scope="generate_prd",
-        )
+        available_repos = await get_effective_repos(jira, issue.project_key)
 
         raw_requirements = await fetch_and_inject_references(state, jira, raw_requirements)
 
@@ -171,7 +166,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
             "retry_count": state.get("retry_count", 0),
             "summary": issue.summary,
             "project_key": issue.project_key,
-            "available_repos": resolved_repos,
+            "available_repos": available_repos,
         }
 
         # Generate PRD using the configured LLM backend - primary operation
@@ -185,6 +180,9 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
         )
         assert outcome.output is not None
         prd_content = str(outcome.output.content)
+        await reconcile_repo_labels(
+            jira, ticket_key, outcome.output.repositories, allowed_repos=available_repos
+        )
 
         # Publish PRD - either as GitHub PR or Jira update
         # Per-project opt-in: check forge.prd_proposals_repo project property
@@ -283,6 +281,8 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
 
     jira = JiraClient()
     try:
+        issue = await jira.get_issue(ticket_key)
+        available_repos = await get_effective_repos(jira, issue.project_key)
         original_prd_with_refs = await fetch_and_inject_references(state, jira, original_prd)
 
         # Regenerate PRD with feedback
@@ -293,6 +293,8 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
                 source_content=original_prd_with_refs,
                 feedback=feedback,
                 context={
+                    "project_key": issue.project_key,
+                    "available_repos": available_repos,
                     "ticket_type": state.get("ticket_type", ""),
                     "current_node": state.get("current_node", ""),
                     "event_type": state.get("event_type", ""),
@@ -303,15 +305,8 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
         )
         assert outcome.output is not None
         new_prd = str(outcome.output.content)
-
-        # A revision may change repository scope, and repository labels may
-        # have drifted while the workflow was waiting at the approval gate.
-        issue = await jira.get_issue(ticket_key)
-        await ensure_repo_labels(
-            jira,
-            issue,
-            new_prd,
-            effect_scope="regenerate_prd",
+        await reconcile_repo_labels(
+            jira, ticket_key, outcome.output.repositories, allowed_repos=available_repos
         )
 
         # Publish revised PRD

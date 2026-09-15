@@ -164,6 +164,12 @@ def _apply_retry(_command: WorkflowCommand, state: Mapping[str, Any]) -> Command
         "auto_retry_cap_notified": False,
         "retry_count": 0,
     }
+    # Revision-3 checkpoints used route_tasks before the declarative workflow
+    # named the node task_router.  Retrying such a checkpoint must use the
+    # declared node so observation validation and graph resume both succeed.
+    if current_node == "route_tasks":
+        current_node = "task_router"
+        updated["current_node"] = current_node
     if current_node == "escalate_blocked" and state.get("retry_node"):
         current_node = str(state["retry_node"])
         updated["current_node"] = current_node

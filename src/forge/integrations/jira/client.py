@@ -48,16 +48,25 @@ _ARTIFACT_APPROVAL_LABELS = {
     "task": ForgeLabel.TASK_APPROVED.value,
 }
 
+_ARTIFACT_PENDING_LABELS = {
+    "prd": ForgeLabel.PRD_PENDING.value,
+    "spec": ForgeLabel.SPEC_PENDING.value,
+    "plan": ForgeLabel.PLAN_PENDING.value,
+    "task": ForgeLabel.TASK_PENDING.value,
+}
+
 
 class MissingProjectConfig(Exception):
     """Raised when a required Jira project property is absent or malformed."""
 
 
 def artifact_interaction_options(comment_type: str) -> str:
-    approval_label = _ARTIFACT_APPROVAL_LABELS[comment_type.lower()]
+    normalized_type = comment_type.lower()
+    approval_label = _ARTIFACT_APPROVAL_LABELS[normalized_type]
+    pending_label = _ARTIFACT_PENDING_LABELS[normalized_type]
     return (
         "## 🤖 Forge interaction options\n\n"
-        f"- ✅ **Approve:** add `{approval_label}` to continue.\n"
+        f"- ✅ **Approve:** replace `{pending_label}` with `{approval_label}` to continue.\n"
         "- ♻️ **Request changes:** add a Jira comment starting with `!`, followed by the requested revision.\n"
         "- ❓ **Ask a question:** add a Jira comment starting with `?`."
     )

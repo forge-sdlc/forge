@@ -154,10 +154,33 @@ async def provision_tasks_from_draft(
     state: WorkflowState, jira: "JiraClient"
 ) -> tuple[list[str], dict[str, list[str]]]:
     """Materialize the approved workflow-state draft as Jira Tasks."""
-    from forge.config import get_settings
-    from forge.integrations.jira.client import MissingProjectConfig
     from forge.models.draft import ForgeDecompositionDraft
     from forge.models.workflow import ForgeLabel
+    from forge.workflow.utils.repo_resolution import repo_from_labels
+
+    def valid_repo(repo: str | None) -> bool:
+        return bool(repo and repo != "unknown" and "/" in repo)
+
+    async def resolve_repo(task_repo: str | None, epic_key: str | None) -> str | None:
+        """Use task data first, then the parent Epic's repo label only."""
+        if valid_repo(task_repo):
+            return task_repo
+        if not epic_key:
+            return None
+        return repo_from_labels(await jira.get_labels(epic_key))
+
+    async def report_missing_repo(task_key: str, epic_key: str | None) -> None:
+        parent = f"parent Epic {epic_key}" if epic_key else "parent Epic"
+        try:
+            await jira.add_comment(
+                task_key,
+                "⚠️ Forge could not assign this Task to a repository. "
+                f"The Task has no `repo:<owner>/<repo>` label and {parent} has no valid "
+                "`repo:<owner>/<repo>` label. Add a repository label to this Task or its "
+                "parent Epic, then retry routing.",
+            )
+        except Exception as exc:
+            logger.warning("Failed to report missing repository on Task %s: %s", task_key, exc)
 
     ticket_key = state["ticket_key"]
     existing = await jira.search_issues(
@@ -166,15 +189,13 @@ async def provision_tasks_from_draft(
     if existing:
         by_repo: dict[str, list[str]] = {}
         for issue in existing:
-            repo = next(
-                (
-                    label.removeprefix("repo:")
-                    for label in issue.labels
-                    if label.startswith("repo:")
-                ),
-                "unknown",
-            )
-            by_repo.setdefault(repo, []).append(issue.key)
+            repo = await resolve_repo(repo_from_labels(issue.labels), issue.parent_key)
+            if repo:
+                if repo_from_labels(issue.labels) != repo:
+                    await jira.add_labels(issue.key, [f"repo:{repo}"])
+                by_repo.setdefault(repo, []).append(issue.key)
+            else:
+                await report_missing_repo(issue.key, issue.parent_key)
         return [issue.key for issue in existing], by_repo
 
     raw = state.get("tasks_draft")
@@ -182,25 +203,15 @@ async def provision_tasks_from_draft(
         raise ValueError(f"Approved tasks_draft not found for {ticket_key}")
     draft = ForgeDecompositionDraft.model_validate(raw) if isinstance(raw, dict) else raw
     project_key = (await jira.get_issue(ticket_key)).project_key
-    settings = get_settings()
     task_keys: list[str] = []
     by_repo: dict[str, list[str]] = {}
     for item in draft.items:
         if item.excluded:
             continue
-        repo = item.repo
-        if not repo or "/" not in repo:
-            try:
-                repo = await jira.get_project_default_repo(project_key)
-            except MissingProjectConfig:
-                repo = (
-                    settings.github_default_repo
-                    if not settings.forge_require_project_config
-                    else ""
-                )
         parent_key = item.epic_key or next(iter(state.get("epic_keys") or []), None)
+        repo = await resolve_repo(item.repo, parent_key)
         labels = [ForgeLabel.FORGE_MANAGED.value, f"forge:parent:{ticket_key}"]
-        if repo and "/" in repo:
+        if repo:
             labels.append(f"repo:{repo}")
         task_key = await jira.create_task(
             project_key=project_key,
@@ -214,6 +225,8 @@ async def provision_tasks_from_draft(
         except Exception as exc:
             logger.warning("Failed to assign model tier to Task %s: %s", task_key, exc)
         task_keys.append(task_key)
-        if repo and "/" in repo:
+        if repo:
             by_repo.setdefault(repo, []).append(task_key)
+        else:
+            await report_missing_repo(task_key, parent_key)
     return task_keys, by_repo

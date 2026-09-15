@@ -5,6 +5,27 @@ from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from pydantic import BaseModel, ConfigDict
 
 from forge.integrations.agents.agent import ForgeAgent
+from forge.integrations.agents.structured_outputs import ArtifactDocument, TaskGeneration
+
+
+def test_artifact_document_requires_repository_names() -> None:
+    with pytest.raises(ValueError, match="owner/repository"):
+        ArtifactDocument(content="Document", repositories=["not-a-repo"])
+
+
+def test_task_generation_requires_owner_repository_repo_field() -> None:
+    with pytest.raises(ValueError, match="owner/repository"):
+        TaskGeneration.model_validate(
+            {
+                "tasks": [
+                    {
+                        "summary": "Implement it",
+                        "description": "Implement the change.",
+                        "repo": "unknown",
+                    }
+                ]
+            }
+        )
 
 
 class Decision(BaseModel):

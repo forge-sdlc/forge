@@ -175,7 +175,13 @@ async def ensure_repo_labels(
     return selected
 
 
-async def reconcile_repo_labels(jira: Any, issue_key: str, repos: list[str]) -> list[str]:
+async def reconcile_repo_labels(
+    jira: Any,
+    issue_key: str,
+    repos: list[str],
+    *,
+    allowed_repos: list[str] | None = None,
+) -> list[str]:
     """Make ``repo:`` labels exactly match the validated repository selection.
 
     Use this for structured workflow outputs whose repository selection is
@@ -183,6 +189,15 @@ async def reconcile_repo_labels(jira: Any, issue_key: str, repos: list[str]) -> 
     label, which would conflict with the durable effect journal.
     """
     selected = list(dict.fromkeys(repo for repo in repos if "/" in repo))
+    if not selected:
+        raise ValueError("No valid repositories returned by artifact generation")
+    if allowed_repos:
+        invalid = [repo for repo in selected if repo not in allowed_repos]
+        if invalid:
+            raise ValueError(
+                "Artifact generation returned repositories not configured for this project: "
+                + ", ".join(invalid)
+            )
     desired = {f"{_REPO_LABEL_PREFIX}{repo}" for repo in selected}
     existing = await jira.get_labels(issue_key)
     stale = [

@@ -242,7 +242,7 @@ class DraftManager:
 
         footer = (
             "## 🤖 Forge interaction options\n\n"
-            f"- Approve:  add the `{approval_label}` label\n"
+            f"- Approve:  replace `{approval_label.replace('-approved', '-pending')}` with `{approval_label}`\n"
             f"- Revise:   comment starting with `!` (regenerates with your feedback)\n"
             f"- Add:      /forge add summary=... repo=...\n"
             f"- Update:   /forge update <ID> summary=... | description=... | repo=...\n"

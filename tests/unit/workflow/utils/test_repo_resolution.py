@@ -16,6 +16,21 @@ from forge.workflow.utils.repo_resolution import (
 
 
 @pytest.mark.asyncio
+async def test_reconcile_repo_labels_rejects_unconfigured_repositories() -> None:
+    jira = AsyncMock()
+
+    with pytest.raises(ValueError, match="not configured"):
+        await reconcile_repo_labels(
+            jira,
+            "PROJ-1",
+            ["other/repo"],
+            allowed_repos=["owner/repo"],
+        )
+
+    jira.get_labels.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_local_mode_prefers_environment_repos_over_jira() -> None:
     jira = AsyncMock()
     settings = MagicMock(

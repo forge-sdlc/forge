@@ -33,7 +33,7 @@ except ImportError:
     HAS_MCP = False
 
 from forge.config import Settings, get_settings
-from forge.integrations.agents.structured_outputs import EpicDecomposition
+from forge.integrations.agents.structured_outputs import ArtifactDocument, EpicDecomposition
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
 from forge.integrations.langfuse.fields import resolve_trace_fields
 from forge.model_policy import resolve_model_target_for_project
@@ -1078,7 +1078,7 @@ class ForgeAgent:
         self,
         raw_requirements: str,
         context: dict[str, Any] | None = None,
-    ) -> str:
+    ) -> ArtifactDocument:
         """Generate a structured PRD from raw requirements.
 
         Uses the 'generate-prd' skill from configured skill paths.
@@ -1097,9 +1097,10 @@ class ForgeAgent:
         )
 
         logger.info("Generating PRD using Deep Agents with skill")
-        result = await self.run_task(
+        result = await self.run_structured_task(
             task="generate-prd",
             policy_key="generate_prd",
+            response_schema=ArtifactDocument,
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
@@ -1109,15 +1110,14 @@ class ForgeAgent:
             trace_context=_forward_trace_fields(context),
         )
 
-        result = self._strip_preamble(result)
-        logger.info(f"Generated PRD ({len(result)} chars)")
+        logger.info(f"Generated PRD ({len(result.content)} chars)")
         return result
 
     async def generate_spec(
         self,
         prd_content: str,
         context: dict[str, Any] | None = None,
-    ) -> str:
+    ) -> ArtifactDocument:
         """Generate a behavioral specification from a PRD.
 
         Uses the 'generate-spec' skill from configured skill paths.
@@ -1132,23 +1132,63 @@ class ForgeAgent:
         prompt = load_prompt(
             "generate-spec",
             prd_content=prd_content,
-            context=_prompt_context_fields(context, ("project_key", "summary")),
+            context=_prompt_context_fields(context, ("project_key", "summary", "available_repos")),
         )
 
         logger.info("Generating Spec using Deep Agents with skill")
-        result = await self.run_task(
+        result = await self.run_structured_task(
             task="generate-spec",
             policy_key="generate_spec",
+            response_schema=ArtifactDocument,
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
                 "project_key": context.get("project_key", "") if context else "",
+                "available_repos": context.get("available_repos", []) if context else [],
             },
             trace_context=_forward_trace_fields(context),
         )
 
-        result = self._strip_preamble(result)
-        logger.info(f"Generated specification ({len(result)} chars)")
+        logger.info(f"Generated specification ({len(result.content)} chars)")
+        return result
+
+    async def regenerate_document_with_feedback(
+        self,
+        original_content: str,
+        feedback: str,
+        content_type: str,
+        ticket_key: str | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> ArtifactDocument:
+        """Regenerate a PRD or specification with explicit repository selection."""
+        if content_type not in {"prd", "spec"}:
+            raise ValueError(f"Unsupported document type for structured regeneration: {content_type}")
+        prompt = load_prompt(
+            "regenerate",
+            content_type=content_type.upper(),
+            original_content=original_content,
+            feedback=feedback,
+        )
+        prompt += (
+            "\n\n## Repository selection\n\n"
+            "Select every affected repository from the configured available repositories. "
+            "Your structured response must include those exact repository names.\n\n"
+            f"Available repositories: {context.get('available_repos', []) if context else []}"
+        )
+        result = await self.run_structured_task(
+            task=f"generate-{content_type}",
+            policy_key=f"generate_{content_type}",
+            response_schema=ArtifactDocument,
+            prompt=prompt,
+            context={
+                "is_revision": True,
+                "ticket_key": ticket_key or "",
+                "project_key": context.get("project_key", "") if context else "",
+                "available_repos": context.get("available_repos", []) if context else [],
+            },
+            trace_context=_forward_trace_fields(context),
+        )
+        logger.info(f"Regenerated {content_type} ({len(result.content)} chars)")
         return result
 
     async def generate_epics(
@@ -1214,7 +1254,7 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         )
 
         epics = [
-            {"summary": epic.summary, "plan": epic.plan, "repo": epic.repository}
+            {"summary": epic.summary, "plan": epic.plan, "repo": epic.repo}
             for epic in result.epics
         ]
         logger.info(f"Generated {len(epics)} Epics")

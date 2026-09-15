@@ -11,6 +11,8 @@ from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from typing import Any
 
+from langgraph.types import Command
+
 from forge.api.routes.metrics import (
     record_workflow_completed,
     record_workflow_failed,
@@ -199,7 +201,7 @@ class OrchestratorWorker:
     async def _invoke_workflow(
         self,
         compiled_workflow: Any,
-        invocation_input: dict[str, Any] | None,
+        invocation_input: Any | None,
         *,
         config: dict[str, Any],
         ticket_key: str,
@@ -658,9 +660,13 @@ class OrchestratorWorker:
                         f"{'Retrying' if was_errored else 'Re-invoking'} workflow "
                         f"from {updated_values.get('current_node')}"
                     )
+                    # A state mapping begins a declarative graph at its entry
+                    # node.  Retrying must execute the saved checkpoint node
+                    # itself instead of restarting planning at generate_prd.
+                    resume_target = str(updated_values["current_node"])
                     result = await self._invoke_workflow(
                         compiled_workflow,
-                        updated_values,
+                        Command(update=updated_values, goto=resume_target),
                         config=config,
                         ticket_key=ticket_key,
                         state=updated_values,

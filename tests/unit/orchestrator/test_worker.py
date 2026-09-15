@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+from langgraph.types import Command
 
 from forge.integrations.source_control.contracts import (
     Actor,
@@ -621,6 +622,47 @@ class TestQuestionDetection:
         assert result["revision_requested"] is True
 
     @pytest.mark.asyncio
+    async def test_retry_maps_legacy_route_tasks_to_task_router(
+        self,
+        worker: OrchestratorWorker,
+        base_message: QueueMessage,
+        base_state: dict,
+    ):
+        state = {
+            **base_state,
+            "current_node": "route_tasks",
+            "is_paused": True,
+            "is_blocked": True,
+            "last_error": "Repository must be resolved before workspace setup",
+        }
+        payload = {
+            **base_message.payload,
+            "changelog": {
+                "items": [
+                    {
+                        "field": "labels",
+                        "fromString": "forge:managed",
+                        "toString": "forge:managed forge:retry",
+                    }
+                ]
+            },
+        }
+        message = QueueMessage(
+            message_id=base_message.message_id,
+            event_id=base_message.event_id,
+            source=base_message.source,
+            event_type="jira:issue_updated",
+            ticket_key=base_message.ticket_key,
+            payload=payload,
+        )
+
+        result = await worker._apply_observation_transition(message, state)
+
+        assert result["current_node"] == "task_router"
+        assert result["is_paused"] is False
+        assert result["last_error"] is None
+
+    @pytest.mark.asyncio
     async def test_retry_at_triage_gate_reenters_triage_check(
         self, worker: OrchestratorWorker, base_message: QueueMessage, base_state: dict
     ):
@@ -1169,10 +1211,11 @@ class TestEnsureSkillsIntegration:
             await worker._process_workflow(jira_message)
 
         fake_compiled.aupdate_state.assert_not_awaited()
-        fake_compiled.ainvoke.assert_awaited_once_with(
-            {**retry_cleared_state, "command_decisions": ANY},
-            config={"configurable": {"thread_id": "TEST-123"}},
-        )
+        invocation = fake_compiled.ainvoke.await_args
+        assert isinstance(invocation.args[0], Command)
+        assert invocation.args[0].goto == "setup_workspace"
+        assert invocation.args[0].update == {**retry_cleared_state, "command_decisions": ANY}
+        assert invocation.kwargs["config"] == {"configurable": {"thread_id": "TEST-123"}}
 
     @pytest.mark.asyncio
     async def test_retry_force_fresh_invoke_reruns_bug_implementation(
@@ -1227,10 +1270,11 @@ class TestEnsureSkillsIntegration:
             await worker._process_workflow(jira_message)
 
         fake_compiled.aupdate_state.assert_not_awaited()
-        fake_compiled.ainvoke.assert_awaited_once_with(
-            expected_invoked_state,
-            config={"configurable": {"thread_id": "TEST-123"}},
-        )
+        invocation = fake_compiled.ainvoke.await_args
+        assert isinstance(invocation.args[0], Command)
+        assert invocation.args[0].goto == "implement_bug_fix"
+        assert invocation.args[0].update == expected_invoked_state
+        assert invocation.kwargs["config"] == {"configurable": {"thread_id": "TEST-123"}}
 
 
 class TestCiWebhookSignalAtCiEvaluator:

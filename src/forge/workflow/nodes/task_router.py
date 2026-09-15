@@ -42,7 +42,11 @@ async def route_tasks_by_repo(state: WorkflowState) -> WorkflowState:
     """
     # Preserve resume compatibility with revision-3 definitions, which route
     # approved drafts directly to task_router.
-    if not state.get("task_keys") and state.get("tasks_draft"):
+    # A retry can reach this node with Jira Tasks already created but no
+    # routing map (for example, after a previously missing repo label).  Re-run
+    # provisioning in that case so it rebuilds assignments from the Task label
+    # or, if absent, the parent Epic label.
+    if not state.get("tasks_by_repo") and (state.get("task_keys") or state.get("tasks_draft")):
         from forge.workflow.effect_runtime import JiraClient
         from forge.workflow.gates.task_approval import provision_tasks_from_draft
 

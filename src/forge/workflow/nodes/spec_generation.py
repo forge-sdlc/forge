@@ -33,7 +33,7 @@ from forge.workflow.utils.jira_status import post_status_comment
 from forge.workflow.utils.proposal_review_threads import reply_to_proposal_decisions
 from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
 from forge.workflow.utils.references import fetch_and_inject_references
-from forge.workflow.utils.repo_resolution import ensure_repo_labels
+from forge.workflow.utils.repo_resolution import get_effective_repos, reconcile_repo_labels
 
 logger = logging.getLogger(__name__)
 
@@ -122,12 +122,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                 "current_node": "generate_spec",
             }
 
-        resolved_repos = await ensure_repo_labels(
-            jira,
-            issue,
-            prd_content,
-            effect_scope="generate_spec",
-        )
+        available_repos = await get_effective_repos(jira, issue.project_key)
 
         # Build context
         context: dict[str, Any] = {
@@ -137,7 +132,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
             "event_type": state.get("event_type", ""),
             "event_source": state.get("context", {}).get("source", ""),
             "retry_count": state.get("retry_count", 0),
-            "available_repos": resolved_repos,
+            "available_repos": available_repos,
         }
 
         prd_content = await fetch_and_inject_references(state, jira, prd_content)
@@ -153,6 +148,9 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         )
         assert outcome.output is not None
         spec_content = str(outcome.output.content)
+        await reconcile_repo_labels(
+            jira, ticket_key, outcome.output.repositories, allowed_repos=available_repos
+        )
 
         # Publish spec — either as GitHub PR or Jira update
         proposals_repo = await _resolve_prd_proposals_repo(issue.project_key, jira)
@@ -256,6 +254,8 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
 
     jira = JiraClient()
     try:
+        issue = await jira.get_issue(ticket_key)
+        available_repos = await get_effective_repos(jira, issue.project_key)
         original_spec_with_refs = await fetch_and_inject_references(state, jira, original_spec)
 
         # Regenerate spec with feedback
@@ -266,6 +266,8 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
                 source_content=original_spec_with_refs,
                 feedback=feedback,
                 context={
+                    "project_key": issue.project_key,
+                    "available_repos": available_repos,
                     "ticket_type": state.get("ticket_type", ""),
                     "current_node": state.get("current_node", ""),
                     "event_type": state.get("event_type", ""),
@@ -276,6 +278,9 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         )
         assert outcome.output is not None
         new_spec = str(outcome.output.content)
+        await reconcile_repo_labels(
+            jira, ticket_key, outcome.output.repositories, allowed_repos=available_repos
+        )
 
         # Publish revised spec
         if state.get("spec_pr_number"):

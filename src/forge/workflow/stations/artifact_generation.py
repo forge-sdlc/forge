@@ -37,6 +37,7 @@ class ArtifactGenerationInput(DomainModel):
 class ArtifactGenerationOutput(DomainModel):
     kind: ArtifactKind
     content: JsonValue
+    repositories: list[str] = Field(default_factory=list)
 
 
 async def run_artifact_generation_station(
@@ -45,8 +46,19 @@ async def run_artifact_generation_station(
     """Generate content without reading workflow state or provider resources."""
     value = request.input
     agent = ForgeAgent()
+    repositories: list[str] = []
     try:
-        if value.feedback:
+        if value.feedback and value.kind in (ArtifactKind.PRD, ArtifactKind.SPEC):
+            document = await agent.regenerate_document_with_feedback(
+                original_content=value.source_content,
+                feedback=value.feedback,
+                content_type=value.kind.value,
+                ticket_key=value.ticket_key,
+                context=dict(value.context),
+            )
+            content = document.content
+            repositories = document.repositories
+        elif value.feedback:
             content = await agent.regenerate_with_feedback(
                 original_content=value.source_content,
                 feedback=value.feedback,
@@ -55,9 +67,13 @@ async def run_artifact_generation_station(
                 context=dict(value.context),
             )
         elif value.kind is ArtifactKind.PRD:
-            content = await agent.generate_prd(value.source_content, dict(value.context))
+            document = await agent.generate_prd(value.source_content, dict(value.context))
+            content = document.content
+            repositories = document.repositories
         elif value.kind is ArtifactKind.SPEC:
-            content = await agent.generate_spec(value.source_content, dict(value.context))
+            document = await agent.generate_spec(value.source_content, dict(value.context))
+            content = document.content
+            repositories = document.repositories
         elif value.kind is ArtifactKind.EPICS:
             content = await agent.generate_epics(value.source_content, dict(value.context))
         else:
@@ -71,5 +87,9 @@ async def run_artifact_generation_station(
         contract_version=request.contract_version,
         status=StationOutcomeStatus.SUCCEEDED,
         completed_at=request.requested_at,
-        output=ArtifactGenerationOutput(kind=value.kind, content=content),
+        output=ArtifactGenerationOutput(
+            kind=value.kind,
+            content=content,
+            repositories=repositories,
+        ),
     )

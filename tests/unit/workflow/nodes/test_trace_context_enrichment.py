@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from forge.integrations.agents.structured_outputs import ArtifactDocument
 from forge.models.workflow import TicketType
 
 TRACE_CONTEXT_KEYS = {
@@ -65,6 +66,10 @@ class TestPrdGenerationTraceContext:
 
         mock_jira = MagicMock()
         mock_jira.close = AsyncMock()
+        mock_jira.get_project_repos = AsyncMock(return_value=["org/repo"])
+        mock_jira.get_labels = AsyncMock(return_value=[])
+        mock_jira.add_labels = AsyncMock()
+        mock_jira.remove_labels = AsyncMock()
         mock_jira.get_issue = AsyncMock(
             return_value=MagicMock(
                 summary="Test Feature",
@@ -81,10 +86,10 @@ class TestPrdGenerationTraceContext:
         mock_agent.close = AsyncMock()
         captured_context: dict[str, Any] = {}
 
-        async def capture_generate_prd(raw_req, context=None):
+        async def capture_generate_prd(_raw_req, context=None):
             if context:
                 captured_context.update(context)
-            return "# PRD\n\nContent"
+            return ArtifactDocument(content="# PRD\n\nContent", repositories=["org/repo"])
 
         mock_agent.generate_prd = capture_generate_prd
 
@@ -111,6 +116,11 @@ class TestPrdGenerationTraceContext:
 
         mock_jira = MagicMock()
         mock_jira.close = AsyncMock()
+        mock_jira.get_issue = AsyncMock(return_value=MagicMock(project_key="TEST"))
+        mock_jira.get_project_repos = AsyncMock(return_value=["org/repo"])
+        mock_jira.get_labels = AsyncMock(return_value=[])
+        mock_jira.add_labels = AsyncMock()
+        mock_jira.remove_labels = AsyncMock()
         mock_jira.update_description = AsyncMock()
         mock_jira.set_workflow_label = AsyncMock()
         mock_jira.add_comment = AsyncMock()
@@ -122,9 +132,9 @@ class TestPrdGenerationTraceContext:
         async def capture_regen(**kwargs):
             if kwargs.get("context"):
                 captured_context.update(kwargs["context"])
-            return "# Revised PRD"
+            return ArtifactDocument(content="# Revised PRD", repositories=["org/repo"])
 
-        mock_agent.regenerate_with_feedback = capture_regen
+        mock_agent.regenerate_document_with_feedback = capture_regen
 
         state = _make_feature_state(
             current_node="regenerate_prd",
@@ -158,6 +168,10 @@ class TestSpecGenerationTraceContext:
 
         mock_jira = MagicMock()
         mock_jira.close = AsyncMock()
+        mock_jira.get_project_repos = AsyncMock(return_value=["org/repo"])
+        mock_jira.get_labels = AsyncMock(return_value=[])
+        mock_jira.add_labels = AsyncMock()
+        mock_jira.remove_labels = AsyncMock()
         mock_jira.update_description = AsyncMock()
         mock_jira.set_workflow_label = AsyncMock()
         mock_jira.add_comment = AsyncMock()
@@ -176,10 +190,10 @@ class TestSpecGenerationTraceContext:
         mock_agent.close = AsyncMock()
         captured_context: dict[str, Any] = {}
 
-        async def capture_generate_spec(prd, context=None):
+        async def capture_generate_spec(_prd, context=None):
             if context:
                 captured_context.update(context)
-            return "# Spec\n\nContent"
+            return ArtifactDocument(content="# Spec\n\nContent", repositories=["org/repo"])
 
         mock_agent.generate_spec = capture_generate_spec
 
@@ -211,6 +225,11 @@ class TestSpecGenerationTraceContext:
 
         mock_jira = MagicMock()
         mock_jira.close = AsyncMock()
+        mock_jira.get_issue = AsyncMock(return_value=MagicMock(project_key="TEST"))
+        mock_jira.get_project_repos = AsyncMock(return_value=["org/repo"])
+        mock_jira.get_labels = AsyncMock(return_value=[])
+        mock_jira.add_labels = AsyncMock()
+        mock_jira.remove_labels = AsyncMock()
         mock_jira.update_description = AsyncMock()
         mock_jira.set_workflow_label = AsyncMock()
         mock_jira.add_comment = AsyncMock()
@@ -223,9 +242,9 @@ class TestSpecGenerationTraceContext:
         async def capture_regen(**kwargs):
             if kwargs.get("context"):
                 captured_context.update(kwargs["context"])
-            return "# Revised Spec"
+            return ArtifactDocument(content="# Revised Spec", repositories=["org/repo"])
 
-        mock_agent.regenerate_with_feedback = capture_regen
+        mock_agent.regenerate_document_with_feedback = capture_regen
 
         state = _make_feature_state(
             current_node="regenerate_spec",
@@ -266,7 +285,7 @@ class TestQaHandlerTraceContext:
         mock_agent.close = AsyncMock()
         captured_context: dict[str, Any] = {}
 
-        async def capture_answer(question, artifact_content, context):
+        async def capture_answer(question, artifact_content, context):  # noqa: ARG001
             captured_context.update(context)
             return "The answer"
 
@@ -318,7 +337,7 @@ class TestEpicDecompositionTraceContext:
         mock_agent = AsyncMock()
         captured_context: dict[str, Any] = {}
 
-        async def capture_epics(spec, context=None):
+        async def capture_epics(_spec, context=None):
             if context:
                 captured_context.update(context)
             return [{"summary": "Epic 1", "plan": "Do it", "repo": "acme/backend"}]

@@ -27,7 +27,7 @@ def reduce_task_routing(
         return {
             "station_history": append_station_attempt(state, request, outcome),
             "last_error": outcome.reason or "No tasks available for routing",
-            "current_node": "route_tasks",
+            "current_node": "task_router",
         }
     if outcome.status is not StationOutcomeStatus.SUCCEEDED:
         raise ValueError(f"Task-routing station did not succeed: {outcome.status}")

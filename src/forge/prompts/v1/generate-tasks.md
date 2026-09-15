@@ -31,6 +31,7 @@ Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
 - Do not invent generic paths or introduce new repo standards. If repository grounding remains unavailable, create a Task that clearly scopes the required repo investigation/access before implementation proceeds
 - Prefer additional codebase exploration only for missing implementation details. Reuse grounded Epic context when applicable, and broaden the search when needed to understand the change safely. Do not inspect project-management metadata such as unrelated branches, open issues, pull requests, milestones, or release boards unless the Epic explicitly asks for them.
 - Each Task should follow nearby source/test patterns when the repo establishes them
+- Each structured Task must include `repo`, using the exact repository assigned to the Epic. Do not omit it or invent a different repository.
 
 For each of the 3–8 Tasks, provide a concise `summary` and a complete `description` that
 includes grounded files and symbols, integration points, nearby patterns, repository
