@@ -215,7 +215,9 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                                 )
                             except Exception as exc:
                                 logger.warning(
-                                    "Failed to report missing repository on Task %s: %s", task_key, exc
+                                    "Failed to report missing repository on Task %s: %s",
+                                    task_key,
+                                    exc,
                                 )
 
                         # Assign the model tier for the newly created Task (BR-011).
