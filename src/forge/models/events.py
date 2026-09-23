@@ -1,7 +1,7 @@
 """Webhook event models for Jira and GitHub integrations."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -32,7 +32,7 @@ class WebhookEvent:
     event_type: str
     ticket_key: str
     payload: dict[str, Any] = field(default_factory=dict)
-    received_at: datetime = field(default_factory=datetime.utcnow)
+    received_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     processed_at: datetime | None = None
     status: EventStatus = EventStatus.PENDING
     error_message: str | None = None
@@ -44,15 +44,15 @@ class WebhookEvent:
     def mark_completed(self) -> None:
         """Mark event as successfully processed."""
         self.status = EventStatus.COMPLETED
-        self.processed_at = datetime.utcnow()
+        self.processed_at = datetime.now(UTC)
 
     def mark_failed(self, error: str) -> None:
         """Mark event as failed with error message."""
         self.status = EventStatus.FAILED
         self.error_message = error
-        self.processed_at = datetime.utcnow()
+        self.processed_at = datetime.now(UTC)
 
     def mark_duplicate(self) -> None:
         """Mark event as duplicate (already processed)."""
         self.status = EventStatus.DUPLICATE
-        self.processed_at = datetime.utcnow()
+        self.processed_at = datetime.now(UTC)
