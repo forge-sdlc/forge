@@ -23,6 +23,18 @@ Integration tests use `FORGE_TEST_REDIS_URL` when set and otherwise start a
 pinned Redis Stack testcontainer. CI sets `FORGE_REQUIRE_TEST_REDIS=1`, so a
 missing infrastructure dependency fails the gate instead of silently skipping it.
 
+### Webhook Event Timestamps
+
+`WebhookEvent` generates timezone-aware UTC creation and completion timestamps.
+The event-model regression tests cover creation plus completed, failed, and
+duplicate transitions, checking that timestamps are current and comparable.
+Those tests treat deprecation warnings as errors even though the default suite
+filters them. To run the entire event-model file with that stricter policy:
+
+```bash
+uv run pytest tests/unit/models/test_events.py -W error::DeprecationWarning -q
+```
+
 ## Linting and Type Checking
 
 Before submitting a PR, these must all pass:
