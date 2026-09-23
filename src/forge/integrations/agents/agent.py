@@ -1162,7 +1162,9 @@ class ForgeAgent:
     ) -> ArtifactDocument:
         """Regenerate a PRD or specification with explicit repository selection."""
         if content_type not in {"prd", "spec"}:
-            raise ValueError(f"Unsupported document type for structured regeneration: {content_type}")
+            raise ValueError(
+                f"Unsupported document type for structured regeneration: {content_type}"
+            )
         prompt = load_prompt(
             "regenerate",
             content_type=content_type.upper(),
@@ -1254,8 +1256,7 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         )
 
         epics = [
-            {"summary": epic.summary, "plan": epic.plan, "repo": epic.repo}
-            for epic in result.epics
+            {"summary": epic.summary, "plan": epic.plan, "repo": epic.repo} for epic in result.epics
         ]
         logger.info(f"Generated {len(epics)} Epics")
         return epics

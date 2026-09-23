@@ -4,10 +4,24 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from forge.integrations.agents.structured_outputs import ArtifactDocument
 from forge.models.workflow import TicketType
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 from forge.workflow.gates import route_prd_approval
 from forge.workflow.nodes import regenerate_prd_with_feedback
+
+
+@pytest.fixture(autouse=True)
+def mock_repo_resolution(monkeypatch):
+    monkeypatch.setattr(
+        "forge.workflow.nodes.prd_generation.fetch_and_inject_references",
+        AsyncMock(side_effect=lambda _state, _jira, content: content),
+    )
+    monkeypatch.setattr(
+        "forge.workflow.nodes.prd_generation.get_effective_repos",
+        AsyncMock(return_value=["acme/repo"]),
+    )
+    monkeypatch.setattr("forge.workflow.nodes.prd_generation.reconcile_repo_labels", AsyncMock())
 
 
 class TestPrdRejectedOnce:
@@ -59,8 +73,9 @@ Initial PRD content without user personas.
         mock_jira.close = AsyncMock()
 
         mock_agent = MagicMock()
-        mock_agent.regenerate_with_feedback = AsyncMock(
-            return_value="""# Product Requirements Document
+        mock_agent.regenerate_document_with_feedback = AsyncMock(
+            return_value=ArtifactDocument(
+                content="""# Product Requirements Document
 
 ## Overview
 Revised PRD with user personas.
@@ -72,7 +87,9 @@ Revised PRD with user personas.
 ## Goals
 - Enable user login
 - Secure authentication
-"""
+""",
+                repositories=["acme/repo"],
+            )
         )
         mock_agent.close = AsyncMock()
 
@@ -83,14 +100,15 @@ Revised PRD with user personas.
                 new_callable=AsyncMock,
                 return_value=prd_pending_state["prd_content"],
             ),
-            patch("forge.workflow.nodes.prd_generation.ensure_repo_labels", new_callable=AsyncMock),
-            patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent),
+            patch(
+                "forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent
+            ),
         ):
             result = await regenerate_prd_with_feedback(prd_pending_state)
 
         # Verify agent was called with feedback
-        mock_agent.regenerate_with_feedback.assert_called_once()
-        call_kwargs = mock_agent.regenerate_with_feedback.call_args.kwargs
+        mock_agent.regenerate_document_with_feedback.assert_called_once()
+        call_kwargs = mock_agent.regenerate_document_with_feedback.call_args.kwargs
         assert "user persona" in call_kwargs["feedback"].lower()
 
         # Verify new content
@@ -109,7 +127,9 @@ Revised PRD with user personas.
         mock_jira.close = AsyncMock()
 
         mock_agent = MagicMock()
-        mock_agent.regenerate_with_feedback = AsyncMock(return_value="# Revised PRD")
+        mock_agent.regenerate_document_with_feedback = AsyncMock(
+            return_value=ArtifactDocument(content="# Revised PRD", repositories=["acme/repo"])
+        )
         mock_agent.close = AsyncMock()
 
         with (
@@ -119,8 +139,9 @@ Revised PRD with user personas.
                 new_callable=AsyncMock,
                 return_value=prd_pending_state["prd_content"],
             ),
-            patch("forge.workflow.nodes.prd_generation.ensure_repo_labels", new_callable=AsyncMock),
-            patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent),
+            patch(
+                "forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent
+            ),
         ):
             result = await regenerate_prd_with_feedback(prd_pending_state)
 
@@ -184,11 +205,15 @@ class TestPrdRejectedMultiple:
 
         mock_agent = MagicMock()
         # Simulate error to increment retry count
-        mock_agent.regenerate_with_feedback = AsyncMock(side_effect=Exception("Simulated error"))
+        mock_agent.regenerate_document_with_feedback = AsyncMock(
+            side_effect=Exception("Simulated error")
+        )
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
+            with patch(
+                "forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent
+            ):
                 result = await regenerate_prd_with_feedback(prd_state_first_revision)
 
         # Error case increments retry count
@@ -222,17 +247,22 @@ class TestPrdRevisionPreservesContext:
         mock_jira.update_description = AsyncMock()
         mock_jira.add_comment = AsyncMock()
         mock_jira.add_structured_comment = AsyncMock()
+        mock_jira.get_issue = AsyncMock(return_value=MagicMock(project_key="TEST"))
         mock_jira.close = AsyncMock()
 
         mock_agent = MagicMock()
-        mock_agent.regenerate_with_feedback = AsyncMock(return_value="# Revised")
+        mock_agent.regenerate_document_with_feedback = AsyncMock(
+            return_value=ArtifactDocument(content="# Revised", repositories=["acme/repo"])
+        )
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
+            with patch(
+                "forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent
+            ):
                 await regenerate_prd_with_feedback(prd_with_context)
 
-        call_kwargs = mock_agent.regenerate_with_feedback.call_args.kwargs
+        call_kwargs = mock_agent.regenerate_document_with_feedback.call_args.kwargs
         assert call_kwargs["original_content"] == "# Original PRD"
         assert call_kwargs["content_type"] == "prd"
 
@@ -243,15 +273,20 @@ class TestPrdRevisionPreservesContext:
         mock_jira.update_description = AsyncMock()
         mock_jira.add_comment = AsyncMock()
         mock_jira.add_structured_comment = AsyncMock()
+        mock_jira.get_issue = AsyncMock(return_value=MagicMock(project_key="TEST"))
         mock_jira.close = AsyncMock()
 
         mock_agent = MagicMock()
-        mock_agent.regenerate_with_feedback = AsyncMock(return_value="# Revised")
+        mock_agent.regenerate_document_with_feedback = AsyncMock(
+            return_value=ArtifactDocument(content="# Revised", repositories=["acme/repo"])
+        )
         mock_agent.close = AsyncMock()
 
         with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent):
+            with patch(
+                "forge.workflow.stations.artifact_generation.ForgeAgent", return_value=mock_agent
+            ):
                 await regenerate_prd_with_feedback(prd_with_context)
 
-        call_kwargs = mock_agent.regenerate_with_feedback.call_args.kwargs
+        call_kwargs = mock_agent.regenerate_document_with_feedback.call_args.kwargs
         assert "security" in call_kwargs["feedback"].lower()
