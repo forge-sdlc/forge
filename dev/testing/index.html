@@ -1227,6 +1227,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Running the Test Suite">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#webhook-event-timestamps" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Webhook Event Timestamps
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1866,6 +1883,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Running the Test Suite">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#webhook-event-timestamps" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Webhook Event Timestamps
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2005,58 +2039,67 @@
 <p>Integration tests use <code>FORGE_TEST_REDIS_URL</code> when set and otherwise start a
 pinned Redis Stack testcontainer. CI sets <code>FORGE_REQUIRE_TEST_REDIS=1</code>, so a
 missing infrastructure dependency fails the gate instead of silently skipping it.</p>
+<h3 id="webhook-event-timestamps">Webhook Event Timestamps<a class="headerlink" href="#webhook-event-timestamps" title="Permanent link">&para;</a></h3>
+<p><code>WebhookEvent</code> generates timezone-aware UTC creation and completion timestamps.
+The Jira webhook route carries the creation timestamp into the queued message.
+The event-model regression tests cover creation plus completed, failed, and
+duplicate transitions, checking that timestamps are current and comparable.
+Those tests treat deprecation warnings as errors even though the default suite
+filters them. To run the entire event-model file with that stricter policy:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit/models/test_events.py<span class="w"> </span>-W<span class="w"> </span>error::DeprecationWarning<span class="w"> </span>-q
+</code></pre></div>
 <h2 id="linting-and-type-checking">Linting and Type Checking<a class="headerlink" href="#linting-and-type-checking" title="Permanent link">&para;</a></h2>
 <p>Before submitting a PR, these must all pass:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>make<span class="w"> </span>lint
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>src/forge/<span class="w">       </span><span class="c1"># type check</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>make<span class="w"> </span>lint
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>src/forge/<span class="w">       </span><span class="c1"># type check</span>
 </code></pre></div>
 <h2 id="payload-based-testing">Payload-Based Testing<a class="headerlink" href="#payload-based-testing" title="Permanent link">&para;</a></h2>
 <p>Test workflow stages without live webhooks using sample payloads from <code>tests/payloads/</code>.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Trigger a Jira issue-created event</span>
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/jira-feature-created.json
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>
-<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="c1"># Trigger a GitHub PR review</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/github-pr-approved.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Trigger a Jira issue-created event</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/jira<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/jira-feature-created.json
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="c1"># Trigger a GitHub PR review</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/webhooks/github<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">  </span>-d<span class="w"> </span>@tests/payloads/github-pr-approved.json
 </code></pre></div>
 <p>See the <a href="../../developer-guide/#6-testing-with-payloads">Developer Guide</a> for the full set of payloads and how to trigger specific workflow stages.</p>
 <h2 id="testing-ci-skip-commands">Testing CI Skip Commands<a class="headerlink" href="#testing-ci-skip-commands" title="Permanent link">&para;</a></h2>
 <p>Post a PR comment via the GitHub API:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="s2">&quot;https://api.github.com/repos/your-org/your-repo/issues/123/comments&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;body&quot;: &quot;/forge skip-gate e2e-openstack&quot;}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="s2">&quot;https://api.github.com/repos/your-org/your-repo/issues/123/comments&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Authorization: token </span><span class="nv">$GITHUB_TOKEN</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;body&quot;: &quot;/forge skip-gate e2e-openstack&quot;}&#39;</span>
 </code></pre></div>
 <p>Then trigger a check run webhook to see Forge re-evaluate CI with the skip applied.</p>
 <h2 id="debugging">Debugging<a class="headerlink" href="#debugging" title="Permanent link">&para;</a></h2>
 <h3 id="snapshot-and-restore-checkpoints">Snapshot and Restore Checkpoints<a class="headerlink" href="#snapshot-and-restore-checkpoints" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Capture current workflow state</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>snapshot<span class="w"> </span>--ticket<span class="w"> </span>PROJ-123
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="c1"># Restore to a previous snapshot</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>restore<span class="w"> </span>--ticket<span class="w"> </span>PROJ-123<span class="w"> </span>--snapshot<span class="w"> </span>snapshots/PROJ-123-2024-01-01.json
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Capture current workflow state</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>snapshot<span class="w"> </span>--ticket<span class="w"> </span>PROJ-123
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Restore to a previous snapshot</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>restore<span class="w"> </span>--ticket<span class="w"> </span>PROJ-123<span class="w"> </span>--snapshot<span class="w"> </span>snapshots/PROJ-123-2024-01-01.json
 </code></pre></div>
 <h3 id="inspect-redis-state">Inspect Redis State<a class="headerlink" href="#inspect-redis-state" title="Permanent link">&para;</a></h3>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>redis-cli<span class="w"> </span>-p<span class="w"> </span><span class="m">6380</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="c1"># List all workflow checkpoints</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>KEYS<span class="w"> </span>forge:checkpoint:*
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="c1"># View a specific checkpoint</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>GET<span class="w"> </span>forge:checkpoint:PROJ-123
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>redis-cli<span class="w"> </span>-p<span class="w"> </span><span class="m">6380</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># List all workflow checkpoints</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>KEYS<span class="w"> </span>forge:checkpoint:*
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># View a specific checkpoint</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>GET<span class="w"> </span>forge:checkpoint:PROJ-123
 </code></pre></div>
 <h3 id="worker-logs">Worker Logs<a class="headerlink" href="#worker-logs" title="Permanent link">&para;</a></h3>
 <p>The worker logs each node execution with the ticket key and node name. Use these to trace where a workflow stopped:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;PROJ-123&quot;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>worker<span class="w"> </span><span class="m">2</span>&gt;<span class="p">&amp;</span><span class="m">1</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s2">&quot;PROJ-123&quot;</span>
 </code></pre></div>
 <p>See the <a href="../../developer-guide/#10-debugging-tools">Developer Guide</a> for patching checkpoints directly and other advanced debugging tools.</p>
 <h2 id="end-to-end-smoke-testing">End-to-End Smoke Testing<a class="headerlink" href="#end-to-end-smoke-testing" title="Permanent link">&para;</a></h2>
 <p>Forge provides an automated end-to-end smoke test CLI command to verify that state checkpointing, the container runtime sandbox, model provider API connectivity, and the Deep Agent system are fully functional.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>smoke-test
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>uv<span class="w"> </span>run<span class="w"> </span>forge<span class="w"> </span>smoke-test
 </code></pre></div>
 <p>This command runs completely offline from Jira/production branches, performing all actions in a disposable workspace:
 1. <strong>Diagnostic Graph Execution</strong>: Compiles a 2-node LangGraph and executes it with the configured Redis state checkpointer, verifying workflow resumption.
