@@ -57,6 +57,26 @@ async def test_publish_once_returns_stream_id_for_new_event() -> None:
     )
 
 
+async def test_publish_once_preserves_received_timestamp() -> None:
+    redis_client = AsyncMock()
+    redis_client.eval.return_value = "123-0"
+    producer = QueueProducer(redis_client=redis_client)
+    received_at = datetime(2026, 9, 23, 12, 34, tzinfo=UTC)
+
+    await producer.publish_once(
+        event_id="delivery-1",
+        source=EventSource.JIRA,
+        event_type="issue_created",
+        ticket_key="TEST-1",
+        payload={},
+        timestamp=received_at,
+    )
+
+    args = redis_client.eval.await_args.args
+    fields = dict(zip(args[5::2], args[6::2], strict=True))
+    assert fields["timestamp"] == received_at.isoformat()
+
+
 async def test_publish_once_returns_none_for_duplicate_event() -> None:
     redis_client = AsyncMock()
     redis_client.eval.return_value = None

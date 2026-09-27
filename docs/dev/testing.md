@@ -26,6 +26,7 @@ missing infrastructure dependency fails the gate instead of silently skipping it
 ### Webhook Event Timestamps
 
 `WebhookEvent` generates timezone-aware UTC creation and completion timestamps.
+The Jira webhook route carries the creation timestamp into the queued message.
 The event-model regression tests cover creation plus completed, failed, and
 duplicate transitions, checking that timestamps are current and comparable.
 Those tests treat deprecation warnings as errors even though the default suite

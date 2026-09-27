@@ -1,6 +1,7 @@
 """Queue producer for publishing webhook events to Redis Streams."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 import redis.asyncio as redis
@@ -91,6 +92,7 @@ class QueueProducer:
         event_type: str,
         ticket_key: str,
         payload: dict[str, Any],
+        timestamp: datetime | None = None,
     ) -> str | None:
         """Atomically publish an event unless its delivery ID was already seen.
 
@@ -107,6 +109,7 @@ class QueueProducer:
             event_type=event_type,
             ticket_key=ticket_key,
             payload=payload,
+            timestamp=timestamp if timestamp is not None else datetime.now(UTC),
         )
         fields = message.to_dict()
         field_values = [item for pair in fields.items() for item in pair]

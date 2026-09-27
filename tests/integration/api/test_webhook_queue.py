@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import json
+from datetime import UTC
 from unittest.mock import patch
 
 from forge.queue.models import QueueMessage
@@ -53,6 +54,7 @@ async def test_jira_delivery_is_authenticated_queued_and_deduplicated(
     assert len(messages) == 1
     assert messages[0].event_id == "jira-delivery-1"
     assert messages[0].ticket_key == WEBHOOK_ISSUE_CREATED["issue"]["key"]
+    assert messages[0].timestamp.tzinfo is UTC
 
 
 async def test_jira_invalid_signature_and_json_never_reach_queue(

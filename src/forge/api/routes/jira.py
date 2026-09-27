@@ -203,6 +203,7 @@ async def receive_jira_webhook(
             event_type=webhook_event.event_type,
             ticket_key=routing_ticket_key,  # Route to parent Feature if child
             payload=event_payload,
+            timestamp=webhook_event.received_at,
         )
 
         if message_id is None:

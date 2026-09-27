@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import json
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -61,6 +62,7 @@ class TestJiraWebhookRoute:
                 )
 
         assert response.status_code == 202
+        assert mock_producer.publish_once.call_args.kwargs["timestamp"].tzinfo is UTC
 
     @pytest.mark.asyncio
     async def test_invalid_signature_returns_401(self):
@@ -259,9 +261,7 @@ class TestJiraWebhookRoute:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("issue_type", ["Task", "Epic"])
-    async def test_managed_standalone_issue_bypasses_parent_check(
-        self, issue_type: str
-    ) -> None:
+    async def test_managed_standalone_issue_bypasses_parent_check(self, issue_type: str) -> None:
         """Managed standalone Task/Epic issues bypass parent checks and queue under their own key."""
         webhook = make_jira_webhook(issue_type=issue_type, labels=["forge:managed"])
         payload = json.dumps(webhook).encode()
@@ -340,6 +340,7 @@ class TestJiraWebhookRoute:
         mock_producer.publish_once.assert_called_once()
         called_kwargs = mock_producer.publish_once.call_args.kwargs
         assert called_kwargs["ticket_key"] == "TEST-123"
+
 
 class TestJiraWebhookParsing:
     """Tests for Jira webhook payload parsing."""
