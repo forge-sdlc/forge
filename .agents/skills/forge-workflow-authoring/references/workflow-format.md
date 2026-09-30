@@ -16,7 +16,7 @@ complete workflow with `returnTo` for normal completion. Use `source: builtin` o
 project. Nodes remain canonical and cannot collide. New runs pin the fully expanded graph;
 active runs keep their existing pin.
 
-Start at `entry`. Follow `next` for a fixed transition. At a step with `route`, follow every target in `branches`. A branch key is a possible router result; its value is the next step. `__end__` stops the current invocation and is not itself a declared step. In an included full workflow, fixed `next: __end__` returns to the caller's `returnTo` target; routed `__end__` still pauses the invocation.
+Start at `entry`. Follow `next` for a fixed transition. At a step with `route`, follow every target in `branches`. A branch key is a possible router result; its value is the next step. A step may instead use ordered `cases` with predicates over catalog facts and a required `otherwise` target. `__end__` stops the current invocation and is not itself a declared step. In an included full workflow, fixed `next: __end__` returns to the caller's `returnTo` target; routed `__end__` still pauses the invocation.
 
 Use `forge workflow render FILE` instead of tracing a large definition manually.
 
@@ -42,6 +42,21 @@ prd_approval_gate:
 ```
 
 Every possible static router result must be represented in `branches`.
+
+A conditional transition uses the first matching case, then `otherwise`:
+
+```yaml
+ci_evaluator:
+  cases:
+    - when: {fact: ci.status, op: in, value: [failed, blocked, no_prs]}
+      next: escalate_blocked
+    - when: {fact: ci.status, op: equals, value: fixing}
+      next: attempt_ci_fix
+  otherwise: human_review_gate
+```
+
+Inspect available facts with `forge workflow catalog STATE`. Supported predicates are `equals`,
+`in`, `isNull`, and bounded `all`, `any`, and `not` groups. Protected gates require a trusted router.
 
 Dynamic fan-out uses `dynamicRoute: true` and an explicit `maxConcurrency`. Forge derives the router's permitted destinations from the trusted catalog; inspect them with `forge workflow catalog STATE`. A join uses `join: all` or `join: any`. Copy the applicable shape from a validated built-in definition instead of reconstructing advanced routing from memory.
 

@@ -81,7 +81,32 @@ forge workflow render src/forge/workflow/declarative/definitions/feature.json --
 
 Authors may use YAML, as in the example above; publishing converts it to canonical JSON. In either
 format, the fields that describe the process are `spec.entry` and `spec.steps`. Each step declares
-either a fixed `next` step or a named `route` with possible `branches`.
+a fixed `next`, a named `route` with `branches`, or ordered conditional `cases` with `otherwise`.
+
+### Conditional edges
+
+Use conditional edges when a composed process needs its own destinations based on Forge-owned
+facts. The first matching case wins; `otherwise` is required and may target `__end__`. Conditions
+are pure and do not execute authored code.
+
+```yaml
+ci_evaluator:
+  cases:
+    - when: {fact: ci.status, op: in, value: [failed, blocked, no_prs]}
+      next: escalate_blocked
+    - when: {fact: ci.status, op: equals, value: fixing}
+      next: attempt_ci_fix
+  otherwise: human_review_gate
+```
+
+Atomic predicates use `fact`, `op`, and, except for `isNull`, `value`. Supported operators are
+`equals`, `in`, and `isNull`. Combine predicates with `all`, `any`, or `not`; groups are limited to
+three nesting levels and eight members per group. `in` accepts 1–32 typed values. Run
+`forge workflow catalog STATE` to inspect the version 1 fact names, types, and enumerated values.
+Unknown facts and wrong value types fail validation. Missing string facts project as null;
+missing boolean facts project as false. Existing static routers remain available, and protected
+approval and review gates continue to use trusted routers. Conditional steps implicitly use fact
+contract version 1; authors may write `factVersion: "1"` explicitly.
 
 ### Reusable definitions
 
@@ -155,8 +180,8 @@ than asking users to edit canonical JSON directly.
   are also Jira label suffixes; subworkflows are reusable dependencies and cannot be selected.
 - `metadata.revision` must increase whenever content changes.
 - `spec.state` is `feature`, `bug`, or `task_takeover` and controls the available node catalog.
-- Each step name is a canonical, registered Forge node. A step has either `next` or `route` with a
-  complete branch map. Use `__end__` to stop the current invocation.
+- Each step name is a canonical, registered Forge node. A step has either `next`, `route` with a
+  complete branch map, or `cases` with `otherwise`. Use `__end__` to stop the current invocation.
 - Node kind, station contract, effect authority, mandatory policies, observation handling, and
   precondition contracts are owned by the trusted state-profile catalog. They are not workflow
   authoring fields. Older pinned definitions containing this metadata remain readable.
@@ -226,7 +251,7 @@ forge workflow show-history MYPROJ prd-only
 Project authors can configure these flow-level choices:
 
 - the built-in state profile (`feature`, `bug`, or `task_takeover`);
-- registered steps, fixed edges, router branches, joins, dynamic fan-out, retry
+- registered steps, fixed edges, router branches, conditional cases over catalog facts, joins, dynamic fan-out, retry
   bounds, and concurrency; and
 - includes of built-in and same-project active subworkflows or workflows, with explicit exits
   or return targets; and
