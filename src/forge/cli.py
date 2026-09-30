@@ -1721,18 +1721,21 @@ def main(argv: list[str] | None = None) -> int:
     workflow_validate = workflow_subparsers.add_parser("validate", help="Validate a YAML file")
     workflow_validate.add_argument("file")
     workflow_validate.add_argument("--json", action="store_true", help="Print canonical JSON")
+    workflow_validate.add_argument("--project-key", help="Resolve active project dependencies")
 
     workflow_render = workflow_subparsers.add_parser(
         "render", help="Render a validated workflow process manifest"
     )
     workflow_render.add_argument("file")
     workflow_render.add_argument("--format", choices=("mermaid", "json"), default="mermaid")
+    workflow_render.add_argument("--project-key", help="Resolve active project dependencies")
 
     workflow_diff = workflow_subparsers.add_parser(
         "diff", help="Report structural and in-flight impact between revisions"
     )
     workflow_diff.add_argument("previous")
     workflow_diff.add_argument("current")
+    workflow_diff.add_argument("--project-key", help="Resolve active project dependencies")
 
     workflow_simulate = workflow_subparsers.add_parser(
         "simulate-migration",
@@ -1741,6 +1744,7 @@ def main(argv: list[str] | None = None) -> int:
     workflow_simulate.add_argument("previous")
     workflow_simulate.add_argument("current")
     workflow_simulate.add_argument("instances", help="JSON array of active checkpoint snapshots")
+    workflow_simulate.add_argument("--project-key", help="Resolve active project dependencies")
 
     workflow_catalog = workflow_subparsers.add_parser(
         "catalog", help="Show registered nodes, routers, contracts, and effect authority"

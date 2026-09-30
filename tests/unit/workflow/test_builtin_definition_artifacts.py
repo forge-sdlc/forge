@@ -24,9 +24,9 @@ _DEFINITIONS = {
 # A changed digest is an intentional process revision and must update the
 # checked-in artifact and this snapshot together.
 _DIGESTS = {
-    "feature": "7764c3ba6a9ede67f9b4b2636c9718085aa07f24a50cb4054b6068fe18ae9841",
-    "bug": "c78b72f68d8c10bb58a0e019395ee2dff3b184928f25fb4d740b01e4612dc7d1",
-    "task_takeover": "63690df2b210effda77e00b79d39a3f7be62ffb727b67cc657bf58b47a787b37",
+    "feature": "5f653ba647ffbb9cbeda762b363e95eacbc17ed99b82a5d1176ac6fa9c9a8a29",
+    "bug": "95d5afd82d727e9eaa1f75f40635536d32ef1b7ef0af84fd9cca2a29683b1d07",
+    "task_takeover": "06049d7a4fee8789254b897ece896b004b54a2ae04f2b27a1f173c86129053fb",
 }
 
 
@@ -38,7 +38,10 @@ def test_artifact_round_trip_preserves_canonical_definition(name: str) -> None:
     definition = load_workflow_value(artifact)
 
     assert definition.canonical_dict() == artifact
-    assert _DEFINITIONS[name]().canonical_dict() == artifact
+    expanded = _DEFINITIONS[name]()
+    assert not expanded.spec.includes
+    assert expanded.spec.resolved_dependencies
+    assert set(expanded.spec.steps) > set(definition.spec.steps)
 
 
 @pytest.mark.parametrize("name", tuple(_DEFINITIONS))

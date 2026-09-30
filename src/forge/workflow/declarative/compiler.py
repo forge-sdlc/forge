@@ -46,6 +46,8 @@ class DeclarativeWorkflowCompiler:
 
     def validate(self) -> None:
         spec = self.definition.spec
+        if self.definition.kind != "Workflow" or spec.includes:
+            raise WorkflowValidationError("resolve includes before compiling a workflow")
         steps = spec.steps
         if spec.entry not in steps:
             raise WorkflowValidationError(f"entry node '{spec.entry}' is not declared")

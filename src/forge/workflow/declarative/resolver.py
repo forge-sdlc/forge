@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from forge.workflow.declarative.composition import resolve_definition
 from forge.workflow.declarative.loader import load_workflow_value
 from forge.workflow.declarative.models import (
     WORKFLOW_LABEL_PREFIX,
@@ -100,6 +101,36 @@ async def load_project_workflow(
                     f"project {project_key.upper()} does not define workflow '{workflow_name}'"
                 )
             definition = load_workflow_value(value)
+        if definition.spec.includes:
+            loaded_dependencies: dict[str, str] = {}
+            dependency_cache: dict[str, Any] = {}
+
+            async def dependency(name: str):
+                if definition_reader is None:
+                    return None
+                if name in dependency_cache:
+                    return dependency_cache[name]
+                value = await definition_reader.active(name)
+                resolved = (
+                    value
+                    if isinstance(value, type(definition))
+                    else load_workflow_value(value)
+                    if value
+                    else None
+                )
+                if resolved is not None:
+                    loaded_dependencies[name] = resolved.digest
+                dependency_cache[name] = resolved
+                return resolved
+
+            definition = await resolve_definition(definition, dependency)
+            for name, digest in loaded_dependencies.items():
+                current = await definition_reader.active(name) if definition_reader else None
+                if current is None:
+                    raise ValueError(f"project dependency '{name}' changed during resolution")
+                current = current if hasattr(current, "digest") else load_workflow_value(current)
+                if current.digest != digest:
+                    raise ValueError(f"project dependency '{name}' changed during resolution")
     if definition.metadata.name != workflow_name:
         raise ValueError(
             f"workflow property name '{workflow_name}' does not match metadata name "

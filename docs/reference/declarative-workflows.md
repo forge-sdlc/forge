@@ -1,8 +1,9 @@
 # Declarative workflows
 
-Forge project administrators can compose the nodes and state profiles shipped with Forge into
-project-specific workflows. Definitions are selected by Jira label, validated before compilation,
-and compiled into LangGraph graphs at runtime. They cannot import Python or define expressions.
+Forge project administrators can compose registered nodes and reusable definitions into
+project-specific workflows. Jira labels select active workflows. Forge resolves their includes,
+validates the resulting graph, and compiles it with LangGraph. Definitions cannot import Python
+or define expressions.
 
 This is project-level configuration, not a plugin system. A definition controls flow; trusted
 Forge code controls authority. To add a provider adapter, a station, a node, or an effect executor,
@@ -10,7 +11,9 @@ use the [core-maintainer extension path](../architecture/control-plane.md#core-m
 
 ## Author and publish
 
-Create a YAML file locally:
+Create a YAML file locally. This small example illustrates the format and passes local
+validation; publishing a workflow requires the mandatory gates for its state profile. Start
+from the matching full built-in definition for a publishable process.
 
 ```yaml
 apiVersion: forge/v1
@@ -36,11 +39,13 @@ spec:
       next: prd_approval_gate
 ```
 
-Validate and publish it:
+Validate the file. Once the complete workflow passes publication validation, publish and
+activate its revision as separate decisions:
 
 ```bash
 forge workflow validate workflow.yaml
-forge workflow publish MYPROJ workflow.yaml
+forge workflow publish MYPROJ complete-workflow.yaml --actor alice --reason "approved process"
+forge workflow activate MYPROJ workflow-name 1 --actor alice --reason "start new runs"
 ```
 
 Before authoring a definition, inspect the supported catalog and before activating a revision,
@@ -54,19 +59,20 @@ forge workflow diff previous.yaml workflow.yaml
 forge workflow simulate-migration previous.yaml workflow.yaml instances.json
 ```
 
-Publishing stores canonical JSON in the `forge.workflow.prd-only` Jira project property. Jira
-requires the credentials used by the command to have global or project administration permission.
-The canonical value must fit Jira's 32,768-byte project-property limit.
+Publication stores immutable source JSON and an audit decision in Forge's project-scoped Redis
+definition store. Activation sets the pointer used for new runs. Existing Jira project properties
+remain a legacy read fallback for workflows that have no governed active definition. A canonical
+source or expanded artifact must fit the 32,768-byte definition limit.
 
-Apply `forge:workflow:prd-only` to a ticket to select the workflow. With no such label, Forge uses
-its built-in ticket-type routing. Multiple workflow labels, missing definitions, or invalid
-definitions block execution instead of silently falling back.
+Apply `forge:workflow:workflow-name` to a ticket to select an active workflow. With no such
+label, Forge uses its built-in ticket-type routing. Multiple workflow labels, missing definitions,
+or invalid definitions block execution instead of silently falling back.
 
 ## Format
 
-The checked-in built-in definitions are canonical JSON because that is the exact artifact Forge
-pins and stores. They are not intended to be read as raw topology. Render one as Mermaid or as a
-compact process manifest instead:
+The checked-in built-in definitions are canonical JSON source documents. Forge resolves their
+includes before compiling and pinning an instance. Render one as Mermaid or as a compact
+process manifest to inspect the expanded topology:
 
 ```bash
 forge workflow render src/forge/workflow/declarative/definitions/feature.json
@@ -77,12 +83,76 @@ Authors may use YAML, as in the example above; publishing converts it to canonic
 format, the fields that describe the process are `spec.entry` and `spec.steps`. Each step declares
 either a fixed `next` step or a named `route` with possible `branches`.
 
+### Reusable definitions
+
+Use `kind: Subworkflow` to publish a reusable group of registered steps. Give it an entry,
+steps, and named exit targets such as `@exit/review`. A subworkflow can list
+`spec.compatibleStates` when the same nodes and routers are valid in several profiles. It is
+not selectable by a ticket label. A normal `Workflow` can also be included; its fixed
+`next: __end__` completion returns to the caller, while routed `__end__` outcomes continue
+to pause the invocation.
+
+```yaml
+apiVersion: forge/v1
+kind: Subworkflow
+metadata: {name: shared_pr, revision: 1}
+spec:
+  state: feature
+  compatibleStates: [feature, bug, task_takeover]
+  entry: create_pr
+  steps:
+    create_pr:
+      route: route_after_pr_creation
+      branches:
+        escalate_blocked: "@exit/blocked"
+        teardown_workspace: teardown_workspace
+    teardown_workspace:
+      route: route_after_teardown
+      branches:
+        human_review_gate: "@exit/review"
+        setup_workspace: "@exit/setup"
+```
+
+Include it in a workflow with `spec.includes` and bind every named exit:
+
+```yaml
+spec:
+  state: feature
+  entry: generate_prd
+  includes:
+    - source: builtin  # or project, for an active definition in this Jira project
+      name: github_pr_review
+      exits:
+        blocked: escalate_blocked
+        review: human_review_gate
+        setup: setup_workspace
+```
+
+The caller may target included nodes by their canonical names. An included definition may
+appear once per caller; node-name collisions, missing exits, dependency cycles, and profile
+mismatches are rejected. For a full workflow include, use `returnTo: caller_step` instead of
+`exits`. Includes can be nested. All expanded steps must satisfy the ordinary workflow
+catalog, policy, size, and graph checks.
+
+Forge ships `github_pr_review` for the shared PR creation, CI, CI fix, and review response
+path. Each built-in workflow keeps its own human review gate routing. Project definitions
+can include active definitions from the same project. A new run resolves the active
+dependency revisions and pins the expanded artifact and dependency identities. Running
+instances continue with their pinned graph when a dependency is updated.
+
+Use `forge workflow validate FILE --project-key PROJECT` or `render`, `diff`, and
+`simulate-migration` with the same option to inspect a definition that includes project
+dependencies. Built-in dependencies resolve without a project key. For a historical diff or
+migration simulation, use the exact expanded artifacts pinned by the instances; source files
+resolved against today's active dependencies may produce a different graph.
+
 Repository users can ask a compatible coding agent to use the generic
 `.agents/skills/forge-workflow-authoring` skill to create, explain, change, or review a definition.
 The skill authors YAML and uses Forge's validator, renderer, diff, and migration simulation rather
 than asking users to edit canonical JSON directly.
 
-- `metadata.name` is lowercase and becomes both the property and label suffix.
+- `metadata.name` is lowercase and is the project-scoped publication identity. Workflow names
+  are also Jira label suffixes; subworkflows are reusable dependencies and cannot be selected.
 - `metadata.revision` must increase whenever content changes.
 - `spec.state` is `feature`, `bug`, or `task_takeover` and controls the available node catalog.
 - Each step name is a canonical, registered Forge node. A step has either `next` or `route` with a
@@ -96,8 +166,9 @@ than asking users to edit canonical JSON directly.
   change how the flow executes. A dynamic router's possible targets are capabilities of its
   trusted implementation and are derived from the catalog rather than repeated in the workflow.
 - Graphs may contain a cycle only when it crosses an approved human/CI pause boundary.
-- A new instance pins the selected definition's name, revision, digest, and canonical artifact.
-  Publishing or activating a newer revision does not silently change an active instance.
+- A new instance pins the expanded definition's name, revision, digest, dependency identities,
+  and canonical artifact. Publishing or activating a newer workflow or dependency revision does
+  not silently change an active instance.
 
 To move a pinned instance when a newer revision removes or renames its saved node, add an explicit
 migration mapping and run compatibility simulation before activation:
@@ -110,9 +181,9 @@ spec:
         old_gate: replacement_gate
 ```
 
-State-profile changes, revision rollback, and content changes without a revision increment are
-rejected. Published revisions are immutable and retained for pinned instances. Removing an active
-pointer prevents new selection but does not mutate an existing checkpoint.
+State-profile changes cannot migrate active instances, and changed content needs a new revision.
+Published revisions are immutable and retained for pinned instances. A governed rollback may
+activate an older compatible revision without changing an existing checkpoint.
 
 ## Operational safeguards
 
@@ -157,6 +228,8 @@ Project authors can configure these flow-level choices:
 - the built-in state profile (`feature`, `bug`, or `task_takeover`);
 - registered steps, fixed edges, router branches, joins, dynamic fan-out, retry
   bounds, and concurrency; and
+- includes of built-in and same-project active subworkflows or workflows, with explicit exits
+  or return targets; and
 - revision/resume mappings for explicitly migratable saved positions.
 
 The trusted catalog, not a project definition, owns node kind, station contract,
@@ -174,6 +247,5 @@ approval, or make arbitrary network, shell, or Python calls.
 5. Diff it against the active revision.
 6. When a saved node changes, add `spec.resume.fromRevisions` and run migration
    simulation against representative active instances.
-7. Publish only after reviewing the resulting canonical JSON and migration
-   result. Existing tickets remain pinned to their prior definition unless a
-   declared migration applies.
+7. Publish and activate separately after reviewing the resolved canonical JSON and migration
+   result. Existing tickets remain pinned to their prior graph unless explicitly migrated.

@@ -30,12 +30,48 @@ def _load_builtin_definition(name: str) -> WorkflowDefinition:
         raise RuntimeError(f"missing built-in workflow artifact: {name}") from exc
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"invalid built-in workflow artifact: {name}") from exc
+    if value.get("kind") == "Workflow" and value.get("spec", {}).get("includes"):
+        # Built-in artifacts are resolved synchronously because their graphs are
+        # also constructed inside an already-running event loop.
+        includes = value["spec"].pop("includes")
+        dependencies = []
+        for include in includes:
+            if include["source"] != "builtin":
+                raise RuntimeError("built-in workflows may include only built-in subworkflows")
+            fragment = _load_builtin_definition(include["name"])
+            if fragment.kind != "Subworkflow":
+                raise RuntimeError("built-in include must be a subworkflow")
+            dependencies.append(
+                f"builtin:{fragment.metadata.name}:{fragment.metadata.revision}:{fragment.digest}"
+            )
+            for node, step in fragment.spec.steps.items():
+                if node in value["spec"]["steps"]:
+                    raise RuntimeError(f"duplicate built-in node '{node}'")
+                imported = step.model_dump(by_alias=True, exclude_none=True)
+                if imported.get("next", "").startswith("@exit/"):
+                    imported["next"] = include["exits"][imported["next"][6:]]
+                if "branches" in imported:
+                    imported["branches"] = {
+                        outcome: include["exits"].get(target[6:], target)
+                        if target.startswith("@exit/")
+                        else target
+                        for outcome, target in imported["branches"].items()
+                    }
+                value["spec"]["steps"][node] = imported
+        value["spec"]["resolvedDependencies"] = dependencies
     definition = load_workflow_value(value)
     if definition.metadata.name != name:
         raise RuntimeError(
             f"built-in workflow artifact {name!r} declares name {definition.metadata.name!r}"
         )
     return definition
+
+
+def load_builtin_source(name: str) -> WorkflowDefinition:
+    """Load a checked-in workflow or reusable subworkflow by exact name."""
+    if name not in {"feature", "bug", "task_takeover", "github_pr_review"}:
+        raise ValueError(f"unknown built-in definition '{name}'")
+    return _load_builtin_definition(name)
 
 
 def builtin_feature_definition() -> WorkflowDefinition:
