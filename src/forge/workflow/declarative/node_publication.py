@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from forge.orchestrator.checkpointer import get_redis_client
-from forge.workflow.declarative.models import NodeDefinition
+from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler
+from forge.workflow.declarative.composition import (
+    NodeLookup,
+    resolve_definition,
+    validate_subworkflow,
+)
+from forge.workflow.declarative.models import NodeDefinition, WorkflowDefinition
 from forge.workflow.declarative.predicates import validate_predicate
 
 
@@ -15,6 +21,41 @@ def validate_node(definition: NodeDefinition) -> None:
         for rule in definition.spec.rules:
             for state in ("feature", "bug", "task_takeover"):
                 validate_predicate(rule.when, state)
+
+
+class WorkflowReader(Protocol):
+    async def list_workflows(self) -> tuple[str, ...]: ...
+
+    async def active(self, name: str) -> WorkflowDefinition | None: ...
+
+
+async def _validate_consumers(
+    candidate: NodeDefinition, workflows: WorkflowReader, node_lookup: NodeLookup
+) -> None:
+    """Check active consumers with the candidate substituted before changing the pointer."""
+
+    async def lookup(name: str) -> NodeDefinition | None:
+        return candidate if name == candidate.metadata.name else await node_lookup(name)
+
+    for name in await workflows.list_workflows():
+        consumer = await workflows.active(name)
+        if consumer is None:
+            continue
+        try:
+            if consumer.kind == "Subworkflow":
+                for state in consumer.spec.compatible_states or (consumer.spec.state,):
+                    validate_subworkflow(
+                        await resolve_definition(
+                            consumer, workflows.active, state_profile=state, node_lookup=lookup
+                        )
+                    )
+            else:
+                resolved = await resolve_definition(consumer, workflows.active, node_lookup=lookup)
+                DeclarativeWorkflowCompiler(resolved).validate_for_publication()
+        except ValueError as exc:
+            raise ValueError(
+                f"node '{candidate.metadata.name}' invalidates active consumer '{name}': {exc}"
+            ) from exc
 
 
 class NodePublisher:
@@ -81,6 +122,10 @@ class NodePublisher:
         previous = await self.active(name)
         if previous and previous.digest != expected_digest:
             raise ValueError("active node changed concurrently")
+        from forge.workflow.declarative.publication import DefinitionPublisher
+
+        workflows = DefinitionPublisher(self.project_key, await self._client())
+        await _validate_consumers(target, workflows, self.active)
         result = await (await self._client()).eval(
             """local old=redis.call('GET',KEYS[1])
             if ARGV[1]~='' and old~=ARGV[1] then return -1 end
@@ -137,6 +182,7 @@ class InMemoryNodePublisher:
         self.project_key = project_key.upper()
         self._definitions: dict[tuple[str, int], NodeDefinition] = {}
         self._active: dict[str, NodeDefinition] = {}
+        self.workflow_reader: WorkflowReader | None = None
 
     async def publish(self, definition: NodeDefinition) -> None:
         validate_node(definition)
@@ -165,6 +211,8 @@ class InMemoryNodePublisher:
         previous = self._active.get(name)
         if previous and previous.digest != expected_digest:
             raise ValueError("active node changed concurrently")
+        if self.workflow_reader is not None:
+            await _validate_consumers(target, self.workflow_reader, self.active)
         self._active[name] = target
         return target
 

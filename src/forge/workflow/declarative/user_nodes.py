@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import create_model
 
+from forge.workflow.base import merge_node_results
 from forge.workflow.declarative.models import NodeTemplate
 
 
@@ -45,7 +46,7 @@ async def execute_node(template: NodeTemplate, state: dict[str, Any], step: str)
             state.get("workflow_project_key") or state.get("ticket_key", "").split("-", 1)[0]
         ).upper()
         settings = get_settings()
-        target = await resolve_model_target_for_project(settings, project, step)
+        target = await resolve_model_target_for_project(settings, project, "user_node_assessment")
         model = ForgeAgent(settings)._create_model(model_target=target)
         Response = create_model(
             "NodeAssessment", outcome=(Literal[tuple(template.outcomes)], ...), summary=(str, ...)
@@ -72,4 +73,10 @@ async def execute_node(template: NodeTemplate, state: dict[str, Any], step: str)
         "outcome": outcome,
         "summary": summary,
     }
-    return {**state, "node_results": {key: record}}
+    # The compiler evaluates outgoing cases before LangGraph applies reducers.
+    # Supply the complete outcome view here as well as in the checkpoint.
+    return {
+        **state,
+        "current_node": step,
+        "node_results": merge_node_results(state.get("node_results"), {key: record}),
+    }

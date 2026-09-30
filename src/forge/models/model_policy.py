@@ -90,6 +90,7 @@ KNOWN_MODEL_POLICY_KEYS = (
     "task_takeover_review",
     "task_takeover_triage",
     "update_docs",
+    "user_node_assessment",
 )
 
 # Requirements belong to Forge's execution stages, not Jira project policy.
@@ -99,6 +100,7 @@ _TOOL_FREE_POLICY_KEYS = {
     "generate_pr_description",
     "proposal_review_triage",
     "sync_pr_description",
+    "user_node_assessment",
 }
 REQUIRED_CAPABILITIES_BY_POLICY_KEY: dict[str, frozenset[str]] = {
     key: frozenset({"tools"})
@@ -112,6 +114,7 @@ _STRUCTURED_OUTPUT_POLICY_KEYS = {
     "generate_tasks",
     "proposal_review_triage",
     "task_takeover_triage",
+    "user_node_assessment",
 }
 for _key in _STRUCTURED_OUTPUT_POLICY_KEYS:
     REQUIRED_CAPABILITIES_BY_POLICY_KEY[_key] = REQUIRED_CAPABILITIES_BY_POLICY_KEY.get(

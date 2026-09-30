@@ -366,6 +366,7 @@ class InMemoryDefinitionPublisher:
             raise ValueError("project_key is required for governed publication")
         self.project_key = project_key.upper()
         self.node_publisher = node_publisher or InMemoryNodePublisher(self.project_key)
+        self.node_publisher.workflow_reader = self
         self._definitions: dict[tuple[str, int], WorkflowDefinition] = {}
         self._active: dict[str, WorkflowDefinition] = {}
         self._decisions: dict[str, list[PublicationDecision]] = {}

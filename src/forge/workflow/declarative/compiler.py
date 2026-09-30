@@ -374,6 +374,7 @@ class DeclarativeWorkflowCompiler:
                 except Exception as exc:
                     return {
                         **state,
+                        "current_node": node_name,
                         "is_blocked": True,
                         "last_error": f"User node {node_name}: {exc}",
                     }

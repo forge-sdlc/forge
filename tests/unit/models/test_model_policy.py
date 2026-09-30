@@ -110,6 +110,7 @@ def test_tool_requirements_cover_every_agentic_stage() -> None:
         "sync_pr_description",
     }
     assert REQUIRED_CAPABILITIES_BY_POLICY_KEY["automated_review_triage"] == {"structured_output"}
+    assert REQUIRED_CAPABILITIES_BY_POLICY_KEY["user_node_assessment"] == {"structured_output"}
 
 
 def test_project_output_token_limit_is_bounded(resolver: ModelPolicyResolver) -> None:
