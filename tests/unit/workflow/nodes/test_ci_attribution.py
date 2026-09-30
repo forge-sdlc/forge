@@ -334,3 +334,47 @@ def test_wait_for_ci_gate_does_not_exist():
     assert not hasattr(mod, "wait_for_ci_gate"), (
         "wait_for_ci_gate must be deleted — it no longer exists as a graph node"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failing_phase", [0, 1])
+async def test_failed_analysis_artifacts_never_reach_fix_execution(tmp_path, failing_phase):
+    """A failed analysis may leave plausible artifacts; they must not authorize a fix."""
+    from unittest.mock import MagicMock
+
+    from forge.sandbox.runner import ContainerResult
+    from forge.workflow.nodes.ci_evaluator import attempt_ci_fix
+
+    calls = []
+
+    async def run_container(**kwargs):
+        calls.append(kwargs)
+        forge_dir = tmp_path / ".forge"
+        forge_dir.mkdir(exist_ok=True)
+        (forge_dir / "ci-attribution.json").write_text('{"attributable": true}')
+        (forge_dir / "fix-plan.md").write_text("Apply a change")
+        failed = len(calls) - 1 == failing_phase
+        return ContainerResult(
+            success=not failed, exit_code=1 if failed else 0, stdout="", stderr=""
+        )
+
+    runner = MagicMock(run=AsyncMock(side_effect=run_container))
+    with (
+        patch("forge.workflow.nodes.ci_evaluator.ContainerRunner", return_value=runner),
+        patch(
+            "forge.workflow.nodes.ci_evaluator.prepare_workspace",
+            return_value=(str(tmp_path), None),
+        ),
+        patch("forge.workflow.nodes.ci_evaluator.JiraClient", return_value=AsyncMock()),
+        patch(
+            "forge.workflow.nodes.ci_evaluator.get_adapter", return_value=(_repo_ref(), AsyncMock())
+        ),
+        patch(
+            "forge.workflow.nodes.ci_evaluator._fetch_ci_logs_and_artifacts", new_callable=AsyncMock
+        ),
+    ):
+        result = await attempt_ci_fix({**ATTEMPT_BASE_STATE, "workspace_path": str(tmp_path)})
+    assert len(calls) == failing_phase + 1
+    assert result["current_node"] == "attempt_ci_fix"
+    assert "failed; refusing" in result["last_error"]
+    assert all(call.get("skill_name") != "fix-ci" for call in calls)

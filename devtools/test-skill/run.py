@@ -89,17 +89,15 @@ def build_user_message(
     requirements: str,
     project_key: str,
     summary: str,
+    prompt_inputs: dict | None = None,
+    available_repos: list[str] | None = None,
 ) -> str:
-    prompt_name = skill_name  # e.g., "generate-prd"
-    context_str = str({"project_key": project_key, "summary": summary})
-    try:
-        return load_prompt(
-            prompt_name,
-            raw_requirements=requirements,
-            context=context_str,
-        )
-    except FileNotFoundError:
-        return f"Please complete the following task:\n\n{requirements}"
+    from forge.prompts.evaluation import build_evaluation_prompt
+
+    return build_evaluation_prompt(
+        skill_name, requirements, project_key, summary,
+        prompt_inputs=prompt_inputs, available_repos=available_repos,
+    )
 
 
 def setup_workspace(
@@ -147,7 +145,7 @@ async def run_agent_deepagents(
     user_message: str,
     workspace: Path,
     config: dict,
-    _skill_name: str,
+    skill_name: str,
     project: str,
 ) -> dict:
     vertex_project = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID")
@@ -177,6 +175,17 @@ async def run_agent_deepagents(
 
     skill_paths = [f"/opt/forge/skills/{project}/"]
 
+    from langchain.agents.structured_output import ProviderStrategy
+    from forge.integrations.agents.structured_outputs import STRUCTURED_RESPONSE_SCHEMAS
+
+    schema_key = {
+        "triage-automated-review": "automated_review_triage",
+        "triage-proposal-review-threads": "proposal_review_triage",
+    }.get(skill_name, skill_name.replace("-", "_"))
+    response_schema = STRUCTURED_RESPONSE_SCHEMAS.get(schema_key)
+    if skill_name in {"triage-bug", "task-takeover-triage"}:
+        from forge.workflow.stations.triage import TriageOutput
+        response_schema = TriageOutput
     checkpointer = MemorySaver()
     agent = create_deep_agent(
         model=model,
@@ -184,6 +193,7 @@ async def run_agent_deepagents(
         skills=skill_paths,
         system_prompt=system_prompt,
         checkpointer=checkpointer,
+        response_format=ProviderStrategy(response_schema) if response_schema else None,
     )
 
     thread_id = str(uuid.uuid4())
@@ -248,8 +258,18 @@ async def run_agent_deepagents(
             if t.strip():
                 final_text = t
 
+    structured = result.get("structured_response")
+    structured_data = None
+    if response_schema is not None:
+        if structured is None:
+            raise ValueError("Agent did not return the required structured response")
+        parsed = response_schema.model_validate(structured)
+        structured_data = parsed.model_dump(mode="json")
+        final_text = structured_data.get("content", json.dumps(structured_data, indent=2))
+
     return {
         "trace": trace,
+        "structured_response": structured_data,
         "final_text": final_text,
         "total_input_tokens": total_input,
         "total_output_tokens": total_output,
@@ -314,9 +334,12 @@ def _save_outputs(result, workspace, output_dir, config, repo_dirs=None):
         out_path.write_text(content)
         print(f"Output: {out_path}")
 
+    if result.get("structured_response") is not None:
+        (output_dir / "response.json").write_text(json.dumps(result["structured_response"], indent=2))
     final_text = result.get("final_text", "")
     skill_name = result.get("_skill_name", "")
-    filename = "design.md" if "spec" in skill_name else "prd.md"
+    default_filename = "result.json" if result.get("structured_response") is not None else "result.md"
+    filename = {"generate-spec": "design.md", "generate-prd": "prd.md"}.get(skill_name, default_filename)
     artifact_path = output_dir / filename
     if not artifact_path.exists() and final_text.strip():
         artifact_path.write_text(final_text)
@@ -401,9 +424,9 @@ def run_single_case(
         return
 
     prd_file = input_path.parent / "gold-prd.md"
-    if prd_file.exists():
+    if skill_name == "generate-spec" and prd_file.exists():
         prd_content = prd_file.read_text()
-        requirements += f"\n\n## Approved PRD\n\n{prd_content}"
+        requirements = prd_content
         print(f"  PRD: loaded {prd_file.name} ({len(prd_content)} chars)")
 
     print(f"\n{'='*60}")
@@ -416,7 +439,11 @@ def run_single_case(
 
     references = config.get("references", [])
     system_text = build_system_prompt_text(ticket_key, project_key, references)
-    user_message = build_user_message(skill_name, requirements, project_key, summary)
+    user_message = build_user_message(
+        skill_name, requirements, project_key, summary,
+        prompt_inputs=input_data.get("prompt_inputs"),
+        available_repos=input_data.get("available_repos"),
+    )
 
     def _execute():
         return _run_agent(

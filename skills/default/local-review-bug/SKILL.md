@@ -5,17 +5,16 @@ description: Qualitative code review for bug fixes — verifies root-cause align
 
 # Bug Fix Local Review Skill
 
-Review the implemented changes against the approved RCA and plan. You have access to the workspace and codebase. Run `git diff origin/main...HEAD` to see what changed.
+Review the implemented changes against the approved RCA and plan, using the full
+diff supplied by the runtime. This stage is read-only; report fixes for the
+implementation stage rather than editing, formatting, or running commands.
 
-## Step 1 — Mechanical Checks
+## Step 1 — Validation Evidence
 
-Run these first and fix any failures before proceeding to the qualitative review:
-
-1. **Linters** — run the project's linter (e.g. `ruff check .`, `go vet ./...`)
-2. **Type checker** — run mypy or equivalent if configured
-3. **Test suite** — run all tests and confirm they pass
-
-If any mechanical check fails and cannot be fixed, report it in the feedback.
+Read `.forge/validation.md` if present. Check the recorded commands, outcomes,
+revision/state, and limitations against the required behavior. Relevant tests and
+repository checks matter; running an unrelated entire suite is not required.
+Missing or unavailable evidence must not be reported as passing.
 
 ## Step 2 — Qualitative Checklist
 
@@ -27,9 +26,9 @@ Evaluate the diff against each item:
 4. **Plan scope adherence** — Does the diff match the approved plan scope, or has it drifted?
 5. **Call site completeness** — Are there similar patterns elsewhere in the codebase that need the same treatment?
 6. **Backward compatibility** — Is the fix safe to roll back? Does it avoid breaking interfaces?
-7. **Bidirectional validation** — Does the commit log show `[bidirectional: PASS]`, confirming the agent verified the test fails without the fix?
+7. **Bidirectional validation** — Does recorded reproduction evidence show the regression test fails without the fix and passes with it? If infeasible, is the reason and alternative evidence specific? A commit-message marker is not proof.
 
-8. **Ordering invariants** — Find the `## Ordering Invariants` section in the approved plan above. For each entry, locate the relevant calls in the diff (`git diff origin/main...HEAD`) and verify the stated order is preserved in the implementation. If the section says "None identified.", spot-check the diff for operation pairs with non-obvious side effects (e.g. a call that deletes or resets shared state before a call that depends on it). Flag any reversal as a blocking issue in your feedback.
+8. **Ordering invariants** — Find the `## Ordering Invariants` section in the approved plan above. For each entry, locate the relevant calls in the diff (the supplied full diff) and verify the stated order is preserved in the implementation. If the section says "None identified.", spot-check the diff for operation pairs with non-obvious side effects (e.g. a call that deletes or resets shared state before a call that depends on it). Flag any reversal as a blocking issue in your feedback.
 
 ## Output
 

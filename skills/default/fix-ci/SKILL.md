@@ -5,7 +5,7 @@ description: Apply CI fixes from a pre-analyzed fix plan. Use after analyze-ci h
 
 # CI Fix Skill
 
-You are running inside a container with the full repository workspace. You have been given a pre-analyzed fix plan. Follow it exactly — do not re-diagnose or second-guess it.
+You are running inside a container with the full repository workspace. You have been given a pre-analyzed fix plan. Verify that its assumptions still match the current code and failure evidence before applying it.
 
 ## Workflow
 
@@ -30,7 +30,7 @@ Skip anything listed under **Skipped Failures** — do not attempt to fix them.
 
 - Follow the plan — do not invent additional fixes to the logic
 - Be surgical: only change files listed in the plan for the core fix
-- If a step in the plan fails or doesn't apply, skip it and note it in your output
+- If a plan step is disproven or cannot apply, stop that fix and write `.forge/fix-blocked.md` with the check, evidence, and required re-analysis. Do not weaken tests, mask errors, or silently claim the failure was fixed. Other independent valid fixes may proceed.
 - Do not reformat files not mentioned in the plan
 
 ## Ripple updates — required after every fix
@@ -52,3 +52,6 @@ For each fix applied:
 - Update any inline comment in any `.go` file that says "±10%"
 - Update any `enhancements/`, `docs/`, or `website/` file that describes the jitter as "±10%"
 - Do NOT update files that were already correct or files unrelated to jitter
+
+Preserve historical release notes and superseded design records; update only
+statements that describe current behavior.

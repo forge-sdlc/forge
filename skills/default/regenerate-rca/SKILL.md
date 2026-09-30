@@ -23,6 +23,7 @@ The schema:
 ```json
 {
     "summary": "...",
+    "repository": "owner/repository from the approved repository scope",
     "code_location": {"file": "...", "function": "...", "line_range": "..."},
     "mechanism": "...",
     "trigger_to_symptom": "...",
@@ -34,4 +35,4 @@ The schema:
 }
 ```
 
-Do not write any other files. Do not make any commits.
+Preserve all required fields, including repository. Unknown attribution fields may be null with an explanation in confidence.rationale. Reproduction files belong in temporary scratch directories. Write only .forge/rca.json in the supplied workspace. Do not commit.

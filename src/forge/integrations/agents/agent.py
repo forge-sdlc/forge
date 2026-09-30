@@ -508,7 +508,7 @@ class ForgeAgent:
         logger.info(f"Agent config: root_dir={root_dir}, skills={skill_paths}")
 
         # Create filesystem backend
-        backend = FilesystemBackend(root_dir=str(root_dir))
+        backend = FilesystemBackend(root_dir=str(root_dir), virtual_mode=False)
 
         # Create the model (supports both direct API and Vertex AI)
         model = self._create_model(model_target=model_target)
@@ -869,6 +869,19 @@ class ForgeAgent:
         ticket_key = context.get("ticket_key") if context else None
         if ticket_key is None and trace_context:
             ticket_key = trace_context.get("ticket_key")
+
+        skill_sources = self._get_skill_paths(ticket_key)
+        selected_skill = next(
+            (
+                Path(path) / task / "SKILL.md"
+                for path in reversed(skill_sources)
+                if (Path(path) / task / "SKILL.md").is_file()
+            ),
+            None,
+        )
+        if selected_skill is not None:
+            prompt = f"Use the stage skill at {selected_skill}.\n\n{prompt}"
+            logger.info("Selected stage skill: %s", selected_skill)
 
         import time
 

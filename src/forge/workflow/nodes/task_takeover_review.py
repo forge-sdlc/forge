@@ -90,7 +90,8 @@ async def run_qualitative_review(state: WorkflowState) -> WorkflowState:
             ),
             await adapter.get_git_credentials(repo_ref),
         )
-        git_diff = collect_git_diff(git)
+        base_branch = state.get("context", {}).get("default_branch")
+        git_diff = collect_git_diff(git, f"origin/{base_branch}" if base_branch else "origin/HEAD")
 
         # Prepare the qualitative review prompt
         from forge.prompts import load_prompt
@@ -116,7 +117,8 @@ async def run_qualitative_review(state: WorkflowState) -> WorkflowState:
             repo_name=current_repo,
             step_name="task_takeover_review",
             policy_key="task_takeover_review",
-            skill_name="local-code-review",
+            skill_name="task-takeover-review",
+            base_ref=f"origin/{base_branch}" if base_branch else "origin/HEAD",
         )
 
         state = merge_review_exhaustion(state, result, ticket_key, "task_takeover_review")

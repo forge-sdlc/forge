@@ -69,6 +69,37 @@ EXIT_CONFIG_ERROR = 3
 CONTAINER_HEARTBEAT_INTERVAL_SECONDS = 60
 
 
+def execution_mode_for_stage(step_name: str, skill_name: str) -> str:
+    """Resolve built-in stage permissions; code-changing review remains implementation."""
+    if step_name == "rebase":
+        return "conflict-resolution"
+    if step_name == "implement_review_fix":
+        return "implementation"
+    if step_name == "task_takeover_review" or skill_name in {
+        "task-takeover-review",
+        "local-review-bug",
+    }:
+        return "review"
+    if step_name in {
+        "analyze_bug",
+        "reflect_rca",
+        "plan_bug_fix",
+        "analyze_ci",
+        "ci_attribution",
+        "implement_review_analyze",
+    } or skill_name in {
+        "analyze-bug",
+        "reflect-rca",
+        "plan-bug-fix",
+        "regenerate-plan",
+        "regenerate-rca",
+        "analyze-ci",
+        "implement-review",
+    }:
+        return "analysis"
+    return "implementation"
+
+
 def _contains_error_result(value: Any) -> bool:
     """Return whether nested tool output contains an explicit error result."""
     if isinstance(value, dict):
@@ -767,7 +798,7 @@ class ContainerRunner:
                 exit_code=exit_code,
                 stdout=stdout_str,
                 stderr=stderr_str,
-                tests_passed=True,
+                tests_passed=None,  # Agent completion is not evidence that tests ran.
                 review_cycles=collected_cycles,
             )
         elif exit_code == EXIT_TESTS_FAILED:
@@ -826,6 +857,8 @@ class ContainerRunner:
         skill_name: str | None = None,
         model_target: ResolvedModelTarget | None = None,
         policy_key: str | None = None,
+        execution_mode: str | None = None,
+        base_ref: str | None = None,
     ) -> ContainerResult:
         """Run a task in a container sandbox.
 
@@ -855,6 +888,10 @@ class ContainerRunner:
                 self.settings, project_key, policy_key
             )
 
+        mode = execution_mode or execution_mode_for_stage(step_name or "", skill_name or "")
+        if mode not in {"implementation", "analysis", "review", "conflict-resolution"}:
+            raise ValueError(f"Unknown execution mode: {mode}")
+
         # Create task file in .forge directory (excluded from commits)
         forge_dir = workspace_path / ".forge"
         forge_dir.mkdir(exist_ok=True)
@@ -869,6 +906,9 @@ class ContainerRunner:
             "previous_task_keys": previous_task_keys or [],
             "trace_context": resolved_trace_context,
             "skill_name": skill_name or "",
+            "execution_mode": mode,
+            "stage_instructions": load_prompt(f"container-{mode}"),
+            "base_ref": base_ref or "origin/HEAD",
             "model_target": model_target.model_dump(mode="json") if model_target else {},
         }
         task_file.write_text(json.dumps(task_data, indent=2))

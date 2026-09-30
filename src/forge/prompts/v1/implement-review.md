@@ -5,7 +5,7 @@ Follow the implement-review skill instructions exactly:
 2. Explore the codebase with git log, git diff, and file reads
 3. Write `.forge/review-decisions.json` as a JSON array with one object per thread:
    - `thread_id`: exact thread ID from the input
-   - `comment_id`: integer ID of the latest comment to reply to
+   - `comment_id`: exact ID of the latest input comment to reply to
    - `disposition`: `accept`, `contest`, `clarify`, or `ignore`
    - `reason`: concise rationale
    - `feedback`: concrete change to implement for accepted items, otherwise empty

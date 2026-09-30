@@ -553,6 +553,12 @@ class TestThreadAwareReviewHandling:
             },
         ]
 
+        async def fetch_comments(*, expected_threads, **_kwargs):
+            expected_threads.update(
+                {item["thread_id"]: str(item["comment_id"]) for item in decisions}
+            )
+            return "# Review"
+
         async def run_container(**_kwargs):
             if not (tmp_path / ".forge" / "review-decisions.json").exists():
                 (tmp_path / ".forge" / "review-decisions.json").write_text(json.dumps(decisions))
@@ -582,7 +588,7 @@ class TestThreadAwareReviewHandling:
             ),
             patch(
                 "forge.workflow.nodes.implement_review._fetch_pr_review_comments",
-                new=AsyncMock(return_value="# Review"),
+                new=AsyncMock(side_effect=fetch_comments),
             ),
             patch(
                 "forge.workflow.nodes.implement_review._post_review_addressing_comment",

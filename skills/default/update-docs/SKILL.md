@@ -21,46 +21,18 @@ Follow these steps in order. Do not skip steps.
 
 ### 1. Get the diff
 
-```bash
-DEFAULT_BRANCH=$(git rev-parse --abbrev-ref origin/HEAD | cut -d/ -f2)
-git diff $(git merge-base HEAD "$DEFAULT_BRANCH")..HEAD --no-color
-```
-
-Record the list of files changed in the PR:
-
-```bash
-git diff --name-only $(git merge-base HEAD "$DEFAULT_BRANCH")..HEAD
-```
-
-If the diff is empty, output `NO_DOCS_UPDATED` and stop.
+Use `FORGE_BASE_REF` supplied by the runtime. Resolve its merge base with HEAD,
+then inspect the diff from that commit to the working tree, including staged and
+unstaged edits. If the base cannot be resolved, report that limitation; do not
+claim NO_DOCS_UPDATED. An actually empty diff needs no documentation changes.
 
 ### 2. Discover documentation files
 
-Explore the repository structure to identify where documentation lives.
-Different repos organize docs differently — look for dedicated doc
-directories (`docs/`, `doc/`, `documentation/`), standalone files like
-`README.md` at any level, and any other files whose primary purpose is
-documentation.
-
-Search broadly:
-
-```bash
-find . -type f \( -name "*.md" -o -name "*.rst" -o -name "*.adoc" -o -name "*.txt" \) \
-  ! -path "./.git/*" ! -path "./.forge/*" ! -path "./vendor/*" ! -path "./node_modules/*" \
-  | head -500
-```
-
-Then filter the results:
-
-- **Exclude** files already modified in the PR (they are being actively
-  updated — check against the changed file list from step 1)
-- **Exclude** auto-generated files (lockfiles, generated API docs,
-  swagger output)
-- **Exclude** changelog and release note entries that describe past
-  releases
-
-If no documentation files exist in the repo, output `NO_DOCS_FOUND`
-and stop.
+Use tracked paths (`git ls-files`) to discover relevant Markdown, reStructuredText,
+AsciiDoc, text documentation, and repository-specific documentation formats.
+Include docs already modified in this PR: partial updates can still be stale.
+Exclude generated content and historical release/changelog entries. Do not impose
+an arbitrary first-N-files cutoff; record any genuine search limitation.
 
 ### 3. Build the identifier checklist
 
@@ -82,22 +54,16 @@ changed file gets an entry in the checklist.
 
 ### 4. Search docs for every identifier
 
-Write a shell script that takes the identifiers from step 3 and
-greps for each one across the documentation files from step 2.
-Run the script in a single Bash call:
+Batch literal identifier searches across the discovered documentation, using
+`rg -F` with a pattern file or equivalent. Quote identifiers and handle filenames
+safely. For example:
 
 ```bash
-for id in "identifier1" "identifier2" "identifier3"; do
-  matches=$(grep -rl "$id" <doc_files> 2>/dev/null)
-  if [ -n "$matches" ]; then
-    echo "MATCH: $id -> $matches"
-  fi
-done
+rg -n -F -f .forge/changed-identifiers.txt -- <document-paths>
 ```
 
-Include every identifier from every checklist entry in the `for`
-loop. The script handles the searching mechanically — no identifiers
-are skipped.
+Deduplicate identifiers before searching. Also inspect relevant guides for
+changed behavior described without symbol names, such as defaults or retry rules.
 
 From the script output, collect all matched doc files into a
 candidate list.
@@ -119,7 +85,7 @@ doc might be stale. Record a verdict for every candidate:
 Every candidate must have a verdict. Do not skip candidates.
 
 **Pass 2 — Deep read.** For each candidate marked "possibly stale"
-in pass 1, read the full file alongside the relevant section of the
+in pass 1, read enough surrounding context alongside the relevant section of the
 diff. Confirm whether the doc is actually stale.
 
 When evaluating:
@@ -135,7 +101,7 @@ When evaluating:
 
 For each doc confirmed stale in pass 2:
 
-1. Read the full file
+1. Reuse the context already inspected; read additional lines only as needed
 2. Make minimal targeted edits — fix only what the diff invalidated
 3. Do NOT restructure, rewrite, or add content beyond what the code
    change requires
