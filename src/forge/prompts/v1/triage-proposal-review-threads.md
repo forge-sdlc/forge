@@ -11,7 +11,7 @@ Return one decision per input thread using the enforced response schema.
   the original feedback.
 - `ignore`: resolved by the current artifact, stale, or duplicate; explain in response.
 - Never let one replied-to or ignored thread prevent accepted changes in other threads.
-- Preserve thread_id and comment_id exactly.
+- Preserve thread_id exactly. The runtime owns comment IDs for replies.
 
 <artifact>
 {artifact_content}

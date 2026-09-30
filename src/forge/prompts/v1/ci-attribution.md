@@ -39,9 +39,11 @@ Write your verdict to `.forge/ci-attribution.json` in exactly this format:
 }
 ```
 
-Set `attributable` to `true` if the failure logs reference files, functions,
-or test cases that appear in the PR diff. Set it to `false` if the failures
-are clearly unrelated to the diff.
+Trace the failure mechanism to changed behavior, including effects in unchanged
+callers and tests. Matching file or test names establishes relevance, not causality.
+When available, compare the same check on the base revision. Set `attributable`
+to false only with evidence the failure is independent of this PR; explain the
+evidence and any unavailable logs. Do not infer flakiness from one failed run.
 
 When confidence is low, set `attributable` to `true` (fail-safe: the fix
 pipeline will attempt a fix, and the human can always use `/forge skip-gate`

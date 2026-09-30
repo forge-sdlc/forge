@@ -345,7 +345,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         # default instead of silently reusing stale attribution.
         attribution_file.unlink(missing_ok=True)
         runner = ContainerRunner(settings)
-        await execute_sandbox_kwargs(
+        attribution_result = await execute_sandbox_kwargs(
             state,
             runner=runner,
             discriminator="ci_evaluator",
@@ -354,8 +354,12 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             task_description=attribution_prompt,
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-ci-attribution",
+            execution_mode="analysis",
             repo_name=state.get("current_repo", ""),
         )
+
+        if not attribution_result.success:
+            raise RuntimeError("CI attribution failed; refusing to consume its artifacts")
 
         attributable = True  # fail-safe default
         attribution_reason = ""
@@ -433,6 +437,8 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             skill_name="analyze-ci",
         )
         state = merge_review_exhaustion(state, result, ticket_key, "analyze_ci")
+        if not result.success:
+            raise RuntimeError("CI analysis failed; refusing to apply its plan")
 
         if not fix_plan_file.exists():
             logger.warning(f"No fix plan written for {ticket_key} — skipping fix phase")
@@ -453,6 +459,8 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         fix_prompt = load_prompt("fix-ci", fix_plan=fix_plan)
         runner = ContainerRunner(settings)
         fix_started = True
+        blocked_file = Path(workspace_path) / ".forge" / "fix-blocked.md"
+        blocked_file.unlink(missing_ok=True)
         result = await execute_sandbox_kwargs(
             state,
             runner=runner,
@@ -468,6 +476,9 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             skill_name="fix-ci",
         )
         state = merge_review_exhaustion(state, result, ticket_key, "fix_ci")
+        if not result.success:
+            raise RuntimeError("CI fix execution failed; validation is incomplete")
+        fix_blocker = blocked_file.read_text().strip() if blocked_file.exists() else ""
 
         workspace = Workspace(
             path=Path(workspace_path),
@@ -533,7 +544,9 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 **state,
                 "current_node": "human_review_gate",
                 "pending_ci_event": False,
-                "last_error": None,
+                "last_error": f"CI fix plan needs re-analysis: {fix_blocker}"
+                if fix_blocker
+                else None,
             }
         )
 

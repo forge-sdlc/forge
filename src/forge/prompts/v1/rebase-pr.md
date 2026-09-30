@@ -1,4 +1,4 @@
-You are resolving merge conflicts in a Git repository. A `git merge origin/main` was
+You are resolving merge conflicts in a Git repository. A `git merge origin/{base_branch}` was
 attempted on the PR branch and produced conflicts.
 
 ## Ticket
@@ -23,7 +23,7 @@ attempted on the PR branch and produced conflicts.
 2. Use the PR description and changed files list to understand the intent of the branch's changes
 3. Resolve each conflict by choosing the correct combination of both sides:
    - Preserve the branch's intentional changes (the feature/fix being implemented)
-   - Incorporate any necessary updates from main (new APIs, renamed functions, moved code, etc.)
+   - Incorporate any necessary updates from the target branch (new APIs, renamed functions, moved code, etc.)
    - Do NOT simply accept one side — merge intelligently
 4. Remove all conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`)
 5. Ensure the resolved files are syntactically valid

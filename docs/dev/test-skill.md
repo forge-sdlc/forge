@@ -59,6 +59,7 @@ Create an `input.yaml` with pre-fetched Jira content:
 ```yaml
 jira_key: PROJ-1234
 title: "Feature Title"
+available_repos: ["owner/repository"]
 prompt: |
   # PROJ-1234: Feature Title
 
@@ -70,8 +71,8 @@ prompt: |
   ...
 ```
 
-If a `gold-prd.md` file exists alongside `input.yaml`, it's automatically
-appended to the prompt as an approved PRD (useful for `generate-spec` testing).
+For `generate-spec`, an adjacent `gold-prd.md` supplies the approved PRD. For other
+skills it is evaluation data and is not appended to the task input.
 
 ## Adding Reference Documentation
 
@@ -150,3 +151,39 @@ project: default           # override with --project
 - MCP tools — not loaded in the test runner
 - Jira/GitHub integrations — the runner is offline by design
 - Conversation summarization thresholds — may differ from production
+
+## Fixture and response contracts
+
+The runner uses each stage's production template and typed response schema.
+`prompt` is the raw requirements for PRD generation, the approved PRD for spec
+generation, the specification for Epic decomposition, and the Epic plan for task
+generation. Planning fixtures must list exact `available_repos` names.
+
+Provide additional template inputs under `prompt_inputs`, for example:
+
+```yaml
+available_repos: ["owner/repository"]
+prompt: |
+  The complete approved Epic plan, including repository scope.
+prompt_inputs:
+  spec_content: "The approved behavioral specification"
+  sibling_epics_section: "None"
+  existing_tasks_section: "None"
+```
+
+Missing required inputs fail before model invocation. Literal braces in input
+remain unchanged. Structured responses are validated and saved as `response.json`;
+PRD/spec Markdown is also saved separately for evaluation. The runner still uses
+a filesystem backend: it does not reproduce shell-capable container stages or
+production tool access. Use container regression tests for permission and commit
+behavior, not a claim that an offline document evaluation covers them.
+
+The default PRD rubric is `evaluators/criteria/generate-prd.yaml`. OSAC's personas
+and template rules live separately in `osac-generate-prd.yaml`.
+
+Compare changes on the same cases: docs-only work, a small feature, multiple
+repositories, unavailable access, unknown RCA history, stale CI plans, mixed
+review dispositions, and partially updated docs. Track contract validity,
+requirement coverage, unsupported claims, false rejection, and side effects along
+with tokens, tool calls, elapsed time, and revision count. Shorter instructions
+alone do not demonstrate better efficiency.

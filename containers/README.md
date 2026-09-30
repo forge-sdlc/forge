@@ -207,3 +207,24 @@ podman container prune -f
 # Remove old images
 podman image prune -f
 ```
+
+## Execution modes
+
+The task file carries `execution_mode`, `stage_instructions`, and `base_ref`.
+Forge resolves built-in stages to implementation, analysis, read-only review, or
+conflict resolution. Only implementation runs automatic review/fix loops and the
+fallback commit. Analysis checks for source/index/HEAD changes before succeeding.
+Review agents use a filesystem backend that rejects writes, edits, and uploads
+and has no shell tool. The runtime writes their history and complete diff itself.
+
+`FORGE_BASE_REF` retains the actual remote ref, including slash-containing branch
+names. Review diffs include every commit since the merge base and working-tree
+changes, excluding internal `.forge` artifacts. An unavailable base is reported as
+unavailable rather than treated as an empty diff. Runtime success does not imply
+`tests_passed`; implementation records checks and limitations in
+`.forge/validation.md` for reviewers to inspect.
+
+Rebuild the sandbox image when updating these contracts: it includes the read-only
+backend module as well as the entrypoint. Model tools, credentials, and shell
+isolation for analysis/implementation continue to depend on the sandbox deployment;
+analysis change detection is not an operating-system security boundary.

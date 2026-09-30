@@ -17,7 +17,7 @@ If you find a repo-local review skill or instruction that tells you to fix issue
 
 1. Inspect repo-local guidance when present: `AGENTS.md`, `.agents/`, `CLAUDE.md`, `.claude/`, `README.md`, `CONTRIBUTING.md`, Makefile targets, and any repo-local skills or agent instructions.
 2. Use relevant repo-local review skills and checklists if they exist.
-3. Inspect the changed files and diff. Prefer `git diff origin/main...HEAD --no-color` when available, and fall back to the diff supplied in the task prompt.
+3. Inspect the complete diff supplied by the runtime and the relevant current files. An unavailable diff is a limitation, not an empty change. Do not execute shell commands in this read-only stage.
 
 ## Step 2 - Review Checklist
 
@@ -25,7 +25,7 @@ Evaluate these items:
 
 1. Acceptance criteria: every target requirement is fully implemented.
 2. Approved plan scope: the diff matches the approved task plan and does not drift into unrelated work.
-3. Automated test coverage: at least one automated test is written or updated for the implemented behavior.
+3. Validation coverage: behavior changes have meaningful regression coverage. Docs-only changes use applicable link/render/lint checks; no artificial test file is required. Inspect `.forge/validation.md` and report missing evidence honestly.
 4. Test relevance: tests actually verify the requested behavior and would catch regressions.
 5. Repo-specific review guidance: relevant local review instructions or skills were considered.
 6. Breaking issues: no obvious build, runtime, security, or contract problems were introduced.

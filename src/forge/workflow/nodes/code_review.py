@@ -81,7 +81,7 @@ async def run_post_change_review(
             repo_name=current_repo,
             step_name="code_review",
             policy_key="code_review",
-            skill_name="review-code",
+            skill_name="local-code-review",
         )
 
         repo_ref, adapter = get_adapter(current_repo)

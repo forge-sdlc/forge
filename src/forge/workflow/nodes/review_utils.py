@@ -58,16 +58,27 @@ def collect_review_output(
     return "\n".join(part for part in (stdout, stderr) if part)
 
 
-def collect_git_diff(git: GitOperations) -> str:
+def collect_git_diff(git: GitOperations, base_ref: str = "origin/HEAD") -> str:
     """Return the most useful available diff for a review prompt."""
-    for args in (("diff", "HEAD~1", "HEAD"), ("diff", "HEAD~1"), ("diff",), ("show", "HEAD")):
-        try:
-            result = git._run_git(*args, check=False)
-            if result.returncode == 0 and result.stdout.strip():
-                return cast(str, result.stdout)
-        except Exception:
-            logger.debug("Unable to collect review diff with git %s", " ".join(args))
-    return "No changes detected or unable to retrieve git diff."
+    try:
+        merge_base = git._run_git("merge-base", "HEAD", base_ref, check=False)
+        if merge_base.returncode != 0 or not merge_base.stdout.strip():
+            return "Review diff unavailable: cannot resolve the requested base ref."
+        result = git._run_git(
+            "diff",
+            "--no-ext-diff",
+            "--no-color",
+            merge_base.stdout.strip(),
+            "--",
+            ".",
+            ":(exclude).forge",
+            check=False,
+        )
+        if result.returncode == 0:
+            return cast(str, result.stdout) or "No tracked changes relative to the review base."
+    except Exception:
+        logger.exception("Unable to collect complete review diff")
+    return "Review diff unavailable: repository comparison failed."
 
 
 def parse_review_verdict(
@@ -119,6 +130,7 @@ async def run_review_container(
     step_name: str | None = None,
     skill_name: str | None = None,
     policy_key: str | None = None,
+    base_ref: str | None = None,
 ) -> tuple[ContainerResult, str]:
     """Execute a review container and return its result and combined output."""
     # Never allow a failed retry to reuse an earlier attempt's verdict. The
@@ -138,6 +150,8 @@ async def run_review_container(
         "task_key": task_key,
         "repo_name": repo_name,
     }
+    if base_ref is not None:
+        kwargs["base_ref"] = base_ref
     if config is not None:
         kwargs["config"] = config
     if previous_task_keys is not None:

@@ -41,6 +41,6 @@ Fewer Epics is better. Only split when work is genuinely independent and paralle
 Avoid artificial separation like "Config Epic" + "Validation Epic" + "Tests Epic" -
 these belong together in one cohesive Epic.
 
-For every Epic, provide a concise `summary`, the exact target `repository`, and a detailed
+For every Epic, provide a concise `summary`, the exact target `repo`, and a detailed
 `plan` covering technical approach, grounded files, repository standards, dependencies,
 testing strategy, and estimated complexity.

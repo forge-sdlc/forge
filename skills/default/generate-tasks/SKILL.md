@@ -10,7 +10,7 @@ Generate implementation Tasks from Epic plans following the guidelines below.
 ## Instructions
 
 1. Analyze the Epic implementation plan
-2. Identify discrete, testable units of work (2-8 hours each)
+2. Identify discrete, testable units of work that fit an execution session
 3. Define clear acceptance criteria for each Task
 4. Identify which repository each Task belongs to
 5. Order Tasks by dependency (foundation first)
@@ -36,26 +36,15 @@ If repository grounding is unavailable, keep the Task scoped to the investigatio
 1. **Atomic**: Each Task should be completable in a single PR
 2. **Testable**: Clear acceptance criteria that can be verified
 3. **Independent**: Minimize dependencies between Tasks where possible
-4. **Sized Right**: 2-8 hours of work per Task
+4. **Sized Right**: Scope each Task to a verifiable outcome; do not expand small work to meet a time estimate
 
 ## Output Format
 
-For each Task, use this format:
-
-```
----
-TASK: [Task Title]
-REPO: [repository-name or "unknown"]
-DESCRIPTION:
-[Detailed implementation steps]
-
-ACCEPTANCE_CRITERIA:
-- [Criterion 1]
-- [Criterion 2]
----
-```
-
-Repeat for each Task (typically 3-10 Tasks per Epic).
+Return the enforced structured response: `tasks` with `summary`, `repo`, and
+`description`. Use the Epic's exact assigned repository. Each description includes
+implementation steps, dependencies, requirement IDs, and verifiable acceptance
+criteria. Keep tests and affected documentation with the behavior they validate.
+Use one task when sufficient; split only for independent scope or execution limits.
 
 ## Quality Checklist
 

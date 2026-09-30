@@ -70,6 +70,9 @@ async def execute_sandbox_kwargs(
     **runner_options: Any,
 ) -> ContainerResult:
     """Compatibility projection for existing node call sites during cutover."""
+    context = state.get("context") or {}
+    if isinstance(context, Mapping) and context.get("default_branch"):
+        runner_options.setdefault("base_ref", f"origin/{context['default_branch']}")
     return await execute_sandbox_station(
         state,
         SandboxExecutionInput(
