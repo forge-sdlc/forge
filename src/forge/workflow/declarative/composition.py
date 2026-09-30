@@ -4,14 +4,23 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
-from forge.workflow.declarative.models import MAX_STEPS, WorkflowDefinition, WorkflowStep
+from forge.workflow.declarative.models import (
+    MAX_STEPS,
+    NodeDefinition,
+    NodeReference,
+    NodeTemplate,
+    WorkflowDefinition,
+    WorkflowStep,
+)
 
 ProjectLookup = Callable[[str], Awaitable[WorkflowDefinition | None]]
+NodeLookup = Callable[[str], Awaitable[NodeDefinition | None]]
 
 
 def validate_subworkflow(definition: WorkflowDefinition) -> None:
     """Check fragment authority without requiring a standalone terminal graph."""
     from forge.workflow.declarative.catalog import get_state_profile
+    from forge.workflow.declarative.predicates import validate_predicate
 
     if definition.kind != "Subworkflow":
         raise ValueError("expected a subworkflow")
@@ -24,7 +33,7 @@ def validate_subworkflow(definition: WorkflowDefinition) -> None:
     for state in definition.spec.compatible_states or (definition.spec.state,):
         profile = get_state_profile(state)
         for name, step in definition.spec.steps.items():
-            if name not in profile.nodes:
+            if name not in profile.nodes and not isinstance(step.node, NodeTemplate):
                 raise ValueError(f"node '{name}' is not registered for state '{state}'")
             if step.route and step.route not in profile.routers:
                 raise ValueError(f"router '{step.route}' is not registered for state '{state}'")
@@ -33,13 +42,17 @@ def validate_subworkflow(definition: WorkflowDefinition) -> None:
 
                 validate_router_outcomes(state, name, step.route, set(step.branches))
             if step.cases:
-                from forge.workflow.declarative.predicates import validate_predicate
-
                 if name in profile.mandatory_nodes or name.endswith("_gate"):
                     raise ValueError(f"protected gate '{name}' requires a trusted router")
                 for case in step.cases:
-                    validate_predicate(case.when, state)
-            profile.effect_policies[name].resolve(step.allowed_effects)
+                    validate_predicate(case.when, state, steps=definition.spec.steps)
+            if isinstance(step.node, NodeTemplate):
+                if step.allowed_effects or step.route:
+                    raise ValueError("user node cannot request effects or trusted routers")
+                for rule in step.node.rules:
+                    validate_predicate(rule.when, state, steps=definition.spec.steps)
+            else:
+                profile.effect_policies[name].resolve(step.allowed_effects)
             targets = (
                 [step.next]
                 if step.next
@@ -63,6 +76,7 @@ async def resolve_definition(
     project_lookup: ProjectLookup | None = None,
     *,
     state_profile: str | None = None,
+    node_lookup: NodeLookup | None = None,
 ) -> WorkflowDefinition:
     """Pin all active dependencies and replace includes with their trusted steps."""
 
@@ -156,6 +170,23 @@ async def resolve_definition(
     steps, dependencies = await expand(
         definition, (f"root:{definition.metadata.name}",), state_profile or definition.spec.state
     )
+    resolved_steps = dict(steps)
+    node_dependencies = list(dependencies)
+    for name, step in steps.items():
+        if isinstance(step.node, NodeReference):
+            if node_lookup is None:
+                raise ValueError(f"project node '{step.node.name}' needs a node resolver")
+            published = await node_lookup(step.node.name)
+            if published is None:
+                raise ValueError(f"project node '{step.node.name}' is not active")
+            if published.metadata.name != step.node.name:
+                raise ValueError("project node name mismatch")
+            resolved_steps[name] = step.model_copy(update={"node": published.spec})
+            node_dependencies.append(
+                f"node:project:{published.metadata.name}:{published.metadata.revision}:{published.digest}"
+            )
+    steps = resolved_steps
+    dependencies = tuple(node_dependencies)
     resolved = definition.model_copy(
         update={
             "spec": definition.spec.model_copy(

@@ -1,0 +1,14 @@
+apiVersion: forge/v1
+kind: Node
+metadata:
+  name: artifact-review
+  revision: 1
+  description: Classify a specification for implementation readiness.
+spec:
+  type: agent-assessment-v1
+  outcomes: [ready, revise]
+  instruction: >-
+    Assess whether the specification is clear enough to implement. Return ready
+    only when it includes concrete acceptance criteria and no unresolved blockers.
+    Summarize the reason in one short sentence.
+  inputs: [ticket.key, artifact.spec]

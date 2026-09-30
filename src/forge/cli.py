@@ -1804,6 +1804,26 @@ def main(argv: list[str] | None = None) -> int:
     workflow_delete.add_argument("name")
     workflow_delete.add_argument("--yes", action="store_true", help="Confirm deletion")
 
+    node_parser = subparsers.add_parser("node", help="Manage project workflow node templates")
+    node_subparsers = node_parser.add_subparsers(dest="node_command")
+    for action in ("validate", "publish"):
+        node_action_parser = node_subparsers.add_parser(action)
+        if action == "publish":
+            node_action_parser.add_argument("project_key")
+        node_action_parser.add_argument("file")
+    for action in ("activate", "rollback"):
+        node_action_parser = node_subparsers.add_parser(action)
+        node_action_parser.add_argument("project_key")
+        node_action_parser.add_argument("name")
+        node_action_parser.add_argument("revision", type=int)
+        node_action_parser.add_argument("--expected-active-digest")
+    for action in ("show", "history"):
+        node_action_parser = node_subparsers.add_parser(action)
+        node_action_parser.add_argument("project_key")
+        node_action_parser.add_argument("name")
+    node_subparsers.add_parser("catalog")
+    node_subparsers.add_parser("list").add_argument("project_key")
+
     # project-setup command
     setup_parser = subparsers.add_parser(
         "project-setup",
@@ -2045,6 +2065,11 @@ Examples:
             return asyncio.run(skills_handler(args))
         skills_parser.print_help()
         return 0
+
+    if args.command == "node":
+        from forge.workflow.declarative.node_cli import cmd_node
+
+        return asyncio.run(cmd_node(args))
 
     if args.command == "workflow":
         if getattr(args, "workflow_command", None) is None:
