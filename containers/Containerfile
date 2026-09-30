@@ -24,6 +24,7 @@ RUN pip install --no-cache-dir \
     deepagents \
     anthropic \
     langchain-anthropic \
+    langchain-openai \
     langchain-google-genai \
     langchain-google-vertexai \
     langchain-mcp-adapters \
