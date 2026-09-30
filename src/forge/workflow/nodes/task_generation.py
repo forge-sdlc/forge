@@ -49,7 +49,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
     # Revision-3 workflows created before draft provisioning became an
     # explicit declarative node route approval directly to generate_tasks.
-    if not epic_keys and state.get("plan_draft"):
+    if (not epic_keys or any(not key for key in epic_keys)) and state.get("plan_draft"):
         from forge.workflow.gates.plan_approval import provision_epics_from_draft
 
         jira = JiraClient()

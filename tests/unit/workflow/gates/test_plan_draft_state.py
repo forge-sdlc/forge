@@ -1,6 +1,7 @@
 """Regression coverage for state-backed epic draft provisioning."""
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -40,3 +41,31 @@ async def test_provision_epics_uses_checkpointed_draft_without_attachment_lifecy
     jira.create_epic.assert_awaited_once()
     jira.add_attachment.assert_not_awaited()
     jira.delete_attachments_by_name.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_provision_epics_resumes_after_one_epic_was_created() -> None:
+    first_summary = "A" * 294
+    draft = ForgeDecompositionDraft(
+        parent_key="AISOS-1",
+        phase="epics",
+        items=[
+            DraftItem(id=1, summary=first_summary, description="First", repo="forge-sdlc/forge", acceptance_criteria=[]),
+            DraftItem(id=2, summary="Second", description="Second", repo="forge-sdlc/forge", acceptance_criteria=[]),
+        ],
+        version=1,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    jira = AsyncMock()
+    jira.search_issues.return_value = [SimpleNamespace(key="AISOS-2", summary=first_summary[:255])]
+    jira.get_issue.return_value.project_key = "AISOS"
+    jira.create_epic.return_value = "AISOS-3"
+
+    epic_keys = await provision_epics_from_draft(
+        {"ticket_key": "AISOS-1", "plan_draft": draft}, jira
+    )
+
+    assert epic_keys == ["AISOS-2", "AISOS-3"]
+    jira.create_epic.assert_awaited_once()
+    assert jira.create_epic.call_args.kwargs["summary"] == "Second"

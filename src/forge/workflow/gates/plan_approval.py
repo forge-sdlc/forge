@@ -126,6 +126,7 @@ async def provision_epics(state: WorkflowState) -> WorkflowState:
 
 async def provision_epics_from_draft(state: WorkflowState, jira: "JiraClient") -> list[str]:
     """Materialize the approved workflow-state draft as Jira Epics."""
+    from forge.integrations.jira.client import JIRA_SUMMARY_MAX_LENGTH
     from forge.models.draft import ForgeDecompositionDraft
     from forge.models.workflow import ForgeLabel
 
@@ -133,8 +134,7 @@ async def provision_epics_from_draft(state: WorkflowState, jira: "JiraClient") -
     existing = await jira.search_issues(
         f'labels = "forge:parent:{ticket_key}" AND issuetype = Epic'
     )
-    if existing:
-        return [issue.key for issue in existing]
+    existing_by_summary = {issue.summary: issue.key for issue in existing}
 
     raw = state.get("plan_draft")
     if not raw:
@@ -144,6 +144,10 @@ async def provision_epics_from_draft(state: WorkflowState, jira: "JiraClient") -
     epic_keys: list[str] = []
     for item in draft.items:
         if item.excluded:
+            continue
+        existing_key = existing_by_summary.get(item.summary[:JIRA_SUMMARY_MAX_LENGTH])
+        if existing_key:
+            epic_keys.append(existing_key)
             continue
         labels = [ForgeLabel.FORGE_MANAGED.value, f"forge:parent:{ticket_key}"]
         if item.repo and "/" in item.repo:
