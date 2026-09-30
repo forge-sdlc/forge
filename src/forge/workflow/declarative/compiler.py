@@ -15,7 +15,7 @@ from forge.workflow.declarative.capabilities import (
     effect_capability_scope,
 )
 from forge.workflow.declarative.catalog import get_state_profile
-from forge.workflow.declarative.models import MAX_TRANSITIONS, WorkflowDefinition
+from forge.workflow.declarative.models import MAX_TRANSITIONS, NodeTemplate, WorkflowDefinition
 from forge.workflow.declarative.predicates import evaluate_predicate, validate_predicate
 from forge.workflow.declarative.router_contracts import validate_router_outcomes
 from forge.workflow.preconditions import NodeContract, project_capabilities, with_preconditions
@@ -29,6 +29,17 @@ class DeclarativeWorkflowCompiler:
     def __init__(self, definition: WorkflowDefinition) -> None:
         self.definition = definition
         self.profile = get_state_profile(definition.spec.state)
+
+    @staticmethod
+    def _has_parallel_scope(predicate: Any) -> bool:
+        return predicate.scope != "current" or any(
+            DeclarativeWorkflowCompiler._has_parallel_scope(child)
+            for child in (
+                *predicate.all_of,
+                *predicate.any_of,
+                *((predicate.not_,) if predicate.not_ else ()),
+            )
+        )
 
     def dynamic_targets(self, step: Any) -> frozenset[str]:
         """Return catalog-owned targets, accepting matching legacy metadata."""
@@ -85,12 +96,20 @@ class DeclarativeWorkflowCompiler:
                 f"unsupported extension point '{sorted(unknown_extensions)[0]}'"
             )
 
-        unknown_nodes = set(steps) - set(self.profile.nodes)
+        unknown_nodes = {
+            name
+            for name, step in steps.items()
+            if name not in self.profile.nodes and not isinstance(step.node, NodeTemplate)
+        }
         if unknown_nodes:
             raise WorkflowValidationError(
                 f"node '{sorted(unknown_nodes)[0]}' is not registered for state '{spec.state}'"
             )
-        missing_effect_policies = set(steps) - set(self.profile.effect_policies)
+        missing_effect_policies = {
+            name
+            for name, step in steps.items()
+            if name not in self.profile.effect_policies and not isinstance(step.node, NodeTemplate)
+        }
         if missing_effect_policies:
             raise WorkflowValidationError(
                 f"node '{sorted(missing_effect_policies)[0]}' has no registered effect policy"
@@ -99,6 +118,16 @@ class DeclarativeWorkflowCompiler:
         adjacency: dict[str, set[str]] = {name: set() for name in steps}
         has_terminal = False
         for node_name, step in steps.items():
+            if step.node is not None:
+                if node_name in self.profile.nodes or not isinstance(step.node, NodeTemplate):
+                    raise WorkflowValidationError(
+                        f"node template for '{node_name}' is unresolved or shadows a trusted node"
+                    )
+                if step.route or step.dynamic_route:
+                    raise WorkflowValidationError("user node cannot use trusted routers")
+                if step.node.type == "decision-v1":
+                    for rule in step.node.rules:
+                        validate_predicate(rule.when, spec.state, steps=steps)
             if step.route and step.route not in self.profile.routers:
                 raise WorkflowValidationError(
                     f"router '{step.route}' on '{node_name}' is not registered for state "
@@ -119,8 +148,10 @@ class DeclarativeWorkflowCompiler:
                         f"protected gate '{node_name}' requires a trusted router"
                     )
                 for case in step.cases:
+                    if self._has_parallel_scope(case.when) and step.join != "all":
+                        raise WorkflowValidationError("cross-branch outcome requires join: all")
                     try:
-                        validate_predicate(case.when, spec.state)
+                        validate_predicate(case.when, spec.state, steps=steps)
                     except ValueError as exc:
                         raise WorkflowValidationError(f"step '{node_name}' {exc}") from exc
             for target in targets:
@@ -161,7 +192,9 @@ class DeclarativeWorkflowCompiler:
                     f"node '{node_name}' does not support station contract "
                     f"'{step.station_contract}'"
                 )
-            if step.kind is not None and step.kind != self.profile.node_kind(node_name):
+            if step.kind is not None and step.kind != (
+                "operation" if step.node else self.profile.node_kind(node_name)
+            ):
                 raise WorkflowValidationError(
                     f"node kind for '{node_name}' is catalog-owned and must be "
                     f"'{self.profile.node_kind(node_name)}'"
@@ -260,7 +293,7 @@ class DeclarativeWorkflowCompiler:
             graph.add_node(
                 node_name,
                 self._guarded_node(
-                    self.profile.nodes[node_name],
+                    self._node_function(node_name),
                     node_name,
                     terminal=step.next == "__end__",
                     contract=self.profile.contracts.get(node_name),
@@ -324,7 +357,29 @@ class DeclarativeWorkflowCompiler:
     def effective_effects(self, node_name: str) -> tuple[str, ...]:
         """Resolve catalog-owned authority and an optional supported restriction."""
         step = self.definition.spec.steps[node_name]
+        if isinstance(step.node, NodeTemplate):
+            if step.allowed_effects:
+                raise ValueError("user nodes cannot request effects")
+            return ()
         return self.profile.effect_policies[node_name].resolve(step.allowed_effects)
+
+    def _node_function(self, node_name: str) -> Callable[..., Any]:
+        step = self.definition.spec.steps[node_name]
+        if isinstance(step.node, NodeTemplate):
+            from forge.workflow.declarative.user_nodes import execute_node
+
+            async def run(state: dict[str, Any]) -> dict[str, Any]:
+                try:
+                    return await execute_node(step.node, state, node_name)
+                except Exception as exc:
+                    return {
+                        **state,
+                        "is_blocked": True,
+                        "last_error": f"User node {node_name}: {exc}",
+                    }
+
+            return run
+        return self.profile.nodes[node_name]
 
     def effective_observation_policy(self) -> str | None:
         """Return the profile policy implied by this definition's topology."""

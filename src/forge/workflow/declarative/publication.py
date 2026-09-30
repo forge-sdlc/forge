@@ -13,6 +13,7 @@ from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler
 from forge.workflow.declarative.composition import resolve_definition, validate_subworkflow
 from forge.workflow.declarative.manifest import ProcessChangeImpact, compare_process_definitions
 from forge.workflow.declarative.models import WorkflowDefinition
+from forge.workflow.declarative.node_publication import InMemoryNodePublisher, NodePublisher
 
 _DEFINITION_PREFIX = "forge:process:def:"
 _ACTIVE_PREFIX = "forge:process:active:"
@@ -185,8 +186,16 @@ class DefinitionPublisher:
         impact = None
         if previous and target.kind == previous.kind == "Workflow":
             impact = compare_process_definitions(
-                await resolve_definition(previous, self.active),
-                await resolve_definition(target, self.active),
+                await resolve_definition(
+                    previous,
+                    self.active,
+                    node_lookup=NodePublisher(self.project_key, self._redis).active,
+                ),
+                await resolve_definition(
+                    target,
+                    self.active,
+                    node_lookup=NodePublisher(self.project_key, self._redis).active,
+                ),
             )
         if impact is not None and not _compatible_impact(impact, rollback=action == "rollback"):
             raise ValueError("definition is incompatible with active workflow instances")
@@ -262,10 +271,19 @@ class DefinitionPublisher:
         if definition.kind == "Subworkflow":
             for state in definition.spec.compatible_states or (definition.spec.state,):
                 validate_subworkflow(
-                    await resolve_definition(definition, self.active, state_profile=state)
+                    await resolve_definition(
+                        definition,
+                        self.active,
+                        state_profile=state,
+                        node_lookup=NodePublisher(self.project_key, self._redis).active,
+                    )
                 )
         else:
-            resolved = await resolve_definition(definition, self.active)
+            resolved = await resolve_definition(
+                definition,
+                self.active,
+                node_lookup=NodePublisher(self.project_key, self._redis).active,
+            )
             DeclarativeWorkflowCompiler(resolved).validate_for_publication()
 
     async def _validate_consumers(self, name: str, candidate: WorkflowDefinition) -> None:
@@ -276,7 +294,9 @@ class DefinitionPublisher:
             consumer = await self.active(consumer_name)
             if consumer is None or consumer_name == name or consumer.kind != "Workflow":
                 continue
-            resolved = await resolve_definition(consumer, lookup)
+            resolved = await resolve_definition(
+                consumer, lookup, node_lookup=NodePublisher(self.project_key, self._redis).active
+            )
             DeclarativeWorkflowCompiler(resolved).validate_for_publication()
 
     def _decision(
@@ -339,13 +359,19 @@ class DefinitionPublisher:
 class InMemoryDefinitionPublisher:
     """Deterministic project-scoped publisher for local and contract tests."""
 
-    def __init__(self, project_key: str = "DEFAULT") -> None:
+    def __init__(
+        self, project_key: str = "DEFAULT", node_publisher: InMemoryNodePublisher | None = None
+    ) -> None:
         if not project_key or not project_key.strip():
             raise ValueError("project_key is required for governed publication")
         self.project_key = project_key.upper()
+        self.node_publisher = node_publisher or InMemoryNodePublisher(self.project_key)
         self._definitions: dict[tuple[str, int], WorkflowDefinition] = {}
         self._active: dict[str, WorkflowDefinition] = {}
         self._decisions: dict[str, list[PublicationDecision]] = {}
+
+    async def node_active(self, name: str):
+        return await self.node_publisher.active(name)
 
     async def publish(
         self, definition: WorkflowDefinition, *, actor: str, reason: str, activate: bool = False
@@ -437,8 +463,12 @@ class InMemoryDefinitionPublisher:
         impact = None
         if current and target.kind == current.kind == "Workflow":
             impact = compare_process_definitions(
-                await resolve_definition(current, self.active),
-                await resolve_definition(target, self.active),
+                await resolve_definition(
+                    current, self.active, node_lookup=self.node_publisher.active
+                ),
+                await resolve_definition(
+                    target, self.active, node_lookup=self.node_publisher.active
+                ),
             )
         if impact and not _compatible_impact(impact, rollback=action == "rollback"):
             raise ValueError("definition is incompatible with active workflow instances")
@@ -474,10 +504,17 @@ class InMemoryDefinitionPublisher:
         if definition.kind == "Subworkflow":
             for state in definition.spec.compatible_states or (definition.spec.state,):
                 validate_subworkflow(
-                    await resolve_definition(definition, self.active, state_profile=state)
+                    await resolve_definition(
+                        definition,
+                        self.active,
+                        state_profile=state,
+                        node_lookup=self.node_publisher.active,
+                    )
                 )
         else:
-            resolved = await resolve_definition(definition, self.active)
+            resolved = await resolve_definition(
+                definition, self.active, node_lookup=self.node_publisher.active
+            )
             DeclarativeWorkflowCompiler(resolved).validate_for_publication()
 
     async def _validate_consumers(self, name: str, candidate: WorkflowDefinition) -> None:
@@ -488,7 +525,9 @@ class InMemoryDefinitionPublisher:
             consumer = await self.active(consumer_name)
             if consumer is None or consumer_name == name or consumer.kind != "Workflow":
                 continue
-            resolved = await resolve_definition(consumer, lookup)
+            resolved = await resolve_definition(
+                consumer, lookup, node_lookup=self.node_publisher.active
+            )
             DeclarativeWorkflowCompiler(resolved).validate_for_publication()
 
     def _decision(

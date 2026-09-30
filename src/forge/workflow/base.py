@@ -94,6 +94,17 @@ class PublicationRef(TypedDict, total=False):
     status: str
 
 
+def merge_node_results(
+    left: dict[str, dict[str, Any]] | None, right: dict[str, dict[str, Any]] | None
+) -> dict[str, dict[str, Any]]:
+    """Keep the latest attempt for each node and branch during fan-in."""
+    result = dict(left or {})
+    for key, value in (right or {}).items():
+        if key not in result or int(value.get("attempt", 0)) >= int(result[key].get("attempt", 0)):
+            result[key] = value
+    return result
+
+
 class BaseState(TypedDict, total=False):
     """State shared by ALL workflows."""
 
@@ -168,6 +179,7 @@ class BaseState(TypedDict, total=False):
     validations: list[ValidationResult]
     publications: list[PublicationRef]
     node_outcome: str | None
+    node_results: Annotated[dict[str, dict[str, Any]], merge_node_results]
 
 
 class HandoffState(TypedDict):

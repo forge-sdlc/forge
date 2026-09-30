@@ -11,6 +11,7 @@ from forge.workflow.declarative.models import (
     WORKFLOW_NAME_RE,
     WORKFLOW_PROPERTY_PREFIX,
 )
+from forge.workflow.declarative.node_publication import NodePublisher
 from forge.workflow.declarative.workflow import DeclarativeWorkflow
 
 
@@ -101,7 +102,10 @@ async def load_project_workflow(
                     f"project {project_key.upper()} does not define workflow '{workflow_name}'"
                 )
             definition = load_workflow_value(value)
-        if definition.spec.includes:
+        if definition.spec.includes or any(
+            step.node is not None and getattr(step.node, "source", None) == "project"
+            for step in definition.spec.steps.values()
+        ):
             loaded_dependencies: dict[str, str] = {}
             dependency_cache: dict[str, Any] = {}
 
@@ -123,7 +127,26 @@ async def load_project_workflow(
                 dependency_cache[name] = resolved
                 return resolved
 
-            definition = await resolve_definition(definition, dependency)
+            node_reader = (
+                definition_reader.node_active
+                if definition_reader is not None and hasattr(definition_reader, "node_active")
+                else NodePublisher(project_key).active
+            )
+            loaded_nodes: dict[str, str] = {}
+
+            async def node_dependency(name: str):
+                node = await node_reader(name)
+                if node is not None:
+                    loaded_nodes[name] = node.digest
+                return node
+
+            definition = await resolve_definition(
+                definition, dependency, node_lookup=node_dependency
+            )
+            for name, digest in loaded_nodes.items():
+                current_node = await node_reader(name)
+                if current_node is None or current_node.digest != digest:
+                    raise ValueError(f"project node '{name}' changed during resolution")
             for name, digest in loaded_dependencies.items():
                 current = await definition_reader.active(name) if definition_reader else None
                 if current is None:

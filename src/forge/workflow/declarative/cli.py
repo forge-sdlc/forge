@@ -17,6 +17,7 @@ from forge.workflow.declarative.manifest import (
     render_mermaid,
     simulate_process_migration,
 )
+from forge.workflow.declarative.node_publication import NodePublisher
 from forge.workflow.declarative.publication import DefinitionPublisher
 
 
@@ -24,7 +25,10 @@ async def _load_resolved(path: str, project_key: str | None, state_profile: str 
     source = load_workflow_file(path)
     publisher = DefinitionPublisher(project_key) if project_key else None
     return await resolve_definition(
-        source, publisher.active if publisher else None, state_profile=state_profile
+        source,
+        publisher.active if publisher else None,
+        state_profile=state_profile,
+        node_lookup=NodePublisher(project_key).active if project_key else None,
     )
 
 
@@ -231,10 +235,20 @@ async def cmd_workflow(args: Any) -> int:
             if active_definition is None:
                 raise ValueError(f"workflow '{args.name}' is not defined for {project_key}")
             if active_definition.kind == "Workflow":
-                resolved = await resolve_definition(active_definition, publisher.active)
+                resolved = await resolve_definition(
+                    active_definition,
+                    publisher.active,
+                    node_lookup=NodePublisher(project_key).active,
+                )
                 DeclarativeWorkflowCompiler(resolved).validate()
             else:
-                validate_subworkflow(await resolve_definition(active_definition, publisher.active))
+                validate_subworkflow(
+                    await resolve_definition(
+                        active_definition,
+                        publisher.active,
+                        node_lookup=NodePublisher(project_key).active,
+                    )
+                )
             if getattr(args, "json", False):
                 print(json.dumps(active_definition.canonical_dict(), indent=2))
             else:

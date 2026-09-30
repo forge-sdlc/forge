@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from forge.workflow.declarative.models import WorkflowPredicate
+from forge.workflow.declarative.models import WorkflowPredicate, WorkflowStep
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,13 @@ PROFILE_FACTS: dict[str, frozenset[str]] = {
 FACT_CONTRACT_VERSION = "1"
 
 
-def validate_predicate(predicate: WorkflowPredicate, state_profile: str, depth: int = 0) -> None:
+def validate_predicate(
+    predicate: WorkflowPredicate,
+    state_profile: str,
+    depth: int = 0,
+    *,
+    steps: dict[str, WorkflowStep] | None = None,
+) -> None:
     if depth > 3:
         raise ValueError("predicate nesting exceeds 3 levels")
     if predicate.fact is None:
@@ -47,7 +53,22 @@ def validate_predicate(predicate: WorkflowPredicate, state_profile: str, depth: 
         if predicate.not_ is not None:
             children = (*children, predicate.not_)
         for child in children:
-            validate_predicate(child, state_profile, depth + 1)
+            validate_predicate(child, state_profile, depth + 1, steps=steps)
+        return
+    if predicate.fact.startswith("node.") and predicate.fact.endswith(".outcome"):
+        step_name = predicate.fact[5:-8]
+        template = steps.get(step_name).node if steps and step_name in steps else None
+        if template is None or not hasattr(template, "outcomes"):
+            raise ValueError(f"unknown node outcome fact '{predicate.fact}'")
+        if predicate.op == "isNull":
+            return
+        values = predicate.value if predicate.op == "in" else [predicate.value]
+        if (
+            not isinstance(values, list)
+            or not 1 <= len(values) <= 32
+            or any(value not in template.outcomes for value in values)
+        ):
+            raise ValueError(f"unknown outcome for '{predicate.fact}'")
         return
     if predicate.fact not in PROFILE_FACTS[state_profile]:
         raise ValueError(f"unknown conditional fact '{predicate.fact}' for state '{state_profile}'")
@@ -74,7 +95,36 @@ def evaluate_predicate(predicate: WorkflowPredicate, state: Mapping[str, Any]) -
     if predicate.not_ is not None:
         return not evaluate_predicate(predicate.not_, state)
     assert predicate.fact is not None
-    value = FACTS[predicate.fact].project(state)
+    if predicate.fact.startswith("node.") and predicate.fact.endswith(".outcome"):
+        step_name = predicate.fact[5:-8]
+        records = state.get("node_results") or {}
+        if predicate.scope != "current":
+            total = state.get("parallel_total_branches")
+            if not isinstance(total, int) or total < 1:
+                raise ValueError("parallel branch count is unavailable")
+            values = []
+            for branch_id in range(total):
+                record = records.get(f"{step_name}:{branch_id}")
+                if record is None:
+                    raise ValueError(f"node outcome missing for branch {branch_id}")
+                values.append(record.get("outcome"))
+
+            def matches(item: Any) -> bool:
+                if predicate.op == "isNull":
+                    return item is None
+                if predicate.op == "equals":
+                    return item == predicate.value
+                return item in predicate.value
+
+            return (
+                any(map(matches, values)) if predicate.scope == "any" else all(map(matches, values))
+            )
+        branch = state.get("parallel_branch_id")
+        key = f"{step_name}:{branch if branch is not None else 'main'}"
+        record = records.get(key)
+        value = record.get("outcome") if record else None
+    else:
+        value = FACTS[predicate.fact].project(state)
     if predicate.op == "isNull":
         return value is None
     if predicate.op == "equals":

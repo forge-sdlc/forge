@@ -40,6 +40,9 @@ class WorkflowPredicate(StrictModel):
     fact: str | None = None
     op: Literal["equals", "in", "isNull"] | None = None
     value: Any = None
+    scope: Literal["current", "any", "all"] = Field(
+        default="current", exclude_if=lambda value: value == "current"
+    )
     all_of: tuple[WorkflowPredicate, ...] = Field(
         default=(), alias="all", exclude_if=lambda value: not value
     )
@@ -56,13 +59,17 @@ class WorkflowPredicate(StrictModel):
         if forms != 1:
             raise ValueError("predicate requires exactly one of fact, all, any, or not")
         if self.fact is not None:
+            if self.scope != "current" and not (
+                self.fact.startswith("node.") and self.fact.endswith(".outcome")
+            ):
+                raise ValueError("scope is only valid for node outcome facts")
             if self.op is None:
                 raise ValueError("fact predicate requires op")
             if self.op != "isNull" and self.value is None:
                 raise ValueError("predicate requires value")
             if self.op == "isNull" and self.value is not None:
                 raise ValueError("isNull does not accept value")
-        elif self.op is not None or self.value is not None:
+        elif self.op is not None or self.value is not None or self.scope != "current":
             raise ValueError("group predicate cannot declare op or value")
         if len(self.all_of) > 8 or len(self.any_of) > 8:
             raise ValueError("predicate group may contain at most 8 items")
@@ -74,7 +81,86 @@ class WorkflowCase(StrictModel):
     next: str
 
 
+OUTCOME_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+SELECTORS = frozenset(
+    {"ticket.key", "artifact.prd", "artifact.spec", "artifact.rca", "artifact.plan"}
+)
+
+
+class DecisionRule(StrictModel):
+    when: WorkflowPredicate
+    outcome: str
+
+
+class NodeTemplate(StrictModel):
+    type: Literal["decision-v1", "agent-assessment-v1"]
+    outcomes: tuple[str, ...] = Field(min_length=2, max_length=16)
+    rules: tuple[DecisionRule, ...] = ()
+    otherwise: str | None = None
+    instruction: str | None = Field(default=None, max_length=4000)
+    inputs: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_template(self) -> NodeTemplate:
+        if len(set(self.outcomes)) != len(self.outcomes) or any(
+            not OUTCOME_RE.fullmatch(x) for x in self.outcomes
+        ):
+            raise ValueError("outcomes must be unique canonical names")
+        if self.type == "decision-v1":
+            if not self.rules or len(self.rules) > 32 or self.otherwise not in self.outcomes:
+                raise ValueError("decision requires 1-32 rules and a declared otherwise outcome")
+            if any(rule.outcome not in self.outcomes for rule in self.rules):
+                raise ValueError("decision rule uses undeclared outcome")
+            if self.instruction is not None or self.inputs:
+                raise ValueError("decision cannot declare agent inputs")
+        else:
+            if not self.instruction or not self.instruction.strip():
+                raise ValueError("agent assessment requires an instruction")
+            if not self.inputs or len(set(self.inputs)) != len(self.inputs):
+                raise ValueError("agent assessment requires unique inputs")
+            if any(item not in SELECTORS for item in self.inputs):
+                raise ValueError("agent assessment uses unknown input selector")
+            if self.rules or self.otherwise is not None:
+                raise ValueError("agent assessment cannot declare decision rules")
+        return self
+
+
+class NodeReference(StrictModel):
+    source: Literal["project"]
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def valid_name(cls, value: str) -> str:
+        if not WORKFLOW_NAME_RE.fullmatch(value):
+            raise ValueError("invalid node name")
+        return value
+
+
+class NodeDefinition(StrictModel):
+    api_version: Literal["forge/v1"] = Field(alias="apiVersion")
+    kind: Literal["Node"]
+    metadata: WorkflowMetadata
+    spec: NodeTemplate
+
+    def canonical_json(self) -> str:
+        return json.dumps(
+            self.model_dump(by_alias=True, exclude_none=True, mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    @property
+    def digest(self) -> str:
+        return hashlib.sha256(self.canonical_json().encode()).hexdigest()
+
+    def validate_size(self) -> None:
+        if len(self.canonical_json().encode()) > 32768:
+            raise ValueError("node definition exceeds 32768 bytes")
+
+
 class WorkflowStep(StrictModel):
+    node: NodeTemplate | NodeReference | None = None
     next: str | None = None
     route: str | None = None
     branches: dict[str, str] = Field(default_factory=dict)
