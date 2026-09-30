@@ -114,8 +114,10 @@ Use `kind: Subworkflow` to publish a reusable group of registered steps. Give it
 steps, and named exit targets such as `@exit/review`. A subworkflow can list
 `spec.compatibleStates` when the same nodes and routers are valid in several profiles. It is
 not selectable by a ticket label. A normal `Workflow` can also be included; its fixed
-`next: __end__` completion returns to the caller, while routed `__end__` outcomes continue
-to pause the invocation.
+`next: __end__` completion returns to the caller, while routed or conditional `__end__`
+outcomes stop the current invocation. A full workflow included with `returnTo` therefore
+needs at least one fixed `next: __end__` completion step. Use a `Subworkflow` with named
+exits when distinct conditional outcomes should return to distinct caller steps.
 
 ```yaml
 apiVersion: forge/v1

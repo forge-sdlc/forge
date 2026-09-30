@@ -16,7 +16,7 @@ complete workflow with `returnTo` for normal completion. Use `source: builtin` o
 project. Nodes remain canonical and cannot collide. New runs pin the fully expanded graph;
 active runs keep their existing pin.
 
-Start at `entry`. Follow `next` for a fixed transition. At a step with `route`, follow every target in `branches`. A branch key is a possible router result; its value is the next step. A step may instead use ordered `cases` with predicates over catalog facts and a required `otherwise` target. `__end__` stops the current invocation and is not itself a declared step. In an included full workflow, fixed `next: __end__` returns to the caller's `returnTo` target; routed `__end__` still pauses the invocation.
+Start at `entry`. Follow `next` for a fixed transition. At a step with `route`, follow every target in `branches`. A branch key is a possible router result; its value is the next step. A step may instead use ordered `cases` with predicates over catalog facts and a required `otherwise` target. `__end__` stops the current invocation and is not itself a declared step. In an included full workflow, fixed `next: __end__` returns to the caller's `returnTo` target; routed and conditional `__end__` still stop the invocation. Include a fixed completion step or use a `Subworkflow` with named exits for conditional returns.
 
 Use `forge workflow render FILE` instead of tracing a large definition manually.
 

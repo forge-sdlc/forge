@@ -131,7 +131,10 @@ async def resolve_definition(
                     raise ValueError(f"workflow '{include.name}' requires returnTo and no exits")
                 terminals = [name for name, step in child_steps.items() if step.next == "__end__"]
                 if not terminals:
-                    raise ValueError(f"workflow '{include.name}' has no normal completion")
+                    raise ValueError(
+                        f"workflow '{include.name}' has no fixed normal completion; "
+                        "add a step with next: __end__ or use Subworkflow exits"
+                    )
                 child_steps = {
                     name: _replace_targets(step, {"__end__": include.return_to})
                     if name in terminals

@@ -120,7 +120,7 @@ class WorkflowStep(StrictModel):
             raise ValueError("otherwise is only valid with cases")
         if self.fact_version is not None and not self.cases:
             raise ValueError("factVersion is only valid with cases")
-        if self.next and self.branches:
+        if self.branches and not self.route:
             raise ValueError("branches are only valid with 'route'")
         if self.route and not self.branches and not self.dynamic_route:
             raise ValueError("a routed step requires non-empty branches")

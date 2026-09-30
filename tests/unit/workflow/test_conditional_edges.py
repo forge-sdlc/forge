@@ -101,6 +101,11 @@ def test_conditional_shape_requires_otherwise_and_excludes_router() -> None:
     with pytest.raises(ValidationError, match="exactly one"):
         _definition(steps)
 
+    steps = _steps()
+    steps["generate_prd"]["branches"] = {"ignored": "missing_step"}
+    with pytest.raises(ValidationError, match="branches are only valid with 'route'"):
+        _definition(steps)
+
 
 def test_manifest_and_diff_include_predicates_even_when_target_is_unchanged() -> None:
     previous = _definition(_steps())
@@ -207,10 +212,90 @@ def test_publishable_builtin_can_replace_ci_router_with_authored_conditions() ->
             "when": {"fact": "ci.status", "op": "in", "value": ["failed", "blocked", "no_prs"]},
             "next": "escalate_blocked",
         },
-        {"when": {"fact": "ci.status", "op": "equals", "value": "fixing"}, "next": "attempt_ci_fix"},
+        {
+            "when": {"fact": "ci.status", "op": "equals", "value": "fixing"},
+            "next": "attempt_ci_fix",
+        },
     ]
     ci["otherwise"] = "human_review_gate"
 
     candidate = WorkflowDefinition.model_validate(raw)
     DeclarativeWorkflowCompiler(candidate).validate_for_publication()
     DeclarativeWorkflowCompiler(candidate).build_graph().compile()
+
+
+@pytest.mark.asyncio
+async def test_included_workflow_keeps_conditional_pause_and_rewrites_fixed_completion() -> None:
+    child = WorkflowDefinition.model_validate(
+        {
+            "apiVersion": "forge/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "conditional-child", "revision": 1},
+            "spec": {
+                "state": "feature",
+                "entry": "generate_prd",
+                "steps": {
+                    "generate_prd": {
+                        "cases": [
+                            {
+                                "when": {"fact": "workflow.paused", "op": "equals", "value": True},
+                                "next": "__end__",
+                            }
+                        ],
+                        "otherwise": "generate_spec",
+                    },
+                    "generate_spec": {"next": "__end__"},
+                },
+            },
+        }
+    )
+    parent = WorkflowDefinition.model_validate(
+        {
+            "apiVersion": "forge/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "conditional-parent", "revision": 1},
+            "spec": {
+                "state": "feature",
+                "entry": "answer_question",
+                "steps": {
+                    "answer_question": {"next": "generate_prd"},
+                    "teardown_workspace": {"next": "__end__"},
+                },
+                "includes": [
+                    {
+                        "source": "project",
+                        "name": "conditional-child",
+                        "returnTo": "teardown_workspace",
+                    }
+                ],
+            },
+        }
+    )
+
+    async def lookup(_name: str) -> WorkflowDefinition:
+        return child
+
+    resolved = await resolve_definition(parent, lookup)
+    assert resolved.spec.steps["generate_prd"].cases[0].next == "__end__"
+    assert resolved.spec.steps["generate_spec"].next == "teardown_workspace"
+    DeclarativeWorkflowCompiler(resolved).validate()
+
+    conditional_only = child.model_copy(
+        update={
+            "spec": child.spec.model_copy(
+                update={
+                    "steps": {
+                        "generate_prd": child.spec.steps["generate_prd"].model_copy(
+                            update={"otherwise": "__end__"}
+                        )
+                    }
+                }
+            )
+        }
+    )
+
+    async def lookup_without_completion(_name: str) -> WorkflowDefinition:
+        return conditional_only
+
+    with pytest.raises(ValueError, match="no fixed normal completion"):
+        await resolve_definition(parent, lookup_without_completion)
