@@ -19,6 +19,10 @@ class DefinitionReader(Protocol):
 
     async def active(self, name: str) -> Any | None: ...
 
+    async def remember_expanded(self, definition: Any) -> None: ...
+
+    async def get_expanded(self, name: str, revision: int, digest: str) -> Any | None: ...
+
 
 class ProjectPropertyReader(Protocol):
     async def get_project_property(self, project_key: str, property_key: str) -> Any | None: ...
@@ -55,7 +59,7 @@ async def load_project_workflow(
 
     A checkpoint's canonical definition is preferred because it is the durable
     source of truth for an in-flight instance.  If only identity metadata was
-    persisted, ``definition_reader`` must provide the exact published revision;
+    persisted, ``definition_reader`` must provide the exact expanded artifact;
     this function deliberately never falls back to Jira's active property for a
     pinned checkpoint.
     """
@@ -72,7 +76,12 @@ async def load_project_workflow(
                 raise ValueError(
                     f"published workflow '{workflow_name}' revision {pinned_revision} is unavailable"
                 )
-            value = await definition_reader.get(workflow_name, int(pinned_revision))
+            value = await definition_reader.get_expanded(
+                workflow_name, int(pinned_revision), pinned_digest
+            )
+            if value is None:
+                # Older, non-composed runs only have a published source artifact.
+                value = await definition_reader.get(workflow_name, int(pinned_revision))
             if value is None:
                 raise ValueError(
                     f"published workflow '{workflow_name}' revision {pinned_revision} is unavailable"
@@ -131,6 +140,8 @@ async def load_project_workflow(
                 current = current if hasattr(current, "digest") else load_workflow_value(current)
                 if current.digest != digest:
                     raise ValueError(f"project dependency '{name}' changed during resolution")
+            if definition_reader is not None:
+                await definition_reader.remember_expanded(definition)
     if definition.metadata.name != workflow_name:
         raise ValueError(
             f"workflow property name '{workflow_name}' does not match metadata name "
