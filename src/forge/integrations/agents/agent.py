@@ -296,8 +296,11 @@ class ForgeAgent:
             root_dir / "committed-skills",
             skills_install_dir=root_dir / "skills",
         )
-        logger.debug(f"Using skill paths: {paths}")
-        return paths
+        # The resolver checks host directories, but the virtual backend expects
+        # paths relative to its root, including in skill metadata and read_file.
+        virtual_paths = [f"/{Path(path).relative_to(root_dir).as_posix()}/" for path in paths]
+        logger.debug(f"Using skill paths: {virtual_paths}")
+        return virtual_paths
 
     def _get_allowed_tools(self) -> list[str] | None:
         """Get list of allowed tools based on config.

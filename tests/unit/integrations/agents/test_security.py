@@ -2,9 +2,13 @@ import shutil
 import stat
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from deepagents.backends.filesystem import FilesystemBackend
+from deepagents.middleware.skills import SkillsMiddleware
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from forge.integrations.agents.agent import ForgeAgent
 from forge.integrations.agents.security import (
@@ -14,6 +18,83 @@ from forge.integrations.agents.security import (
     validate_agent_root,
 )
 from forge.skills.resolver import resolve_skill_paths
+
+
+def test_host_skills_load_through_virtual_backend(tmp_path: Path) -> None:
+    root = tmp_path / "agent"
+    sources = ["committed-skills/default", "committed-skills/proj", "skills/proj"]
+    for index, source in enumerate(sources):
+        for name in (f"skill-{index}", "shared"):
+            skill = root / source / name
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text(
+                f"---\nname: {name}\ndescription: Layer {index}\n---\nInstructions\n"
+            )
+
+    agent = ForgeAgent.__new__(ForgeAgent)
+    with patch.object(agent, "_get_root_dir", return_value=root):
+        paths = agent._get_skill_paths("PROJ-123")
+    backend = FilesystemBackend(root_dir=str(root), virtual_mode=True)
+    result = SkillsMiddleware(backend=backend, sources=paths).before_agent({}, None, {})
+
+    assert not result.get("skills_load_errors")
+    skills = {skill["name"]: skill for skill in result["skills_metadata"]}
+    assert set(skills) == {"skill-0", "skill-1", "skill-2", "shared"}
+    assert skills["shared"]["description"] == "Layer 2"
+    content = backend.read(skills["shared"]["path"])
+    assert content.error is None
+    assert "Instructions" in content.file_data["content"]
+
+
+class _ToolCallingModel(FakeMessagesListChatModel):
+    def bind_tools(self, tools, **kwargs):  # noqa: ARG002
+        # Deliberately emit the configured call even if the tool was hidden.
+        return self
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_async", [False, True])
+@pytest.mark.parametrize("allow_read", [False, True])
+async def test_host_tool_allowlist_enforces_execution(
+    tmp_path: Path, use_async: bool, allow_read: bool
+) -> None:
+    (tmp_path / "example.txt").write_text("protected file content")
+    model = _ToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "read_file", "args": {"file_path": "/example.txt"}, "id": "call-1"}
+                ],
+            ),
+            AIMessage(content="done"),
+        ]
+    )
+    agent = ForgeAgent.__new__(ForgeAgent)
+    agent.settings = SimpleNamespace(
+        agent_allowed_tools="read_file" if allow_read else "",
+        agent_enable_tools=True,
+    )
+    agent._checkpointer = None
+    with (
+        patch.object(agent, "_get_root_dir", return_value=tmp_path),
+        patch.object(agent, "_create_model", return_value=model),
+        patch.object(agent, "_load_mcp_tools", new_callable=AsyncMock, return_value=[]),
+    ):
+        graph = await agent._create_agent_async("Test tool permissions.")
+
+    inputs = {"messages": [HumanMessage(content="Read the example file.")]}
+    result = await graph.ainvoke(inputs) if use_async else graph.invoke(inputs)
+    messages = [message for message in result["messages"] if isinstance(message, ToolMessage)]
+    assert len(messages) == 1
+    assert messages[0].tool_call_id == "call-1"
+    if allow_read:
+        assert messages[0].status == "success"
+        assert "protected file content" in messages[0].content
+    else:
+        assert messages[0].status == "error"
+        assert "not allowed" in messages[0].content
+        assert "protected file content" not in messages[0].content
 
 
 def test_host_tools_default_safe_and_write_tools_prohibited() -> None:

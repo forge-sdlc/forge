@@ -6,17 +6,25 @@ import os
 import shutil
 import stat
 import tempfile
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    ModelRequest,
+    ModelResponse,
+    ToolCallRequest,
+)
+from langchain_core.messages import ToolMessage
+from langgraph.types import Command
 
 SAFE_BUILTIN_TOOLS = frozenset({"ls", "read_file", "glob", "grep"})
 PROHIBITED_BUILTIN_TOOLS = frozenset({"write_file", "edit_file", "execute"})
 
 
 class HostToolAllowlistMiddleware(AgentMiddleware):
-    """Expose only explicitly granted tools to the host agent model."""
+    """Expose and execute only explicitly granted host agent tools."""
 
     def __init__(self, allowed: set[str] | frozenset[str]) -> None:
         self.allowed = frozenset(allowed)
@@ -29,6 +37,33 @@ class HostToolAllowlistMiddleware(AgentMiddleware):
 
     async def awrap_model_call(self, request: ModelRequest, handler: Any) -> ModelResponse:
         return await handler(self._request(request))
+
+    def _denied_tool_call(self, request: ToolCallRequest) -> ToolMessage | None:
+        name = request.tool_call["name"]
+        if name in self.allowed:
+            return None
+        return ToolMessage(
+            content=f"Error: tool '{name}' is not allowed for this host agent.",
+            name=name,
+            tool_call_id=request.tool_call["id"],
+            status="error",
+        )
+
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+    ) -> ToolMessage | Command[Any]:
+        denied = self._denied_tool_call(request)
+        return denied if denied is not None else handler(request)
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+    ) -> ToolMessage | Command[Any]:
+        denied = self._denied_tool_call(request)
+        return denied if denied is not None else await handler(request)
 
 
 def parse_host_tools(value: str, *, enabled: bool = True) -> frozenset[str]:
