@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
 from enum import StrEnum
 from typing import Any
@@ -23,6 +24,7 @@ class ProcessTransition(DomainModel):
     source: str
     target: str
     outcome: str | None = None
+    condition: dict[str, Any] | None = None
 
 
 class ProcessNode(DomainModel):
@@ -245,6 +247,19 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
                 ProcessTransition(source=name, target=target, outcome="dynamic")
                 for target in compiler.dynamic_targets(step)
             )
+        elif step.cases:
+            transitions.extend(
+                ProcessTransition(
+                    source=name,
+                    target=case.next,
+                    outcome=f"case {index + 1}",
+                    condition=case.when.model_dump(by_alias=True, exclude_none=True),
+                )
+                for index, case in enumerate(step.cases)
+            )
+            transitions.append(
+                ProcessTransition(source=name, target=step.otherwise, outcome="otherwise")
+            )
         else:
             transitions.extend(
                 ProcessTransition(source=name, target=target, outcome=outcome)
@@ -280,7 +295,11 @@ def render_mermaid(manifest: ProcessManifest) -> str:
         manifest.transitions,
         key=lambda edge: (edge.source, edge.target, edge.outcome or ""),
     ):
-        label = f"|{transition.outcome}|" if transition.outcome else ""
+        if transition.condition is not None:
+            description = json.dumps(transition.condition, sort_keys=True, separators=(",", ":"))
+            label = f"|{transition.outcome}: {description.replace(chr(34), '&quot;')}|"
+        else:
+            label = f"|{transition.outcome}|" if transition.outcome else ""
         lines.append(f"    {transition.source} -->{label} {transition.target}")
     return "\n".join(lines)
 
@@ -318,6 +337,12 @@ def compare_process_definitions(
             step.next,
             step.route,
             tuple(sorted(step.branches.items())),
+            tuple(
+                (case.when.model_dump_json(by_alias=True, exclude_none=True), case.next)
+                for case in step.cases
+            ),
+            step.otherwise,
+            step.fact_version or ("1" if step.cases else None),
             step.dynamic_route,
             tuple(sorted(dynamic_targets)),
             effective_effects(definition, name),
@@ -349,6 +374,16 @@ def compare_process_definitions(
                     (name, target, "dynamic")
                     for target in profile.dynamic_router_targets.get(step.route, frozenset())
                 }
+            elif step.cases:
+                edges = {
+                    (
+                        name,
+                        case.next,
+                        f"case:{index}:{case.when.model_dump_json(by_alias=True, exclude_none=True)}",
+                    )
+                    for index, case in enumerate(step.cases)
+                }
+                edges.add((name, step.otherwise, "otherwise"))
             else:
                 edges = {(name, target, outcome) for outcome, target in step.branches.items()}
             result[name] = frozenset(edges)

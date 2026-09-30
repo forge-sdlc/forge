@@ -28,8 +28,25 @@ def validate_subworkflow(definition: WorkflowDefinition) -> None:
                 raise ValueError(f"node '{name}' is not registered for state '{state}'")
             if step.route and step.route not in profile.routers:
                 raise ValueError(f"router '{step.route}' is not registered for state '{state}'")
+            if step.route and not step.dynamic_route:
+                from forge.workflow.declarative.router_contracts import validate_router_outcomes
+
+                validate_router_outcomes(state, name, step.route, set(step.branches))
+            if step.cases:
+                from forge.workflow.declarative.predicates import validate_predicate
+
+                if name in profile.mandatory_nodes or name.endswith("_gate"):
+                    raise ValueError(f"protected gate '{name}' requires a trusted router")
+                for case in step.cases:
+                    validate_predicate(case.when, state)
             profile.effect_policies[name].resolve(step.allowed_effects)
-            targets = [step.next] if step.next else step.branches.values()
+            targets = (
+                [step.next]
+                if step.next
+                else [*(case.next for case in step.cases), step.otherwise]
+                if step.cases
+                else step.branches.values()
+            )
             for target in targets:
                 if (
                     target != "__end__"
@@ -89,7 +106,13 @@ async def resolve_definition(
                 declared_exits = {
                     target[6:]
                     for step in child_steps.values()
-                    for target in ([step.next] if step.next else step.branches.values())
+                    for target in (
+                        [step.next]
+                        if step.next
+                        else [*(case.next for case in step.cases), step.otherwise]
+                        if step.cases
+                        else step.branches.values()
+                    )
                     if target and target.startswith("@exit/")
                 }
                 if set(include.exits) != declared_exits or include.return_to is not None:
@@ -108,7 +131,10 @@ async def resolve_definition(
                     raise ValueError(f"workflow '{include.name}' requires returnTo and no exits")
                 terminals = [name for name, step in child_steps.items() if step.next == "__end__"]
                 if not terminals:
-                    raise ValueError(f"workflow '{include.name}' has no normal completion")
+                    raise ValueError(
+                        f"workflow '{include.name}' has no fixed normal completion; "
+                        "add a step with next: __end__ or use Subworkflow exits"
+                    )
                 child_steps = {
                     name: _replace_targets(step, {"__end__": include.return_to})
                     if name in terminals
@@ -153,5 +179,10 @@ def _replace_targets(step: WorkflowStep, replacements: dict[str, str]) -> Workfl
                 outcome: replacements.get(target, target)
                 for outcome, target in step.branches.items()
             },
+            "cases": tuple(
+                case.model_copy(update={"next": replacements.get(case.next, case.next)})
+                for case in step.cases
+            ),
+            "otherwise": replacements.get(step.otherwise, step.otherwise),
         }
     )

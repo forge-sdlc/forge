@@ -16,6 +16,8 @@ from forge.workflow.declarative.capabilities import (
 )
 from forge.workflow.declarative.catalog import get_state_profile
 from forge.workflow.declarative.models import MAX_TRANSITIONS, WorkflowDefinition
+from forge.workflow.declarative.predicates import evaluate_predicate, validate_predicate
+from forge.workflow.declarative.router_contracts import validate_router_outcomes
 from forge.workflow.preconditions import NodeContract, project_capabilities, with_preconditions
 
 
@@ -105,10 +107,22 @@ class DeclarativeWorkflowCompiler:
             targets = (
                 [step.next]
                 if step.next
+                else [*(case.next for case in step.cases), step.otherwise]
+                if step.cases
                 else list(self.dynamic_targets(step))
                 if step.dynamic_route
                 else list(step.branches.values())
             )
+            if step.cases:
+                if node_name in self.profile.mandatory_nodes or node_name.endswith("_gate"):
+                    raise WorkflowValidationError(
+                        f"protected gate '{node_name}' requires a trusted router"
+                    )
+                for case in step.cases:
+                    try:
+                        validate_predicate(case.when, spec.state)
+                    except ValueError as exc:
+                        raise WorkflowValidationError(f"step '{node_name}' {exc}") from exc
             for target in targets:
                 if target == "__end__":
                     has_terminal = True
@@ -224,44 +238,19 @@ class DeclarativeWorkflowCompiler:
                 f"publication omits mandatory gate '{sorted(missing_nodes)[0]}'"
             )
         self.validate()
-        self._validate_golden_route_contracts()
+        self._validate_router_contracts()
 
-    def _validate_golden_route_contracts(self) -> None:
-        """Keep custom routing within the reviewed golden-path outcome contract."""
-        from forge.workflow.declarative.builtins import (
-            builtin_bug_definition,
-            builtin_feature_definition,
-            builtin_task_takeover_definition,
-        )
-
-        factories = {
-            "feature": builtin_feature_definition,
-            "bug": builtin_bug_definition,
-            "task_takeover": builtin_task_takeover_definition,
-        }
-        golden = factories[self.definition.spec.state]()
+    def _validate_router_contracts(self) -> None:
+        """Validate outcomes against reviewed router contracts, independent of topology."""
         for node_name, step in self.definition.spec.steps.items():
-            expected = golden.spec.steps.get(node_name)
-            if expected is None or not expected.route or step.route != expected.route:
+            if not step.route or step.dynamic_route:
                 continue
-            expected_outcomes = (
-                set(self.dynamic_targets(expected))
-                if expected.dynamic_route
-                else set(expected.branches)
-            )
-            declared_outcomes = (
-                set(self.dynamic_targets(step)) if step.dynamic_route else set(step.branches)
-            )
-            missing = expected_outcomes - declared_outcomes
-            if missing:
-                raise WorkflowValidationError(
-                    f"step '{node_name}' omits router outcome '{sorted(missing)[0]}'"
+            try:
+                validate_router_outcomes(
+                    self.definition.spec.state, node_name, step.route, set(step.branches)
                 )
-            extra = declared_outcomes - expected_outcomes
-            if extra:
-                raise WorkflowValidationError(
-                    f"step '{node_name}' adds unregistered router outcome '{sorted(extra)[0]}'"
-                )
+            except ValueError as exc:
+                raise WorkflowValidationError(str(exc)) from exc
 
     def build_graph(self) -> StateGraph[Any]:
         self.validate()
@@ -277,6 +266,8 @@ class DeclarativeWorkflowCompiler:
                     contract=self.profile.contracts.get(node_name),
                     retry_bound=step.retry_bound,
                     allowed_effects=self.effective_effects(node_name),
+                    cases=step.cases,
+                    otherwise=step.otherwise,
                 ),
             )
         graph.set_entry_point("_forge_entry")
@@ -293,6 +284,17 @@ class DeclarativeWorkflowCompiler:
                     node_name,
                     self._fixed_route(step.next),
                     {step.next: target, "__end__": END},
+                )
+                continue
+
+            if step.cases:
+                targets = [*(case.next for case in step.cases), step.otherwise]
+                branches = {target: END if target == "__end__" else target for target in targets}
+                branches.setdefault("__end__", END)
+                graph.add_conditional_edges(
+                    node_name,
+                    self._conditional_route(step.cases, step.otherwise),
+                    branches,
                 )
                 continue
 
@@ -346,6 +348,8 @@ class DeclarativeWorkflowCompiler:
         contract: NodeContract | None = None,
         retry_bound: int | None = None,
         allowed_effects: tuple[str, ...] = (),
+        cases: tuple[Any, ...] = (),
+        otherwise: str | None = None,
     ) -> Callable[..., Awaitable[dict[str, Any]]]:
         guarded_func = with_preconditions(func, contract, node_name=node_name)
 
@@ -385,7 +389,16 @@ class DeclarativeWorkflowCompiler:
                 (result.get("last_error"), result.get("is_paused"), result.get("is_blocked"))
             ):
                 result = {**result, "current_node": "complete", "is_paused": False}
-            target = str(result.get("current_node") or node_name)
+            selected = None
+            if cases and otherwise is not None:
+                selected = DeclarativeWorkflowCompiler._select_case(
+                    cases, otherwise, {**state, **result}
+                )
+            target = (
+                selected[1]
+                if selected is not None
+                else str(result.get("current_node") or node_name)
+            )
             occurred_at = str(result.get("updated_at") or state.get("updated_at") or "")
             transition = {
                 "transition_id": stable_identity(
@@ -401,6 +414,8 @@ class DeclarativeWorkflowCompiler:
                 "target": target,
                 "occurred_at": occurred_at,
             }
+            if selected is not None:
+                transition["case"] = selected[0]
             history = list(state.get("transition_history") or [])
             return {
                 **result,
@@ -417,6 +432,28 @@ class DeclarativeWorkflowCompiler:
     def _fixed_route(target: str) -> Callable[[dict[str, Any]], str]:
         def route(state: dict[str, Any]) -> str:
             return "__end__" if state.get("is_blocked") else target
+
+        return route
+
+    @staticmethod
+    def _select_case(
+        cases: tuple[Any, ...], otherwise: str, state: dict[str, Any]
+    ) -> tuple[str, str]:
+        if state.get("is_blocked"):
+            return "blocked", "__end__"
+        for index, case in enumerate(cases):
+            if evaluate_predicate(case.when, state):
+                return str(index), case.next
+        return "otherwise", otherwise
+
+    @staticmethod
+    def _conditional_route(
+        cases: tuple[Any, ...], otherwise: str | None
+    ) -> Callable[[dict[str, Any]], str]:
+        assert otherwise is not None
+
+        def route(state: dict[str, Any]) -> str:
+            return DeclarativeWorkflowCompiler._select_case(cases, otherwise, state)[1]
 
         return route
 

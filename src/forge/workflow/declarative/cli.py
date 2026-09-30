@@ -69,6 +69,19 @@ async def cmd_workflow(args: Any) -> int:
                         lines.append(f'    {name}["{name}"]')
                         if step.next:
                             lines.append(f"    {name} --> {step.next.replace('@exit/', 'exit_')}")
+                        elif step.cases:
+                            for index, case in enumerate(step.cases):
+                                label = json.dumps(
+                                    case.when.model_dump(by_alias=True, exclude_none=True),
+                                    sort_keys=True,
+                                )
+                                label = label.replace('"', "&quot;")
+                                lines.append(
+                                    f"    {name} -->|case {index + 1}: {label}| {case.next.replace('@exit/', 'exit_')}"
+                                )
+                            lines.append(
+                                f"    {name} -->|otherwise| {step.otherwise.replace('@exit/', 'exit_')}"
+                            )
                         else:
                             for outcome, target in sorted(step.branches.items()):
                                 lines.append(
@@ -111,6 +124,12 @@ async def cmd_workflow(args: Any) -> int:
 
     if action == "catalog":
         from forge.workflow.declarative.catalog import get_state_profile
+        from forge.workflow.declarative.predicates import (
+            FACT_CONTRACT_VERSION,
+            FACTS,
+            PROFILE_FACTS,
+        )
+        from forge.workflow.declarative.router_contracts import ROUTER_CONTRACTS
 
         profile = get_state_profile(args.state)
         catalog = {
@@ -143,9 +162,30 @@ async def cmd_workflow(args: Any) -> int:
                         {"dynamicTargets": sorted(profile.dynamic_router_targets[name])}
                         if name in profile.dynamic_router_targets
                         else {}
-                    )
+                    ),
+                    "outcomesByStep": {
+                        step_name: sorted(outcomes)
+                        for step_name, (router_name, outcomes) in sorted(
+                            ROUTER_CONTRACTS[args.state].items()
+                        )
+                        if router_name == name
+                    },
                 }
                 for name in sorted(profile.routers)
+            },
+            "conditionalFacts": {
+                "version": FACT_CONTRACT_VERSION,
+                "facts": {
+                    name: {
+                        "type": FACTS[name].value_type.__name__,
+                        **(
+                            {"values": sorted(FACTS[name].values)}
+                            if FACTS[name].values is not None
+                            else {}
+                        ),
+                    }
+                    for name in sorted(PROFILE_FACTS[args.state])
+                },
             },
             "pauseNodes": sorted(profile.pause_nodes),
             "mandatoryPolicies": sorted(profile.mandatory_policies),

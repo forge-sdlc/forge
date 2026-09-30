@@ -36,10 +36,51 @@ class WorkflowMetadata(StrictModel):
         return value
 
 
+class WorkflowPredicate(StrictModel):
+    fact: str | None = None
+    op: Literal["equals", "in", "isNull"] | None = None
+    value: Any = None
+    all_of: tuple[WorkflowPredicate, ...] = Field(
+        default=(), alias="all", exclude_if=lambda value: not value
+    )
+    any_of: tuple[WorkflowPredicate, ...] = Field(
+        default=(), alias="any", exclude_if=lambda value: not value
+    )
+    not_: WorkflowPredicate | None = Field(default=None, alias="not")
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> WorkflowPredicate:
+        forms = sum(
+            (self.fact is not None, bool(self.all_of), bool(self.any_of), self.not_ is not None)
+        )
+        if forms != 1:
+            raise ValueError("predicate requires exactly one of fact, all, any, or not")
+        if self.fact is not None:
+            if self.op is None:
+                raise ValueError("fact predicate requires op")
+            if self.op != "isNull" and self.value is None:
+                raise ValueError("predicate requires value")
+            if self.op == "isNull" and self.value is not None:
+                raise ValueError("isNull does not accept value")
+        elif self.op is not None or self.value is not None:
+            raise ValueError("group predicate cannot declare op or value")
+        if len(self.all_of) > 8 or len(self.any_of) > 8:
+            raise ValueError("predicate group may contain at most 8 items")
+        return self
+
+
+class WorkflowCase(StrictModel):
+    when: WorkflowPredicate
+    next: str
+
+
 class WorkflowStep(StrictModel):
     next: str | None = None
     route: str | None = None
     branches: dict[str, str] = Field(default_factory=dict)
+    cases: tuple[WorkflowCase, ...] = Field(default=(), exclude_if=lambda value: not value)
+    otherwise: str | None = None
+    fact_version: Literal["1"] | None = Field(default=None, alias="factVersion")
     dynamic_route: bool = Field(default=False, alias="dynamicRoute")
     # Legacy router capability metadata. New definitions omit it; the trusted
     # router catalog owns the possible destinations.
@@ -68,9 +109,18 @@ class WorkflowStep(StrictModel):
 
     @model_validator(mode="after")
     def validate_transition(self) -> WorkflowStep:
-        if bool(self.next) == bool(self.route):
-            raise ValueError("exactly one of 'next' or 'route' is required")
-        if self.next and self.branches:
+        if sum((bool(self.next), bool(self.route), bool(self.cases))) != 1:
+            raise ValueError("exactly one of 'next', 'route', or 'cases' is required")
+        if self.cases:
+            if not self.otherwise:
+                raise ValueError("conditional cases require otherwise")
+            if len(self.cases) > MAX_BRANCHES:
+                raise ValueError(f"a conditional step may have at most {MAX_BRANCHES} cases")
+        elif self.otherwise is not None:
+            raise ValueError("otherwise is only valid with cases")
+        if self.fact_version is not None and not self.cases:
+            raise ValueError("factVersion is only valid with cases")
+        if self.branches and not self.route:
             raise ValueError("branches are only valid with 'route'")
         if self.route and not self.branches and not self.dynamic_route:
             raise ValueError("a routed step requires non-empty branches")

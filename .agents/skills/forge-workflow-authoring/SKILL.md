@@ -12,7 +12,7 @@ Help the user express a Forge process as readable YAML. Treat canonical JSON as 
 1. Read [references/workflow-format.md](references/workflow-format.md).
 2. For a small local example, copy [assets/workflow.yaml](assets/workflow.yaml). For a publishable workflow, start from the closest full built-in definition and convert it to YAML if needed; publication requires the state profile's mandatory gates.
 3. Establish the intended stages, decisions, loops, human pauses, and external commands before editing fields.
-4. Run `forge workflow catalog STATE` and use only the nodes and routers it reports. Never invent catalog names.
+4. Run `forge workflow catalog STATE` and use only the nodes, routers, and conditional facts it reports. Never invent catalog names.
    For reusable steps, inspect the built-in `github_pr_review` subworkflow or an active
    project definition. Bind every `@exit/name` in `spec.includes` and keep node names unique.
 5. Keep the definition flow-only. Do not add step kinds, station contracts, effect capabilities, required or mandatory policies, extension declarations, observation policies, or external-entry flags. Forge derives and enforces those concerns from its trusted catalog and publication policy.
@@ -50,6 +50,7 @@ Before publication, verify:
 
 - workflow transitions resolve to existing steps or `__end__`; subworkflow exits use
   `@exit/name` and every caller binds them;
+- conditional cases use typed catalog facts, an explicit `otherwise`, and a trusted router on protected gates;
 - expected human and CI pause points remain present;
 - cycles cross an approved pause boundary;
 - exceptional commands such as PR rebasing are absent from graph topology;
