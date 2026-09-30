@@ -138,7 +138,9 @@ Forge ships `github_pr_review` for the shared PR creation, CI, CI fix, and revie
 path. Each built-in workflow keeps its own human review gate routing. Project definitions
 can include active definitions from the same project. A new run resolves the active
 dependency revisions and pins the expanded artifact and dependency identities. Running
-instances continue with their pinned graph when a dependency is updated.
+instances continue with their pinned graph when a dependency is updated. Forge also stores
+the expanded artifact by digest so a checkpoint containing only its revision and digest
+can resume after the active dependency changes.
 
 Use `forge workflow validate FILE --project-key PROJECT` or `render`, `diff`, and
 `simulate-migration` with the same option to inspect a definition that includes project

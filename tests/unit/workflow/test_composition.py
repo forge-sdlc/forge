@@ -100,6 +100,27 @@ async def test_project_dependency_update_affects_new_runs_and_preserves_pin() ->
     )
     assert pinned.definition.digest == first.definition.digest
 
+    identity_only = await load_project_workflow(
+        None,
+        "PROJ",
+        consumer.metadata.name,
+        pinned_revision=first.definition.metadata.revision,
+        pinned_digest=first.definition.digest,
+        definition_reader=publisher,
+    )
+    assert identity_only.definition.digest == first.definition.digest
+    assert identity_only.definition.spec.steps["attempt_ci_fix"].retry_bound == 5
+
+    with pytest.raises(ValueError, match="digest does not match checkpoint"):
+        await load_project_workflow(
+            None,
+            "PROJ",
+            consumer.metadata.name,
+            pinned_revision=first.definition.metadata.revision,
+            pinned_digest="missing-expanded-artifact",
+            definition_reader=publisher,
+        )
+
 
 @pytest.mark.asyncio
 async def test_full_workflow_normal_completion_returns_to_caller() -> None:

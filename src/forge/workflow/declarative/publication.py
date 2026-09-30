@@ -15,6 +15,7 @@ from forge.workflow.declarative.manifest import ProcessChangeImpact, compare_pro
 from forge.workflow.declarative.models import WorkflowDefinition
 
 _DEFINITION_PREFIX = "forge:process:def:"
+_EXPANDED_PREFIX = "forge:process:expanded:"
 _ACTIVE_PREFIX = "forge:process:active:"
 _DECISIONS_PREFIX = "forge:process:decisions:"
 _LATEST_PREFIX = "forge:process:latest:"
@@ -213,6 +214,19 @@ class DefinitionPublisher:
         value = await (await self._client()).get(self._definition_key(name, revision))
         return WorkflowDefinition.model_validate_json(value) if value else None
 
+    async def remember_expanded(self, definition: WorkflowDefinition) -> None:
+        """Keep the exact graph used by a run for identity-only checkpoint recovery."""
+        key = self._expanded_key(
+            definition.metadata.name, definition.metadata.revision, definition.digest
+        )
+        await (await self._client()).set(key, definition.canonical_json(), nx=True)
+
+    async def get_expanded(
+        self, name: str, revision: int, digest: str
+    ) -> WorkflowDefinition | None:
+        value = await (await self._client()).get(self._expanded_key(name, revision, digest))
+        return WorkflowDefinition.model_validate_json(value) if value else None
+
     async def active(self, name: str) -> WorkflowDefinition | None:
         pointer = await (await self._client()).get(self._active_key(name))
         if not pointer:
@@ -322,6 +336,9 @@ class DefinitionPublisher:
     def _definition_key(self, name: str, revision: int | str) -> str:
         return f"{self._prefix(_DEFINITION_PREFIX, name)}:{revision}"
 
+    def _expanded_key(self, name: str, revision: int, digest: str) -> str:
+        return f"{self._prefix(_EXPANDED_PREFIX, name)}:{revision}:{digest}"
+
     def _latest_key(self, name: str) -> str:
         return self._prefix(_LATEST_PREFIX, name)
 
@@ -344,6 +361,7 @@ class InMemoryDefinitionPublisher:
             raise ValueError("project_key is required for governed publication")
         self.project_key = project_key.upper()
         self._definitions: dict[tuple[str, int], WorkflowDefinition] = {}
+        self._expanded: dict[tuple[str, int, str], WorkflowDefinition] = {}
         self._active: dict[str, WorkflowDefinition] = {}
         self._decisions: dict[str, list[PublicationDecision]] = {}
 
@@ -451,6 +469,15 @@ class InMemoryDefinitionPublisher:
 
     async def get(self, name: str, revision: int) -> WorkflowDefinition | None:
         return self._definitions.get((name, revision))
+
+    async def remember_expanded(self, definition: WorkflowDefinition) -> None:
+        key = (definition.metadata.name, definition.metadata.revision, definition.digest)
+        self._expanded.setdefault(key, definition)
+
+    async def get_expanded(
+        self, name: str, revision: int, digest: str
+    ) -> WorkflowDefinition | None:
+        return self._expanded.get((name, revision, digest))
 
     async def active(self, name: str) -> WorkflowDefinition | None:
         return self._active.get(name)
