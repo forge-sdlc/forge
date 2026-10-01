@@ -13,7 +13,12 @@ from forge.cli import cmd_get_config, cmd_project_setup, main
 class TestCLIConfigParserAndRouting:
     """Parser and Command Routing Integration Tests."""
 
-    @patch("forge.cli.cmd_get_config", new_callable=AsyncMock)
+    @pytest.fixture(autouse=True)
+    def _without_event_loop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # These tests inspect argument routing; no async handler needs to run.
+        monkeypatch.setattr("forge.cli.asyncio.run", lambda result: result)
+
+    @patch("forge.cli.cmd_get_config", new_callable=MagicMock)
     @patch("forge.cli.setup_logging")
     def test_routing_get_config(self, _mock_setup_logging, mock_cmd):
         """Calling main(['get-config', 'aisos']) routes to cmd_get_config."""
@@ -25,7 +30,7 @@ class TestCLIConfigParserAndRouting:
         assert args.command == "get-config"
         assert args.project_key == "AISOS"  # converts lowercase to uppercase
 
-    @patch("forge.cli.cmd_get_config", new_callable=AsyncMock)
+    @patch("forge.cli.cmd_get_config", new_callable=MagicMock)
     @patch("forge.cli.setup_logging")
     def test_routing_project_config_alias(self, _mock_setup_logging, mock_cmd):
         """Calling main(['project-config', 'aisos']) successfully maps to cmd_get_config."""
@@ -43,7 +48,7 @@ class TestCLIConfigParserAndRouting:
         with pytest.raises(SystemExit):
             main(["get-config", "aisos", "--json", "--property", "forge.repos"])
 
-    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.cmd_project_setup", new_callable=MagicMock)
     @patch("forge.cli.setup_logging")
     def test_project_setup_model_all_parsing(self, _mock_setup_logging, mock_cmd):
         mock_cmd.return_value = 0
@@ -55,7 +60,7 @@ class TestCLIConfigParserAndRouting:
         assert args.project_key == "aisos"
         assert args.model_all == "vertex-prod:gemini-pro"
 
-    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.cmd_project_setup", new_callable=MagicMock)
     @patch("forge.cli.setup_logging")
     def test_project_setup_model_removal_parsing(self, _mock_setup_logging, mock_cmd):
         mock_cmd.return_value = 0
@@ -66,7 +71,7 @@ class TestCLIConfigParserAndRouting:
         args = mock_cmd.call_args.args[0]
         assert args.remove_model == ["generate_prd"]
 
-    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.cmd_project_setup", new_callable=MagicMock)
     @patch("forge.cli.setup_logging")
     def test_project_setup_incremental_flags(self, _mock_setup_logging, mock_cmd):
         mock_cmd.return_value = 0
@@ -95,7 +100,7 @@ class TestCLIConfigParserAndRouting:
         assert args.remove_prd_proposals_path is True
         assert args.remove_skills is True
 
-    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.cmd_project_setup", new_callable=MagicMock)
     @patch("forge.cli.setup_logging")
     def test_project_setup_json_parsing(self, _mock_setup_logging, mock_cmd):
         mock_cmd.return_value = 0
@@ -1146,28 +1151,29 @@ class TestCLIReferencesConfig:
             assert "https://example.com/ref2 - Desc 2" in out
             assert "https://example.com/ref1" not in out
 
-    @patch("forge.cli.cmd_project_setup", new_callable=AsyncMock)
+    @patch("forge.cli.cmd_project_setup", new_callable=MagicMock)
     @patch("forge.cli.setup_logging")
     def test_cli_parser_registers_references(self, _mock_setup_logging, mock_cmd):
         """Verify argparse parser registers --add-reference, --ref-description, --description, --remove-reference, and --list-references."""
         mock_cmd.return_value = 0
-        code = main(
-            [
-                "project-setup",
-                "myproj",
-                "--add-reference",
-                "https://example.com/ref1",
-                "--ref-description",
-                "Desc 1",
-                "--add-reference",
-                "https://example.com/ref2",
-                "--description",
-                "Desc 2",
-                "--remove-reference",
-                "https://example.com/ref3",
-                "--list-references",
-            ]
-        )
+        with patch("forge.cli.asyncio.run", side_effect=lambda result: result):
+            code = main(
+                [
+                    "project-setup",
+                    "myproj",
+                    "--add-reference",
+                    "https://example.com/ref1",
+                    "--ref-description",
+                    "Desc 1",
+                    "--add-reference",
+                    "https://example.com/ref2",
+                    "--description",
+                    "Desc 2",
+                    "--remove-reference",
+                    "https://example.com/ref3",
+                    "--list-references",
+                ]
+            )
         assert code == 0
         mock_cmd.assert_called_once()
         args = mock_cmd.call_args[0][0]
