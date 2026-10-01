@@ -7,8 +7,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from deepagents.backends.filesystem import FilesystemBackend
 from deepagents.middleware.skills import SkillsMiddleware
+from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from pydantic import BaseModel
 
 from forge.integrations.agents.agent import ForgeAgent
 from forge.integrations.agents.security import (
@@ -105,6 +107,59 @@ def test_host_tools_default_safe_and_write_tools_prohibited() -> None:
         parse_host_tools("*")
     with pytest.raises(ValueError, match="Unknown"):
         parse_host_tools("web_search")
+
+
+class _ReviewDecision(BaseModel):
+    accepted: bool
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strategy", [ProviderStrategy, ToolStrategy])
+async def test_host_allowlist_preserves_structured_responses(tmp_path: Path, strategy) -> None:
+    """Native and fallback output schemas work without granting filesystem access."""
+    (tmp_path / "example.txt").write_text("protected file content")
+    final_response = (
+        AIMessage(content='{"accepted": true}')
+        if strategy is ProviderStrategy
+        else AIMessage(
+            content="",
+            tool_calls=[{"name": "_ReviewDecision", "args": {"accepted": True}, "id": "decision"}],
+        )
+    )
+    model = _ToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {"name": "read_file", "args": {"file_path": "/example.txt"}, "id": "read"}
+                ],
+            ),
+            final_response,
+        ]
+    )
+    agent = ForgeAgent.__new__(ForgeAgent)
+    agent.settings = SimpleNamespace(agent_allowed_tools="", agent_enable_tools=True)
+    agent._checkpointer = None
+    with (
+        patch.object(agent, "_get_root_dir", return_value=tmp_path),
+        patch.object(agent, "_create_model", return_value=model),
+        patch.object(agent, "_load_mcp_tools", new_callable=AsyncMock, return_value=[]),
+    ):
+        graph = await agent._create_agent_async(
+            "Return a review decision.", response_format=strategy(_ReviewDecision)
+        )
+
+    result = await graph.ainvoke({"messages": [HumanMessage(content="Review.")]})
+
+    assert result["structured_response"] == _ReviewDecision(accepted=True)
+    denied = next(
+        message
+        for message in result["messages"]
+        if isinstance(message, ToolMessage) and message.tool_call_id == "read"
+    )
+    assert denied.status == "error"
+    assert "not allowed" in denied.content
+    assert "protected file content" not in denied.content
 
 
 def test_agent_root_cannot_expose_project_or_workspace(tmp_path: Path) -> None:

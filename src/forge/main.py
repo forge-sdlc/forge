@@ -25,8 +25,8 @@ from forge.api.routes import (
     org_pulse_router,
 )
 from forge.config import get_settings
-from forge.integrations.source_control.registry import get_registry
 from forge.integrations.agents.security import initialize_agent_skills, validate_agent_root
+from forge.integrations.source_control.registry import get_registry
 from forge.observability.config import configure_tracing, shutdown_tracing
 from forge.orchestrator.checkpointer import close_redis_pool
 
