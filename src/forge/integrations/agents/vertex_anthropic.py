@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 from anthropic import APIConnectionError, APIStatusError, transform_schema
 from langchain_anthropic.chat_models import convert_to_anthropic_tool
+from langchain_core.outputs import ChatResult
 from langchain_core.tools import BaseTool
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
@@ -21,25 +22,49 @@ _SERVER_TOOL_PREFIXES = (
 )
 
 
+class VertexResponseStopError(ValueError):
+    """Claude stopped before a complete, usable response was available."""
+
+    def __init__(self, stop_reason: str) -> None:
+        self.stop_reason = stop_reason
+        super().__init__(f"Vertex Claude response stop_reason={stop_reason}")
+
+
 def _argument_structure(schema: Any) -> Any:
     """Retain schema features that determine accepted argument shapes."""
     if not isinstance(schema, dict):
         return schema
     properties = schema.get("properties")
     structure: dict[str, Any] = {
-        key: schema[key] for key in ("type", "$ref", "required") if key in schema
+        key: schema[key]
+        for key in ("type", "$ref", "required", "dependentRequired")
+        if key in schema
     }
     if properties is not None:
         structure["properties"] = {
             name: _argument_structure(value) for name, value in properties.items()
         }
-    if "items" in schema:
-        structure["items"] = _argument_structure(schema["items"])
-    if "additionalProperties" in schema:
-        structure["additionalProperties"] = schema["additionalProperties"]
-    elif properties:
+    for key in (
+        "items",
+        "additionalProperties",
+        "additionalItems",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "contains",
+        "not",
+        "if",
+        "then",
+        "else",
+        "propertyNames",
+    ):
+        if key in schema:
+            structure[key] = _argument_structure(schema[key])
+    if "additionalProperties" not in schema and properties:
         structure["additionalProperties"] = True
-    for key in ("$defs", "definitions"):
+    for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+        if key in schema:
+            structure[key] = [_argument_structure(item) for item in schema[key]]
+    for key in ("$defs", "definitions", "patternProperties", "dependentSchemas"):
         if key in schema:
             structure[key] = {
                 name: _argument_structure(value) for name, value in schema[key].items()
@@ -123,6 +148,12 @@ class ForgeChatAnthropicVertex(ChatAnthropicVertex):
     def __init__(self, **kwargs: Any) -> None:
         # Pydantic accepts configured model fields dynamically at runtime.
         super().__init__(**kwargs)
+
+    def _format_output(self, data: Any, **kwargs: Any) -> ChatResult:
+        stop_reason = data.stop_reason
+        if stop_reason in {"max_tokens", "refusal"}:
+            raise VertexResponseStopError(stop_reason)
+        return super()._format_output(data, **kwargs)
 
     def bind_tools(
         self,

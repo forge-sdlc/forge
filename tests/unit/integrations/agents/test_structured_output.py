@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from forge.integrations.agents.agent import ForgeAgent
 from forge.integrations.agents.structured_outputs import ArtifactDocument, TaskGeneration
+from forge.integrations.agents.vertex_anthropic import VertexResponseStopError
 
 
 def test_artifact_document_requires_repository_names() -> None:
@@ -69,6 +70,8 @@ def _vertex_agent() -> ForgeAgent:
         _vertex_error(400, "invalid schema"),
         _vertex_error(403, "structured_outputs is disabled by project policy"),
         ValueError("invalid JSON in provider response"),
+        VertexResponseStopError("max_tokens"),
+        VertexResponseStopError("refusal"),
     ],
 )
 async def test_vertex_native_failure_does_not_downgrade_or_retry(error: Exception) -> None:

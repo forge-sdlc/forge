@@ -22,6 +22,7 @@ from forge.integrations.agents.structured_outputs import (
     STRUCTURED_RESPONSE_SCHEMAS,
     TaskGeneration,
 )
+from forge.integrations.agents.vertex_anthropic import VertexResponseStopError
 
 MODEL = "claude-opus-4-8"
 TASKS = {
@@ -162,6 +163,21 @@ async def test_more_than_twenty_explicit_strict_tools_are_rejected(vertex_model:
 async def test_explicit_strict_tool_must_keep_open_dictionary_arguments(vertex_model: Any) -> None:
     with pytest.raises(ValueError, match="strict tool.*input schema"):
         vertex_model.bind_tools([_ordinary_tool(1, strict=True)])
+
+
+@pytest.mark.asyncio
+async def test_explicit_strict_nullable_dictionary_branch_is_rejected(vertex_model: Any) -> None:
+    definition = _ordinary_tool(1, strict=True)
+    definition["input_schema"]["additionalProperties"] = False
+    definition["input_schema"]["properties"]["filters"] = {
+        "anyOf": [
+            {"type": "object", "additionalProperties": {"type": "string"}},
+            {"type": "null"},
+        ]
+    }
+
+    with pytest.raises(ValueError, match="would change its input schema"):
+        vertex_model.bind_tools([definition])
 
 
 @pytest.mark.asyncio
@@ -470,8 +486,6 @@ async def test_forge_vertex_provider_strategy_preserves_ordinary_tool_and_final_
         ),
         (json.dumps({"tasks": [{**TASKS["tasks"][0], "repo": "invalid"}]}), "end_turn"),
         (json.dumps({"tasks": [{**TASKS["tasks"][0], "unknown": 1}]}), "end_turn"),
-        ('{"tasks":', "max_tokens"),
-        ("I cannot comply", "refusal"),
     ],
 )
 async def test_native_graph_rejects_invalid_final_task_json(
@@ -495,6 +509,39 @@ async def test_native_graph_rejects_invalid_final_task_json(
                         {"messages": [("user", "Return tasks")]},
                         config={"recursion_limit": 8},
                     )
+            finally:
+                model.client.close()
+                await model.async_client.close()
+
+    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop_reason", ["max_tokens", "refusal"])
+async def test_native_graph_rejects_valid_json_with_incomplete_stop_reason(
+    stop_reason: str,
+) -> None:
+    requests: list[dict[str, Any]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return _message([{"type": "text", "text": json.dumps(TASKS)}], stop_reason)
+
+    transport = httpx.MockTransport(respond)
+    with httpx.Client(transport=transport) as sync_http:
+        async with httpx.AsyncClient(transport=transport) as async_http:
+            model = _forge_model(sync_http, async_http)
+            model.max_retries = 0
+            try:
+                graph = create_agent(model, response_format=ProviderStrategy(TaskGeneration))
+                with pytest.raises(
+                    VertexResponseStopError, match=f"stop_reason={stop_reason}"
+                ) as stopped:
+                    await graph.ainvoke(
+                        {"messages": [("user", "Return tasks")]},
+                        config={"recursion_limit": 8},
+                    )
+                assert stopped.value.stop_reason == stop_reason
             finally:
                 model.client.close()
                 await model.async_client.close()
