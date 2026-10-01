@@ -344,23 +344,20 @@ class ContainerRunner:
     ) -> tuple[list[tuple[Path, str]], str]:
         """Get skill directory mounts and container paths.
 
-        Resolves skill directories via the resolver in ascending priority:
-        committed defaults (``skills_dir/default/``), committed per-project
-        overrides (``skills_dir/{project}/``), and runtime-fetched project
-        skills (``skills_install_dir/{project}/``), with later sources winning.
+        Resolves default and project skill directories from the isolated runtime
+        skill tree populated by the worker.
 
         Returns:
             Tuple of (mounts, container_paths) where:
             - mounts: List of (host_path, container_path) tuples
             - container_paths: Comma-separated paths for AGENT_SKILL_PATHS env var
         """
-        skills_dir = Path.cwd() / self.settings.skills_dir.rstrip("/")
-        # Assumes worker and runner share the same host filesystem — skills_install_dir
-        # is populated by the worker and mounted into the container from the host.
         host_paths = [
             Path(p.rstrip("/"))
             for p in resolve_skill_paths(
-                ticket_key or "", skills_dir, skills_install_dir=self.settings.skills_install_dir
+                ticket_key or "",
+                self.settings.committed_skills_dir,
+                skills_install_dir=self.settings.skills_install_dir,
             )
         ]
 

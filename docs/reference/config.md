@@ -2,6 +2,9 @@
 
 All configuration is via environment variables in `.env`. See `.env.example` in the repository for the complete list with comments.
 
+For production agent-root, tool, MCP, container, and secret-handling requirements, see
+the [safe agent deployment guide](../security/agent-isolation.md).
+
 ## Required Variables
 
 ### Jira

@@ -2,7 +2,7 @@
 
 import json
 from typing import Any
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -36,6 +36,7 @@ class MockChatModel(SimpleChatModel):
     @property
     def _llm_type(self) -> str:
         return "mock"
+
 
 def _model_agent(backend: str, model: str) -> ForgeAgent:
     agent = ForgeAgent.__new__(ForgeAgent)
@@ -231,31 +232,41 @@ async def test_answer_question_empty_response():
     await agent.close()
 
 
-def test_get_skill_paths_uses_resolver_when_ticket_key_given():
-    """When ticket_key is provided, resolver is called and result returned."""
+def test_get_skill_paths_uses_resolver_when_ticket_key_given(tmp_path):
+    """Resolve host directories before converting them to virtual paths."""
     agent = ForgeAgent.__new__(ForgeAgent)
-    agent.settings = MagicMock()
 
-    with patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver:
-        mock_resolver.return_value = ["skills/default/", "skills/proj/"]
+    with (
+        patch.object(agent, "_get_root_dir", return_value=tmp_path),
+        patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver,
+    ):
+        mock_resolver.return_value = [
+            str(tmp_path / "committed-skills/default"),
+            str(tmp_path / "committed-skills/proj"),
+        ]
         result = agent._get_skill_paths("PROJ-123")
 
-    mock_resolver.assert_called_once()
-    assert result == ["skills/default/", "skills/proj/"]
+    mock_resolver.assert_called_once_with(
+        "PROJ-123", tmp_path / "committed-skills", skills_install_dir=tmp_path / "skills"
+    )
+    assert result == ["/committed-skills/default/", "/committed-skills/proj/"]
 
 
-def test_get_skill_paths_returns_default_without_ticket_key():
-    """When ticket_key is None, resolver returns skills/default/ only."""
+def test_get_skill_paths_returns_default_without_ticket_key(tmp_path):
+    """When ticket_key is None, only the default virtual path is returned."""
     agent = ForgeAgent.__new__(ForgeAgent)
-    agent.settings = MagicMock()
-    agent.settings.skills_dir = "skills/"
 
-    with patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver:
-        mock_resolver.return_value = ["skills/default/"]
+    with (
+        patch.object(agent, "_get_root_dir", return_value=tmp_path),
+        patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver,
+    ):
+        mock_resolver.return_value = [str(tmp_path / "committed-skills/default")]
         result = agent._get_skill_paths(None)
 
-    mock_resolver.assert_called_once_with("", ANY, skills_install_dir=ANY)
-    assert result == ["skills/default/"]
+    mock_resolver.assert_called_once_with(
+        "", tmp_path / "committed-skills", skills_install_dir=tmp_path / "skills"
+    )
+    assert result == ["/committed-skills/default/"]
 
 
 @pytest.mark.asyncio
@@ -263,13 +274,13 @@ async def test_revise_draft_with_feedback_success():
     """Verify that revise_draft_with_feedback properly renders prompt and parses valid JSON."""
     agent = ForgeAgent()
 
-    mock_model = MockChatModel(response='{"parent_key": "PROJ-1", "items": [{"id": 1, "summary": "Task 1"}]}')
+    mock_model = MockChatModel(
+        response='{"parent_key": "PROJ-1", "items": [{"id": 1, "summary": "Task 1"}]}'
+    )
 
     with patch.object(agent, "_create_model", return_value=mock_model):
         result = await agent.revise_draft_with_feedback(
-            draft_content='{"items": []}',
-            feedback="Add Task 1",
-            context={"ticket_key": "PROJ-1"}
+            draft_content='{"items": []}', feedback="Add Task 1", context={"ticket_key": "PROJ-1"}
         )
 
     assert json.loads(result) == {"parent_key": "PROJ-1", "items": [{"id": 1, "summary": "Task 1"}]}
@@ -296,9 +307,7 @@ async def test_revise_draft_with_feedback_markdown_stripping():
 
     with patch.object(agent, "_create_model", return_value=mock_model):
         result = await agent.revise_draft_with_feedback(
-            draft_content='{"items": []}',
-            feedback="Add Task 1",
-            context={"ticket_key": "PROJ-1"}
+            draft_content='{"items": []}', feedback="Add Task 1", context={"ticket_key": "PROJ-1"}
         )
 
     assert json.loads(result) == {"items": [{"id": 1, "summary": "Task 1"}]}
@@ -310,14 +319,14 @@ async def test_revise_draft_with_feedback_preamble_no_codeblock():
     """Verify that revise_draft_with_feedback strips preamble and postamble without markdown code block."""
     agent = ForgeAgent()
 
-    llm_response = 'The corrected draft is: {"items": [{"id": 1, "summary": "Task 1"}]} please review.'
+    llm_response = (
+        'The corrected draft is: {"items": [{"id": 1, "summary": "Task 1"}]} please review.'
+    )
     mock_model = MockChatModel(response=llm_response)
 
     with patch.object(agent, "_create_model", return_value=mock_model):
         result = await agent.revise_draft_with_feedback(
-            draft_content='{"items": []}',
-            feedback="Add Task 1",
-            context={"ticket_key": "PROJ-1"}
+            draft_content='{"items": []}', feedback="Add Task 1", context={"ticket_key": "PROJ-1"}
         )
 
     assert json.loads(result) == {"items": [{"id": 1, "summary": "Task 1"}]}
@@ -336,9 +345,7 @@ async def test_revise_draft_with_feedback_invalid_json():
         pytest.raises(ValueError, match="Failed to parse revised draft as JSON"),
     ):
         await agent.revise_draft_with_feedback(
-            draft_content='{"items": []}',
-            feedback="Add Task 1",
-            context={"ticket_key": "PROJ-1"}
+            draft_content='{"items": []}', feedback="Add Task 1", context={"ticket_key": "PROJ-1"}
         )
 
     await agent.close()
@@ -351,13 +358,13 @@ async def test_revise_draft_with_feedback_prompt_formatting():
     mock_model = MockChatModel(response='{"items": []}')
 
     with (
-        patch("forge.integrations.agents.agent.load_prompt", return_value="FORMATTED PROMPT") as mock_load_prompt,
+        patch(
+            "forge.integrations.agents.agent.load_prompt", return_value="FORMATTED PROMPT"
+        ) as mock_load_prompt,
         patch.object(agent, "_create_model", return_value=mock_model),
     ):
         await agent.revise_draft_with_feedback(
-            draft_content='{"some": "json"}',
-            feedback="Do this",
-            context={"ticket_key": "PROJ-123"}
+            draft_content='{"some": "json"}', feedback="Do this", context={"ticket_key": "PROJ-123"}
         )
 
     mock_load_prompt.assert_called_once_with(
@@ -375,9 +382,7 @@ async def test_revise_draft_with_feedback_fallback_matched_delimiters():
     agent = ForgeAgent()
 
     # Case 1: JSON Object starting with '{' but having a trailing ']' in the postamble
-    llm_response_object = (
-        'Here is the result: {"parent_key": "PROJ-1", "items": [{"id": 1}]} with an unmatched trailing bracket ]'
-    )
+    llm_response_object = 'Here is the result: {"parent_key": "PROJ-1", "items": [{"id": 1}]} with an unmatched trailing bracket ]'
     mock_model_object = MockChatModel(response=llm_response_object)
 
     with patch.object(agent, "_create_model", return_value=mock_model_object):
@@ -387,9 +392,7 @@ async def test_revise_draft_with_feedback_fallback_matched_delimiters():
     assert json.loads(result_object) == {"parent_key": "PROJ-1", "items": [{"id": 1}]}
 
     # Case 2: JSON List starting with '[' but having a trailing '}' in the postamble
-    llm_response_list = (
-        'Here is the result: [{"id": 1}] with an unmatched trailing brace }'
-    )
+    llm_response_list = 'Here is the result: [{"id": 1}] with an unmatched trailing brace }'
     mock_model_list = MockChatModel(response=llm_response_list)
 
     with patch.object(agent, "_create_model", return_value=mock_model_list):

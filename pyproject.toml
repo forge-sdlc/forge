@@ -27,7 +27,7 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "redis>=5.0.0",
     "anthropic[vertex]>=0.40.0",
-    "deepagents>=0.1.0",
+    "deepagents==0.6.12",
     "langchain-anthropic>=0.3.0",
     "langchain-google-genai>=4.0.0",
     "langchain-google-vertexai>=2.0.0",

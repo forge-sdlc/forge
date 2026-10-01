@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,8 @@ def resolve_skill_paths(
         return [str(default_dir) + "/"]
 
     project = ticket_key.split("-")[0].lower()
+    if not re.fullmatch(r"[a-z0-9_]+", project):
+        raise ValueError(f"Unsafe project key for skill resolution: {project!r}")
     paths: list[str] = [str(default_dir) + "/"]
 
     override_dir = skills_dir / project

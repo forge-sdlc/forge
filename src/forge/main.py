@@ -4,6 +4,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -24,6 +25,7 @@ from forge.api.routes import (
     org_pulse_router,
 )
 from forge.config import get_settings
+from forge.integrations.agents.security import initialize_agent_skills, validate_agent_root
 from forge.integrations.source_control.registry import get_registry
 from forge.observability.config import configure_tracing, shutdown_tracing
 from forge.orchestrator.checkpointer import close_redis_pool
@@ -50,6 +52,12 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # (unknown provider, missing credential_env, etc.) fails startup instead
     # of surfacing as a 500 on the first inbound webhook.
     registry = get_registry()
+    project_root = Path(os.environ.get("FORGE_PROJECT_ROOT", Path.cwd())).resolve()
+    agent_root = validate_agent_root(
+        Path(settings.agent_root_dir), project_root, settings.workspace_base_dir or ""
+    )
+    initialize_agent_skills(agent_root, project_root / settings.skills_dir)
+    logger.info("Host agent root initialized at %s", agent_root)
 
     # Startup - initialize tracing
     if settings.tracing_enabled:

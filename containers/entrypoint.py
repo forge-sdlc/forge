@@ -43,6 +43,39 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _operational_shell_env() -> dict[str, str]:
+    """Environment exposed to commands run by implementation/reviewer agents.
+
+    This prevents ordinary subprocess inheritance of provider and tracing secrets.
+    It is defense in depth only: secrets in the container's top-level environment
+    may still be obtainable by sufficiently capable code through facilities such
+    as ``/proc``.
+    """
+    names = (
+        "PATH",
+        "HOME",
+        "LANG",
+        "LANGUAGE",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "GIT_USER_NAME",
+        "GIT_USER_EMAIL",
+    )
+    result = {name: os.environ[name] for name in names if name in os.environ}
+    result.setdefault("PATH", os.defpath)
+    result.setdefault("HOME", str(Path.home()))
+    result.setdefault("LANG", "C.UTF-8")
+    result.setdefault("TMPDIR", "/tmp")
+    return result
+
+
 def command_timeout(default: int) -> int:
     """Return the configured per-command timeout, or the caller's default."""
     raw_value = os.environ.get("CONTAINER_COMMAND_TIMEOUT")
@@ -635,7 +668,8 @@ async def run_agent_task(
 
         backend = LocalShellBackend(
             root_dir=str(workspace),
-            inherit_env=True,
+            inherit_env=False,
+            env=_operational_shell_env(),
             virtual_mode=False,
             timeout=command_timeout(600),
         )
@@ -744,7 +778,8 @@ async def run_reviewer_agent(
 
     backend = LocalShellBackend(
         root_dir=str(workspace),
-        inherit_env=True,
+        inherit_env=False,
+        env=_operational_shell_env(),
         virtual_mode=False,
         timeout=command_timeout(600),
     )
