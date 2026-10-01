@@ -343,6 +343,37 @@ repositories:
     change_request_mode: direct
 ```
 
+## Host agent recursion limit
+
+`AGENT_RECURSION_LIMIT` sets the positive global maximum number of LangGraph
+steps for each host `ForgeAgent` invocation; it defaults to `100`. A Jira
+project can override it with a positive JSON integer in
+`forge.agent_recursion_limit`:
+
+```bash
+forge project-setup MYPROJ --agent-recursion-limit 150
+forge get-config MYPROJ --property forge.agent_recursion_limit
+forge project-setup MYPROJ --clear-agent-recursion-limit
+```
+
+An absent property or JSON `null` uses the global value, even when
+`FORGE_REQUIRE_PROJECT_CONFIG=true`. Other JSON types, zero, and negative
+numbers are invalid. Forge reads the property once at the start of each
+ticket-scoped host agent run. Temporary Jira read failures receive bounded
+retries, then stop the run with an error; Forge does not assume the global
+value after a failed read. Runs without a ticket use the global value without
+contacting Jira. The limit applies separately to each graph invocation,
+including a permitted structured-output fallback or transient retry. It does
+not cap wall-clock time or the entire ticket across workflow retries.
+
+`forge get-config MYPROJ --json` shows the raw project property, this CLI
+process's global fallback, and the effective value and source. A malformed
+property or failed read appears as an error with no claimed effective value.
+The CLI may have a different environment from the running worker. Project
+changes affect the next host agent run; changing the worker's environment
+value requires a worker restart. Container implementation agents use their
+own execution limits.
+
 ## Proposal review configuration
 
 Projects can opt into GitHub pull-request review for PRDs and specifications.

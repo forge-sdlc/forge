@@ -109,6 +109,260 @@ class TestCLIConfigParserAndRouting:
         assert args.json is True
 
 
+class TestAgentRecursionCLI:
+    @staticmethod
+    def setup_args(**overrides):
+        values = TestCLIConfigExecution.setup_args(**overrides)
+        values.project_key = "AISOS"
+        return values
+
+    @staticmethod
+    def mock_config_jira(raw=None, *, error=None):
+        jira = MagicMock()
+        jira.list_project_properties = AsyncMock(return_value=[])
+
+        async def read(_project, key):
+            if key == "forge.agent_recursion_limit":
+                if error is not None:
+                    raise error
+                return raw
+            return None
+
+        jira.get_project_property = AsyncMock(side_effect=read)
+        jira.close = AsyncMock()
+        return jira
+
+    @pytest.fixture(autouse=True)
+    def config_settings(self):
+        from forge.config import Settings
+
+        settings = Settings(
+            _env_file=None,
+            jira_base_url="https://jira.example.test",
+            jira_api_token="dummy",
+            jira_user_email="tester@example.test",
+            github_token="dummy",
+            llm_backend="vertex-ai",
+            llm_model="claude-opus-4-8",
+            google_cloud_project="offline-project",
+            agent_recursion_limit=100,
+        )
+        with patch("forge.config.get_settings", return_value=settings):
+            yield settings
+
+    @pytest.mark.asyncio
+    async def test_set_limit_writes_json_integer_and_reports_mutation(self, capsys):
+        jira = MagicMock()
+        jira.set_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(self.setup_args(agent_recursion_limit=150, json=True))
+
+        assert code == 0
+        jira.set_project_property.assert_awaited_once_with(
+            "AISOS", "forge.agent_recursion_limit", 150
+        )
+        assert json.loads(capsys.readouterr().out)["mutations"] == {
+            "forge.agent_recursion_limit": {"operation": "set", "value": 150}
+        }
+
+    @pytest.mark.asyncio
+    async def test_clear_absent_limit_succeeds_without_other_mutations(self):
+        jira = MagicMock()
+        jira.delete_project_property = AsyncMock()
+        jira.close = AsyncMock()
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_project_setup(self.setup_args(clear_agent_recursion_limit=True))
+
+        assert code == 0
+        jira.delete_project_property.assert_awaited_once_with(
+            "AISOS", "forge.agent_recursion_limit"
+        )
+        jira.set_project_property.assert_not_called()
+
+    @pytest.mark.parametrize("invalid", [0, -1])
+    @pytest.mark.asyncio
+    async def test_invalid_limit_with_repo_flag_makes_no_jira_calls(self, invalid, capsys):
+        with patch("forge.integrations.jira.client.JiraClient") as jira_class:
+            code = await cmd_project_setup(
+                self.setup_args(agent_recursion_limit=invalid, repo=["org/repo"])
+            )
+
+        assert code == 1
+        jira_class.assert_not_called()
+        assert "positive integer" in capsys.readouterr().err
+
+    @pytest.mark.asyncio
+    async def test_conflicting_limit_flags_make_no_jira_calls(self, capsys):
+        with patch("forge.integrations.jira.client.JiraClient") as jira_class:
+            code = await cmd_project_setup(
+                self.setup_args(agent_recursion_limit=150, clear_agent_recursion_limit=True)
+            )
+
+        assert code == 1
+        jira_class.assert_not_called()
+        assert "cannot be combined" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        ("raw", "expected_source", "expected_value"),
+        [(None, "global", 100), (75, "project", 75), (100, "project", 100)],
+    )
+    @pytest.mark.asyncio
+    async def test_get_config_json_shows_raw_global_and_effective(
+        self, raw, expected_source, expected_value, capsys
+    ):
+        jira = self.mock_config_jira(raw)
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_get_config(
+                SimpleNamespace(project_key="AISOS", json=True, property=None, models=False)
+            )
+
+        assert code == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["project_properties"]["forge.agent_recursion_limit"] == raw
+        assert data["global_fallbacks"]["AGENT_RECURSION_LIMIT"] == 100
+        assert data["effective"]["forge.agent_recursion_limit"] == {
+            "value": expected_value,
+            "source": expected_source,
+        }
+        assert (
+            sum(
+                call.args[1] == "forge.agent_recursion_limit"
+                for call in jira.get_project_property.await_args_list
+            )
+            == 1
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_config_text_and_property_filter_show_project_limit(self, capsys):
+        jira = self.mock_config_jira(75)
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_get_config(
+                SimpleNamespace(project_key="AISOS", json=False, property=None, models=False)
+            )
+        assert code == 0
+        output = capsys.readouterr().out
+        assert "AGENT_RECURSION_LIMIT:" in output
+        assert "forge.agent_recursion_limit:" in output
+        assert "75 [project]" in output
+
+        jira = self.mock_config_jira(75)
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_get_config(
+                SimpleNamespace(
+                    project_key="AISOS",
+                    json=False,
+                    property="forge.agent_recursion_limit",
+                    models=False,
+                )
+            )
+        assert code == 0
+        assert capsys.readouterr().out.strip() == "75"
+
+    @pytest.mark.parametrize("raw", ["75", True, 0, {"bad": 1}])
+    @pytest.mark.asyncio
+    async def test_malformed_project_limit_is_diagnostic_error(self, raw, capsys):
+        jira = self.mock_config_jira(raw)
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_get_config(
+                SimpleNamespace(project_key="AISOS", json=True, property=None, models=False)
+            )
+
+        assert code == 1
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["project_properties"]["forge.agent_recursion_limit"] == raw
+        effective = data["effective"]["forge.agent_recursion_limit"]
+        assert effective["value"] is None and effective["source"] == "error"
+        assert "positive integer" in effective["error"]
+        assert "positive integer" in captured.err
+
+    @pytest.mark.asyncio
+    async def test_failed_limit_read_does_not_claim_global_fallback(self, capsys):
+        request = httpx.Request("GET", "https://jira.example.test/property")
+        response = httpx.Response(403, request=request)
+        error = httpx.HTTPStatusError("secret provider detail", request=request, response=response)
+        jira = self.mock_config_jira(error=error)
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_get_config(
+                SimpleNamespace(project_key="AISOS", json=True, property=None, models=False)
+            )
+
+        assert code == 1
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        effective = data["effective"]["forge.agent_recursion_limit"]
+        assert effective["value"] is None and effective["source"] == "error"
+        assert "403" in effective["error"]
+        assert "secret provider detail" not in captured.out + captured.err
+
+    @pytest.mark.asyncio
+    async def test_property_filter_reports_invalid_raw_value_without_global_claim(self, capsys):
+        jira = self.mock_config_jira("75")
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_get_config(
+                SimpleNamespace(
+                    project_key="AISOS",
+                    json=False,
+                    property="forge.agent_recursion_limit",
+                    models=False,
+                )
+            )
+
+        assert code == 1
+        captured = capsys.readouterr()
+        assert not captured.out
+        assert 'Raw forge.agent_recursion_limit: "75"' in captured.err
+        assert "positive integer" in captured.err
+        assert "source=global" not in captured.err
+
+    def test_project_config_alias_routes_recursion_property(self):
+        parsed = []
+
+        def record(args):
+            parsed.append(args)
+            return 0
+
+        with (
+            patch("forge.cli.cmd_get_config", new=record),
+            patch("forge.cli.asyncio.run", side_effect=lambda result: result),
+            patch("forge.cli.setup_logging"),
+        ):
+            assert (
+                main(["project-config", "aisos", "--property", "forge.agent_recursion_limit"]) == 0
+            )
+
+        assert parsed[0].command == "get-config"
+        assert parsed[0].property == "forge.agent_recursion_limit"
+
+    def test_parser_accepts_set_clear_and_rejects_both(self):
+        parsed = []
+
+        def record(args):
+            parsed.append(args)
+            return 0
+
+        with (
+            patch("forge.cli.cmd_project_setup", new=record),
+            patch("forge.cli.asyncio.run", side_effect=lambda result: result),
+            patch("forge.cli.setup_logging"),
+        ):
+            assert main(["project-setup", "aisos", "--agent-recursion-limit", "150"]) == 0
+            assert parsed[-1].agent_recursion_limit == 150
+            assert main(["project-setup", "aisos", "--clear-agent-recursion-limit"]) == 0
+            assert parsed[-1].clear_agent_recursion_limit is True
+            with pytest.raises(SystemExit):
+                main(
+                    [
+                        "project-setup",
+                        "aisos",
+                        "--agent-recursion-limit",
+                        "150",
+                        "--clear-agent-recursion-limit",
+                    ]
+                )
+
+
 class TestCLIConfigExecution:
     """Fallback Semantics, Output Serialization, and Discovery."""
 
@@ -737,7 +991,9 @@ class TestCLIConfigErrorHandling:
             client_inst = MagicMock()
             client_inst.list_project_properties = AsyncMock(return_value=["forge.repos"])
             # Return string value "not-a-list" instead of list
-            client_inst.get_project_property = AsyncMock(return_value="not-a-list")
+            client_inst.get_project_property = AsyncMock(
+                side_effect=lambda _pk, key: "not-a-list" if key == "forge.repos" else None
+            )
             client_inst.close = AsyncMock()
             mock.return_value = client_inst
 
