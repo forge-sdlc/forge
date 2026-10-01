@@ -13,7 +13,7 @@ from forge.workflow.reducers.task_routing import (
     reduce_repository_aggregation,
     reduce_task_routing,
 )
-from forge.workflow.stations.runner import run_serialized
+from forge.workflow.stations.runner import run_serialized_async
 from forge.workflow.stations.task_routing import (
     TaskRoutingOutput,
     run_repository_aggregation_station,
@@ -47,7 +47,7 @@ def test_station_has_no_graph_or_provider_state() -> None:
         first_repository="acme/api",
         task_count=2,
     )
-    assert "current_node" not in outcome.output.model_fields
+    assert "current_node" not in type(outcome.output).model_fields
 
 
 def test_reducer_owns_legacy_topology_mapping() -> None:
@@ -113,10 +113,11 @@ def test_stale_outcome_is_rejected() -> None:
         reduce_task_routing(state, request, outcome)
 
 
-def test_station_runs_from_serialized_fixture_without_control_plane() -> None:
+@pytest.mark.asyncio
+async def test_station_runs_from_serialized_fixture_without_control_plane() -> None:
     request = project_task_routing(_state())
 
-    raw_outcome = run_serialized("task-routing", request.model_dump_json())
+    raw_outcome = await run_serialized_async("task-routing", request.model_dump_json())
 
     assert json.loads(raw_outcome)["output"]["first_repository"] == "acme/api"
 
