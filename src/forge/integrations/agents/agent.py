@@ -51,7 +51,13 @@ except ImportError:
     HAS_GOOGLE_GENAI = False
 
 try:
-    from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+    from forge.integrations.agents.vertex_anthropic import (
+        ForgeChatAnthropicVertex as ChatAnthropicVertex,
+    )
+    from forge.integrations.agents.vertex_anthropic import (
+        is_transient_vertex_error,
+        is_unsupported_native_output_error,
+    )
 
     HAS_ANTHROPIC_VERTEX = True
 except ImportError:
@@ -675,6 +681,12 @@ class ForgeAgent:
         """
         # Use async version to load MCP tools
         response_format = ProviderStrategy(response_schema) if response_schema else None
+        selected_model = model_target.model if model_target else self.settings.llm_model
+        selected_backend = model_target.backend if model_target else self.settings.llm_backend
+        vertex_claude = (
+            selected_backend == "vertex-ai"
+            and Settings.detect_model_provider(selected_model) == "anthropic"
+        )
         agent = await self._create_agent_async(
             system_prompt=system_prompt,
             include_tools=include_tools,
@@ -737,6 +749,23 @@ class ForgeAgent:
                     break  # Success, exit retry loop
                 except Exception as e:
                     last_error = e
+                    if vertex_claude and not (
+                        response_schema is not None
+                        and not used_tool_fallback
+                        and is_unsupported_native_output_error(e)
+                    ):
+                        if is_transient_vertex_error(e) and attempt < self.MAX_RETRIES - 1:
+                            delay = self.INITIAL_BACKOFF_SECONDS * (2**attempt)
+                            logger.warning(
+                                "Transient Vertex error (attempt %s/%s), retrying in %ss: %s",
+                                attempt + 1,
+                                self.MAX_RETRIES,
+                                delay,
+                                e,
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                        raise
                     if response_schema is not None and not used_tool_fallback:
                         logger.warning(
                             "Native structured output failed for %s; retrying with validated "
