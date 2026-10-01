@@ -1,11 +1,11 @@
 """Feature workflow state definition."""
 
-from datetime import datetime
 from typing import Any, cast
 
 from forge.config import get_settings
 from forge.models.draft import ForgeDecompositionDraft
 from forge.models.workflow import TicketType
+from forge.utils.time import utc_now_naive
 from forge.workflow.base import (
     BaseState,
     CIIntegrationState,
@@ -77,7 +77,7 @@ class FeatureState(
 
 def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState:
     """Create initial state for a new Feature workflow run."""
-    now = datetime.utcnow().isoformat()
+    now = utc_now_naive().isoformat()
     settings = get_settings()
 
     # Default values - can be overridden by kwargs

@@ -2,13 +2,13 @@
 
 import operator
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 
 from forge.models.workflow import TicketType
+from forge.utils.time import utc_now_naive
 from forge.workflow.pr_state import PullRequestState
 
 
@@ -254,7 +254,7 @@ class BaseWorkflow(ABC):
 
     def create_initial_state(self, ticket_key: str, **kwargs: Any) -> dict[str, Any]:
         """Create initial state for a new workflow run."""
-        now = datetime.utcnow().isoformat()
+        now = utc_now_naive().isoformat()
         return {
             "thread_id": ticket_key,
             "ticket_key": ticket_key,

@@ -3,7 +3,7 @@
 import json
 from dataclasses import dataclass, field
 from dataclasses import replace as dataclass_replace
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from forge.integrations.source_control.contracts import (
@@ -23,11 +23,7 @@ from forge.integrations.source_control.contracts import (
     ReviewState,
 )
 from forge.models.events import EventSource
-
-
-def _utc_now_naive() -> datetime:
-    """Preserve the queue's timezone-free UTC wire format without utcnow()."""
-    return datetime.now(UTC).replace(tzinfo=None)
+from forge.utils.time import utc_now_naive
 
 
 @dataclass
@@ -41,7 +37,7 @@ class QueueMessage:
     ticket_key: str
     payload: dict[str, Any] = field(default_factory=dict)
     normalized_event: dict[str, Any] | None = None
-    timestamp: datetime = field(default_factory=_utc_now_naive)
+    timestamp: datetime = field(default_factory=utc_now_naive)
     retry_count: int = 0
 
     def to_dict(self) -> dict[str, str]:
@@ -83,7 +79,7 @@ class QueueMessage:
             ticket_key=data.get("ticket_key", ""),
             payload=json.loads(data.get("payload", "{}")),
             normalized_event=json.loads(normalized_event_raw) if normalized_event_raw else None,
-            timestamp=datetime.fromisoformat(data.get("timestamp", _utc_now_naive().isoformat())),
+            timestamp=datetime.fromisoformat(data.get("timestamp", utc_now_naive().isoformat())),
             retry_count=int(data.get("retry_count", "0")),
         )
 

@@ -1,16 +1,16 @@
 """Pre-built WorkflowState snapshots for testing."""
 
 from copy import deepcopy
-from datetime import datetime
 from typing import Any
 
 from forge.models.workflow import TicketType
+from forge.utils.time import utc_now_naive
 from forge.workflow.feature.state import FeatureState as WorkflowState
 
 
 def _timestamp() -> str:
     """Get current timestamp in ISO format."""
-    return datetime.utcnow().isoformat()
+    return utc_now_naive().isoformat()
 
 
 # Base state template
