@@ -5,7 +5,7 @@ All tests use pytest-asyncio and mock Redis via unittest.mock.AsyncMock.
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -63,7 +63,7 @@ def _make_message(
         event_type="jira:issue_updated",
         ticket_key=ticket_key,
         payload={},
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC).replace(tzinfo=None),
     )
 
 

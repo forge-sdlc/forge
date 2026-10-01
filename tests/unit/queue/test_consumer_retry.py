@@ -1,6 +1,6 @@
 """Unit tests for QueueConsumer retry integration."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -246,7 +246,7 @@ class TestProcessRetryQueue:
         entry = RetryEntry(
             message=message,
             attempt=1,
-            next_retry=datetime.utcnow(),
+            next_retry=datetime.now(UTC).replace(tzinfo=None),
             last_error="boom",
         )
 
@@ -278,7 +278,7 @@ class TestProcessRetryQueue:
         entry = RetryEntry(
             message=message,
             attempt=1,
-            next_retry=datetime.utcnow(),
+            next_retry=datetime.now(UTC).replace(tzinfo=None),
             last_error="boom",
         )
 
@@ -320,7 +320,7 @@ class TestProcessRetryQueue:
         entry = RetryEntry(
             message=message,
             attempt=3,
-            next_retry=datetime.utcnow(),
+            next_retry=datetime.now(UTC).replace(tzinfo=None),
             last_error="still broken",
         )
         notification = TerminalNotification(
@@ -358,7 +358,7 @@ class TestProcessRetryQueue:
         entry = RetryEntry(
             message=message,
             attempt=3,
-            next_retry=datetime.utcnow(),
+            next_retry=datetime.now(UTC).replace(tzinfo=None),
             last_error="still broken",
         )
 

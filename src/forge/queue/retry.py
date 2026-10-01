@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from forge.orchestrator.checkpointer import get_redis_client
-from forge.queue.models import QueueMessage
+from forge.queue.models import QueueMessage, _utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ return 1
 
 
 def _now_timestamp() -> float:
-    return datetime.utcnow().timestamp()
+    return _utc_now_naive().timestamp()
 
 
 @dataclass
@@ -150,7 +150,7 @@ class RetryQueue:
             INITIAL_RETRY_DELAY_SECONDS * (RETRY_BACKOFF_MULTIPLIER ** (attempt - 1)),
             MAX_RETRY_DELAY_SECONDS,
         )
-        next_retry = datetime.utcnow() + timedelta(seconds=delay)
+        next_retry = _utc_now_naive() + timedelta(seconds=delay)
 
         entry = RetryEntry(
             message=message,
@@ -191,7 +191,7 @@ class RetryQueue:
             "message": msg,
             "error": error,
             "attempts": attempt,
-            "failed_at": datetime.utcnow().isoformat(),
+            "failed_at": _utc_now_naive().isoformat(),
         }
 
         serialized = json.dumps(entry)
@@ -382,7 +382,7 @@ class RetryQueue:
             entry = RetryEntry(
                 message=message,
                 attempt=1,
-                next_retry=datetime.utcnow() + timedelta(seconds=INITIAL_RETRY_DELAY_SECONDS),
+                next_retry=_utc_now_naive() + timedelta(seconds=INITIAL_RETRY_DELAY_SECONDS),
                 last_error="Requeued from dead-letter",
             )
             await redis.zadd(

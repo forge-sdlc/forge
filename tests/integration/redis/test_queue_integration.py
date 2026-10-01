@@ -6,7 +6,7 @@ using a real Redis instance via testcontainers.
 
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -281,7 +281,7 @@ class TestRetryQueue:
         entry = RetryEntry(
             message=message,
             attempt=1,
-            next_retry=datetime.utcnow() - timedelta(seconds=1),
+            next_retry=datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=1),
             last_error="temporary failure",
         )
         serialized_entry = json.dumps(entry.to_dict())
@@ -304,7 +304,7 @@ class TestRetryQueue:
         assert sum(claim[0].message.event_id == message.event_id for claim in claims if claim) == 1
         lease_score = await redis_client.zscore(RETRY_QUEUE_KEY, serialized_entry)
         assert lease_score is not None
-        assert lease_score > datetime.utcnow().timestamp()
+        assert lease_score > datetime.now(UTC).replace(tzinfo=None).timestamp()
 
 
 @pytest.mark.integration
