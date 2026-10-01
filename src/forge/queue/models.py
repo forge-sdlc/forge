@@ -23,6 +23,7 @@ from forge.integrations.source_control.contracts import (
     ReviewState,
 )
 from forge.models.events import EventSource
+from forge.utils.time import utc_now_naive
 
 
 @dataclass
@@ -36,7 +37,7 @@ class QueueMessage:
     ticket_key: str
     payload: dict[str, Any] = field(default_factory=dict)
     normalized_event: dict[str, Any] | None = None
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=utc_now_naive)
     retry_count: int = 0
 
     def to_dict(self) -> dict[str, str]:
@@ -78,7 +79,7 @@ class QueueMessage:
             ticket_key=data.get("ticket_key", ""),
             payload=json.loads(data.get("payload", "{}")),
             normalized_event=json.loads(normalized_event_raw) if normalized_event_raw else None,
-            timestamp=datetime.fromisoformat(data.get("timestamp", datetime.utcnow().isoformat())),
+            timestamp=datetime.fromisoformat(data.get("timestamp", utc_now_naive().isoformat())),
             retry_count=int(data.get("retry_count", "0")),
         )
 

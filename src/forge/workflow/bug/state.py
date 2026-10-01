@@ -1,10 +1,10 @@
 """Bug workflow state definition."""
 
-from datetime import datetime
 from typing import Any, cast
 
 from forge.config import get_settings
 from forge.models.workflow import TicketType
+from forge.utils.time import utc_now_naive
 from forge.workflow.base import (
     BaseState,
     CIIntegrationState,
@@ -66,7 +66,7 @@ class BugState(
 
 def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
     """Create initial state for a new Bug workflow run."""
-    now = datetime.utcnow().isoformat()
+    now = utc_now_naive().isoformat()
     settings = get_settings()
 
     # Default values - can be overridden by kwargs

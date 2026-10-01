@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -252,7 +252,7 @@ class TestTerminalNotificationQueue:
                 "message": {**message.to_dict(), "message_id": message.message_id},
                 "error": "final failure",
                 "attempts": 4,
-                "failed_at": datetime.utcnow().isoformat(),
+                "failed_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             }
         ).encode()
         claim_lock = asyncio.Lock()
@@ -342,7 +342,7 @@ class TestRequeueDeadLetter:
                 "message": {**message.to_dict(), "message_id": message.message_id},
                 "error": "final failure",
                 "attempts": 4,
-                "failed_at": datetime.utcnow().isoformat(),
+                "failed_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             }
         ).encode()
         redis = make_redis_mock()
