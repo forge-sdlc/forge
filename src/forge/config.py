@@ -195,6 +195,11 @@ class Settings(BaseSettings):
         default=16384,
         description="Maximum output tokens for LLM responses (default 16384)",
     )
+    agent_recursion_limit: int = Field(
+        default=100,
+        gt=0,
+        description="Maximum graph steps for each host agent invocation",
+    )
     model_connections: dict[str, Any] = Field(
         default_factory=dict,
         description="Named non-secret model connections (JSON object)",
