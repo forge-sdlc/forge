@@ -3,12 +3,12 @@
 import json
 import logging
 import sys
-from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
+from forge.utils.time import utc_now_naive
 
 
 class StructuredFormatter(logging.Formatter):
@@ -49,7 +49,7 @@ class StructuredFormatter(logging.Formatter):
             JSON-formatted log string.
         """
         log_data: dict[str, Any] = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": utc_now_naive().isoformat() + "Z",
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

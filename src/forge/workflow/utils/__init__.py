@@ -1,10 +1,10 @@
 """Utility functions for workflow state management and comment classification."""
 
-from datetime import datetime
 from typing import Any
 
 from langgraph.graph import END
 
+from forge.utils.time import utc_now_naive
 from forge.workflow.utils.comment_classifier import (
     CommentType,
     classify_comment,
@@ -61,7 +61,7 @@ def resolve_shared_resume_node(current_node: str) -> str | None:
 
 def update_state_timestamp(state: dict[str, Any]) -> dict[str, Any]:
     """Update the state timestamp."""
-    return {**state, "updated_at": datetime.utcnow().isoformat()}
+    return {**state, "updated_at": utc_now_naive().isoformat()}
 
 
 def set_paused(state: dict[str, Any], node_name: str) -> dict[str, Any]:
@@ -70,7 +70,7 @@ def set_paused(state: dict[str, Any], node_name: str) -> dict[str, Any]:
         **state,
         "current_node": node_name,
         "is_paused": True,
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": utc_now_naive().isoformat(),
     }
 
 
@@ -79,7 +79,7 @@ def resume_state(state: dict[str, Any]) -> dict[str, Any]:
     return {
         **state,
         "is_paused": False,
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": utc_now_naive().isoformat(),
     }
 
 
@@ -89,7 +89,7 @@ def set_error(state: dict[str, Any], error: str) -> dict[str, Any]:
         **state,
         "last_error": error,
         "retry_count": state.get("retry_count", 0) + 1,
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": utc_now_naive().isoformat(),
     }
 
 
