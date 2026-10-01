@@ -109,6 +109,11 @@ class WorkflowInclude(StrictModel):
     name: str
     exits: dict[str, str] = Field(default_factory=dict)
     return_to: str | None = Field(default=None, alias="returnTo")
+    # Full workflow includes must identify which terminal edges return to the
+    # caller. Other __end__ edges may represent waits or blocked termination.
+    return_from: tuple[str, ...] = Field(
+        default=(), alias="returnFrom", exclude_if=lambda value: not value
+    )
 
     @field_validator("name")
     @classmethod

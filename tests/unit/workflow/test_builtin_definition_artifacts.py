@@ -8,6 +8,7 @@ from importlib import resources
 import pytest
 
 from forge.workflow.declarative.builtins import (
+    _load_builtin_definition,
     builtin_bug_definition,
     builtin_feature_definition,
     builtin_task_takeover_definition,
@@ -56,3 +57,36 @@ def test_default_compiler_consumes_checked_in_artifact(name: str) -> None:
     compiler = DeclarativeWorkflowCompiler(definition)
     compiler.validate()
     assert compiler.build_graph() is not None
+
+
+@pytest.mark.parametrize("damage", ["missing_exit", "missing_steps"])
+def test_builtin_include_rejects_malformed_artifact(
+    damage: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from forge.workflow.declarative import builtins
+
+    real_files = resources.files
+    artifact = json.loads(
+        real_files("forge.workflow.declarative.definitions")
+        .joinpath("feature.json")
+        .read_text(encoding="utf-8")
+    )
+    if damage == "missing_exit":
+        del artifact["spec"]["includes"][0]["exits"]["review"]
+    else:
+        del artifact["spec"]["steps"]
+
+    class Resource:
+        def read_text(self, *, encoding: str) -> str:
+            assert encoding == "utf-8"
+            return json.dumps(artifact)
+
+    class Root:
+        def joinpath(self, name: str):
+            if name == "feature.json":
+                return Resource()
+            return real_files("forge.workflow.declarative.definitions").joinpath(name)
+
+    monkeypatch.setattr(builtins.resources, "files", lambda _: Root())
+    with pytest.raises(ValueError, match="requires exactly these exits|requires a steps mapping"):
+        _load_builtin_definition("feature")

@@ -75,6 +75,30 @@ def _compatible_impact(impact: ProcessChangeImpact, *, rollback: bool = False) -
     return impact.compatible_for_in_flight
 
 
+def _affected_consumers(
+    active: dict[str, WorkflowDefinition], name: str
+) -> tuple[WorkflowDefinition, ...]:
+    """Find active workflows that depend on a candidate, including nested includes."""
+    affected = {name}
+    changed = True
+    while changed:
+        changed = False
+        for consumer_name, definition in active.items():
+            if consumer_name in affected:
+                continue
+            if any(
+                include.source == "project" and include.name in affected
+                for include in definition.spec.includes
+            ):
+                affected.add(consumer_name)
+                changed = True
+    return tuple(
+        definition
+        for consumer_name, definition in active.items()
+        if consumer_name != name and consumer_name in affected and definition.kind == "Workflow"
+    )
+
+
 class DefinitionPublisher:
     """Project-scoped immutable definition store and rollout decision log."""
 
@@ -96,6 +120,11 @@ class DefinitionPublisher:
         if activate:
             raise ValueError("publication and activation are separate decisions; use activate()")
         await self._validate(definition)
+        if any(
+            previous.kind != definition.kind
+            for previous in await self.history(definition.metadata.name)
+        ):
+            raise ValueError("definition kind cannot change across revisions of the same name")
         decision = self._decision(definition, actor=actor, reason=reason, action="publish")
         result = await (await self._client()).eval(
             _PUBLISH_SCRIPT,
@@ -175,6 +204,8 @@ class DefinitionPublisher:
         await self._validate(target)
         await self._validate_consumers(name, target)
         previous = await self.active(name)
+        if previous is not None and previous.kind != target.kind:
+            raise ValueError("definition kind cannot change across revisions of the same name")
         if previous is not None and expected_active_digest is None:
             raise ValueError(
                 "expected_active_digest is required when replacing an active definition"
@@ -286,10 +317,12 @@ class DefinitionPublisher:
         async def lookup(dependency: str) -> WorkflowDefinition | None:
             return candidate if dependency == name else await self.active(dependency)
 
-        for consumer_name in await self.list_workflows():
-            consumer = await self.active(consumer_name)
-            if consumer is None or consumer_name == name or consumer.kind != "Workflow":
-                continue
+        active = {
+            consumer_name: consumer
+            for consumer_name in await self.list_workflows()
+            if (consumer := await self.active(consumer_name)) is not None
+        }
+        for consumer in _affected_consumers(active, name):
             resolved = await resolve_definition(consumer, lookup)
             DeclarativeWorkflowCompiler(resolved).validate_for_publication()
 
@@ -376,6 +409,8 @@ class InMemoryDefinitionPublisher:
         if existing is not None and existing.digest != definition.digest:
             raise ValueError("published revision is immutable and has different content")
         published = await self.history(definition.metadata.name)
+        if any(previous.kind != definition.kind for previous in published):
+            raise ValueError("definition kind cannot change across revisions of the same name")
         if any(
             item.digest != definition.digest
             and item.metadata.revision >= definition.metadata.revision
@@ -446,6 +481,8 @@ class InMemoryDefinitionPublisher:
         await self._validate(target)
         await self._validate_consumers(name, target)
         current = self._active.get(name)
+        if current is not None and current.kind != target.kind:
+            raise ValueError("definition kind cannot change across revisions of the same name")
         if current is not None and expected_active_digest is None:
             raise ValueError(
                 "expected_active_digest is required when replacing an active definition"
@@ -511,10 +548,12 @@ class InMemoryDefinitionPublisher:
         async def lookup(dependency: str) -> WorkflowDefinition | None:
             return candidate if dependency == name else await self.active(dependency)
 
-        for consumer_name in await self.list_workflows():
-            consumer = await self.active(consumer_name)
-            if consumer is None or consumer_name == name or consumer.kind != "Workflow":
-                continue
+        active = {
+            consumer_name: consumer
+            for consumer_name in await self.list_workflows()
+            if (consumer := await self.active(consumer_name)) is not None
+        }
+        for consumer in _affected_consumers(active, name):
             resolved = await resolve_definition(consumer, lookup)
             DeclarativeWorkflowCompiler(resolved).validate_for_publication()
 

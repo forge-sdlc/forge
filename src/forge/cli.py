@@ -20,7 +20,7 @@ def setup_logging(verbose: bool = False) -> None:
     )
 
 
-async def _get_compiled_workflow_for_ticket(ticket_key: str):
+async def _get_compiled_workflow_for_ticket(ticket_key: str) -> tuple[Any, Any]:
     """Helper to get compiled workflow for a ticket (used by CLI commands).
 
     Args:

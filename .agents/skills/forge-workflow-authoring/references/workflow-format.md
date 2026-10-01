@@ -11,12 +11,12 @@ A definition has four important parts:
 
 Reusable `Subworkflow` definitions use the same registered nodes and may end a transition
 at `@exit/name`. A caller binds each exit through `spec.includes`; it may also include a
-complete workflow with `returnTo` for normal completion. Use `source: builtin` or
+complete workflow with `returnTo` and `returnFrom` for selected normal completion edges. Use `source: builtin` or
 `source: project`. Project references resolve to active definitions in the caller's Jira
 project. Nodes remain canonical and cannot collide. New runs pin the fully expanded graph;
 active runs keep their existing pin.
 
-Start at `entry`. Follow `next` for a fixed transition. At a step with `route`, follow every target in `branches`. A branch key is a possible router result; its value is the next step. `__end__` stops the current invocation and is not itself a declared step. In an included full workflow, fixed `next: __end__` returns to the caller's `returnTo` target; routed `__end__` still pauses the invocation.
+Start at `entry`. Follow `next` for a fixed transition. At a step with `route`, follow every target in `branches`. A branch key is a possible router result; its value is the next step. `__end__` stops the current invocation and is not itself a declared step. In an included full workflow, `returnFrom` lists the terminal edges that return to the caller's `returnTo` target. Write `step_name` for a fixed `next: __end__` edge or `step_name:outcome` for a routed branch targeting `__end__`. Unlisted terminal edges keep their pause or stop behavior.
 
 Use `forge workflow render FILE` instead of tracing a large definition manually.
 

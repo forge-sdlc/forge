@@ -15,6 +15,20 @@ def validate_subworkflow(definition: WorkflowDefinition) -> None:
 
     if definition.kind != "Subworkflow":
         raise ValueError("expected a subworkflow")
+    unsupported = [
+        name
+        for name, present in (
+            ("observationPolicy", definition.spec.observation_policy is not None),
+            ("mandatoryPolicies", bool(definition.spec.mandatory_policies)),
+            ("extensionPoints", bool(definition.spec.extension_points)),
+            ("resume.fromRevisions", bool(definition.spec.resume.from_revisions)),
+        )
+        if present
+    ]
+    if unsupported:
+        raise ValueError(
+            "subworkflow fields are not applied to the caller: " + ", ".join(unsupported)
+        )
     if definition.spec.includes:
         raise ValueError("publish nested subworkflows after their includes are resolved")
     if definition.spec.entry not in definition.spec.steps:
@@ -55,6 +69,7 @@ async def resolve_definition(
         steps = dict(source.spec.steps)
         dependencies: list[str] = []
         seen: set[tuple[str, str]] = set()
+        included_by: dict[str, str] = {}
         for include in source.spec.includes:
             key = (include.source, include.name)
             if key in seen:
@@ -65,6 +80,7 @@ async def resolve_definition(
             identity = f"{include.source}:{include.name}"
             if identity in chain:
                 raise ValueError(f"workflow dependency cycle: {' -> '.join((*chain, identity))}")
+            child: WorkflowDefinition | None
             if include.source == "builtin":
                 from forge.workflow.declarative.builtins import load_builtin_source
 
@@ -76,7 +92,10 @@ async def resolve_definition(
                     )
                 child = await project_lookup(include.name)
                 if child is None:
-                    raise ValueError(f"project dependency '{include.name}' is not active")
+                    raise ValueError(
+                        f"project dependency '{include.name}' is not active; "
+                        "publish and activate it before including it"
+                    )
             if child.metadata.name != include.name:
                 raise ValueError(f"dependency '{include.name}' has a mismatched name")
             allowed = child.spec.compatible_states or (child.spec.state,)
@@ -92,7 +111,11 @@ async def resolve_definition(
                     for target in ([step.next] if step.next else step.branches.values())
                     if target and target.startswith("@exit/")
                 }
-                if set(include.exits) != declared_exits or include.return_to is not None:
+                if (
+                    set(include.exits) != declared_exits
+                    or include.return_to is not None
+                    or include.return_from
+                ):
                     raise ValueError(
                         f"subworkflow '{include.name}' requires exactly these exits: "
                         f"{', '.join(sorted(declared_exits))}"
@@ -104,21 +127,24 @@ async def resolve_definition(
                     for name, step in child_steps.items()
                 }
             else:
-                if include.exits or include.return_to is None:
-                    raise ValueError(f"workflow '{include.name}' requires returnTo and no exits")
-                terminals = [name for name, step in child_steps.items() if step.next == "__end__"]
-                if not terminals:
-                    raise ValueError(f"workflow '{include.name}' has no normal completion")
-                child_steps = {
-                    name: _replace_targets(step, {"__end__": include.return_to})
-                    if name in terminals
-                    else step
-                    for name, step in child_steps.items()
-                }
+                if include.exits or include.return_to is None or not include.return_from:
+                    raise ValueError(
+                        f"workflow '{include.name}' requires returnTo and explicit returnFrom edges"
+                    )
+                child_steps = _bind_workflow_returns(
+                    child_steps, include.return_from, include.return_to
+                )
             collision = set(steps) & set(child_steps)
             if collision:
-                raise ValueError(f"included node '{sorted(collision)[0]}' collides with caller")
+                node = sorted(collision)[0]
+                if node in included_by:
+                    raise ValueError(
+                        f"included node '{node}' appears through both "
+                        f"'{included_by[node]}' and '{identity}'"
+                    )
+                raise ValueError(f"included node '{node}' collides with caller")
             steps.update(child_steps)
+            included_by.update(dict.fromkeys(child_steps, identity))
             if len(steps) > MAX_STEPS:
                 raise ValueError(f"expanded workflow exceeds {MAX_STEPS} steps")
         return steps, tuple(dependencies)
@@ -155,3 +181,28 @@ def _replace_targets(step: WorkflowStep, replacements: dict[str, str]) -> Workfl
             },
         }
     )
+
+
+def _bind_workflow_returns(
+    steps: dict[str, WorkflowStep], selectors: tuple[str, ...], return_to: str
+) -> dict[str, WorkflowStep]:
+    """Bind only the child terminal edges explicitly selected by the caller."""
+    if len(selectors) != len(set(selectors)):
+        raise ValueError("returnFrom contains duplicate edges")
+    bound = dict(steps)
+    for selector in selectors:
+        node, separator, outcome = selector.partition(":")
+        step = bound.get(node)
+        if step is None:
+            raise ValueError(f"returnFrom edge '{selector}' has no declared step")
+        if separator:
+            if not outcome or step.branches.get(outcome) != "__end__":
+                raise ValueError(f"returnFrom edge '{selector}' is not a terminal branch")
+            bound[node] = step.model_copy(
+                update={"branches": {**step.branches, outcome: return_to}}
+            )
+        else:
+            if step.next != "__end__":
+                raise ValueError(f"returnFrom edge '{selector}' is not a fixed terminal")
+            bound[node] = step.model_copy(update={"next": return_to})
+    return bound

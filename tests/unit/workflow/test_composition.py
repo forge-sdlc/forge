@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from forge.workflow.declarative.builtins import builtin_feature_definition, load_builtin_source
@@ -9,7 +11,10 @@ from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler
 from forge.workflow.declarative.composition import resolve_definition, validate_subworkflow
 from forge.workflow.declarative.loader import load_workflow_value
 from forge.workflow.declarative.models import WorkflowInclude
-from forge.workflow.declarative.publication import InMemoryDefinitionPublisher
+from forge.workflow.declarative.publication import (
+    InMemoryDefinitionPublisher,
+    _affected_consumers,
+)
 from forge.workflow.declarative.resolver import load_project_workflow
 
 
@@ -156,7 +161,12 @@ async def test_full_workflow_normal_completion_returns_to_caller() -> None:
                         ),
                     },
                     "includes": (
-                        WorkflowInclude(source="project", name="child", returnTo="answer_question"),
+                        WorkflowInclude(
+                            source="project",
+                            name="child",
+                            returnTo="answer_question",
+                            returnFrom=("generate_prd",),
+                        ),
                     ),
                 }
             )
@@ -169,6 +179,60 @@ async def test_full_workflow_normal_completion_returns_to_caller() -> None:
     resolved = await resolve_definition(parent, lookup)
     assert resolved.spec.steps["generate_prd"].next == "answer_question"
     DeclarativeWorkflowCompiler(resolved).validate()
+
+
+@pytest.mark.asyncio
+async def test_full_workflow_include_preserves_wait_and_blocked_terminals() -> None:
+    child = load_workflow_value(
+        {
+            "apiVersion": "forge/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "child", "revision": 1},
+            "spec": {
+                "state": "feature",
+                "entry": "generate_spec",
+                "steps": {
+                    "generate_spec": {
+                        "route": "route_current_node",
+                        "branches": {
+                            "done": "__end__",
+                            "wait": "__end__",
+                            "blocked": "escalate_blocked",
+                        },
+                    },
+                    "escalate_blocked": {"next": "__end__"},
+                },
+            },
+        }
+    )
+    parent = load_workflow_value(
+        {
+            "apiVersion": "forge/v1",
+            "kind": "Workflow",
+            "metadata": {"name": "parent", "revision": 1},
+            "spec": {
+                "state": "feature",
+                "entry": "answer_question",
+                "steps": {"answer_question": {"next": "generate_spec"}},
+                "includes": [
+                    {
+                        "source": "project",
+                        "name": "child",
+                        "returnTo": "answer_question",
+                        "returnFrom": ["generate_spec:done"],
+                    }
+                ],
+            },
+        }
+    )
+
+    async def lookup(name: str):
+        return child if name == "child" else None
+
+    resolved = await resolve_definition(parent, lookup)
+    assert resolved.spec.steps["generate_spec"].branches["done"] == "answer_question"
+    assert resolved.spec.steps["generate_spec"].branches["wait"] == "__end__"
+    assert resolved.spec.steps["escalate_blocked"].next == "__end__"
 
 
 @pytest.mark.asyncio
@@ -237,6 +301,95 @@ async def test_dependency_activation_rejects_a_graph_that_breaks_active_consumer
             broken, actor="admin", reason="bad rollout", expected_active_digest=fragment.digest
         )
     assert (await publisher.active("github_pr_review")).digest == fragment.digest
+
+
+@pytest.mark.asyncio
+async def test_dependency_activation_ignores_unrelated_invalid_workflow() -> None:
+    publisher = InMemoryDefinitionPublisher("PROJ")
+    fragment = load_builtin_source("github_pr_review")
+    await publisher.publish(fragment, actor="admin", reason="shared path")
+    await publisher.activate(fragment, actor="admin", reason="enable shared path")
+
+    unrelated = _project_consumer("unrelated")
+    missing = unrelated.spec.includes[0].model_copy(update={"name": "missing_dependency"})
+    unrelated = unrelated.model_copy(
+        update={"spec": unrelated.spec.model_copy(update={"includes": (missing,)})}
+    )
+    publisher._active["unrelated"] = unrelated
+
+    updated = fragment.model_copy(
+        update={"metadata": fragment.metadata.model_copy(update={"revision": 2})}
+    )
+    await publisher.publish(updated, actor="admin", reason="new revision")
+    await publisher.activate(
+        updated, actor="admin", reason="roll out", expected_active_digest=fragment.digest
+    )
+    assert (await publisher.active("github_pr_review")).digest == updated.digest
+
+
+def test_dependency_impact_follows_nested_project_includes() -> None:
+    fragment = load_builtin_source("github_pr_review")
+    middle = fragment.model_copy(
+        update={
+            "metadata": fragment.metadata.model_copy(update={"name": "middle"}),
+            "spec": fragment.spec.model_copy(
+                update={
+                    "includes": (WorkflowInclude(source="project", name="github_pr_review"),),
+                }
+            ),
+        }
+    )
+    outer = _project_consumer("outer")
+    outer_include = outer.spec.includes[0].model_copy(update={"name": "middle"})
+    outer = outer.model_copy(
+        update={"spec": outer.spec.model_copy(update={"includes": (outer_include,)})}
+    )
+    affected = _affected_consumers(
+        {"github_pr_review": fragment, "middle": middle, "outer": outer}, "github_pr_review"
+    )
+    assert affected == (outer,)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("observation_policy", "default"),
+        ("mandatory_policies", ("require-review",)),
+        ("extension_points", ("after-review",)),
+    ],
+)
+def test_subworkflow_rejects_caller_fields_that_composition_ignores(field, value) -> None:
+    fragment = load_builtin_source("github_pr_review")
+    invalid = fragment.model_copy(update={"spec": fragment.spec.model_copy(update={field: value})})
+    with pytest.raises(ValueError, match="not applied to the caller"):
+        validate_subworkflow(invalid)
+
+
+@pytest.mark.asyncio
+async def test_definition_kind_cannot_change_across_revisions() -> None:
+    publisher = InMemoryDefinitionPublisher("PROJ")
+    fragment = load_builtin_source("github_pr_review")
+    publisher._definitions[(fragment.metadata.name, 1)] = fragment
+    publisher._active[fragment.metadata.name] = fragment
+    replacement = fragment.model_copy(
+        update={
+            "kind": "Workflow",
+            "metadata": fragment.metadata.model_copy(update={"revision": 2}),
+        }
+    )
+    publisher._validate = AsyncMock()
+
+    with pytest.raises(ValueError, match="kind cannot change"):
+        await publisher.publish(replacement, actor="admin", reason="replace kind")
+
+    publisher._definitions[(fragment.metadata.name, 2)] = replacement
+    with pytest.raises(ValueError, match="kind cannot change"):
+        await publisher.activate(
+            replacement,
+            actor="admin",
+            reason="replace kind",
+            expected_active_digest=fragment.digest,
+        )
 
 
 @pytest.mark.asyncio
@@ -310,3 +463,71 @@ async def test_nested_subworkflows_bind_exits_through_parent() -> None:
     resolved = await resolve_definition(outer, lookup)
     assert resolved.spec.steps["generate_spec"].next == "answer_question"
     DeclarativeWorkflowCompiler(resolved).validate()
+
+
+@pytest.mark.asyncio
+async def test_diamond_dependency_identifies_duplicate_include_paths() -> None:
+    def workflow(name: str, step: str, includes: list | None = None):
+        return load_workflow_value(
+            {
+                "apiVersion": "forge/v1",
+                "kind": "Workflow",
+                "metadata": {"name": name, "revision": 1},
+                "spec": {
+                    "state": "feature",
+                    "entry": step,
+                    "steps": {step: {"next": "__end__"}},
+                    "includes": includes or [],
+                },
+            }
+        )
+
+    shared = workflow("shared", "generate_spec")
+    left = workflow(
+        "left",
+        "generate_prd",
+        [
+            {
+                "source": "project",
+                "name": "shared",
+                "returnTo": "generate_prd",
+                "returnFrom": ["generate_spec"],
+            }
+        ],
+    )
+    right = workflow(
+        "right",
+        "answer_question",
+        [
+            {
+                "source": "project",
+                "name": "shared",
+                "returnTo": "answer_question",
+                "returnFrom": ["generate_spec"],
+            }
+        ],
+    )
+    root = workflow(
+        "root",
+        "triage_bug",
+        [
+            {
+                "source": "project",
+                "name": "left",
+                "returnTo": "triage_bug",
+                "returnFrom": ["generate_prd"],
+            },
+            {
+                "source": "project",
+                "name": "right",
+                "returnTo": "triage_bug",
+                "returnFrom": ["answer_question"],
+            },
+        ],
+    )
+
+    async def lookup(name: str):
+        return {"shared": shared, "left": left, "right": right}.get(name)
+
+    with pytest.raises(ValueError, match="appears through both 'project:left' and 'project:right'"):
+        await resolve_definition(root, lookup)

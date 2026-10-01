@@ -10,6 +10,7 @@ from forge.workflow.declarative.models import (
     WORKFLOW_LABEL_PREFIX,
     WORKFLOW_NAME_RE,
     WORKFLOW_PROPERTY_PREFIX,
+    WorkflowDefinition,
 )
 from forge.workflow.declarative.workflow import DeclarativeWorkflow
 
@@ -112,17 +113,17 @@ async def load_project_workflow(
             definition = load_workflow_value(value)
         if definition.spec.includes:
             loaded_dependencies: dict[str, str] = {}
-            dependency_cache: dict[str, Any] = {}
+            dependency_cache: dict[str, WorkflowDefinition | None] = {}
 
-            async def dependency(name: str):
+            async def dependency(name: str) -> WorkflowDefinition | None:
                 if definition_reader is None:
                     return None
                 if name in dependency_cache:
                     return dependency_cache[name]
                 value = await definition_reader.active(name)
-                resolved = (
+                resolved: WorkflowDefinition | None = (
                     value
-                    if isinstance(value, type(definition))
+                    if isinstance(value, WorkflowDefinition)
                     else load_workflow_value(value)
                     if value
                     else None

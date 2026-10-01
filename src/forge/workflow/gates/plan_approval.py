@@ -132,24 +132,73 @@ async def provision_epics_from_draft(state: WorkflowState, jira: "JiraClient") -
 
     ticket_key = state["ticket_key"]
     existing = await jira.search_issues(
-        f'labels = "forge:parent:{ticket_key}" AND issuetype = Epic'
+        f'labels = "forge:parent:{ticket_key}" AND issuetype = Epic',
+        fields=["summary", "labels"],
+        max_results=None,
     )
-    existing_by_summary = {issue.summary: issue.key for issue in existing}
 
     raw = state.get("plan_draft")
     if not raw:
         raise ValueError(f"Approved plan_draft not found for {ticket_key}")
     draft = ForgeDecompositionDraft.model_validate(raw) if isinstance(raw, dict) else raw
     project_key = (await jira.get_issue(ticket_key)).project_key
-    epic_keys: list[str] = []
-    for item in draft.items:
-        if item.excluded:
+    active_items = [item for item in draft.items if not item.excluded]
+    marker_prefix = f"forge:epic-item:{ticket_key}:"
+    claimed: set[str] = set()
+    matches: dict[int, str] = {}
+
+    # Stable per-item labels survive title edits and make a resumed provision
+    # independent of Jira search ordering. Old Epics without markers are
+    # matched by summary once and then upgraded to the stable label.
+    for item in active_items:
+        marker = f"{marker_prefix}{item.id}"
+        candidates = [issue for issue in existing if marker in getattr(issue, "labels", [])]
+        if len(candidates) > 1:
+            raise ValueError(f"Epic marker {marker} matches multiple Jira issues")
+        if candidates:
+            matches[item.id] = candidates[0].key
+            claimed.add(candidates[0].key)
+
+    for item in active_items:
+        if item.id in matches:
             continue
-        existing_key = existing_by_summary.get(item.summary[:JIRA_SUMMARY_MAX_LENGTH])
+        summary = item.summary[:JIRA_SUMMARY_MAX_LENGTH]
+        candidates = [
+            issue
+            for issue in existing
+            if issue.key not in claimed
+            and issue.summary == summary
+            and not any(label.startswith(marker_prefix) for label in getattr(issue, "labels", []))
+        ]
+        if len(candidates) > 1:
+            raise ValueError(f"Epic summary {summary!r} matches multiple unmarked Jira issues")
+        if candidates:
+            matches[item.id] = candidates[0].key
+            claimed.add(candidates[0].key)
+            await jira.add_labels(candidates[0].key, [f"{marker_prefix}{item.id}"])
+
+    unclaimed = [
+        issue.key
+        for issue in existing
+        if issue.key not in claimed
+        and not any(label.startswith(marker_prefix) for label in getattr(issue, "labels", []))
+    ]
+    if unclaimed:
+        raise ValueError(
+            f"Cannot safely reconcile unmarked Epics for {ticket_key}: {', '.join(unclaimed)}"
+        )
+
+    epic_keys: list[str] = []
+    for item in active_items:
+        existing_key = matches.get(item.id)
         if existing_key:
             epic_keys.append(existing_key)
             continue
-        labels = [ForgeLabel.FORGE_MANAGED.value, f"forge:parent:{ticket_key}"]
+        labels = [
+            ForgeLabel.FORGE_MANAGED.value,
+            f"forge:parent:{ticket_key}",
+            f"{marker_prefix}{item.id}",
+        ]
         if item.repo and "/" in item.repo:
             labels.append(f"repo:{item.repo}")
         epic_keys.append(

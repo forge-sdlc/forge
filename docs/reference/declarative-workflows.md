@@ -88,9 +88,10 @@ either a fixed `next` step or a named `route` with possible `branches`.
 Use `kind: Subworkflow` to publish a reusable group of registered steps. Give it an entry,
 steps, and named exit targets such as `@exit/review`. A subworkflow can list
 `spec.compatibleStates` when the same nodes and routers are valid in several profiles. It is
-not selectable by a ticket label. A normal `Workflow` can also be included; its fixed
-`next: __end__` completion returns to the caller, while routed `__end__` outcomes continue
-to pause the invocation.
+not selectable by a ticket label. A normal `Workflow` can also be included. Its
+`returnFrom` list identifies the terminal edges that return to the caller; all
+other `__end__` edges retain their original behavior, including pauses and
+blocked termination.
 
 ```yaml
 apiVersion: forge/v1
@@ -130,9 +131,17 @@ spec:
 
 The caller may target included nodes by their canonical names. An included definition may
 appear once per caller; node-name collisions, missing exits, dependency cycles, and profile
-mismatches are rejected. For a full workflow include, use `returnTo: caller_step` instead of
-`exits`. Includes can be nested. All expanded steps must satisfy the ordinary workflow
+mismatches are rejected. For a full workflow include, use `returnTo: caller_step` and
+`returnFrom: [step_name]` for a fixed `next: __end__` edge, or
+`returnFrom: [step_name:outcome]` for a routed branch to `__end__`. Select each
+normal completion edge explicitly; use no `exits`. Includes can be nested. All
+expanded steps must satisfy the ordinary workflow
 catalog, policy, size, and graph checks.
+Subworkflow definitions may set `state`, `compatibleStates`, `entry`, `steps`, and
+`includes`. Flow-level `observationPolicy`, `mandatoryPolicies`, `extensionPoints`,
+and `resume.fromRevisions` are rejected on subworkflows because inclusion does not
+apply those fields to the caller. A project dependency must be published and
+activated before another definition can include it.
 
 Forge ships `github_pr_review` for the shared PR creation, CI, CI fix, and review response
 path. Each built-in workflow keeps its own human review gate routing. Project definitions
