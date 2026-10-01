@@ -2105,9 +2105,10 @@ workflow checkpoint and permits targeted operator replay.</p>
 <h3 id="host-level-podman-for-code-execution">Host-Level Podman for Code Execution<a class="headerlink" href="#host-level-podman-for-code-execution" title="Permanent link">&para;</a></h3>
 <p>Run implementation tasks in rootless Podman containers on the Worker host instead of Kubernetes jobs or remote VMs. This simplifies the container lifecycle but requires Podman on every Worker host.</p>
 <h3 id="golden-paths-by-issue-type">Golden paths by issue type<a class="headerlink" href="#golden-paths-by-issue-type" title="Permanent link">&para;</a></h3>
-<p>Forge ships versioned Feature, Bug, and Task Takeover definitions. They have distinct planning
-stages and reuse registered implementation, CI, and review stations. Project definitions may compose
-the registered catalog but cannot add arbitrary executable logic.</p>
+<p>Forge ships versioned Feature, Bug, and Task Takeover definitions. Their distinct planning
+stages share a reusable GitHub PR, CI, and review response subworkflow. Project definitions may
+include built-in or same-project active definitions and compose the registered catalog, but
+cannot add arbitrary executable logic. New instances pin the expanded graph.</p>
 <h3 id="human-approval-gates">Human Approval Gates<a class="headerlink" href="#human-approval-gates" title="Permanent link">&para;</a></h3>
 <p>Workflows pause at defined gates and wait indefinitely for human approval. The <code>forge:yolo</code> label provides an opt-in escape hatch for autonomous operation. The tradeoff: increased latency for every ticket.</p>
 <h2 id="known-limitations">Known Limitations<a class="headerlink" href="#known-limitations" title="Permanent link">&para;</a></h2>
