@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from forge.workflow.declarative.composition import resolve_definition
 from forge.workflow.declarative.loader import load_workflow_value
 from forge.workflow.declarative.models import (
     WORKFLOW_LABEL_PREFIX,
     WORKFLOW_NAME_RE,
     WORKFLOW_PROPERTY_PREFIX,
+    WorkflowDefinition,
 )
 from forge.workflow.declarative.workflow import DeclarativeWorkflow
 
@@ -17,6 +19,10 @@ class DefinitionReader(Protocol):
     async def get(self, name: str, revision: int) -> Any | None: ...
 
     async def active(self, name: str) -> Any | None: ...
+
+    async def remember_expanded(self, definition: Any) -> None: ...
+
+    async def get_expanded(self, name: str, revision: int, digest: str) -> Any | None: ...
 
 
 class ProjectPropertyReader(Protocol):
@@ -54,7 +60,7 @@ async def load_project_workflow(
 
     A checkpoint's canonical definition is preferred because it is the durable
     source of truth for an in-flight instance.  If only identity metadata was
-    persisted, ``definition_reader`` must provide the exact published revision;
+    persisted, ``definition_reader`` must provide the exact expanded artifact;
     this function deliberately never falls back to Jira's active property for a
     pinned checkpoint.
     """
@@ -71,7 +77,12 @@ async def load_project_workflow(
                 raise ValueError(
                     f"published workflow '{workflow_name}' revision {pinned_revision} is unavailable"
                 )
-            value = await definition_reader.get(workflow_name, int(pinned_revision))
+            value = await definition_reader.get_expanded(
+                workflow_name, int(pinned_revision), pinned_digest
+            )
+            if value is None:
+                # Older, non-composed runs only have a published source artifact.
+                value = await definition_reader.get(workflow_name, int(pinned_revision))
             if value is None:
                 raise ValueError(
                     f"published workflow '{workflow_name}' revision {pinned_revision} is unavailable"
@@ -100,6 +111,38 @@ async def load_project_workflow(
                     f"project {project_key.upper()} does not define workflow '{workflow_name}'"
                 )
             definition = load_workflow_value(value)
+        if definition.spec.includes:
+            loaded_dependencies: dict[str, str] = {}
+            dependency_cache: dict[str, WorkflowDefinition | None] = {}
+
+            async def dependency(name: str) -> WorkflowDefinition | None:
+                if definition_reader is None:
+                    return None
+                if name in dependency_cache:
+                    return dependency_cache[name]
+                value = await definition_reader.active(name)
+                resolved: WorkflowDefinition | None = (
+                    value
+                    if isinstance(value, WorkflowDefinition)
+                    else load_workflow_value(value)
+                    if value
+                    else None
+                )
+                if resolved is not None:
+                    loaded_dependencies[name] = resolved.digest
+                dependency_cache[name] = resolved
+                return resolved
+
+            definition = await resolve_definition(definition, dependency)
+            for name, digest in loaded_dependencies.items():
+                current = await definition_reader.active(name) if definition_reader else None
+                if current is None:
+                    raise ValueError(f"project dependency '{name}' changed during resolution")
+                current = current if hasattr(current, "digest") else load_workflow_value(current)
+                if current.digest != digest:
+                    raise ValueError(f"project dependency '{name}' changed during resolution")
+            if definition_reader is not None:
+                await definition_reader.remember_expanded(definition)
     if definition.metadata.name != workflow_name:
         raise ValueError(
             f"workflow property name '{workflow_name}' does not match metadata name "

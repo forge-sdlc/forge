@@ -1,0 +1,76 @@
+{
+  "apiVersion": "forge/v1",
+  "kind": "Subworkflow",
+  "metadata": {
+    "description": "Shared pull request, CI, and review response path",
+    "name": "github_pr_review",
+    "revision": 1
+  },
+  "spec": {
+    "compatibleStates": [
+      "feature",
+      "bug",
+      "task_takeover"
+    ],
+    "entry": "create_pr",
+    "state": "feature",
+    "steps": {
+      "attempt_ci_fix": {
+        "branches": {
+          "attempt_ci_fix": "@exit/blocked",
+          "ci_evaluator": "ci_evaluator",
+          "escalate_blocked": "@exit/blocked",
+          "human_review_gate": "@exit/review"
+        },
+        "dynamicRoute": false,
+        "retryBound": 5,
+        "route": "route_current_node"
+      },
+      "ci_evaluator": {
+        "branches": {
+          "attempt_ci_fix": "attempt_ci_fix",
+          "escalate_blocked": "@exit/blocked",
+          "human_review_gate": "@exit/review"
+        },
+        "dynamicRoute": false,
+        "route": "route_ci_evaluation"
+      },
+      "create_pr": {
+        "branches": {
+          "escalate_blocked": "@exit/blocked",
+          "teardown_workspace": "teardown_workspace"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_pr_creation"
+      },
+      "implement_review": {
+        "branches": {
+          "escalate_blocked": "@exit/blocked",
+          "human_review_gate": "@exit/review",
+          "implement_review": "implement_review",
+          "review_response_gate": "review_response_gate"
+        },
+        "dynamicRoute": false,
+        "retryBound": 3,
+        "route": "route_current_node"
+      },
+      "review_response_gate": {
+        "branches": {
+          "__end__": "__end__",
+          "human_review_gate": "@exit/review",
+          "implement_review": "implement_review"
+        },
+        "dynamicRoute": false,
+        "route": "route_review_response"
+      },
+      "teardown_workspace": {
+        "branches": {
+          "human_review_gate": "@exit/review",
+          "setup_workspace": "@exit/setup"
+        },
+        "dynamicRoute": false,
+        "route": "route_after_teardown"
+      }
+    }
+  }
+}

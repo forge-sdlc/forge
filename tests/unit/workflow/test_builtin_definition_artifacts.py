@@ -8,6 +8,7 @@ from importlib import resources
 import pytest
 
 from forge.workflow.declarative.builtins import (
+    _load_builtin_definition,
     builtin_bug_definition,
     builtin_feature_definition,
     builtin_task_takeover_definition,
@@ -24,9 +25,9 @@ _DEFINITIONS = {
 # A changed digest is an intentional process revision and must update the
 # checked-in artifact and this snapshot together.
 _DIGESTS = {
-    "feature": "7764c3ba6a9ede67f9b4b2636c9718085aa07f24a50cb4054b6068fe18ae9841",
-    "bug": "c78b72f68d8c10bb58a0e019395ee2dff3b184928f25fb4d740b01e4612dc7d1",
-    "task_takeover": "63690df2b210effda77e00b79d39a3f7be62ffb727b67cc657bf58b47a787b37",
+    "feature": "5f653ba647ffbb9cbeda762b363e95eacbc17ed99b82a5d1176ac6fa9c9a8a29",
+    "bug": "95d5afd82d727e9eaa1f75f40635536d32ef1b7ef0af84fd9cca2a29683b1d07",
+    "task_takeover": "06049d7a4fee8789254b897ece896b004b54a2ae04f2b27a1f173c86129053fb",
 }
 
 
@@ -38,7 +39,10 @@ def test_artifact_round_trip_preserves_canonical_definition(name: str) -> None:
     definition = load_workflow_value(artifact)
 
     assert definition.canonical_dict() == artifact
-    assert _DEFINITIONS[name]().canonical_dict() == artifact
+    expanded = _DEFINITIONS[name]()
+    assert not expanded.spec.includes
+    assert expanded.spec.resolved_dependencies
+    assert set(expanded.spec.steps) > set(definition.spec.steps)
 
 
 @pytest.mark.parametrize("name", tuple(_DEFINITIONS))
@@ -53,3 +57,36 @@ def test_default_compiler_consumes_checked_in_artifact(name: str) -> None:
     compiler = DeclarativeWorkflowCompiler(definition)
     compiler.validate()
     assert compiler.build_graph() is not None
+
+
+@pytest.mark.parametrize("damage", ["missing_exit", "missing_steps"])
+def test_builtin_include_rejects_malformed_artifact(
+    damage: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from forge.workflow.declarative import builtins
+
+    real_files = resources.files
+    artifact = json.loads(
+        real_files("forge.workflow.declarative.definitions")
+        .joinpath("feature.json")
+        .read_text(encoding="utf-8")
+    )
+    if damage == "missing_exit":
+        del artifact["spec"]["includes"][0]["exits"]["review"]
+    else:
+        del artifact["spec"]["steps"]
+
+    class Resource:
+        def read_text(self, *, encoding: str) -> str:
+            assert encoding == "utf-8"
+            return json.dumps(artifact)
+
+    class Root:
+        def joinpath(self, name: str):
+            if name == "feature.json":
+                return Resource()
+            return real_files("forge.workflow.declarative.definitions").joinpath(name)
+
+    monkeypatch.setattr(builtins.resources, "files", lambda _: Root())
+    with pytest.raises(ValueError, match="requires exactly these exits|requires a steps mapping"):
+        _load_builtin_definition("feature")

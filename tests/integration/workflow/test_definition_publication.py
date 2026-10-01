@@ -58,3 +58,17 @@ async def test_redis_publication_activation_and_cas(redis_client) -> None:
         first.metadata.revision,
         second.metadata.revision,
     ]
+
+
+@pytest.mark.asyncio
+async def test_expanded_artifact_survives_publisher_recreation(redis_client) -> None:
+    first = builtin_feature_definition()
+    publisher = DefinitionPublisher("PROJ", redis_client=redis_client)
+    await publisher.remember_expanded(first)
+
+    reopened = DefinitionPublisher("PROJ", redis_client=redis_client)
+    recovered = await reopened.get_expanded(
+        first.metadata.name, first.metadata.revision, first.digest
+    )
+    assert recovered is not None
+    assert recovered.digest == first.digest

@@ -303,6 +303,7 @@ class TestJiraClientLabels:
             return_value=[
                 "forge:managed",
                 "forge:workflow:planning-smoke",
+                "forge:yolo",
                 "forge:prd-pending",
             ]
         )
@@ -318,7 +319,22 @@ class TestJiraClientLabels:
 
         operations = mock_http.put.call_args.kwargs["json"]["update"]["labels"]
         assert {"remove": "forge:workflow:planning-smoke"} not in operations
+        assert {"remove": "forge:yolo"} not in operations
         assert {"remove": "forge:prd-pending"} in operations
+
+
+class TestJiraClientCreateEpic:
+    @pytest.mark.asyncio
+    async def test_generated_summary_is_limited_to_jira_maximum(self):
+        jira = JiraClient()
+        response = MagicMock()
+        response.json.return_value = {"key": "AISOS-123"}
+        http = AsyncMock()
+        http.post.return_value = response
+        with patch.object(jira, "_get_client", return_value=http):
+            key = await jira.create_epic("AISOS", "x" * 294, "Description", "AISOS-1")
+        assert key == "AISOS-123"
+        assert len(http.post.call_args.kwargs["json"]["fields"]["summary"]) == 255
 
 
 class TestJiraClientArchiveIssue:
@@ -1092,6 +1108,18 @@ class TestJiraClientListProjectProperties:
 
 
 class TestJiraClientSearchIssues:
+    @pytest.mark.asyncio
+    async def test_requests_fields_when_caller_uses_defaults(self, jira_client):
+        response = MagicMock()
+        response.json.return_value = {"issues": [], "isLast": True}
+        http = AsyncMock()
+        http.get.return_value = response
+
+        with patch.object(jira_client, "_get_client", return_value=http):
+            await jira_client.search_issues('project = "PROJ"')
+
+        assert "summary" in http.get.call_args.kwargs["params"]["fields"]
+
     @pytest.mark.asyncio
     async def test_uses_enhanced_jql_search_and_token_pagination(self, jira_client):
         first = MagicMock()

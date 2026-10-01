@@ -9,7 +9,14 @@ A definition has four important parts:
 - `spec.entry` names the first ordinary step.
 - `spec.steps` maps registered node names to their transitions.
 
-Start at `entry`. Follow `next` for a fixed transition. At a step with `route`, follow every target in `branches`. A branch key is a possible router result; its value is the next step. `__end__` stops the current invocation and is not itself a declared step.
+Reusable `Subworkflow` definitions use the same registered nodes and may end a transition
+at `@exit/name`. A caller binds each exit through `spec.includes`; it may also include a
+complete workflow with `returnTo` and `returnFrom` for selected normal completion edges. Use `source: builtin` or
+`source: project`. Project references resolve to active definitions in the caller's Jira
+project. Nodes remain canonical and cannot collide. New runs pin the fully expanded graph;
+active runs keep their existing pin.
+
+Start at `entry`. Follow `next` for a fixed transition. At a step with `route`, follow every target in `branches`. A branch key is a possible router result; its value is the next step. `__end__` stops the current invocation and is not itself a declared step. In an included full workflow, `returnFrom` lists the terminal edges that return to the caller's `returnTo` target. Write `step_name` for a fixed `next: __end__` edge or `step_name:outcome` for a routed branch targeting `__end__`. Unlisted terminal edges keep their pause or stop behavior.
 
 Use `forge workflow render FILE` instead of tracing a large definition manually.
 
@@ -42,7 +49,7 @@ Dynamic fan-out uses `dynamicRoute: true` and an explicit `maxConcurrency`. Forg
 
 The workflow owns topology and flow-level execution choices. `retryBound`, `maxConcurrency`, and join behavior remain valid because they change how the graph advances.
 
-Do not author `kind`, `stationContract`, `stationContractVersion`, `requiredPolicies`, `allowedEffects`, `externalEntry`, `observationPolicy`, `mandatoryPolicies`, or `extensionPoints`. Forge derives node identity, authority, reconciliation, and mandatory governance from the selected state profile. Exceptional commands such as PR rebasing execute through the command-operation boundary and do not appear as workflow steps. Older pinned definitions containing catalog metadata remain readable for compatibility.
+Do not author step `kind`, `stationContract`, `stationContractVersion`, `requiredPolicies`, `allowedEffects`, `externalEntry`, `observationPolicy`, `mandatoryPolicies`, or `extensionPoints`. The top-level `kind` is `Workflow` or `Subworkflow`. Forge derives node identity, authority, reconciliation, and mandatory governance from the selected state profile. Exceptional commands such as PR rebasing execute through the command-operation boundary and do not appear as workflow steps. Older pinned definitions containing catalog metadata remain readable for compatibility.
 
 Run `forge workflow catalog STATE` when you need to inspect the derived node metadata; do not copy that metadata into the workflow.
 
@@ -72,4 +79,10 @@ forge workflow diff previous.yaml workflow.yaml
 forge workflow simulate-migration previous.yaml workflow.yaml instances.json
 ```
 
-`validate --json` emits canonical storage JSON. `render --format json` emits a compact process manifest. These outputs serve different purposes.
+Use `--project-key PROJECT` when a source file includes an active project definition. For a
+historical diff or migration check, use the exact expanded artifacts pinned by the instances;
+resolving old source files against today's active dependencies can change the graph being compared.
+
+For a workflow, `validate --json` emits the resolved canonical runtime JSON and
+`render --format json` emits a process manifest. For a subworkflow, render JSON emits the
+resolved subworkflow definition with its exit targets.

@@ -8,6 +8,7 @@ from forge.integrations.source_control.contracts import (
     ChangeRequest,
     ChangeRequestIdentity,
     ChangeRequestState,
+    CheckStatus,
     EventKind,
     NormalizedEvent,
     Provider,
@@ -127,4 +128,31 @@ async def test_merged_change_request_is_terminal_and_independent_of_head_sha() -
     ledger = InMemoryObservationLedger()
     assert (await ledger.record(updated_observation)).disposition is ObservationDisposition.ACCEPTED
     assert (await ledger.record(merged_observation)).disposition is ObservationDisposition.ACCEPTED
-    assert (await ledger.record(redelivery_observation)).disposition is ObservationDisposition.DUPLICATE
+    assert (
+        await ledger.record(redelivery_observation)
+    ).disposition is ObservationDisposition.DUPLICATE
+
+
+@pytest.mark.asyncio
+async def test_check_suite_events_for_successive_ci_runs_are_independent() -> None:
+    first = _event()
+    first.id = "poller-check_suite-failed"
+    first.kind = EventKind.CHECK_UPDATED
+    first.check_suite_status = CheckStatus.COMPLETED
+
+    second = _event()
+    second.id = "poller-check_suite-passed"
+    second.kind = EventKind.CHECK_UPDATED
+    second.check_suite_status = CheckStatus.COMPLETED
+    assert second.change_request is not None
+    second.change_request.head_sha = "def456"
+
+    first_observation = normalized_event_to_observation(first)
+    second_observation = normalized_event_to_observation(second)
+    assert first_observation.resource.resource_type == "check_suite_event"
+    assert first_observation.resource != second_observation.resource
+
+    ledger = InMemoryObservationLedger()
+    assert (await ledger.record(first_observation)).disposition is ObservationDisposition.ACCEPTED
+    assert (await ledger.record(second_observation)).disposition is ObservationDisposition.ACCEPTED
+    assert (await ledger.record(second_observation)).disposition is ObservationDisposition.DUPLICATE

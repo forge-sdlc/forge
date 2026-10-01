@@ -51,6 +51,14 @@ def normalized_event_to_observation(
         resource_type = "check"
         external_id = f"{event.repo_ref.id}:{event.check.name}"
         revision = _check_revision(event)
+    elif event.kind is EventKind.CHECK_UPDATED and event.check_suite_status is not None:
+        # A check suite is an event about a CI run, not a revision of the PR.
+        # In particular, a new run on another head SHA must not conflict with
+        # the previous suite (or with a pull_request event for the same PR).
+        # The delivery ID is stable for poller redelivery and webhook retries.
+        resource_type = "check_suite_event"
+        external_id = f"{event.repo_ref.id}:{event.id}"
+        revision = event.id
     elif event.comment:
         resource_type = "comment"
         external_id = f"{event.repo_ref.id}:{event.comment.id}"

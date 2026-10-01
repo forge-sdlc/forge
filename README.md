@@ -231,7 +231,7 @@ See [Getting Started](https://Forge-sdlc.github.io/forge/getting-started/) for t
 - [Architecture](https://Forge-sdlc.github.io/forge/architecture/): Versioned workflows,
   reconciliation, typed stations, durable effects, and execution inspection.
 - [Declarative Workflows](https://Forge-sdlc.github.io/forge/reference/declarative-workflows/):
-  Author and govern constrained project workflow definitions.
+  Author, reuse, and govern constrained project workflow definitions.
 - [Skills System](https://Forge-sdlc.github.io/forge/skills/): Customize Forge for your team and stack.
 - [Developer Guide](https://Forge-sdlc.github.io/forge/developer-guide/): Local testing, debugging, Prometheus metrics, Langfuse tracing, and Grafana dashboards.
 

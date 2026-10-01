@@ -31,9 +31,10 @@ Run implementation tasks in rootless Podman containers on the Worker host instea
 
 ### Golden paths by issue type
 
-Forge ships versioned Feature, Bug, and Task Takeover definitions. They have distinct planning
-stages and reuse registered implementation, CI, and review stations. Project definitions may compose
-the registered catalog but cannot add arbitrary executable logic.
+Forge ships versioned Feature, Bug, and Task Takeover definitions. Their distinct planning
+stages share a reusable GitHub PR, CI, and review response subworkflow. Project definitions may
+include built-in or same-project active definitions and compose the registered catalog, but
+cannot add arbitrary executable logic. New instances pin the expanded graph.
 
 ### Human Approval Gates
 

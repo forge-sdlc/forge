@@ -9,6 +9,7 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 
 from forge.workflow.declarative.compiler import DeclarativeWorkflowCompiler
+from forge.workflow.declarative.composition import resolve_definition, validate_subworkflow
 from forge.workflow.declarative.loader import load_workflow_file
 from forge.workflow.declarative.manifest import (
     build_process_manifest,
@@ -17,6 +18,14 @@ from forge.workflow.declarative.manifest import (
     simulate_process_migration,
 )
 from forge.workflow.declarative.publication import DefinitionPublisher
+
+
+async def _load_resolved(path: str, project_key: str | None, state_profile: str | None = None):
+    source = load_workflow_file(path)
+    publisher = DefinitionPublisher(project_key) if project_key else None
+    return await resolve_definition(
+        source, publisher.active if publisher else None, state_profile=state_profile
+    )
 
 
 def _print_error(exc: Exception) -> int:
@@ -28,8 +37,15 @@ async def cmd_workflow(args: Any) -> int:
     action = args.workflow_command
     if action == "validate":
         try:
-            definition = load_workflow_file(args.file)
-            DeclarativeWorkflowCompiler(definition).validate()
+            definition = await _load_resolved(args.file, getattr(args, "project_key", None))
+            if definition.kind == "Subworkflow":
+                for state in definition.spec.compatible_states or (definition.spec.state,):
+                    profile_definition = await _load_resolved(
+                        args.file, getattr(args, "project_key", None), state
+                    )
+                    validate_subworkflow(profile_definition)
+            else:
+                DeclarativeWorkflowCompiler(definition).validate()
         except Exception as exc:
             return _print_error(exc)
         print(
@@ -42,7 +58,24 @@ async def cmd_workflow(args: Any) -> int:
 
     if action == "render":
         try:
-            definition = load_workflow_file(args.file)
+            definition = await _load_resolved(args.file, getattr(args, "project_key", None))
+            if definition.kind == "Subworkflow":
+                validate_subworkflow(definition)
+                if args.format == "json":
+                    print(json.dumps(definition.canonical_dict(), indent=2))
+                else:
+                    lines = ["flowchart TD", f"    __start__([start]) --> {definition.spec.entry}"]
+                    for name, step in sorted(definition.spec.steps.items()):
+                        lines.append(f'    {name}["{name}"]')
+                        if step.next:
+                            lines.append(f"    {name} --> {step.next.replace('@exit/', 'exit_')}")
+                        else:
+                            for outcome, target in sorted(step.branches.items()):
+                                lines.append(
+                                    f"    {name} -->|{outcome}| {target.replace('@exit/', 'exit_')}"
+                                )
+                    print("\n".join(lines))
+                return 0
             manifest = build_process_manifest(definition)
         except Exception as exc:
             return _print_error(exc)
@@ -54,8 +87,8 @@ async def cmd_workflow(args: Any) -> int:
 
     if action == "diff":
         try:
-            previous = load_workflow_file(args.previous)
-            current = load_workflow_file(args.current)
+            previous = await _load_resolved(args.previous, getattr(args, "project_key", None))
+            current = await _load_resolved(args.current, getattr(args, "project_key", None))
             impact = compare_process_definitions(previous, current)
         except Exception as exc:
             return _print_error(exc)
@@ -64,8 +97,8 @@ async def cmd_workflow(args: Any) -> int:
 
     if action == "simulate-migration":
         try:
-            previous = load_workflow_file(args.previous)
-            current = load_workflow_file(args.current)
+            previous = await _load_resolved(args.previous, getattr(args, "project_key", None))
+            current = await _load_resolved(args.current, getattr(args, "project_key", None))
             with open(args.instances, encoding="utf-8") as source:
                 instances = json.load(source)
             if not isinstance(instances, list):
@@ -157,7 +190,11 @@ async def cmd_workflow(args: Any) -> int:
             active_definition = await publisher.active(args.name)
             if active_definition is None:
                 raise ValueError(f"workflow '{args.name}' is not defined for {project_key}")
-            DeclarativeWorkflowCompiler(active_definition).validate()
+            if active_definition.kind == "Workflow":
+                resolved = await resolve_definition(active_definition, publisher.active)
+                DeclarativeWorkflowCompiler(resolved).validate()
+            else:
+                validate_subworkflow(await resolve_definition(active_definition, publisher.active))
             if getattr(args, "json", False):
                 print(json.dumps(active_definition.canonical_dict(), indent=2))
             else:

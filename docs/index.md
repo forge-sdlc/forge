@@ -51,7 +51,7 @@ graph TD
 - [Operations](operations.md) — Services, execution inspection, recovery, and incident response
 - [Developer Guide](developer-guide.md) — Full local development reference
 - [Architecture](architecture/index.md) — How workflow state, reconciliation, stations, and effects fit together
-- [Declarative Workflows](reference/declarative-workflows.md) — Compose registered Forge stages safely
+- [Declarative Workflows](reference/declarative-workflows.md) — Compose and reuse registered Forge stages safely
 - [Configuration](reference/config.md) — Repository, model, proposal, and deployment settings
 - [Skills System](skills/index.md) — Customize Forge for your stack
 - [Contributing](dev/contributing.md) — How to contribute

@@ -4,10 +4,21 @@
   "metadata": {
     "description": "Forge supported feature golden path",
     "name": "feature",
-    "revision": 4
+    "revision": 5
   },
   "spec": {
     "entry": "generate_prd",
+    "includes": [
+      {
+        "exits": {
+          "blocked": "escalate_blocked",
+          "review": "human_review_gate",
+          "setup": "setup_workspace"
+        },
+        "name": "github_pr_review",
+        "source": "builtin"
+      }
+    ],
     "resume": {
       "fromRevisions": {}
     },
@@ -33,38 +44,10 @@
         "dynamicRoute": false,
         "route": "route_after_answer"
       },
-      "attempt_ci_fix": {
-        "branches": {
-          "attempt_ci_fix": "escalate_blocked",
-          "ci_evaluator": "ci_evaluator",
-          "escalate_blocked": "escalate_blocked",
-          "human_review_gate": "human_review_gate"
-        },
-        "dynamicRoute": false,
-        "retryBound": 5,
-        "route": "route_current_node"
-      },
-      "ci_evaluator": {
-        "branches": {
-          "attempt_ci_fix": "attempt_ci_fix",
-          "escalate_blocked": "escalate_blocked",
-          "human_review_gate": "human_review_gate"
-        },
-        "dynamicRoute": false,
-        "route": "route_ci_evaluation"
-      },
       "complete_tasks": {
         "branches": {},
         "dynamicRoute": false,
         "next": "aggregate_epic_status"
-      },
-      "create_pr": {
-        "branches": {
-          "escalate_blocked": "escalate_blocked",
-          "teardown_workspace": "teardown_workspace"
-        },
-        "dynamicRoute": false,
-        "route": "route_after_pr_creation"
       },
       "decompose_epics": {
         "branches": {
@@ -113,21 +96,10 @@
         "dynamicRoute": false,
         "route": "route_human_review"
       },
-      "implement_review": {
+      "implement_work": {
         "branches": {
           "escalate_blocked": "escalate_blocked",
-          "human_review_gate": "human_review_gate",
-          "implement_review": "implement_review",
-          "review_response_gate": "review_response_gate"
-        },
-        "dynamicRoute": false,
-        "retryBound": 3,
-        "route": "route_current_node"
-      },
-    "implement_work": {
-      "branches": {
-        "escalate_blocked": "escalate_blocked",
-        "implement_work": "implement_work",
+          "implement_work": "implement_work",
           "local_review": "local_review"
         },
         "dynamicRoute": false,
@@ -156,11 +128,6 @@
         "dynamicRoute": false,
         "route": "route_plan_approval"
       },
-      "provision_epics": {
-        "branches": {},
-        "dynamicRoute": false,
-        "next": "generate_tasks"
-      },
       "prd_approval_gate": {
         "branches": {
           "__end__": "__end__",
@@ -170,6 +137,16 @@
         },
         "dynamicRoute": false,
         "route": "route_prd_approval"
+      },
+      "provision_epics": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "generate_tasks"
+      },
+      "provision_tasks": {
+        "branches": {},
+        "dynamicRoute": false,
+        "next": "task_router"
       },
       "regenerate_all_epics": {
         "branches": {
@@ -211,19 +188,10 @@
         "dynamicRoute": false,
         "route": "route_after_spec_regeneration"
       },
-      "review_response_gate": {
+      "setup_workspace": {
         "branches": {
-          "__end__": "__end__",
-          "human_review_gate": "human_review_gate",
-          "implement_review": "implement_review"
-        },
-        "dynamicRoute": false,
-        "route": "route_review_response"
-      },
-    "setup_workspace": {
-      "branches": {
-        "escalate_blocked": "escalate_blocked",
-        "implement_work": "implement_work"
+          "escalate_blocked": "escalate_blocked",
+          "implement_work": "implement_work"
         },
         "dynamicRoute": false,
         "route": "route_after_workspace_setup"
@@ -242,33 +210,20 @@
         "branches": {
           "__end__": "__end__",
           "answer_question": "answer_question",
+          "provision_tasks": "provision_tasks",
           "regenerate_all_tasks": "regenerate_all_tasks",
           "regenerate_epic_tasks": "regenerate_epic_tasks",
-          "provision_tasks": "provision_tasks",
           "task_router": "task_router",
           "update_single_task": "update_single_task"
         },
         "dynamicRoute": false,
         "route": "route_task_approval"
       },
-      "provision_tasks": {
-        "branches": {},
-        "dynamicRoute": false,
-        "next": "task_router"
-      },
       "task_router": {
         "branches": {},
         "dynamicRoute": true,
         "maxConcurrency": 16,
         "route": "route_tasks_parallel"
-      },
-      "teardown_workspace": {
-        "branches": {
-          "human_review_gate": "human_review_gate",
-          "setup_workspace": "setup_workspace"
-        },
-        "dynamicRoute": false,
-        "route": "route_after_teardown"
       },
       "update_documentation": {
         "branches": {},

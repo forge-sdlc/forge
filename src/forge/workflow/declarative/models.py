@@ -104,10 +104,37 @@ class WorkflowResume(StrictModel):
     )
 
 
+class WorkflowInclude(StrictModel):
+    source: Literal["builtin", "project"]
+    name: str
+    exits: dict[str, str] = Field(default_factory=dict)
+    return_to: str | None = Field(default=None, alias="returnTo")
+    # Full workflow includes must identify which terminal edges return to the
+    # caller. Other __end__ edges may represent waits or blocked termination.
+    return_from: tuple[str, ...] = Field(
+        default=(), alias="returnFrom", exclude_if=lambda value: not value
+    )
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        if not WORKFLOW_NAME_RE.fullmatch(value):
+            raise ValueError("invalid included definition name")
+        return value
+
+
 class WorkflowSpec(StrictModel):
     state: Literal["feature", "bug", "task_takeover"]
     entry: str
-    steps: dict[str, WorkflowStep]
+    steps: dict[str, WorkflowStep] = Field(default_factory=dict)
+    includes: tuple[WorkflowInclude, ...] = Field(default=(), exclude_if=lambda value: not value)
+    resolved_dependencies: tuple[str, ...] = Field(
+        default=(), alias="resolvedDependencies", exclude_if=lambda value: not value
+    )
+    # Subworkflows can be checked against more than one trusted state profile.
+    compatible_states: tuple[Literal["feature", "bug", "task_takeover"], ...] = Field(
+        default=(), alias="compatibleStates", exclude_if=lambda value: not value
+    )
     # The provider-neutral policy used to apply external observations to this
     # workflow instance.  Policies are versioned, allowlisted runtime
     # capabilities; arbitrary import paths are deliberately not supported.
@@ -134,8 +161,6 @@ class WorkflowSpec(StrictModel):
     @field_validator("steps")
     @classmethod
     def validate_steps(cls, value: dict[str, WorkflowStep]) -> dict[str, WorkflowStep]:
-        if not value:
-            raise ValueError("at least one step is required")
         if len(value) > MAX_STEPS:
             raise ValueError(f"a workflow may have at most {MAX_STEPS} steps")
         invalid = [name for name in value if not NODE_NAME_RE.fullmatch(name)]
@@ -143,12 +168,28 @@ class WorkflowSpec(StrictModel):
             raise ValueError(f"invalid canonical node name: {invalid[0]}")
         return value
 
+    @model_validator(mode="after")
+    def validate_body(self) -> WorkflowSpec:
+        if not self.steps and not self.includes:
+            raise ValueError("at least one step or include is required")
+        return self
+
 
 class WorkflowDefinition(StrictModel):
     api_version: Literal["forge/v1"] = Field(alias="apiVersion")
-    kind: Literal["Workflow"]
+    kind: Literal["Workflow", "Subworkflow"]
     metadata: WorkflowMetadata
     spec: WorkflowSpec
+
+    @model_validator(mode="after")
+    def validate_kind(self) -> WorkflowDefinition:
+        if self.kind == "Workflow" and self.spec.compatible_states:
+            raise ValueError("compatibleStates is only valid for subworkflows")
+        if self.kind == "Subworkflow" and self.spec.state not in (
+            self.spec.compatible_states or (self.spec.state,)
+        ):
+            raise ValueError("subworkflow state must be compatible")
+        return self
 
     def canonical_dict(self) -> dict[str, Any]:
         return self.model_dump(by_alias=True, exclude_none=True, mode="json")

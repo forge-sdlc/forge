@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 5
 INITIAL_BACKOFF_SECONDS = 1.0
 MAX_BACKOFF_SECONDS = 60.0
+JIRA_SUMMARY_MAX_LENGTH = 255
 
 _BARE_URL_RE = re.compile(r"https?://[^\s<>]+")
 _URL_TRAILING_PUNCTUATION = ".,;:!?)]}"
@@ -278,7 +279,7 @@ class JiraClient:
 
         fields = {
             "project": {"key": project_key},
-            "summary": summary,
+            "summary": summary[:JIRA_SUMMARY_MAX_LENGTH],
             "description": adf_content,
             "issuetype": {"name": "Epic"},
             "parent": {"key": parent_key},
@@ -1008,6 +1009,8 @@ class JiraClient:
             and label != ForgeLabel.FORGE_MANAGED.value
             and label != "forge:managed:task"
             and label != "forge:managed:task-takeover"
+            # YOLO is a workflow setting, not a phase label.
+            and label != ForgeLabel.YOLO.value
             # A declarative workflow label identifies the graph definition. It
             # is not a transient phase label and must survive phase changes.
             and not label.startswith("forge:workflow:")
@@ -1374,8 +1377,11 @@ class JiraClient:
                 "jql": jql,
                 "maxResults": page_size,
             }
-            if fields:
-                params["fields"] = ",".join(fields)
+            # Jira's enhanced JQL endpoint returns only issue IDs when fields
+            # is omitted. Always request enough data to populate JiraIssue.
+            params["fields"] = ",".join(
+                fields or ["summary", "description", "status", "issuetype", "parent", "labels"]
+            )
             if next_page_token:
                 params["nextPageToken"] = next_page_token
 

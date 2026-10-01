@@ -49,9 +49,11 @@ are then checked against the active definition's transition policy.
 ### Pinned declarative definitions
 
 Definitions provide the workflow topology: entry, nodes, edges, routed
-branches, joins, and flow execution settings. Each workflow instance pins its
-name, revision, digest, and canonical definition. Publishing a new definition
-changes future selection only; it cannot silently alter an in-flight ticket.
+branches, joins, includes, and flow execution settings. Forge expands built-in
+and same-project active dependencies into one validated graph before a new run.
+Each instance pins the expanded artifact and dependency identities. Activating
+a new definition or dependency changes new runs only; it cannot silently alter
+an in-flight ticket.
 
 The trusted catalog provides authority: node identity, station contracts,
 allowed effects, mandatory policies, preconditions, and observation behavior.
@@ -88,8 +90,8 @@ There are two distinct extension paths.
 ### Project administrators: declarative configuration
 
 Project configuration can select a built-in or published workflow and compose
-catalog-registered nodes, routers, transitions, joins, concurrency, and resume
-mappings. It can configure repositories, proposal review, skills, and model
+catalog-registered nodes, routers, transitions, reusable definitions, joins,
+concurrency, and resume mappings. It can configure repositories, proposal review, skills, and model
 policy. It cannot execute Python or shell code, store credentials, make provider
 calls, add an effect operation, or relax trusted policies.
 

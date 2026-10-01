@@ -13,7 +13,7 @@ from typing import Any
 
 from forge.models.workflow import TicketType
 from forge.workflow.declarative.loader import load_workflow_value
-from forge.workflow.declarative.models import WorkflowDefinition
+from forge.workflow.declarative.models import MAX_STEPS, WorkflowDefinition, WorkflowInclude
 from forge.workflow.declarative.workflow import DeclarativeWorkflow
 
 POLICY = "forge-contracts-v1"
@@ -30,12 +30,69 @@ def _load_builtin_definition(name: str) -> WorkflowDefinition:
         raise RuntimeError(f"missing built-in workflow artifact: {name}") from exc
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"invalid built-in workflow artifact: {name}") from exc
+    if value.get("kind") == "Workflow" and value.get("spec", {}).get("includes"):
+        # Built-in artifacts are resolved synchronously because their graphs are
+        # also constructed inside an already-running event loop.
+        includes = value["spec"].pop("includes")
+        steps = value["spec"].get("steps")
+        if not isinstance(steps, dict):
+            raise ValueError(f"built-in workflow '{name}' requires a steps mapping")
+        dependencies = []
+        for raw_include in includes:
+            include = WorkflowInclude.model_validate(raw_include)
+            if include.source != "builtin":
+                raise RuntimeError("built-in workflows may include only built-in subworkflows")
+            fragment = _load_builtin_definition(include.name)
+            if fragment.kind != "Subworkflow":
+                raise RuntimeError("built-in include must be a subworkflow")
+            declared_exits = {
+                target[6:]
+                for step in fragment.spec.steps.values()
+                for target in ([step.next] if step.next else step.branches.values())
+                if target and target.startswith("@exit/")
+            }
+            if (
+                set(include.exits) != declared_exits
+                or include.return_to is not None
+                or include.return_from
+            ):
+                raise ValueError(
+                    f"built-in subworkflow '{include.name}' requires exactly these exits: "
+                    f"{', '.join(sorted(declared_exits))}"
+                )
+            dependencies.append(
+                f"builtin:{fragment.metadata.name}:{fragment.metadata.revision}:{fragment.digest}"
+            )
+            for node, step in fragment.spec.steps.items():
+                if node in steps:
+                    raise RuntimeError(f"duplicate built-in node '{node}'")
+                imported = step.model_dump(by_alias=True, exclude_none=True)
+                if imported.get("next", "").startswith("@exit/"):
+                    imported["next"] = include.exits[imported["next"][6:]]
+                if "branches" in imported:
+                    imported["branches"] = {
+                        outcome: include.exits[target[6:]]
+                        if target.startswith("@exit/")
+                        else target
+                        for outcome, target in imported["branches"].items()
+                    }
+                steps[node] = imported
+            if len(steps) > MAX_STEPS:
+                raise ValueError(f"expanded built-in workflow exceeds {MAX_STEPS} steps")
+        value["spec"]["resolvedDependencies"] = dependencies
     definition = load_workflow_value(value)
     if definition.metadata.name != name:
         raise RuntimeError(
             f"built-in workflow artifact {name!r} declares name {definition.metadata.name!r}"
         )
     return definition
+
+
+def load_builtin_source(name: str) -> WorkflowDefinition:
+    """Load a checked-in workflow or reusable subworkflow by exact name."""
+    if name not in {"feature", "bug", "task_takeover", "github_pr_review"}:
+        raise ValueError(f"unknown built-in definition '{name}'")
+    return _load_builtin_definition(name)
 
 
 def builtin_feature_definition() -> WorkflowDefinition:
