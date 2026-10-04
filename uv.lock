@@ -849,7 +849,7 @@ k8s = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", extras = ["vertex"], specifier = ">=0.40.0" },
+    { name = "anthropic", extras = ["vertex"], specifier = ">=0.77.0" },
     { name = "deepagents", specifier = ">=0.1.0" },
     { name = "factory-boy", marker = "extra == 'dev'", specifier = ">=3.3.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
