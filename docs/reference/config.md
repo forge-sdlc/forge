@@ -374,6 +374,13 @@ changes affect the next host agent run; changing the worker's environment
 value requires a worker restart. Container implementation agents use their
 own execution limits.
 
+Full configuration output and `--property forge.agent_recursion_limit` fail with
+a nonzero exit code if the recursion setting is malformed or cannot be read.
+`--models` and queries for unrelated properties (for example,
+`--property forge.repos`) do not read or validate the recursion setting, so its
+errors and retries cannot block those queries. This also applies to the
+`project-config` alias; host agent execution remains fail-closed.
+
 ## Proposal review configuration
 
 Projects can opt into GitHub pull-request review for PRDs and specifications.

@@ -122,20 +122,115 @@ class TestAgentRecursionCLI:
         return values
 
     @staticmethod
-    def mock_config_jira(raw=None, *, error=None):
+    def mock_config_jira(raw=None, *, error=None, properties=None):
         jira = MagicMock()
-        jira.list_project_properties = AsyncMock(return_value=[])
+        properties = properties or {}
+        jira.list_project_properties = AsyncMock(return_value=list(properties))
 
         async def read(_project, key):
             if key == "forge.agent_recursion_limit":
                 if error is not None:
                     raise error
                 return raw
-            return None
+            return properties.get(key)
 
         jira.get_project_property = AsyncMock(side_effect=read)
         jira.close = AsyncMock()
         return jira
+
+    @pytest.mark.parametrize("recursion_state", ["valid", "malformed", "read_failure"])
+    @pytest.mark.parametrize("property_key", ["forge.repos", "FORGE.REPOS", "forge.custom", None])
+    @pytest.mark.asyncio
+    async def test_unrelated_queries_skip_recursion_property(
+        self, recursion_state, property_key, capsys
+    ):
+        error = None
+        if recursion_state == "read_failure":
+            request = httpx.Request("GET", "https://jira.example.test/property")
+            error = httpx.HTTPStatusError(
+                "secret provider detail",
+                request=request,
+                response=httpx.Response(403, request=request),
+            )
+        jira = self.mock_config_jira(
+            "75" if recursion_state == "malformed" else 75,
+            error=error,
+            properties={
+                "forge.repos": ["example/repo"],
+                "forge.custom": "custom-value",
+                "forge.agent_recursion_limit": None,
+                "forge.model_policy": {
+                    "generate_tasks": {"connection": "default", "model": "claude-opus-4-8"}
+                },
+            },
+        )
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_get_config(
+                SimpleNamespace(
+                    project_key="AISOS",
+                    json=False,
+                    property=property_key,
+                    models=property_key is None,
+                )
+            )
+
+        assert code == 0
+        captured = capsys.readouterr()
+        assert not captured.err
+        if property_key is None:
+            target = json.loads(captured.out)["generate_tasks"]
+            assert target["connection"] == "default"
+            assert target["model"] == "claude-opus-4-8"
+            assert target["policy_source"] == "project"
+        elif property_key.lower() == "forge.repos":
+            assert json.loads(captured.out) == ["example/repo"]
+        else:
+            assert captured.out.strip() == "custom-value"
+        assert all(
+            call.args[1] != "forge.agent_recursion_limit"
+            for call in jira.get_project_property.await_args_list
+        )
+
+    @pytest.mark.parametrize("recursion_state", ["malformed", "read_failure"])
+    @pytest.mark.parametrize("output_mode", ["text", "json", "property", "property_uppercase"])
+    @pytest.mark.asyncio
+    async def test_recursion_queries_remain_fail_closed(self, recursion_state, output_mode, capsys):
+        error = None
+        if recursion_state == "read_failure":
+            request = httpx.Request("GET", "https://jira.example.test/property")
+            error = httpx.HTTPStatusError(
+                "secret provider detail",
+                request=request,
+                response=httpx.Response(403, request=request),
+            )
+        jira = self.mock_config_jira("75", error=error)
+        property_key = {
+            "property": "forge.agent_recursion_limit",
+            "property_uppercase": "FORGE.AGENT_RECURSION_LIMIT",
+        }.get(output_mode)
+        with patch("forge.integrations.jira.client.JiraClient", return_value=jira):
+            code = await cmd_get_config(
+                SimpleNamespace(
+                    project_key="AISOS",
+                    json=output_mode == "json",
+                    property=property_key,
+                    models=False,
+                )
+            )
+
+        assert code == 1
+        captured = capsys.readouterr()
+        assert "forge.agent_recursion_limit" in captured.err
+        assert "secret provider detail" not in captured.out + captured.err
+        if output_mode == "json":
+            entry = json.loads(captured.out)["effective"]["forge.agent_recursion_limit"]
+            assert entry["value"] is None
+            assert entry["source"] == "error"
+        elif output_mode == "text":
+            assert "(error)" in captured.out
+        else:
+            assert not captured.out
+        jira.get_project_property.assert_any_await("AISOS", "forge.agent_recursion_limit")
 
     @pytest.fixture(autouse=True)
     def config_settings(self):

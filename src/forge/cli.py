@@ -1070,6 +1070,9 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
 
     project_key = args.project_key.upper()
     settings = get_settings()
+    include_recursion = not getattr(args, "models", False) and (
+        not args.property or args.property.lower() == AGENT_RECURSION_PROPERTY
+    )
 
     jira = JiraClient(settings=settings)
     try:
@@ -1102,7 +1105,11 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
 
         # Combine standard keys with extra discovered keys (avoid duplicates, preserve order/sort)
         extra_keys = sorted(set(forge_discovered_keys) - set(standard_keys))
-        all_keys = standard_keys + extra_keys
+        all_keys = [
+            key
+            for key in standard_keys + extra_keys
+            if include_recursion or key != AGENT_RECURSION_PROPERTY
+        ]
 
         # Retrieve raw property values from Jira
         project_properties_raw = {}
@@ -1263,34 +1270,32 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
             "source": "project" if model_default_val is not None else "unset",
         }
 
-        recursion_raw = project_properties[AGENT_RECURSION_PROPERTY]
-        if recursion_error is None:
-            try:
-                recursion_override = validate_project_agent_recursion_limit(
-                    recursion_raw, project_key
-                )
-            except ValueError as error:
-                recursion_error = str(error)
-        if recursion_error is None:
-            effective_config[AGENT_RECURSION_PROPERTY] = {
-                "value": (
-                    settings.agent_recursion_limit
-                    if recursion_override is None
-                    else recursion_override
-                ),
-                "source": "global" if recursion_override is None else "project",
-            }
-        else:
-            effective_config[AGENT_RECURSION_PROPERTY] = {
-                "value": None,
-                "source": "error",
-                "error": recursion_error,
-            }
+        if include_recursion:
+            recursion_raw = project_properties[AGENT_RECURSION_PROPERTY]
+            if recursion_error is None:
+                try:
+                    recursion_override = validate_project_agent_recursion_limit(
+                        recursion_raw, project_key
+                    )
+                except ValueError as error:
+                    recursion_error = str(error)
+            if recursion_error is None:
+                effective_config[AGENT_RECURSION_PROPERTY] = {
+                    "value": (
+                        settings.agent_recursion_limit
+                        if recursion_override is None
+                        else recursion_override
+                    ),
+                    "source": "global" if recursion_override is None else "project",
+                }
+            else:
+                effective_config[AGENT_RECURSION_PROPERTY] = {
+                    "value": None,
+                    "source": "error",
+                    "error": recursion_error,
+                }
 
         if getattr(args, "models", False):
-            if recursion_error:
-                print(f"Error: {recursion_error}", file=sys.stderr)
-                return 1
             try:
                 resolved = settings.model_policy_resolver().resolve_all(
                     model_policy_val or {}, model_default_val
