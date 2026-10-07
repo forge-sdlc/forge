@@ -1743,6 +1743,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#host-agent-recursion-limit" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Host agent recursion limit
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#proposal-review-configuration" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
@@ -2153,6 +2164,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#host-agent-recursion-limit" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Host agent recursion limit
+      </span>
+    </span>
+  </a>
   
 </li>
       
@@ -2804,6 +2826,37 @@ by appending <code>/api/v4</code>; explicit URLs ending in <code>/api/v4</code> 
 <a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="w">    </span><span class="nt">default_branch</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main</span>
 <a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="w">    </span><span class="nt">change_request_mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">direct</span>
 </code></pre></div>
+<h2 id="host-agent-recursion-limit">Host agent recursion limit<a class="headerlink" href="#host-agent-recursion-limit" title="Permanent link">&para;</a></h2>
+<p><code>AGENT_RECURSION_LIMIT</code> sets the positive global maximum number of LangGraph
+steps for each host <code>ForgeAgent</code> invocation; it defaults to <code>100</code>. A Jira
+project can override it with a positive JSON integer in
+<code>forge.agent_recursion_limit</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--agent-recursion-limit<span class="w"> </span><span class="m">150</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>forge<span class="w"> </span>get-config<span class="w"> </span>MYPROJ<span class="w"> </span>--property<span class="w"> </span>forge.agent_recursion_limit
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>forge<span class="w"> </span>project-setup<span class="w"> </span>MYPROJ<span class="w"> </span>--clear-agent-recursion-limit
+</code></pre></div>
+<p>An absent property or JSON <code>null</code> uses the global value, even when
+<code>FORGE_REQUIRE_PROJECT_CONFIG=true</code>. Other JSON types, zero, and negative
+numbers are invalid. Forge reads the property once at the start of each
+ticket-scoped host agent run. Temporary Jira read failures receive bounded
+retries, then stop the run with an error; Forge does not assume the global
+value after a failed read. Runs without a ticket use the global value without
+contacting Jira. The limit applies separately to each graph invocation,
+including a permitted structured-output fallback or transient retry. It does
+not cap wall-clock time or the entire ticket across workflow retries.</p>
+<p><code>forge get-config MYPROJ --json</code> shows the raw project property, this CLI
+process's global fallback, and the effective value and source. A malformed
+property or failed read appears as an error with no claimed effective value.
+The CLI may have a different environment from the running worker. Project
+changes affect the next host agent run; changing the worker's environment
+value requires a worker restart. Container implementation agents use their
+own execution limits.</p>
+<p>Full configuration output and <code>--property forge.agent_recursion_limit</code> fail with
+a nonzero exit code if the recursion setting is malformed or cannot be read.
+<code>--models</code> and queries for unrelated properties (for example,
+<code>--property forge.repos</code>) do not read or validate the recursion setting, so its
+errors and retries cannot block those queries. This also applies to the
+<code>project-config</code> alias; host agent execution remains fail-closed.</p>
 <h2 id="proposal-review-configuration">Proposal review configuration<a class="headerlink" href="#proposal-review-configuration" title="Permanent link">&para;</a></h2>
 <p>Projects can opt into GitHub pull-request review for PRDs and specifications.
 Set <code>forge.prd_proposals_repo</code> to an <code>owner/repo</code> repository and optionally set
