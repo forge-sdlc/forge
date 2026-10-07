@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.integrations.agents.agent import ForgeAgent
+from forge.integrations.agents.structured_outputs import TaskGeneration
 
 
 @pytest.fixture
@@ -33,6 +34,16 @@ def _metrics_patches():
 
 class TestRunTaskTraceResolution:
     """run_task() resolves trace fields and forwards them to _run_agent()."""
+
+    @pytest.fixture(autouse=True)
+    def fixed_recursion_limit_for_trace_tests(self):
+        with patch(
+            "forge.integrations.agents.agent.resolve_agent_recursion_limit_for_project",
+            new_callable=AsyncMock,
+            create=True,
+        ) as resolver:
+            resolver.return_value = 100
+            yield
 
     @pytest.mark.asyncio
     async def test_builds_trace_state_from_context_and_system_prompt(
@@ -233,3 +244,115 @@ class TestRunTaskTraceResolution:
         assert jira.get_project_property.await_count == 4
         assert mock_run.await_args_list[0].kwargs["model_target"].model == "gemini-pro"
         assert mock_run.await_args_list[1].kwargs["model_target"].model == "gemini-flash"
+
+
+class TestRunTaskRecursionResolution:
+    @pytest.mark.asyncio
+    async def test_project_override_is_resolved_once_and_forwarded(self, agent: ForgeAgent):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(return_value=75)
+        jira.close = AsyncMock()
+        with (
+            patch.object(agent, "_run_agent", new_callable=AsyncMock) as run,
+            patch("forge.integrations.agents.agent.load_prompt", return_value="prompt"),
+            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
+        ):
+            run.return_value = "ok"
+            await agent.run_task(
+                task="generate-tasks", prompt="test", context={"ticket_key": "PROJ-42"}
+            )
+
+        assert run.await_args.kwargs["recursion_limit"] == 75
+        jira.get_project_property.assert_awaited_once_with("PROJ", "forge.agent_recursion_limit")
+        jira.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_trace_only_ticket_uses_project_limit(self, agent: ForgeAgent):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(return_value=80)
+        jira.close = AsyncMock()
+        with (
+            patch.object(agent, "_run_agent", new_callable=AsyncMock) as run,
+            patch("forge.integrations.agents.agent.load_prompt", return_value="prompt"),
+            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
+        ):
+            run.return_value = "ok"
+            await agent.run_task(
+                task="generate-tasks",
+                prompt="test",
+                trace_context={"ticket_key": "PROJ-42"},
+            )
+
+        assert run.await_args.kwargs["recursion_limit"] == 80
+        assert run.await_args.kwargs["ticket_key"] == "PROJ-42"
+
+    @pytest.mark.asyncio
+    async def test_no_ticket_uses_global_without_jira(self, agent: ForgeAgent):
+        agent.settings.agent_recursion_limit = 120
+        with (
+            patch.object(agent, "_run_agent", new_callable=AsyncMock) as run,
+            patch("forge.integrations.agents.agent.load_prompt", return_value="prompt"),
+            patch("forge.integrations.jira.client.JiraClient") as jira_class,
+        ):
+            run.return_value = "ok"
+            await agent.run_task(task="question", prompt="test")
+
+        assert run.await_args.kwargs["recursion_limit"] == 120
+        jira_class.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_invalid_project_limit_fails_before_agent_creation(self, agent: ForgeAgent):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(return_value=True)
+        jira.close = AsyncMock()
+        with (
+            patch.object(agent, "_run_agent", new_callable=AsyncMock) as run,
+            patch("forge.integrations.agents.agent.load_prompt", return_value="prompt"),
+            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
+            pytest.raises(ValueError, match="forge.agent_recursion_limit for PROJ"),
+        ):
+            run.return_value = "ok"
+            await agent.run_task(
+                task="generate-tasks", prompt="test", context={"ticket_key": "PROJ-42"}
+            )
+
+        run.assert_not_awaited()
+        jira.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_resolved_limit_stays_fixed_across_tool_fallback(self, agent: ForgeAgent):
+        jira = MagicMock()
+        jira.get_project_property = AsyncMock(return_value=75)
+        jira.close = AsyncMock()
+        native = AsyncMock()
+        native.ainvoke.side_effect = ValueError("native output unavailable")
+        fallback = AsyncMock()
+        fallback.ainvoke.return_value = {
+            "messages": [],
+            "structured_response": {
+                "tasks": [
+                    {
+                        "summary": "Offline",
+                        "description": "No external work",
+                        "repo": "example/repo",
+                    }
+                ]
+            },
+        }
+        with (
+            patch.object(agent, "_create_agent_async", side_effect=[native, fallback]) as create,
+            patch("forge.integrations.agents.agent.load_prompt", return_value="prompt"),
+            patch("forge.integrations.jira.client.JiraClient", return_value=jira),
+        ):
+            result = await agent.run_task(
+                task="generate-tasks",
+                prompt="test",
+                context={"ticket_key": "PROJ-42"},
+                response_schema=TaskGeneration,
+            )
+
+        assert isinstance(result, TaskGeneration)
+        assert jira.get_project_property.await_count == 1
+        assert create.await_count == 2
+        assert native.ainvoke.await_args.kwargs["config"]["recursion_limit"] == 75
+        assert fallback.ainvoke.await_args.kwargs["config"]["recursion_limit"] == 75

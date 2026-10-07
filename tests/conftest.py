@@ -1,6 +1,14 @@
 """Shared test fixtures for Forge test suite."""
 
+import asyncio
 import os
+from collections.abc import AsyncGenerator, Generator
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 
 # Set dummy environment variables for Pydantic Settings validation during test initialization
 os.environ.setdefault("JIRA_BASE_URL", "https://test.atlassian.net")
@@ -11,17 +19,28 @@ os.environ.setdefault("LLM_BACKEND", "anthropic")
 os.environ.setdefault("LLM_MODEL", "claude-3-5-sonnet-20241022")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test-key")
 
-from collections.abc import AsyncGenerator, Generator
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
-
-import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-
 from forge.config import Settings
 from forge.integrations.github.client import PullRequestCreationResult
 from forge.main import app
+
+_session_event_loop: asyncio.AbstractEventLoop | None = None
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Own the loop pytest-asyncio saves as the pre-fixture policy loop."""
+    global _session_event_loop
+    del session
+    _session_event_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(_session_event_loop)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    global _session_event_loop
+    del session, exitstatus
+    if _session_event_loop is not None:
+        _session_event_loop.close()
+        _session_event_loop = None
+
 
 _TEST_DIRECTORY_MARKERS = {
     "unit": "unit",

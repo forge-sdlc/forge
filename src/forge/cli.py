@@ -532,10 +532,25 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
     import json
     import sys
 
+    from forge.agent_recursion_policy import validate_project_agent_recursion_limit
     from forge.integrations.jira.client import JiraClient
 
     project_key = args.project_key.upper()
     is_json = getattr(args, "json", False)
+    agent_recursion_limit = getattr(args, "agent_recursion_limit", None)
+    clear_agent_recursion_limit = getattr(args, "clear_agent_recursion_limit", False)
+    if agent_recursion_limit is not None and clear_agent_recursion_limit:
+        print(
+            "Error: --agent-recursion-limit cannot be combined with --clear-agent-recursion-limit",
+            file=sys.stderr,
+        )
+        return 1
+    if agent_recursion_limit is not None:
+        try:
+            validate_project_agent_recursion_limit(agent_recursion_limit, project_key)
+        except ValueError as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 1
 
     jira = None
     original_stdout = sys.stdout
@@ -953,6 +968,21 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 for ref in current_references:
                     desc_str = f" - {ref.get('description')}" if ref.get("description") else ""
                     print(f"  {ref.get('url')}{desc_str}")
+        if clear_agent_recursion_limit:
+            await jira.delete_project_property(project_key, "forge.agent_recursion_limit")
+            mutations["forge.agent_recursion_limit"] = {"operation": "remove", "value": None}
+            if not is_json:
+                print("[OK] forge.agent_recursion_limit removed")
+        elif agent_recursion_limit is not None:
+            await jira.set_project_property(
+                project_key, "forge.agent_recursion_limit", agent_recursion_limit
+            )
+            mutations["forge.agent_recursion_limit"] = {
+                "operation": "set",
+                "value": agent_recursion_limit,
+            }
+            if not is_json:
+                print(f"[OK] forge.agent_recursion_limit = {agent_recursion_limit}")
 
         if not any(
             [
@@ -977,6 +1007,8 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 add_reference,
                 remove_reference,
                 list_references,
+                agent_recursion_limit is not None,
+                clear_agent_recursion_limit,
             ]
         ):
             msg = (
@@ -989,6 +1021,7 @@ async def cmd_project_setup(args: argparse.Namespace) -> int:
                 ", --remove-model, --clear-model-policy"
                 ", --clear-model-default"
                 ", --add-reference, --remove-reference, --list-references"
+                ", --agent-recursion-limit, --clear-agent-recursion-limit"
             )
             if is_json:
                 print(msg, file=sys.stderr)
@@ -1027,11 +1060,19 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
 
     import httpx
 
+    from forge.agent_recursion_policy import (
+        AGENT_RECURSION_PROPERTY,
+        read_agent_recursion_property,
+        validate_project_agent_recursion_limit,
+    )
     from forge.config import get_settings
     from forge.integrations.jira.client import JiraClient
 
     project_key = args.project_key.upper()
     settings = get_settings()
+    include_recursion = not getattr(args, "models", False) and (
+        not args.property or args.property.lower() == AGENT_RECURSION_PROPERTY
+    )
 
     jira = JiraClient(settings=settings)
     try:
@@ -1059,15 +1100,33 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
             "forge.references",
             "forge.model_policy",
             "forge.model_default",
+            AGENT_RECURSION_PROPERTY,
         ]
 
         # Combine standard keys with extra discovered keys (avoid duplicates, preserve order/sort)
         extra_keys = sorted(set(forge_discovered_keys) - set(standard_keys))
-        all_keys = standard_keys + extra_keys
+        all_keys = [
+            key
+            for key in standard_keys + extra_keys
+            if include_recursion or key != AGENT_RECURSION_PROPERTY
+        ]
 
         # Retrieve raw property values from Jira
         project_properties_raw = {}
+        recursion_error: str | None = None
         for key in all_keys:
+            if key == AGENT_RECURSION_PROPERTY:
+                try:
+                    project_properties_raw[key] = await read_agent_recursion_property(
+                        jira, project_key
+                    )
+                except (RuntimeError, ValueError) as error:
+                    recursion_error = str(error)
+                    project_properties_raw[key] = None
+                except Exception:
+                    recursion_error = f"Reading {AGENT_RECURSION_PROPERTY} for {project_key} failed"
+                    project_properties_raw[key] = None
+                continue
             try:
                 val = await jira.get_project_property(project_key, key)
                 project_properties_raw[key] = val
@@ -1081,6 +1140,9 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
         # Clean/type-validate project properties
         project_properties = {}
         for key, val in project_properties_raw.items():
+            if key == AGENT_RECURSION_PROPERTY:
+                project_properties[key] = val
+                continue
             if val is None:
                 project_properties[key] = None
                 continue
@@ -1208,6 +1270,31 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
             "source": "project" if model_default_val is not None else "unset",
         }
 
+        if include_recursion:
+            recursion_raw = project_properties[AGENT_RECURSION_PROPERTY]
+            if recursion_error is None:
+                try:
+                    recursion_override = validate_project_agent_recursion_limit(
+                        recursion_raw, project_key
+                    )
+                except ValueError as error:
+                    recursion_error = str(error)
+            if recursion_error is None:
+                effective_config[AGENT_RECURSION_PROPERTY] = {
+                    "value": (
+                        settings.agent_recursion_limit
+                        if recursion_override is None
+                        else recursion_override
+                    ),
+                    "source": "global" if recursion_override is None else "project",
+                }
+            else:
+                effective_config[AGENT_RECURSION_PROPERTY] = {
+                    "value": None,
+                    "source": "error",
+                    "error": recursion_error,
+                }
+
         if getattr(args, "models", False):
             try:
                 resolved = settings.model_policy_resolver().resolve_all(
@@ -1235,6 +1322,14 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
                 print(f"Error: Unknown property '{args.property}'", file=sys.stderr)
                 return 1
             canonical_key = effective_keys_lower[query_key]
+            if recursion_error:
+                if canonical_key == AGENT_RECURSION_PROPERTY and recursion_raw is not None:
+                    print(
+                        f"Raw {AGENT_RECURSION_PROPERTY}: {json.dumps(recursion_raw)}",
+                        file=sys.stderr,
+                    )
+                print(f"Error: {recursion_error}", file=sys.stderr)
+                return 1
             value = effective_config[canonical_key]["value"]
 
             if value is None:
@@ -1257,6 +1352,7 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
                 "PRD_PROPOSALS_PATH": settings.prd_proposals_path.strip("/")
                 if settings.prd_proposals_path
                 else None,
+                "AGENT_RECURSION_LIMIT": settings.agent_recursion_limit,
             }
             output_data = {
                 "project": project_key,
@@ -1265,6 +1361,9 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
                 "effective": effective_config,
             }
             print(json.dumps(output_data, indent=2))
+            if recursion_error:
+                print(f"Error: {recursion_error}", file=sys.stderr)
+                return 1
             return 0
 
         # Output - Human-Readable (Default)
@@ -1295,6 +1394,7 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
         print(f"  {'GITHUB_DEFAULT_REPO:':<29} {fmt_fallback(settings.github_default_repo)}")
         print(f"  {'PRD_PROPOSALS_REPO:':<29} {fmt_fallback(settings.prd_proposals_repo)}")
         print(f"  {'PRD_PROPOSALS_PATH:':<29} {fmt_fallback(settings.prd_proposals_path)}")
+        print(f"  {'AGENT_RECURSION_LIMIT:':<29} {settings.agent_recursion_limit}")
 
         print("\nEffective configuration:")
         for key in all_keys:
@@ -1308,9 +1408,14 @@ async def cmd_get_config(args: argparse.Namespace) -> int:
                 print(f"  {key + ':':<27} (none) [unset]")
             elif src == "global":
                 print(f"  {key + ':':<27} {fmt_val(val)} [default]")
+            elif src == "error":
+                print(f"  {key + ':':<27} (error) [{cfg['error']}]")
             else:
                 print(f"  {key + ':':<27} {fmt_val(val)} [{src}]")
 
+        if recursion_error:
+            print(f"Error: {recursion_error}", file=sys.stderr)
+            return 1
         return 0
 
     finally:
@@ -1917,6 +2022,18 @@ Representative output:
 """,
     )
     setup_parser.add_argument("project_key", help="Jira project key (e.g., MYPROJ)")
+    recursion_group = setup_parser.add_mutually_exclusive_group()
+    recursion_group.add_argument(
+        "--agent-recursion-limit",
+        type=int,
+        metavar="STEPS",
+        help="Override the host agent graph limit with a positive integer",
+    )
+    recursion_group.add_argument(
+        "--clear-agent-recursion-limit",
+        action="store_true",
+        help="Remove the project host agent graph limit override",
+    )
     setup_parser.add_argument(
         "--repo",
         action="append",

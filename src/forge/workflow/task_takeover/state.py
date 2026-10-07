@@ -1,9 +1,9 @@
 """Task Takeover workflow state definition."""
 
-from datetime import datetime
 from typing import Any, TypedDict, cast
 
 from forge.models.workflow import TicketType
+from forge.utils.time import utc_now_naive
 from forge.workflow.base import (
     BaseState,
     CIIntegrationState,
@@ -38,7 +38,7 @@ class TaskTakeoverState(
 
 def create_initial_task_takeover_state(ticket_key: str, **kwargs: Any) -> TaskTakeoverState:
     """Create initial state for a new Task Takeover workflow run."""
-    now = datetime.utcnow().isoformat()
+    now = utc_now_naive().isoformat()
     defaults: dict[str, Any] = {
         "thread_id": ticket_key,
         "ticket_key": ticket_key,

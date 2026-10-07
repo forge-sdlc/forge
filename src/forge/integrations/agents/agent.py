@@ -20,6 +20,7 @@ from deepagents.backends.filesystem import FilesystemBackend
 from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from langchain_anthropic import ChatAnthropic
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.errors import GraphRecursionError
 from pydantic import BaseModel
 
 # Optional MCP support
@@ -32,6 +33,7 @@ except ImportError:
     StructuredTool = None  # type: ignore[misc, assignment]
     HAS_MCP = False
 
+from forge.agent_recursion_policy import resolve_agent_recursion_limit_for_project
 from forge.config import Settings, get_settings
 from forge.integrations.agents.structured_outputs import ArtifactDocument, EpicDecomposition
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
@@ -661,6 +663,7 @@ class ForgeAgent:
         metadata: dict[str, Any] | None = None,
         model_target: ResolvedModelTarget | None = None,
         response_schema: type[StructuredResponseT] | None = None,
+        recursion_limit: int | None = None,
     ) -> str | StructuredResponseT:
         """Run the agent with the given prompt.
 
@@ -717,6 +720,10 @@ class ForgeAgent:
             config.update(langfuse_config)
         else:
             langfuse_ctx_params = {}
+        config["configurable"] = {**config.get("configurable", {}), "thread_id": thread_id}
+        config["recursion_limit"] = (
+            recursion_limit if recursion_limit is not None else self.settings.agent_recursion_limit
+        )
 
         # Invoke the agent with retry logic for transient errors
         # Use async Langfuse context for session tracking (v3+ API)
@@ -747,6 +754,14 @@ class ForgeAgent:
                             result["structured_response"]
                         )
                     break  # Success, exit retry loop
+                except GraphRecursionError:
+                    logger.error(
+                        "Host agent graph exhausted: task=%s ticket=%s recursion_limit=%s",
+                        trace_name,
+                        ticket_key,
+                        config["recursion_limit"],
+                    )
+                    raise
                 except Exception as e:
                     last_error = e
                     if vertex_claude and not (
@@ -939,6 +954,9 @@ class ForgeAgent:
             project_key,
             runtime_policy_key,
         )
+        recursion_limit = await resolve_agent_recursion_limit_for_project(
+            self.settings, project_key
+        )
         trace_state["llm_model"] = (
             model_target.model if model_target is not None else self.settings.llm_model
         )
@@ -955,6 +973,7 @@ class ForgeAgent:
             metadata=trace_metadata or None,
             model_target=model_target,
             response_schema=response_schema,
+            recursion_limit=recursion_limit,
         )
         observe_agent_duration(task_type=task, duration=time.monotonic() - _start)
 

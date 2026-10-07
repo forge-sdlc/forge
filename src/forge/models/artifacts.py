@@ -7,6 +7,8 @@ Workflow status is tracked via labels (see forge.models.workflow).
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from forge.utils.time import utc_now_naive
+
 
 @dataclass
 class Feature:
@@ -17,8 +19,8 @@ class Feature:
     prd_content: str = ""
     spec_content: str = ""
     epic_keys: list[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=utc_now_naive)
+    updated_at: datetime = field(default_factory=utc_now_naive)
 
     @property
     def has_prd(self) -> bool:
@@ -46,8 +48,8 @@ class Epic:
     summary: str = ""
     plan_content: str = ""
     task_keys: list[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=utc_now_naive)
+    updated_at: datetime = field(default_factory=utc_now_naive)
 
     @property
     def has_plan(self) -> bool:
@@ -67,8 +69,8 @@ class Task:
     target_repo: str = ""
     acceptance_criteria: list[str] = field(default_factory=list)
     pr_url: str | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=utc_now_naive)
+    updated_at: datetime = field(default_factory=utc_now_naive)
 
     @property
     def has_implementation_details(self) -> bool:

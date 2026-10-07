@@ -9,7 +9,6 @@ import pytest_asyncio
 import redis.asyncio as aioredis
 import respx
 from httpx import ASGITransport, AsyncClient, Response
-from testcontainers.redis import RedisContainer
 
 from forge.config import Settings
 from forge.main import app
@@ -206,6 +205,8 @@ def redis_container():
     """
     if not _container_runtime_available():
         pytest.skip("Podman/Docker not available - skipping testcontainers tests")
+
+    from testcontainers.redis import RedisContainer
 
     with RedisContainer("redis/redis-stack-server:7.4.0-v3") as container:
         yield container
