@@ -36,6 +36,25 @@ filters them. To run the entire event-model file with that stricter policy:
 uv run pytest tests/unit/models/test_events.py -W error::DeprecationWarning -q
 ```
 
+### Vertex Claude Output Modes
+
+The offline structured-output regressions use synthetic identifiers and mocked
+HTTP only; no Vertex account, credentials, or policy changes are required:
+
+```bash
+uv run pytest tests/unit/test_config_agent.py \
+  tests/unit/integrations/agents/test_structured_output.py \
+  tests/unit/integrations/agents/test_vertex_structured_output.py \
+  tests/unit/integrations/agents/test_vertex_tool_output.py -q
+```
+
+The test matrix covers default/invalid/explicit configuration, legacy and named
+model selection, every host response schema, 26 ordinary tools with open
+dictionaries, ordinary tool execution followed by a validated final response,
+missing/invalid/multiple output, terminal provider errors, and strict markers
+in both tool metadata and provider definitions. Native-mode policy denials remain
+fail-closed. These tests do not prove live Vertex policy or model availability.
+
 ## Linting and Type Checking
 
 Before submitting a PR, these must all pass:

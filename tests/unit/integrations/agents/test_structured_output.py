@@ -77,6 +77,7 @@ def _vertex_agent() -> ForgeAgent:
         _vertex_error(400, "schema is too complex for compilation"),
         _vertex_error(400, "invalid schema"),
         _vertex_error(403, "structured_outputs is disabled by project policy"),
+        _vertex_error(400, "structured_outputs is disabled by project policy"),
         ValueError("invalid JSON in provider response"),
         VertexResponseStopError("max_tokens"),
         VertexResponseStopError("refusal"),

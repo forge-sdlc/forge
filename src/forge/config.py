@@ -200,6 +200,10 @@ class Settings(BaseSettings):
         gt=0,
         description="Maximum graph steps for each host agent invocation",
     )
+    vertex_structured_output_strategy: Literal["native", "tool"] = Field(
+        default="native",
+        description="Structured host-agent output mode for Vertex Claude: native or tool",
+    )
     model_connections: dict[str, Any] = Field(
         default_factory=dict,
         description="Named non-secret model connections (JSON object)",

@@ -520,6 +520,12 @@ class ForgeAgent:
 
         # Create the model (supports both direct API and Vertex AI)
         model = self._create_model(model_target=model_target)
+        if (
+            isinstance(response_format, ToolStrategy)
+            and self.settings.vertex_structured_output_strategy == "tool"
+            and isinstance(model, ChatAnthropicVertex)
+        ):
+            model.tool_output_only = True
 
         # Load MCP tools if enabled
         mcp_tools = await self._load_mcp_tools() if include_tools else []
@@ -683,12 +689,21 @@ class ForgeAgent:
             Agent response text.
         """
         # Use async version to load MCP tools
-        response_format = ProviderStrategy(response_schema) if response_schema else None
         selected_model = model_target.model if model_target else self.settings.llm_model
         selected_backend = model_target.backend if model_target else self.settings.llm_backend
         vertex_claude = (
             selected_backend == "vertex-ai"
             and Settings.detect_model_provider(selected_model) == "anthropic"
+        )
+        tool_output_mode = (
+            vertex_claude and self.settings.vertex_structured_output_strategy == "tool"
+        )
+        response_format = (
+            ToolStrategy(response_schema, handle_errors=False)
+            if response_schema is not None and tool_output_mode
+            else ProviderStrategy(response_schema)
+            if response_schema is not None
+            else None
         )
         agent = await self._create_agent_async(
             system_prompt=system_prompt,
@@ -735,7 +750,7 @@ class ForgeAgent:
         ):
             last_error: Exception | None = None
             structured_result: StructuredResponseT | None = None
-            used_tool_fallback = False
+            used_tool_fallback = tool_output_mode
             for attempt in range(self.MAX_RETRIES):
                 try:
                     result = await agent.ainvoke(

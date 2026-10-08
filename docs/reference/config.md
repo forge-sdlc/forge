@@ -343,6 +343,38 @@ repositories:
     change_request_mode: direct
 ```
 
+## Vertex Claude structured output
+
+`VERTEX_STRUCTURED_OUTPUT_STRATEGY` accepts `native` (default) or `tool`.
+It applies only to structured host-agent calls resolved to Claude on Vertex,
+including named model connections. Other backends, unstructured calls, and
+container agents are unchanged. Invalid values stop configuration loading.
+
+Native mode uses provider-side schema enforcement. Authorization, project-policy,
+schema, refusal, truncation, and SDK errors do not silently switch strategies.
+Only an explicitly unsupported native-output feature permits the existing fallback.
+
+An operator can explicitly select `tool` when the deployment's Vertex policy
+disables native structured output:
+
+```bash
+VERTEX_STRUCTURED_OUTPUT_STRATEGY=tool
+```
+
+Restart the worker after changing this environment setting. Forge selects a
+non-strict final-response tool before the first model request; it does not send
+`output_config.format`, `response_format`, or `strict: true` tool declarations.
+Ordinary tool schemas, including open dictionaries, retain their argument shapes.
+Explicitly strict tools fail locally rather than being silently weakened.
+
+Final responses must still pass the same local Pydantic schema validation and
+return a typed `structured_response`. Missing, invalid, or multiple final outputs
+stop the invocation without schema-repair loops. Tool mode is not equivalent to
+provider-side constrained decoding: the model can generate invalid output, which
+Forge rejects. Transient provider retries remain bounded; host recursion limits
+and outer workflow retries are unchanged. Selecting this mode does not restart
+or retry a blocked ticket automatically, and it does not change Vertex policy.
+
 ## Host agent recursion limit
 
 `AGENT_RECURSION_LIMIT` sets the positive global maximum number of LangGraph

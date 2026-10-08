@@ -9,6 +9,7 @@ from langchain_anthropic.chat_models import convert_to_anthropic_tool
 from langchain_core.outputs import ChatResult
 from langchain_core.tools import BaseTool
 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+from pydantic import Field
 
 _SERVER_TOOL_PREFIXES = (
     "web_search_",
@@ -145,6 +146,8 @@ def _explicitly_strict(tool: Any) -> bool:
 class ForgeChatAnthropicVertex(ChatAnthropicVertex):
     """Keep LangChain's provider strategy on Anthropic's Vertex wire format."""
 
+    tool_output_only: bool = Field(default=False, exclude=True)
+
     def __init__(self, **kwargs: Any) -> None:
         # Pydantic accepts configured model fields dynamically at runtime.
         super().__init__(**kwargs)
@@ -165,9 +168,13 @@ class ForgeChatAnthropicVertex(ChatAnthropicVertex):
         **kwargs: Any,
     ) -> Any:
         del strict  # LangChain's binding-wide strictness is not a per-tool opt-in.
+        if self.tool_output_only and any(_explicitly_strict(tool) for tool in tools):
+            raise ValueError("Explicit strict tools are incompatible with Vertex tool output mode")
         if sum(_explicitly_strict(tool) for tool in tools) > 20:
             raise ValueError("Claude on Vertex accepts at most 20 strict tools")
         formatted = [_format_tool(tool) for tool in tools]
+        if self.tool_output_only and any(tool.get("strict") is True for tool in formatted):
+            raise ValueError("Explicit strict tools are incompatible with Vertex tool output mode")
         if response_format is not None:
             if (
                 not isinstance(response_format, dict)
