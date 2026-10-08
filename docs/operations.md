@@ -35,6 +35,16 @@ workflows unrecoverable.
 changing it; there is no runtime registry reload. See [configuration](reference/config.md)
 for repository, proposal, model, and environment settings.
 
+### Vertex Claude output-policy compatibility
+
+If Vertex policy disables native structured output, an operator may explicitly
+set `VERTEX_STRUCTURED_OUTPUT_STRATEGY=tool` and restart the worker after deploying
+the compatible code. See [output modes](reference/config.md#vertex-claude-structured-output)
+for the validation contract and the loss of provider-side constrained decoding.
+Do not weaken cloud policy or clear Redis as a recovery shortcut. Changing this
+setting does not authorize an automatic retry: inspect the failed execution and
+use the normal approved recovery flow before resuming a blocked ticket.
+
 ## How incoming events become workflow work
 
 Webhooks and poller events are at-least-once deliveries. Forge converts each
