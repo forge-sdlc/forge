@@ -127,6 +127,7 @@ graph-node names are not accepted in Jira configuration:
 | `bug_triage` | Bug-report completeness triage |
 | `automated_review_triage` | Classification of automated review feedback |
 | `proposal_review_triage` | Classification of proposal review threads |
+| `user_node_assessment` | All authored `agent-assessment-v1` workflow nodes |
 | `task_takeover_triage` | Existing-task takeover triage |
 | `task_takeover_planning` | Existing-task implementation planning |
 | `implement_work` | Container implementation for feature, bug, and task-takeover workflows |
@@ -198,8 +199,9 @@ key before testing a workflow.
 Forge owns stage capability requirements. Every stage requires a connection
 declaring `"capabilities": ["tools"]` except the explicitly tool-free text or
 classification stages `automated_review_triage`, `proposal_review_triage`,
-`generate_pr_description`, and `sync_pr_description`. Jira policy cannot
+`generate_pr_description`, `sync_pr_description`, and `user_node_assessment`. Jira policy cannot
 weaken that requirement.
+`user_node_assessment` requires the `structured_output` capability.
 Per-target `max_output_tokens` is limited to 131072.
 
 Resolution is project stage override (`forge.model_policy`), then the separate

@@ -225,7 +225,7 @@ def build_process_manifest(definition: WorkflowDefinition) -> ProcessManifest:
     transitions = []
     for name, step in definition.spec.steps.items():
         binding = profile.station_bindings.get(name)
-        kind = ProcessNodeKind(profile.node_kind(name))
+        kind = ProcessNodeKind("operation" if step.node else profile.node_kind(name))
         nodes.append(
             ProcessNode(
                 name=name,
@@ -334,6 +334,7 @@ def compare_process_definitions(
             else frozenset()
         )
         return (
+            step.node.model_dump_json(by_alias=True, exclude_none=True) if step.node else None,
             step.next,
             step.route,
             tuple(sorted(step.branches.items())),
