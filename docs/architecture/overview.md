@@ -61,3 +61,6 @@ workflow node with branches to every possible return stage.
 Planning and review stations use Deep Agents. Data-shaped decisions use strict Pydantic response
 contracts with provider-native structured output and a validated tool-strategy fallback; narrative
 artifacts remain Markdown. See [Structured model output](structured-output.md).
+
+Model backends include Anthropic direct API, Google APIs and Vertex AI, and configured
+OpenAI-compatible Chat Completions endpoints for host and container agents.

@@ -4,10 +4,13 @@ import json
 from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
+import respx
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import SimpleChatModel
 from langchain_core.messages import BaseMessage
+from langchain_openai import ChatOpenAI
 
 from forge.integrations.agents.agent import ForgeAgent
 from forge.models.model_policy import ResolvedModelTarget
@@ -47,9 +50,11 @@ def _model_agent(backend: str, model: str) -> ForgeAgent:
         llm_max_tokens=16384,
         google_cloud_project="project",
         google_cloud_location="global",
+        openai_base_url="https://gateway.example/v1",
     )
     agent.settings.google_api_key.get_secret_value.return_value = "google-key"
     agent.settings.anthropic_api_key.get_secret_value.return_value = "anthropic-key"
+    agent.settings.resolve_openai_api_key.return_value = "gateway-key"
     return agent
 
 
@@ -139,6 +144,81 @@ def test_create_model_rejects_backend_model_mismatch():
 
     with pytest.raises(ValueError, match="not supported by anthropic"):
         agent._create_model()
+
+
+def test_create_model_uses_openai_compatible_backend():
+    agent = _model_agent("openai-compatible", "custom-model")
+
+    with patch("forge.integrations.agents.agent.ChatOpenAI") as model_class:
+        agent._create_model()
+
+    model_class.assert_called_once_with(
+        model="custom-model",
+        base_url="https://gateway.example/v1",
+        api_key="gateway-key",
+        max_tokens=16384,
+    )
+
+
+@respx.mock
+def test_openai_compatible_chat_completions_tool_call_contract():
+    route = respx.post("https://gateway.example/v1/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "custom-model",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "tool_calls",
+                        "message": {
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "lookup",
+                                        "arguments": '{"query":"forge"}',
+                                    },
+                                }
+                            ],
+                        },
+                    }
+                ],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 3, "total_tokens": 7},
+            },
+        )
+    )
+    model = ChatOpenAI(
+        model="custom-model",
+        base_url="https://gateway.example/v1",
+        api_key="gateway-secret",
+    ).bind_tools(
+        [
+            {
+                "name": "lookup",
+                "description": "Look up a value",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                    "required": ["query"],
+                },
+            }
+        ]
+    )
+
+    response = model.invoke("Find forge")
+
+    assert response.tool_calls == [
+        {"name": "lookup", "args": {"query": "forge"}, "id": "call-1", "type": "tool_call"}
+    ]
+    assert route.calls[0].request.headers["authorization"] == "Bearer gateway-secret"
+    assert b'"tools"' in route.calls[0].request.content
 
 
 @pytest.mark.asyncio

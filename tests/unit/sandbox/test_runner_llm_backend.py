@@ -21,9 +21,11 @@ def _settings(backend: str) -> MagicMock:
         log_level="INFO",
         google_cloud_project="project",
         google_cloud_location="global",
+        openai_base_url="https://gateway.example/v1",
     )
     settings.google_api_key = SecretStr("google-key")
     settings.anthropic_api_key = SecretStr("anthropic-key")
+    settings.resolve_openai_api_key.return_value = "gateway-key"
     return settings
 
 
@@ -36,6 +38,14 @@ def _settings(backend: str) -> MagicMock:
             "vertex-ai",
             {"GOOGLE_CLOUD_PROJECT": "project", "GOOGLE_CLOUD_LOCATION": "global"},
             "GOOGLE_API_KEY",
+        ),
+        (
+            "openai-compatible",
+            {
+                "OPENAI_BASE_URL": "https://gateway.example/v1",
+                "OPENAI_API_KEY": "gateway-key",
+            },
+            "ANTHROPIC_API_KEY",
         ),
     ],
 )

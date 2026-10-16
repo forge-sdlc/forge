@@ -23,6 +23,8 @@ def clear_model_env(monkeypatch):
         "LLM_MODEL",
         "GOOGLE_API_KEY",
         "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -50,3 +52,11 @@ def test_explicit_backend_and_model_take_precedence(entrypoint_module, monkeypat
 
     assert entrypoint_module.resolve_llm_backend() == "vertex-ai"
     assert entrypoint_module.resolve_llm_model() == "gemini-custom"
+
+
+def test_openai_compatible_requires_base_url(entrypoint_module, monkeypatch):
+    monkeypatch.setenv("LLM_BACKEND", "openai-compatible")
+    monkeypatch.setenv("LLM_MODEL", "custom-model")
+
+    with pytest.raises(RuntimeError, match="OPENAI_BASE_URL is required"):
+        entrypoint_module._create_llm_model()
