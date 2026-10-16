@@ -138,3 +138,8 @@ Three output formats per evaluation:
 - The judge sees both generated and gold documents — phrase prompts as
   comparisons ("Compare X against the gold standard")
 - Keep prompts focused: vague criteria produce inconsistent scores
+
+Use `generate-prd.yaml` for default skills and `osac-generate-prd.yaml` only for
+OSAC's template and personas. Keep project-specific expectations separate from
+generic correctness. Prompt rendering, read-only execution, and full-diff handling
+also have deterministic unit tests; LLM judging supplements those contracts.

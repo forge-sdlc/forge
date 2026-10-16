@@ -5,14 +5,14 @@ description: Decompose a Technical Specification into implementable Epics with t
 
 # Epic Decomposition Skill
 
-Decompose a specification into 2-5 implementable Epics using the template and guidelines below.
+Decompose a specification into 1-5 implementable Epics using the template and guidelines below.
 
 ## Instructions
 
-1. Read the template from `skills/default/decompose-epics/epic-template.md`
+1. Read the template from `epic-template.md` relative to this SKILL.md
 2. Analyze the specification content
 3. Inspect each target repository listed in the prompt before proposing Epics
-4. Identify 2-5 cohesive capability areas
+4. Identify 1-5 cohesive capability areas
 5. Create a detailed implementation plan for each
 6. Map dependencies between Epics
 7. Validate against the quality checklist
@@ -68,7 +68,7 @@ Examples:
 
 Before returning the Epic breakdown:
 
-- [ ] 2-5 Epics total (not more, not fewer)
+- [ ] Only as many Epics as independent capabilities require; one is valid
 - [ ] Each Epic has clear, non-overlapping scope
 - [ ] Dependencies between Epics documented
 - [ ] Technical approach is specific and grounded in inspected repository files
@@ -84,16 +84,7 @@ Before returning the Epic breakdown:
 
 ## Output Format
 
-For each Epic, use this format:
-
-```
----
-EPIC: [Epic Title]
-PLAN:
-[Full epic content following skills/default/decompose-epics/epic-template.md]
----
-```
-
-Repeat for each Epic (2-5 total).
-
-IMPORTANT: Return ONLY the Epic content. Do not include any planning text, explanations of what you're doing, or meta-commentary. Start directly with the first Epic.
+Return the enforced structured response: `epics` with `summary`, `repo`, and
+`plan` for each Epic. Use exact configured repository names. The Markdown `plan`
+uses the applicable sections of `epic-template.md` relative to this SKILL.md.
+Preserve specification scenario IDs and identify deferred or blocked scope.

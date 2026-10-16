@@ -12,7 +12,7 @@ Before creating a PR, ensure the code is clean and correct. This skill runs in t
 Run any required code generation so that generated files are in sync with source changes.
 
 1. Check for codegen instructions in `README.md`, `CONTRIBUTING.md`, or `Makefile`
-2. Check for `//go:generate` directives in files that were changed (`git diff origin/main...HEAD --name-only`)
+2. Check for `//go:generate` directives in files that were changed (`git diff --name-only "$(git merge-base HEAD "$FORGE_BASE_REF")" --`)
 3. Run the appropriate codegen command (e.g. `go generate ./...`, `make generate`, `controller-gen`)
 4. If codegen produces changes, they will be included in the commit
 
@@ -36,7 +36,7 @@ Run the formatter first, then the linter, targeting only the changed files.
 
 Get the diff and review for breaking issues only.
 
-1. Run `git diff origin/main...HEAD --no-color` to get all changes on this branch
+1. Inspect `git status --short` for newly generated/untracked files as well as the diff. Run `git diff "$(git merge-base HEAD "$FORGE_BASE_REF")" --no-color --` to get all changes on this branch
 2. If the diff is empty, output `NO_BREAKING_ISSUES` and stop
 3. For each breaking issue found:
    a. Identify the exact file and location

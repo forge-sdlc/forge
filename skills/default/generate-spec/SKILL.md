@@ -7,7 +7,7 @@ description: Generate a Technical Specification with behavioral acceptance crite
 
 Generate a Technical Specification using the template and guidelines below.
 
-> **IMPORTANT**: Return ONLY the specification content. Do not include any planning text, explanations of what you're doing, or meta-commentary. Start directly with the specification title.
+> Return the enforced runtime response schema. Put only the Markdown document in `content`; preserve the required repository selection.
 
 ## Core Purpose
 
@@ -35,7 +35,8 @@ Ask for each section: "Does this feature have something concrete and specific to
 3. **No Ambiguity**: Use precise language. Avoid "should", "might", "could".
 4. **Trace to PRD**: Reference FR/US IDs from the parent PRD where relevant.
 5. **Error format matches the stack**: Go/CLI tools use field validation errors, not HTTP error codes. Web APIs use HTTP status codes. Match the error style to the actual implementation.
-6. **Security only when relevant**: Include auth/authz requirements only if the feature touches authentication, user data, or access control.
+6. **Conditional coverage**: Address security/trust boundaries for authentication, privileged actions, untrusted input, command execution, file ingestion, or dependency changes. Address retries/idempotency/concurrency for asynchronous work, compatibility/migration/rollback for API or data changes, and accessibility for UI changes when applicable. Ground these behaviors in the requested scope and repository constraints; do not invent product features.
+7. **Coverage trace**: Map every in-scope PRD requirement to a scenario or an explicit deferred/blocked decision. Preserve IDs for downstream planning and validation.
 
 ## Markdown Formatting
 
@@ -58,5 +59,5 @@ Before returning the specification:
 
 ## Output Format
 
-Follow the structure in `skills/default/generate-spec/spec-template.md`.
+Resolve the following template relative to this SKILL.md. Follow the structure in `spec-template.md`.
 Omit any section that does not apply to this feature type.

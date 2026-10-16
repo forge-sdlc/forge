@@ -187,6 +187,9 @@ async def _run_bug_review(state: WorkflowState, git: GitOperations) -> WorkflowS
             step_name="local_review",
             policy_key="bug_local_review",
             skill_name="local-review-bug",
+            base_ref=f"origin/{state['context']['default_branch']}"
+            if state.get("context", {}).get("default_branch")
+            else "origin/HEAD",
             task_description=task_description,
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-qualreview",
@@ -194,10 +197,6 @@ async def _run_bug_review(state: WorkflowState, git: GitOperations) -> WorkflowS
         )
 
         state = merge_review_exhaustion(state, result, ticket_key, "local_review")
-
-        if git.has_uncommitted_changes():
-            git.stage_all()
-            git.commit(f"[{ticket_key}] fix: address review feedback")
 
         verdict, feedback = _parse_bug_verdict(output)
 

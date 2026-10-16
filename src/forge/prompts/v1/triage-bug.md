@@ -10,5 +10,5 @@
 
 ---
 
-Evaluate this ticket using the triage-bug skill. Set `sufficient` to whether implementation
-can be planned safely and list only genuinely blocking information in `missing_fields`.
+Evaluate this ticket using the triage-bug skill. Set `sufficient` to whether investigation
+can begin and list only genuinely blocking information in `missing_fields`.

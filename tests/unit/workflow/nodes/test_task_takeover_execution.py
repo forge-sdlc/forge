@@ -127,7 +127,8 @@ class TestTaskTakeoverExecutionNode:
         assert kwargs["workspace_path"] == Path("/tmp/ws")
         assert "config" not in kwargs
         assert "Approved Implementation Plan" in kwargs["task_description"]
-        assert "inject at least one new or modified test file" in kwargs["task_description"]
+        assert ".forge/validation.md" in kwargs["task_description"]
+        assert "documentation-only changes" in kwargs["task_description"]
         assert "Current repository: `acme/backend`" in kwargs["task_description"]
         assert (
             "Do not search for, create, or modify files assigned to other repositories"

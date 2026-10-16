@@ -1,4 +1,4 @@
-"""Rebase node — merges main into the PR branch and resolves conflicts.
+"""Rebase node — merges the PR target branch into the PR branch and resolves conflicts.
 
 Triggered by the `/forge rebase` PR comment command.  Works from any
 workflow stage: the worker saves the current node in `rebase_return_node`
@@ -41,7 +41,7 @@ async def _fetch_pr_body(
 
 
 async def rebase_pr(state: WorkflowState) -> WorkflowState:
-    """Merge main into the PR branch, resolving conflicts with AI if needed.
+    """Merge the PR target into the PR branch, resolving conflicts with AI if needed.
 
     Args:
         state: Current workflow state.
@@ -107,15 +107,22 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
                 }
             )
 
-        # Attempt merge
-        git._run_git("fetch", "origin", "main")
-        merge_result = git._run_git("merge", "origin/main", check=False)
+        change_request = await adapter.get_change_request(repo_ref, identity)
+        base_branch = change_request.target_branch
+        if not isinstance(base_branch, str) or not base_branch:
+            raise ValueError("Cannot resolve the PR target branch")
+        base_ref = f"origin/{base_branch}"
+        # Merge the actual PR target, which may differ from the default branch.
+        git._run_git("fetch", "origin", base_branch)
+        merge_result = git._run_git("merge", base_ref, check=False)
 
         if merge_result.returncode == 0:
             if "Already up to date" in merge_result.stdout:
-                logger.info(f"{ticket_key}: branch already up to date with main")
+                logger.info(f"{ticket_key}: branch already up to date with {base_branch}")
                 await post_status_comment(
-                    jira, ticket_key, "Branch is already up to date with main — no rebase needed."
+                    jira,
+                    ticket_key,
+                    f"Branch is already up to date with {base_branch} — no rebase needed.",
                 )
                 return update_state_timestamp(
                     {
@@ -126,18 +133,18 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
                 )
 
             # Clean merge — push it
-            logger.info(f"{ticket_key}: clean merge with main, pushing")
+            logger.info(f"{ticket_key}: clean merge with {base_branch}, pushing")
             await push_repository(git, use_fork=use_fork, force=True, check_conflicts=False)
 
             await adapter.create_comment(
                 repo_ref,
                 identity,
-                "Branch has been rebased onto main (no conflicts). CI should re-run.",
+                f"Branch has been rebased onto {base_branch} (no conflicts). CI should re-run.",
             )
             await post_status_comment(
                 jira,
                 ticket_key,
-                f"Branch rebased onto main (clean merge) via `/forge rebase` on PR #{pr_number}.",
+                f"Branch rebased onto {base_branch} (clean merge) via `/forge rebase` on PR #{pr_number}.",
             )
 
             return update_state_timestamp(
@@ -161,11 +168,11 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         pr_description = ""
         changed_files = ""
         try:
-            pr_description = await _fetch_pr_body(adapter, repo_ref, identity)
+            pr_description = change_request.body
             diff_result = git._run_git(
                 "diff",
                 "--name-only",
-                f"origin/main...{push_remote}/{workspace.branch_name}",
+                f"{base_ref}...{push_remote}/{workspace.branch_name}",
                 check=False,
             )
             changed_files = diff_result.stdout.strip()
@@ -176,6 +183,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         prompt = load_prompt(
             "rebase-pr",
             ticket_key=ticket_key,
+            base_branch=base_branch,
             conflicted_files="\n".join(f"- {f}" for f in conflicted_files),
             pr_description=pr_description or "(not available)",
             changed_files=changed_files or "(not available)",
@@ -187,12 +195,13 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
             runner=runner,
             discriminator="rebase",
             workspace_path=workspace.path,
-            task_summary=f"Resolve merge conflicts with main for {ticket_key}",
+            task_summary=f"Resolve merge conflicts with {base_branch} for {ticket_key}",
             task_description=prompt,
             ticket_key=ticket_key,
             task_key=f"{ticket_key}-rebase",
             repo_name=current_repo,
             step_name="rebase",
+            base_ref=base_ref,
             policy_key="rebase",
         )
 
@@ -239,7 +248,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         # Commit and push
         if git.has_uncommitted_changes():
             git.stage_all()
-            git.commit(f"[{ticket_key}] merge: resolve conflicts with main")
+            git.commit(f"[{ticket_key}] merge: resolve conflicts with {base_branch}")
 
         await push_repository(git, use_fork=use_fork, force=True, check_conflicts=False)
         logger.info(f"{ticket_key}: conflicts resolved and pushed")
@@ -253,7 +262,7 @@ async def rebase_pr(state: WorkflowState) -> WorkflowState:
         await post_status_comment(
             jira,
             ticket_key,
-            f"Merge conflicts with main resolved via `/forge rebase` on PR #{pr_number}.\n"
+            f"Merge conflicts with {base_branch} resolved via `/forge rebase` on PR #{pr_number}.\n"
             f"Conflicted files: {', '.join(conflicted_files)}",
         )
 

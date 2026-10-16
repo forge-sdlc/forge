@@ -7,11 +7,11 @@ description: Generate a structured Product Requirements Document (PRD) from raw 
 
 Generate a Product Requirements Document using the template and guidelines below.
 
-> **IMPORTANT**: Return ONLY the PRD content. Do not include any planning text, explanations of what you're doing, or meta-commentary. Start directly with the PRD title.
+> Return the enforced runtime response schema. Put only the Markdown document in `content`; preserve the required repository selection.
 
 ## Instructions
 
-1. Read the template from `skills/default/generate-prd/prd-template.md`
+1. Read `prd-template.md` relative to this SKILL.md
 2. **Fetch attachments**: Check whether the feature ticket has any attachments (e.g. mockups, research docs, specs, diagrams). Use `mcp__atlassian__jira_download_attachments` or equivalent Jira tools to retrieve them. For each attachment, attempt to read or fetch its content and incorporate it as additional context. If an attachment cannot be read (e.g. unsupported binary format), note its filename and skip it.
 3. **Explore the target repositories**: For every repository identified in the ticket or additional context, use the available GitHub, repository, or filesystem tools to inspect the repository before writing the PRD.
    - Read repository guidance and product context when present, including `README.md`, `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, relevant files under `docs/`, and nearby code or tests that establish current user-visible behavior.
@@ -19,7 +19,7 @@ Generate a Product Requirements Document using the template and guidelines below
    - Use repository findings to make requirements accurate and to identify genuine assumptions or open questions. Do not turn the PRD into an implementation plan or prescribe technical solutions.
    - Do not invent repository details. If a target repository cannot be accessed, record the missing access or unresolved repository-dependent facts as assumptions or open questions in the PRD.
 4. Analyze the raw requirements together with attachment content and relevant repository findings
-5. Fill in all sections of the template
+5. Fill applicable template sections; omit sections that add no feature-specific information
 6. Ensure every requirement is testable and specific
 7. Validate against the quality checklist
 
@@ -65,7 +65,7 @@ Before returning the PRD, verify:
 - [ ] Problem statement clearly articulates the pain point
 - [ ] At least 1 user persona defined with goals and pain points
 - [ ] All functional requirements have acceptance criteria
-- [ ] Success metrics are quantifiable with specific targets
+- [ ] Metrics use supported targets; unknown baselines or targets are explicitly unknown
 - [ ] Scope boundaries clearly defined (in/out of scope)
 - [ ] Risks have mitigation strategies
 - [ ] No technical implementation details included
@@ -73,4 +73,4 @@ Before returning the PRD, verify:
 
 ## Output Format
 
-Follow the structure in `skills/default/generate-prd/prd-template.md` exactly.
+Resolve the following template relative to this SKILL.md. Follow the structure in `prd-template.md`, omitting inapplicable sections.

@@ -34,7 +34,7 @@ Generate a clear, professional PR description that:
 
 3. **Implementation Notes**: Highlight any notable implementation decisions, trade-offs, or patterns used that reviewers should be aware of.
 
-4. **Testing**: Describe what testing was done (unit tests, manual testing, etc.)
+4. **Testing**: Describe only checks supported by the supplied validation/handoff evidence, including actual results and limitations. If execution evidence is absent, say validation is unverified; commit messages alone do not prove tests passed.
 
 5. **Jira Links**: Include links to all related Jira tickets.
 

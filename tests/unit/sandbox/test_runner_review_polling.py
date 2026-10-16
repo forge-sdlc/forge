@@ -1068,7 +1068,7 @@ class TestBuildContainerResult:
 
         assert result.success is True
         assert result.exit_code == 0
-        assert result.tests_passed is True
+        assert result.tests_passed is None  # Successful execution does not prove tests ran.
         assert result.error_message is None
 
     def test_exit_tests_failed_returns_tests_passed_false(self):

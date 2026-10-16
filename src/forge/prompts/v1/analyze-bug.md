@@ -10,7 +10,7 @@ You are an expert software engineer performing a root cause analysis (RCA) for a
 
 ## Available Repositories
 
-Clone the primary repository first. If the bug plausibly spans multiple repos, clone additional ones as needed.
+Clone the primary repository into a temporary scratch directory first. If the bug plausibly spans multiple repos, clone additional ones as needed.
 
 {known_repos}
 
@@ -49,7 +49,7 @@ Follow this protocol exactly:
    - `Medium` — strongly inferred from code structure but not directly executed.
    - `Low` — speculative; the failure mechanism is plausible but not confirmed.
 
-5. **Write a minimal failing test** (unit-level) if the bug is feasibly reproducible in isolation. Record this in the `reproducibility` field.
+5. **Run a minimal reproduction in a temporary scratch clone/copy** if feasible. Preserve the supplied source. Record test source, command, observed outcome, and limitations in the `reproducibility` fields; static inspection is not an executed test.
 
 6. **Enumerate 1–4 fix options** — they must be genuinely distinct approaches, not paraphrases of each other.
 
@@ -111,5 +111,5 @@ Write exactly this JSON structure to `.forge/rca.json`. All top-level keys are r
 - `options` must be a list of 1–4 items.
 - Each option must have `title`, `description`, and `tradeoffs`.
 - `hypothesis_log` must have at least one entry. Unless the bug is trivially isolated, include at least one `"rejected"` candidate.
-- `introduced_in.commit` must be a real commit hash from `git blame` — do not guess.
-- Do not write any other files. Do not make any commits.
+- `introduced_in.commit` must be verified against the behavioral change, not merely the latest blame entry. Use null for unknown commit/PR/date or code-location fields and explain missing evidence in confidence.rationale. Do not invent attribution.
+- Only `.forge/rca.json` may be written in the supplied workspace. Clones and reproduction files belong in temporary scratch directories. Do not make commits.

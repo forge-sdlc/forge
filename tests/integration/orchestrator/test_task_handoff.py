@@ -181,14 +181,16 @@ class TestHandoffPromptFormat:
         """Container system prompt should include handoff reading/writing instructions."""
         from forge.prompts import load_prompt
 
-        prompt = load_prompt("container-system")
+        prompt = load_prompt(
+            "container-system", stage_instructions=load_prompt("container-implementation")
+        )
 
         # Check for handoff reading instructions
         assert ".forge/handoff.md" in prompt, "Prompt should reference handoff.md"
         assert ".forge/history/" in prompt, "Prompt should reference history directory"
 
         # Check for handoff writing instructions
-        assert "Update handoff" in prompt or "update `.forge/handoff.md`" in prompt, (
+        assert "update .forge/handoff.md" in prompt.lower(), (
             "Prompt should instruct agent to update handoff"
         )
 
@@ -317,7 +319,9 @@ class TestGitIgnoreSafeguard:
         """Container system prompt should instruct agent about .forge/ exclusion."""
         from forge.prompts import load_prompt
 
-        prompt = load_prompt("container-system")
+        prompt = load_prompt(
+            "container-system", stage_instructions=load_prompt("container-implementation")
+        )
 
         # Prompt should warn against committing .forge/ (using "NEVER commit" wording)
         assert ".forge/" in prompt, "Prompt should mention .forge/ directory"

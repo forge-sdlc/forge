@@ -18,13 +18,13 @@ EPIC: {epic_summary}
 
 {existing_tasks_section}
 
-Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
+Generate the fewest concrete Tasks that cover the Epic. One Task is valid. Split larger work into independently verifiable units that fit an execution session.
 
 ## Guidance
 
 - Use the Specification above to ensure tasks cover all acceptance criteria relevant to this Epic
 - Use the Other Epics section to understand what neighbouring Epics are responsible for — do not duplicate their work
-- Cross-cutting concerns (e.g., "add tests", "update docs") should only appear once across all Epics
+- Keep relevant tests and documentation with each behavior change. Deduplicate shared test infrastructure, not regression coverage for distinct capabilities.
 - If this Epic needs integration with work from another Epic, reference it rather than recreating it
 - Preserve the Epic plan's repository grounding: use only file paths, components, test targets, and repo standards supported by the Epic plan or by direct repository inspection
 - If the Epic plan lacks enough repository context for concrete implementation Tasks, use available repository tools to inspect the target repo before naming files, functions, frameworks, test runners, or directory layouts
@@ -33,6 +33,6 @@ Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
 - Each Task should follow nearby source/test patterns when the repo establishes them
 - Each structured Task must include `repo`, using the exact repository assigned to the Epic. Do not omit it or invent a different repository.
 
-For each of the 3–8 Tasks, provide a concise `summary` and a complete `description` that
+For each Task, provide a concise `summary` and a complete `description` that
 includes grounded files and symbols, integration points, nearby patterns, repository
 standards, and explicit acceptance criteria including tests.

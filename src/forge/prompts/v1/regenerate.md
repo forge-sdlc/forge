@@ -6,7 +6,7 @@ ORIGINAL CONTENT:
 FEEDBACK:
 {feedback}
 
-Regenerate the COMPLETE document addressing the feedback. You MUST include every section from the original — do not drop, merge, or summarize any section, even if the feedback only mentions one part. Sections not mentioned in the feedback should be reproduced unchanged. The revised document must have the same headings and structure as the original.
+Regenerate the COMPLETE document addressing the feedback. Include every unaffected section from the original; only drop or merge sections when the feedback requests it. Sections not mentioned in the feedback should be reproduced unchanged. Preserve headings and structure unless the feedback explicitly requests a structural change; then apply that change while retaining unaffected content.
 
 If the feedback asks for implementation-specific changes, challenges file paths, tests, commands, project conventions, or whether the document matches an existing codebase, inspect the relevant repository before revising those details. Prefer focused codebase exploration around the changed or questioned details: use relevant guidance files, nearby code/tests, and existing implementation patterns, broadening when needed to revise confidently. Do not inspect project-management metadata such as unrelated branches, open issues, pull requests, milestones, or release boards unless the feedback explicitly asks for them. Do not invent paths, symbols, tools, or repository standards; if repository context is required but unavailable, preserve the document structure and state the unresolved access issue in the relevant section.
 

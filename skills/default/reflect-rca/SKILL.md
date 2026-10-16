@@ -21,7 +21,7 @@ Check each criterion. For any failure, write a specific, actionable finding that
 
 5. **Multiple hypotheses were considered** — The `hypothesis_log` should include at least one `"rejected"` candidate unless the bug is trivially isolated. If no candidates were rejected, verify the bug is genuinely trivial.
 
-6. **Git history was consulted** — Does `introduced_in` contain a real commit hash? Verify using `git show <commit>` that it exists and is plausible. If the hash looks fabricated, flag it.
+6. **Attribution is supported** — Verify a supplied commit exists and introduced the behavioral defect, rather than merely editing the same lines. Null attribution is valid when history is unavailable or inconclusive and the rationale explains why. Never require a fabricated commit to pass.
 
 7. **Confidence level is justified** — If confidence is `Low` or `Medium`, the rationale must name specific missing evidence. Vague rationales are insufficient.
 

@@ -201,7 +201,7 @@ def _format_rca_content(data: dict) -> str:
     )
 
     introduced = data.get("introduced_in", {})
-    intro_str = f"commit {introduced.get('commit', '?')} ({introduced.get('date', 'unknown date')})"
+    intro_str = f"commit {introduced.get('commit') or 'unknown'} ({introduced.get('date') or 'unknown date'})"
     if introduced.get("pr"):
         intro_str += f", PR {introduced['pr']}"
 

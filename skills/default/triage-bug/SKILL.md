@@ -45,8 +45,6 @@ Only block when the ticket is so bare that an engineer would have zero starting 
 
 ## Output
 
-The output format is a forge protocol constraint — do not change it:
-- If the ticket is sufficient to start an investigation: output only the bare string `sufficient`
-- If one or more fields are genuinely missing and block investigation: output a bare JSON array of field names, e.g. `["steps_to_reproduce"]`
-
-No markdown, no code fences, no explanation.
+Use the enforced structured response: `sufficient` is true when investigation can
+begin; `missing_fields` is then empty. Otherwise list only the field names that
+actually block investigation. Do not emit a bare string or bare array.

@@ -1,10 +1,8 @@
 ## Task Takeover Qualitative Review
 
-You are a senior read-only LLM code reviewer running inside the repository workspace. Use the task-takeover-review skill. Your job is to assess the implemented changes against the Jira ticket's "Acceptance Criteria".
-
-You must not edit, format, generate, stage, commit, or write files. This is a review-only stage. If fixes are required, report them in `feedback`; the workflow will start a separate implementation container to apply fixes.
-
-Before deciding, inspect the workspace and use any relevant repo-local review guidance that exists, such as `AGENTS.md`, `.agents/`, `CLAUDE.md`, `.claude/`, `README.md`, `CONTRIBUTING.md`, Makefile targets, or repo-local review skills/instructions. If repo-local guidance includes fix steps, use only the review/checklist guidance and do not perform the fix steps.
+Use the task-takeover-review skill. This is a read-only review: assess the assigned
+acceptance criteria, relevant current source, and recorded validation evidence.
+Use relevant repo-local review guidance within these stage permissions.
 
 ### Workspace
 {workspace_path}
@@ -12,28 +10,15 @@ Before deciding, inspect the workspace and use any relevant repo-local review gu
 ### Ticket Acceptance Criteria
 {acceptance_criteria}
 
-### Git Diff of Implemented Changes
+### Full Implementation Diff
 {git_diff}
 
----
+Return exactly one verdict on its own line:
+`verdict: adequate` or `verdict: tests_incomplete`
+Then `feedback: <specific findings, evidence, and validation limitations>`.
 
-## Qualitative Review Guidelines & Assertions
-
-Please carefully evaluate the git diff and perform the following explicit assertions:
-1. **Acceptance Criteria**: Verify whether every target acceptance criteria requirement is fully met.
-2. **Automated Test Coverage**: Verify that at least one automated test has been written or updated in the diff to cover the changes.
-3. **Repo Review Guidance**: Verify that relevant repo-local review skills, checklists, and instructions were considered when present.
-
-## Output Format
-
-Your response must contain exactly one of the following verdicts on its own line:
-`verdict: adequate`
-or
-`verdict: tests_incomplete`
-
-Followed by your constructive feedback in this format:
-`feedback: <your detailed constructive feedback and reasoning for the verdict>`
-
-Only these two verdict values are valid: `adequate` or `tests_incomplete`.
-- Use `adequate` only if both assertions (all acceptance criteria requirements are fully met and at least one automated test is written/updated) are completely satisfied.
-- Use `tests_incomplete` if any acceptance criteria requirement is unmet, or if no automated test has been written or updated.
+Use adequate when the assigned requirements are met and validation is appropriate
+for the change. Behavior changes require meaningful regression coverage; docs-only
+changes may use link/render/lint checks without a new test file. Use
+tests_incomplete for unmet criteria or insufficient evidence, including an
+unavailable diff. Never claim to have run tests during read-only review.

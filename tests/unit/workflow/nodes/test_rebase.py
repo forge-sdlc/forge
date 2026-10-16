@@ -84,3 +84,31 @@ async def test_rebase_reads_body_via_adapter() -> None:
 
     assert body == "PR body"
     adapter.get_change_request.assert_awaited_once_with(_repo_ref(), identity)
+
+
+@pytest.mark.asyncio
+async def test_rebase_merges_actual_pr_target(tmp_path):
+    """A release PR must not merge main or lose a slash-containing target name."""
+    from types import SimpleNamespace
+
+    workspace = SimpleNamespace(path=tmp_path, branch_name="forge/task-123")
+    manager = MagicMock()
+    manager.create_workspace.return_value = workspace
+    git = MagicMock()
+    git.remote_branch_exists.return_value = True
+    git._run_git.return_value = SimpleNamespace(returncode=0, stdout="Already up to date.")
+    adapter = AsyncMock()
+    adapter.get_change_request.return_value = SimpleNamespace(target_branch="release/2026")
+    jira = MagicMock(close=AsyncMock())
+    state = {"ticket_key": "TASK-123", "current_repo": "acme/backend", "current_pr_number": 5}
+    with (
+        patch("forge.workflow.nodes.rebase.get_settings"),
+        patch("forge.workflow.nodes.rebase.JiraClient", return_value=jira),
+        patch("forge.workflow.nodes.rebase.get_adapter", return_value=(_repo_ref(), adapter)),
+        patch("forge.workflow.nodes.rebase.get_workspace_manager", return_value=manager),
+        patch("forge.workflow.nodes.rebase.GitOperations", return_value=git),
+        patch("forge.workflow.nodes.rebase.post_status_comment", new_callable=AsyncMock),
+    ):
+        await rebase_pr(state)
+    git._run_git.assert_any_call("fetch", "origin", "release/2026")
+    git._run_git.assert_any_call("merge", "origin/release/2026", check=False)

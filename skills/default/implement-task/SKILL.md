@@ -25,35 +25,17 @@ Implement code changes following Task specifications and project standards.
 6. **Focused investigation**: Start from the files, nearby code patterns, and tests identified by the Task. Broaden investigation as needed to implement safely and satisfy acceptance criteria.
 7. **Ordering invariants**: Before committing, read the plan's `## Ordering Invariants` section. For each entry, locate the relevant calls in your implementation and confirm the stated order is preserved. If the section says "None identified.", skip this step.
 
-## File Change Format
+## Completion Evidence
 
-When providing code changes, format as:
+Map each assigned acceptance criterion to the code and relevant validation.
+Follow the stage's validation policy: behavior changes need regression coverage;
+documentation-only changes need applicable documentation checks rather than an
+artificial test file. For a bug fix, use an isolated reproduction to demonstrate
+failure without the fix and success with it when feasible. Record commands,
+results, tested revision/state, and unavailable checks in `.forge/validation.md`.
 
-```path/to/file.py
-<complete file contents>
-```
-
-## Output Format
-
-```markdown
-## Summary
-[Brief description of changes to be made]
-
-## Files Changed
-
-### path/to/file1.py
-[Explanation of changes]
-
-### path/to/file2.py
-[Explanation of changes]
-
-## Implementation Notes
-[Any important decisions or considerations]
-
-## Code Changes
-
-[File blocks with complete contents]
-```
+Edit workspace files directly. Return a concise implementation summary, validation
+results, and blockers. Do not echo complete source files in the response.
 
 ## Quality Checklist
 

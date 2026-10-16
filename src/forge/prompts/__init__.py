@@ -1,5 +1,6 @@
 """Prompt templates for Forge SDLC agent."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -24,12 +25,15 @@ def get_default_version() -> str:
     return _default_version
 
 
-def load_prompt(name: str, version: str | None = None, **kwargs: Any) -> str:
+def load_prompt(
+    name: str, version: str | None = None, *, strict: bool = False, **kwargs: Any
+) -> str:
     """Load a prompt template and format with variables.
 
     Args:
         name: Prompt file name (without .md extension).
         version: Prompt version (e.g., 'v1', 'v2'). Uses default if not specified.
+        strict: Reject missing named placeholders before rendering.
         **kwargs: Variables to substitute in the template.
 
     Returns:
@@ -46,11 +50,15 @@ def load_prompt(name: str, version: str | None = None, **kwargs: Any) -> str:
 
     template = prompt_file.read_text()
 
-    # Simple variable substitution using {variable} format
-    for key, value in kwargs.items():
-        template = template.replace(f"{{{key}}}", str(value))
-
-    return template
+    # Render only placeholders in the template, never text inserted by another
+    # substitution. JSON braces and placeholder-like user data remain literal.
+    pattern = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z_0-9]*)\}(?!\})")
+    missing = set(pattern.findall(template)) - kwargs.keys()
+    if strict and missing:
+        raise ValueError(f"Missing inputs for {name}: {', '.join(sorted(missing))}")
+    return pattern.sub(
+        lambda match: str(kwargs[match[1]]) if match[1] in kwargs else match[0], template
+    )
 
 
 def list_versions() -> list[str]:

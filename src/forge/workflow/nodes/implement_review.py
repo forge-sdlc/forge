@@ -98,6 +98,7 @@ async def _fetch_pr_review_comments(
     pr_number: int,
     review_body: str,
     review_comments: list[dict[str, Any]] | set[str] | None = None,
+    expected_threads: dict[str, str] | None = None,
 ) -> str:
     """Fetch all PR review comments and format them for the analysis container.
 
@@ -134,7 +135,7 @@ async def _fetch_pr_review_comments(
             ],
         }
         for review in reviews
-        if review.id not in processed_thread_ids
+        if review.id not in processed_thread_ids and review.comments
     ]
 
     lines = ["# PR Review Feedback\n"]
@@ -170,6 +171,14 @@ async def _fetch_pr_review_comments(
             thread, dispositions_by_thread.get(thread["thread_id"]), bot_login, prefix
         )
     ]
+    if expected_threads is not None:
+        expected_threads.update(
+            {
+                thread["thread_id"]: str(thread["comments"][-1]["comment_id"])
+                for thread in threads
+                if thread["comments"]
+            }
+        )
     if threads:
         lines.append("## Unresolved Review Threads\n")
         for thread in threads:
@@ -187,26 +196,49 @@ async def _fetch_pr_review_comments(
     return "\n".join(lines)
 
 
-def _load_review_decisions(workspace_path: str) -> list[dict[str, Any]]:
+def _load_review_decisions(
+    workspace_path: str, expected_threads: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
     """Load and validate per-thread decisions produced by review analysis."""
     path = Path(workspace_path) / _REVIEW_DECISIONS_FILE
     if not path.exists():
+        if expected_threads:
+            raise ValueError("Review analysis omitted the required thread decisions")
         return []
     try:
         data = json.loads(path.read_text())
     except (json.JSONDecodeError, OSError) as exc:
+        if expected_threads:
+            raise ValueError("Invalid required review decisions file") from exc
         logger.warning("Invalid review decisions file: %s", exc)
         return []
     if not isinstance(data, list):
+        if expected_threads:
+            raise ValueError("Review decisions must be an array")
         return []
     allowed = {"accept", "contest", "clarify", "ignore"}
-    return [
+    decisions = [
         item
         for item in data
         if isinstance(item, dict)
         and item.get("disposition") in allowed
         and isinstance(item.get("thread_id"), str)
     ]
+    if expected_threads is not None:
+        ids = [item["thread_id"] for item in decisions]
+        if (
+            len(decisions) != len(data)
+            or len(ids) != len(set(ids))
+            or set(ids) != set(expected_threads)
+        ):
+            raise ValueError("Review decisions must cover each input thread exactly once")
+        for item in decisions:
+            if str(item.get("comment_id")) != expected_threads[item["thread_id"]]:
+                raise ValueError("Review decision changed the input comment ID")
+            field = "feedback" if item["disposition"] == "accept" else "response"
+            if not isinstance(item.get(field), str) or not item[field].strip():
+                raise ValueError(f"Review disposition requires {field}")
+    return decisions
 
 
 async def _reply_to_review_threads(
@@ -279,11 +311,13 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
             pr_number=pr_number,
         )
 
+        expected_threads: dict[str, str] = {}
         review_comments_text = await _fetch_pr_review_comments(
             current_repo=current_repo,
             pr_number=pr_number or 0,
             review_body=feedback_comment,
             review_comments=state.get("review_comments", []),
+            expected_threads=expected_threads,
         )
 
         # Write all review comments to a file so the container can read them
@@ -321,7 +355,9 @@ async def implement_review(state: WorkflowState) -> WorkflowState:
         state = merge_review_exhaustion(state, result, ticket_key, "implement_review_analyze")
 
         # ── Process per-thread dispositions ──────────────────────────────────
-        decisions = _load_review_decisions(workspace_path)
+        if not result.success:
+            raise RuntimeError("Review analysis failed; refusing to consume its artifacts")
+        decisions = _load_review_decisions(workspace_path, expected_threads)
         response_decisions = [
             item for item in decisions if item["disposition"] in ("contest", "clarify", "ignore")
         ]
