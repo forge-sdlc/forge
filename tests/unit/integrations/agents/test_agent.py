@@ -2,7 +2,7 @@
 
 import json
 from typing import Any
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -259,31 +259,41 @@ async def test_answer_question_empty_response():
     await agent.close()
 
 
-def test_get_skill_paths_uses_resolver_when_ticket_key_given():
-    """When ticket_key is provided, resolver is called and result returned."""
+def test_get_skill_paths_uses_resolver_when_ticket_key_given(tmp_path):
+    """Resolve host directories before converting them to virtual paths."""
     agent = ForgeAgent.__new__(ForgeAgent)
-    agent.settings = MagicMock()
 
-    with patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver:
-        mock_resolver.return_value = ["skills/default/", "skills/proj/"]
+    with (
+        patch.object(agent, "_get_root_dir", return_value=tmp_path),
+        patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver,
+    ):
+        mock_resolver.return_value = [
+            str(tmp_path / "committed-skills/default"),
+            str(tmp_path / "committed-skills/proj"),
+        ]
         result = agent._get_skill_paths("PROJ-123")
 
-    mock_resolver.assert_called_once()
-    assert result == ["skills/default/", "skills/proj/"]
+    mock_resolver.assert_called_once_with(
+        "PROJ-123", tmp_path / "committed-skills", skills_install_dir=tmp_path / "skills"
+    )
+    assert result == ["/committed-skills/default/", "/committed-skills/proj/"]
 
 
-def test_get_skill_paths_returns_default_without_ticket_key():
-    """When ticket_key is None, resolver returns skills/default/ only."""
+def test_get_skill_paths_returns_default_without_ticket_key(tmp_path):
+    """When ticket_key is None, only the default virtual path is returned."""
     agent = ForgeAgent.__new__(ForgeAgent)
-    agent.settings = MagicMock()
-    agent.settings.skills_dir = "skills/"
 
-    with patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver:
-        mock_resolver.return_value = ["skills/default/"]
+    with (
+        patch.object(agent, "_get_root_dir", return_value=tmp_path),
+        patch("forge.integrations.agents.agent.resolve_skill_paths") as mock_resolver,
+    ):
+        mock_resolver.return_value = [str(tmp_path / "committed-skills/default")]
         result = agent._get_skill_paths(None)
 
-    mock_resolver.assert_called_once_with("", ANY, skills_install_dir=ANY)
-    assert result == ["skills/default/"]
+    mock_resolver.assert_called_once_with(
+        "", tmp_path / "committed-skills", skills_install_dir=tmp_path / "skills"
+    )
+    assert result == ["/committed-skills/default/"]
 
 
 @pytest.mark.asyncio

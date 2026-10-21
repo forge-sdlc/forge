@@ -156,6 +156,14 @@ class TestInstallPathMode:
 
         assert any("No skill subdirectories" in msg for msg in caplog.messages)
 
+    def test_rejects_symlinks_in_skill_tree(self, tmp_path: Path) -> None:
+        source = tmp_path / "source"
+        skill = _make_skill(source, "unsafe")
+        (skill / "escape").symlink_to(tmp_path / "outside")
+
+        with pytest.raises(ValueError, match="Symlinks"):
+            install_path_mode(source, tmp_path / "target")
+
 
 # ===========================================================================
 # install_skill_mapping
@@ -271,6 +279,22 @@ class TestInstallSkillMapping:
         result = install_skill_mapping(source, {}, target)
 
         assert result == []
+
+    def test_rejects_target_path_traversal(self, tmp_path: Path) -> None:
+        source = tmp_path / "source"
+        _make_skill(source, "safe")
+
+        with pytest.raises(ValueError, match="Unsafe skill target"):
+            install_skill_mapping(source, {"../escape": "safe"}, tmp_path / "target")
+
+    def test_rejects_source_path_escape(self, tmp_path: Path) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        outside = _make_skill(tmp_path, "outside")
+        assert outside.is_dir()
+
+        with pytest.raises(ValueError, match="escapes cloned repository"):
+            install_skill_mapping(source, {"escape": "../outside"}, tmp_path / "target")
 
     def test_raises_file_not_found_for_missing_source(self, tmp_path: Path) -> None:
         """FileNotFoundError is raised when source directory does not exist."""

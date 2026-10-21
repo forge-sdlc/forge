@@ -31,6 +31,7 @@ from forge.effects.jira import (
     JIRA_COMMENT_OPERATION,
 )
 from forge.effects.source_control import SC_COMMENT_CREATE_OPERATION
+from forge.integrations.agents.security import initialize_agent_skills, validate_agent_root
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.source_control.contracts import RepositoryRef
 from forge.integrations.source_control.registry import get_registry
@@ -1240,6 +1241,17 @@ class OrchestratorWorker:
         from forge.utils.logging import log_startup_banner
 
         log_startup_banner("Queue Worker")
+
+        project_root = Path(os.environ.get("FORGE_PROJECT_ROOT", Path.cwd())).resolve()
+        agent_root = validate_agent_root(
+            Path(self.settings.agent_root_dir),
+            project_root,
+            self.settings.workspace_base_dir or "",
+        )
+        committed_skills = initialize_agent_skills(
+            agent_root, project_root / self.settings.skills_dir
+        )
+        logger.info("Host agent skills initialized at %s", committed_skills)
 
         # Start Prometheus metrics HTTP server
         if self.settings.worker_metrics_enabled:

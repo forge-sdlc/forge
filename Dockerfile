@@ -31,7 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy wheels and install
 COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+COPY skills/ /app/skills/
+RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels && \
+    mkdir -p /var/lib/forge/agent && chown -R forge:forge /var/lib/forge
 
 # Switch to non-root user
 USER forge

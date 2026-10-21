@@ -417,7 +417,10 @@ async def test_unadapted_library_class_still_rejects_provider_strategy_before_ht
             )
             try:
                 graph = create_agent(model, response_format=ProviderStrategy(TaskGeneration))
-                with pytest.raises(TypeError, match="unexpected keyword argument 'strict'"):
+                # SDK versions reject either native-format keyword before making a request.
+                with pytest.raises(
+                    TypeError, match="unexpected keyword argument '(?:strict|response_format)'"
+                ):
                     await graph.ainvoke({"messages": [("user", "Return tasks")]})
             finally:
                 model.client.close()
