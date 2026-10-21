@@ -223,6 +223,64 @@ Then perform negative tests outside production:
 Canary one worker. Validate planning, implementation, review, build, Git, and Langfuse
 workflows, monitor denials, then expand gradually.
 
+## Minimal real-environment canary
+
+Deploy the rebased PR to one test worker and its API. Rebuild both the Forge
+service image and the sandbox image: the service provides host isolation, while
+`containers/entrypoint.py` in the sandbox provides sanitized implementation and
+review shells. Point `CONTAINER_IMAGE` at the rebuilt sandbox image. A pre-existing
+sandbox image will not test this change. Keep existing model, Jira, GitHub, Redis,
+ADC and Langfuse configuration.
+
+Before starting the worker:
+
+- Set `AGENT_ALLOWED_TOOLS=ls,read_file,glob,grep`; replace legacy `*` values.
+- Give the service user a dedicated writable `AGENT_ROOT_DIR`, for example
+  `/var/lib/forge/agent`. The local `.forge/agent` default also works. Keep it
+  separate from task workspaces; provide a writable volume for read-only services.
+- Run `forge mcp-tools` using the deployed MCP configuration. Set
+  `AGENT_MCP_ALLOWED_TOOLS` to the exact read tools needed for the test, for example
+  `github:get_file_contents,github:search_code` **only if discovery lists those
+  identifiers**. `AGENT_MCP_SERVERS=*` alone no longer grants access. Empty is valid
+  for a run requiring no MCP; it will not exercise allowlisted MCP access.
+- For stdio MCP servers, declare required credentials explicitly in each server's
+  `env`; unrelated service environment variables are no longer inherited.
+- Confirm the required default/project skills are staged under
+  `AGENT_ROOT_DIR/committed-skills` and runtime packages under `AGENT_ROOT_DIR/skills`.
+
+Use the existing **Task workflow** (`task_takeover`), which exercises host planning
+and sandbox execution without Feature decomposition or Bug RCA. Start a fresh Jira
+**Task**, in a configured test project/repository, labeled `forge:managed`. Keep
+manual plan approval enabled for this first run. No workflow publication is needed
+when the project uses the built-in Task definition; check for project overrides.
+
+Suggested task description (replace repository and paths with real values):
+
+> In repo:<owner>/<test-repository>, update one sentence in <existing-doc-path>
+> to clarify <specific behavior>. Before planning, inspect that file using the
+> configured read-only GitHub MCP tool and cite the current sentence. During
+> implementation, read the applicable project skill, make only the requested
+> documentation change, and run the repository's normal lightweight check. Also
+> check that an ordinary shell sees no ANTHROPIC_API_KEY, GITHUB_TOKEN,
+> LANGFUSE_SECRET_KEY, or GOOGLE_APPLICATION_CREDENTIALS variables; report only
+> pass/fail, never secret values. Open a PR and leave it for human review.
+
+Pass criteria:
+
+1. Triage and planning complete; the cited existing sentence proves allowed MCP
+   access, and skill instructions load through the virtual host filesystem.
+2. Jira pauses at `forge:plan-pending`. Apply `forge:plan-approved` after review.
+3. Implementation and qualitative review complete using the rebuilt sandbox;
+   the shell environment check passes and the lightweight repository check runs.
+4. Forge creates the expected small PR, CI passes, and the run reaches human review.
+5. If Langfuse is enabled, planning, implementation and review retain their expected
+   traces and session correlation; model authentication and ADC still work.
+
+A successful task demonstrates compatibility, not every isolation guarantee. Run
+`tests/unit/integrations/agents/test_security.py` for negative filesystem, tool,
+MCP allowlist, and environment cases. Do not attempt to read real credentials to
+prove a denial. Stop at human review for the canary; merge is a separate decision.
+
 ## Incident response
 
 If isolation may have failed:
