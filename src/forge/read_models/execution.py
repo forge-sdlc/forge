@@ -16,6 +16,7 @@ from forge.read_models.models import (
     ExecutionStatus,
     MigrationView,
     NextTransitionView,
+    ObservationProcessingView,
     ObservationView,
     RecoveryOptionView,
     RuleClauseView,
@@ -24,6 +25,7 @@ from forge.read_models.models import (
     TimelineEntry,
     WaitingView,
 )
+from forge.reconciliation import ObservationProcessingRecord, ProcessingPhase
 from forge.workflow.declarative.manifest import ProcessChangeImpact, ProcessManifest
 from forge.workflow.preconditions import has_capability
 
@@ -35,6 +37,7 @@ def project_execution(
     manifest: ProcessManifest | None = None,
     last_observation: Observation | None = None,
     observation_decisions: Sequence[Any] = (),
+    observation_processing: Sequence[ObservationProcessingRecord] = (),
     migration: ProcessChangeImpact | None = None,
     now: datetime | None = None,
     stale_after: timedelta = timedelta(hours=1),
@@ -48,6 +51,11 @@ def project_execution(
     run_id = str(checkpoint.get("thread_id") or ticket_key)
     position = str(checkpoint.get("current_node") or "entry")
     status = _status(checkpoint, position)
+    processing_views = tuple(_processing_view(item) for item in observation_processing)
+    if any(item.phase == ProcessingPhase.BLOCKED.value for item in observation_processing) or any(
+        record.status.value == "indeterminate" for record in effects
+    ):
+        status = ExecutionStatus.BLOCKED
     waiting = _waiting(checkpoint, status)
     permitted = _permitted_commands(status, position, checkpoint, manifest)
     transitions = tuple(
@@ -90,6 +98,7 @@ def project_execution(
         next_transitions=transitions,
         waiting=waiting,
         last_observation=observation_view,
+        observation_processing=processing_views,
         stale_observations=stale_inputs,
         conflicting_observations=conflicting_inputs,
         station_attempts=_station_attempts(checkpoint),
@@ -109,6 +118,7 @@ def project_execution(
             migrations=migrations,
             operator_actions=operator_actions,
             timeline_entries=timeline_entries,
+            observation_processing=observation_processing,
         ),
     )
 
@@ -437,6 +447,27 @@ def _effect(record: EffectRecord) -> EffectView:
     )
 
 
+def _processing_view(record: ObservationProcessingRecord) -> ObservationProcessingView:
+    decision = record.command_decision or {}
+    command = decision.get("command") or {}
+    pin = record.workflow_pin or {}
+    return ObservationProcessingView(
+        delivery_identity=record.delivery_identity,
+        phase=record.phase.value,
+        command_id=record.command_id,
+        command_type=command.get("command_type"),
+        command_status=decision.get("status"),
+        workflow_name=pin.get("name"),
+        workflow_revision=pin.get("revision"),
+        expected_checkpoint_identity=record.expected_checkpoint_identity,
+        checkpoint_identity=record.checkpoint_identity,
+        attempts=record.attempts,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+        last_error=record.last_error,
+    )
+
+
 def _recovery_options(
     waiting: WaitingView | None,
     permitted: Sequence[str],
@@ -557,9 +588,45 @@ def _timeline(
     migrations: Sequence[Mapping[str, Any]] = (),
     operator_actions: Sequence[Mapping[str, Any]] = (),
     timeline_entries: Sequence[TimelineEntry] = (),
+    observation_processing: Sequence[ObservationProcessingRecord] = (),
 ) -> tuple[TimelineEntry, ...]:
     """Aggregate all durable execution records into a stable event stream."""
     entries: list[TimelineEntry] = list(timeline_entries)
+    for record in observation_processing:
+        decision = record.command_decision or {}
+        command = decision.get("command") or {}
+        entries.append(
+            TimelineEntry(
+                event_id=f"processing:{record.delivery_identity}",
+                kind="observation_processing",
+                occurred_at=record.updated_at,
+                status=record.phase.value,
+                summary=(
+                    record.last_error or f"Observation command processing is {record.phase.value}"
+                ),
+                details={
+                    "delivery_identity": record.delivery_identity,
+                    "ticket_key": record.ticket_key,
+                    **({"command_id": record.command_id} if record.command_id else {}),
+                    **(
+                        {"command_type": command["command_type"]}
+                        if command.get("command_type")
+                        else {}
+                    ),
+                    "attempts": record.attempts,
+                    **(
+                        {"expected_checkpoint_identity": record.expected_checkpoint_identity}
+                        if record.expected_checkpoint_identity
+                        else {}
+                    ),
+                    **(
+                        {"checkpoint_identity": record.checkpoint_identity}
+                        if record.checkpoint_identity
+                        else {}
+                    ),
+                },
+            )
+        )
     for item in checkpoint.get("command_decisions") or []:
         entries.append(
             TimelineEntry(

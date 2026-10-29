@@ -4,6 +4,7 @@ from forge.read_models.execution import project_execution, rebuild_execution_tim
 from forge.read_models.models import (
     EffectAttemptView,
     ExecutionReadModel,
+    ObservationProcessingView,
     RecoveryOptionView,
     RuleClauseView,
     RuleExplanationView,
@@ -22,6 +23,7 @@ from forge.read_models.timeline import (
 
 __all__ = [
     "ExecutionReadModel",
+    "ObservationProcessingView",
     "EffectAttemptView",
     "RecoveryOptionView",
     "RuleClauseView",

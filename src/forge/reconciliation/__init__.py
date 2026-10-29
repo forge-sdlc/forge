@@ -12,6 +12,8 @@ from forge.reconciliation.models import (
     DriftClass,
     ObservationDecision,
     ObservationDisposition,
+    ObservationProcessingRecord,
+    ProcessingPhase,
     ReconciledResource,
 )
 
@@ -20,8 +22,10 @@ __all__ = [
     "InMemoryObservationLedger",
     "ObservationDecision",
     "ObservationDisposition",
+    "ObservationProcessingRecord",
     "ObservationLedger",
     "RedisObservationLedger",
+    "ProcessingPhase",
     "ReconciledResource",
     "classify_observation",
     "observation_run_id",

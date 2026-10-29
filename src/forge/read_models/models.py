@@ -51,6 +51,22 @@ class ObservationView(VersionedDomainModel):
     revision_order: int | None = None
 
 
+class ObservationProcessingView(VersionedDomainModel):
+    delivery_identity: str
+    phase: str
+    command_id: str | None = None
+    command_type: str | None = None
+    command_status: str | None = None
+    workflow_name: str | None = None
+    workflow_revision: int | None = None
+    expected_checkpoint_identity: str | None = None
+    checkpoint_identity: str | None = None
+    attempts: int = 0
+    created_at: datetime
+    updated_at: datetime
+    last_error: str | None = None
+
+
 class RuleClauseView(VersionedDomainModel):
     """The result of evaluating one persisted workflow rule clause.
 
@@ -138,6 +154,7 @@ class ExecutionReadModel(VersionedDomainModel):
     next_transitions: tuple[NextTransitionView, ...]
     waiting: WaitingView | None = None
     last_observation: ObservationView
+    observation_processing: tuple[ObservationProcessingView, ...] = ()
     stale_observations: tuple[ObservationView, ...] = ()
     conflicting_observations: tuple[ObservationView, ...] = ()
     station_attempts: tuple[StationAttemptView, ...] = ()

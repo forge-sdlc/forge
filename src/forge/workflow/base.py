@@ -127,6 +127,10 @@ class BaseState(TypedDict, total=False):
     # Durable ingress audit trail. Entries are provider-neutral command decisions,
     # bounded by the worker to keep checkpoint growth predictable.
     command_decisions: list[dict[str, Any]]
+    # Durable handoff markers tie an accepted observation command to the
+    # checkpoint transition it applied. They let a redelivery continue graph
+    # execution without reducing the same command a second time.
+    command_handoffs: list[dict[str, Any]]
     # Normalized observation decisions are retained for read-model rebuilds;
     # unlike provider payloads they contain only contract metadata and reason.
     observation_history: list[dict[str, Any]]

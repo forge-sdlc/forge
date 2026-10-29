@@ -48,22 +48,44 @@ async def load_execution_read_model(
     production_defaults = checkpointer is None
     saver = checkpointer or await get_checkpointer()
     raw = await saver.aget({"configurable": {"thread_id": ticket_key}})
-    if raw is None:
+    checkpoint = dict(raw.get("channel_values", raw)) if raw is not None else {}
+    ledger = observation_ledger
+    if ledger is None and production_defaults:
+        ledger = RedisObservationLedger()
+    processing = ()
+    if ledger is not None:
+        list_processing = getattr(ledger, "processing_for_ticket", None)
+        if list_processing is not None:
+            processing = tuple(await list_processing(ticket_key))
+    if raw is None and not processing:
         return None
-    checkpoint = raw.get("channel_values", raw)
+    if raw is None:
+        latest = processing[-1]
+        pin = latest.workflow_pin or {}
+        checkpoint = {
+            "ticket_key": ticket_key,
+            "thread_id": ticket_key,
+            "current_node": "entry",
+            "is_blocked": latest.phase.value == "blocked",
+            "last_error": latest.last_error,
+            "workflow_name": pin.get("name"),
+            "workflow_definition_revision": pin.get("revision"),
+            "workflow_definition_digest": pin.get("digest"),
+            "workflow_definition": pin.get("definition"),
+        }
     definition_value = checkpoint.get("workflow_definition")
     manifest = None
     if isinstance(definition_value, dict):
         definition = load_workflow_value(definition_value)
-        if definition.digest != checkpoint.get("workflow_digest"):
+        expected_digest = checkpoint.get("workflow_digest") or checkpoint.get(
+            "workflow_definition_digest"
+        )
+        if definition.digest != expected_digest:
             raise ValueError("Pinned workflow definition digest does not match checkpoint")
         manifest = build_process_manifest(definition)
     journal = effect_journal or RedisEffectJournal()
     effects = await journal.list_for_workflow(str(checkpoint.get("thread_id") or ticket_key))
     run_id = str(checkpoint.get("thread_id") or ticket_key)
-    ledger = observation_ledger
-    if ledger is None and production_defaults:
-        ledger = RedisObservationLedger()
     decisions = ()
     if ledger is not None:
         history_for_run = getattr(ledger, "history_for_run", None)
@@ -86,6 +108,7 @@ async def load_execution_read_model(
         observation_decisions=_deduplicate_observation_decisions(
             [*checkpoint.get("observation_history", ()), *decisions]
         ),
+        observation_processing=processing,
         timeline_entries=persisted_timeline,
     )
 

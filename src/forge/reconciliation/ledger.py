@@ -11,10 +11,14 @@ from redis.exceptions import WatchError
 
 from forge.domain import Observation, stable_identity
 from forge.orchestrator.checkpointer import get_redis_client
+from forge.orchestrator.ownership import owned_transaction
+from forge.reconciliation.metrics import refresh_processing_metrics
 from forge.reconciliation.models import (
     DriftClass,
     ObservationDecision,
     ObservationDisposition,
+    ObservationProcessingRecord,
+    ProcessingPhase,
     ReconciledResource,
 )
 
@@ -32,6 +36,8 @@ PROTECTED_WORKFLOW_FACTS = {
     "workflow_position",
     "workflow_transition_count",
     "workflow_node_attempts",
+    "command_decisions",
+    "command_handoffs",
     # Checkpoint control fields.  External providers may report a status, but
     # they cannot directly pause, block, retry, or move a workflow checkpoint.
     "is_paused",
@@ -46,10 +52,31 @@ _RESOURCE_PREFIX = "forge:observations:resource:"
 _DELIVERY_PREFIX = "forge:observations:delivery:"
 _HISTORY_PREFIX = "forge:observations:history:"
 _RUN_HISTORY_PREFIX = "forge:observations:run:"
+_PROCESSING_PREFIX = "forge:observations:processing:"
+_PROCESSING_PENDING = "forge:observations:processing:pending"
+_PROCESSING_HISTORY = "forge:observations:processing:history"
 
 
 class ObservationLedger(Protocol):
     async def record(self, observation: Observation) -> ObservationDecision: ...
+
+    async def accept(
+        self, observation: Observation, ticket_key: str, ingress_message: dict[str, Any]
+    ) -> tuple[ObservationDecision, ObservationProcessingRecord | None]: ...
+
+    async def get_processing(
+        self, delivery_identity: str
+    ) -> ObservationProcessingRecord | None: ...
+
+    async def save_processing(self, record: ObservationProcessingRecord) -> None: ...
+
+    async def pending_processing(
+        self, *, ticket_key: str | None = None, limit: int = 100
+    ) -> Sequence[ObservationProcessingRecord]: ...
+
+    async def processing_for_ticket(
+        self, ticket_key: str, limit: int = 100
+    ) -> Sequence[ObservationProcessingRecord]: ...
 
     async def latest(self, observation: Observation) -> ReconciledResource | None: ...
 
@@ -91,10 +118,25 @@ class InMemoryObservationLedger:
         self._resources: dict[str, ReconciledResource] = {}
         self._history: dict[str, list[ObservationDecision]] = {}
         self._deliveries: dict[str, ObservationDecision] = {}
+        self._processing: dict[str, ObservationProcessingRecord] = {}
         self._run_history: dict[str, list[ObservationDecision]] = {}
         self._lock = asyncio.Lock()
 
     async def record(self, observation: Observation) -> ObservationDecision:
+        decision, _ = await self._record(observation)
+        return decision
+
+    async def accept(
+        self, observation: Observation, ticket_key: str, ingress_message: dict[str, Any]
+    ) -> tuple[ObservationDecision, ObservationProcessingRecord | None]:
+        return await self._record(observation, ticket_key, ingress_message)
+
+    async def _record(
+        self,
+        observation: Observation,
+        ticket_key: str | None = None,
+        ingress_message: dict[str, Any] | None = None,
+    ) -> tuple[ObservationDecision, ObservationProcessingRecord | None]:
         async with self._lock:
             protected = sorted(PROTECTED_WORKFLOW_FACTS & observation.facts.keys())
             if protected:
@@ -105,7 +147,7 @@ class InMemoryObservationLedger:
                     f"external observation attempted to set workflow-owned facts: {protected}",
                 )
                 self._append(observation, decision)
-                return decision
+                return decision, self._processing.get(observation.delivery_identity)
             delivery = observation.delivery_identity
             duplicate = self._deliveries.get(delivery)
             if duplicate is not None:
@@ -117,7 +159,7 @@ class InMemoryObservationLedger:
                         "provider revision has inconsistent ordering metadata",
                     )
                     self._append(observation, decision)
-                    return decision
+                    return decision, self._processing.get(delivery)
                 same_facts = duplicate.observation.facts == observation.facts
                 decision = _decision(
                     observation,
@@ -130,7 +172,17 @@ class InMemoryObservationLedger:
                     else "same provider revision contains different facts",
                 )
                 self._append(observation, decision)
-                return decision
+                processing = self._processing.get(delivery)
+                if (
+                    processing is None
+                    and ticket_key
+                    and duplicate.disposition is ObservationDisposition.ACCEPTED
+                ):
+                    processing = _legacy_ambiguous_processing(
+                        duplicate.observation, ticket_key, ingress_message or {}
+                    )
+                    self._processing[delivery] = processing
+                return decision, processing
 
             key = resource_identity(observation)
             current = self._resources.get(key)
@@ -154,7 +206,49 @@ class InMemoryObservationLedger:
                     latest_delivery_identity=delivery,
                     updated_at=decision.decided_at,
                 )
-            return decision
+                if ticket_key:
+                    processing = ObservationProcessingRecord(
+                        delivery_identity=delivery,
+                        observation=observation,
+                        ticket_key=ticket_key,
+                        ingress_message=ingress_message or {},
+                        created_at=decision.decided_at,
+                        updated_at=decision.decided_at,
+                    )
+                    self._processing[delivery] = processing
+                else:
+                    processing = None
+            else:
+                processing = None
+            return decision, processing
+
+    async def get_processing(self, delivery_identity: str) -> ObservationProcessingRecord | None:
+        return self._processing.get(delivery_identity)
+
+    async def save_processing(self, record: ObservationProcessingRecord) -> None:
+        async with self._lock:
+            self._processing[record.delivery_identity] = record
+
+    async def pending_processing(
+        self, *, ticket_key: str | None = None, limit: int = 100
+    ) -> Sequence[ObservationProcessingRecord]:
+        pending = sorted(self._processing.values(), key=lambda item: item.created_at)
+        return tuple(
+            item
+            for item in pending
+            if item.phase
+            in {ProcessingPhase.PENDING, ProcessingPhase.RUNNING, ProcessingPhase.PREPARED}
+            and (ticket_key is None or item.ticket_key == ticket_key)
+        )[:limit]
+
+    async def processing_for_ticket(
+        self, ticket_key: str, limit: int = 100
+    ) -> Sequence[ObservationProcessingRecord]:
+        records = sorted(
+            (item for item in self._processing.values() if item.ticket_key == ticket_key),
+            key=lambda item: item.created_at,
+        )
+        return tuple(records[-limit:])
 
     def _append(self, observation: Observation, decision: ObservationDecision) -> None:
         self._history.setdefault(resource_identity(observation), []).append(decision)
@@ -184,6 +278,20 @@ class RedisObservationLedger:
         return self._redis
 
     async def record(self, observation: Observation) -> ObservationDecision:
+        decision, _ = await self._record(observation)
+        return decision
+
+    async def accept(
+        self, observation: Observation, ticket_key: str, ingress_message: dict[str, Any]
+    ) -> tuple[ObservationDecision, ObservationProcessingRecord | None]:
+        return await self._record(observation, ticket_key, ingress_message)
+
+    async def _record(
+        self,
+        observation: Observation,
+        ticket_key: str | None = None,
+        ingress_message: dict[str, Any] | None = None,
+    ) -> tuple[ObservationDecision, ObservationProcessingRecord | None]:
         protected = sorted(PROTECTED_WORKFLOW_FACTS & observation.facts.keys())
         if protected:
             decision = _decision(
@@ -196,17 +304,19 @@ class RedisObservationLedger:
                 self._history_key(observation), decision.model_dump_json()
             )
             await self._index_run(observation, decision)
-            return decision
+            return decision, None
 
         redis = await self._client()
         resource_key = self._resource_key(observation)
         delivery_key = f"{_DELIVERY_PREFIX}{observation.delivery_identity}"
+        processing_key = f"{_PROCESSING_PREFIX}{observation.delivery_identity}"
         while True:
-            async with redis.pipeline(transaction=True) as pipeline:
+            async with owned_transaction(redis) as pipeline:
                 try:
-                    await pipeline.watch(resource_key, delivery_key)
+                    await pipeline.watch(resource_key, delivery_key, processing_key)
                     delivery_raw = await pipeline.get(delivery_key)
                     current_raw = await pipeline.get(resource_key)
+                    processing_raw = await pipeline.get(processing_key)
                     prior = (
                         ObservationDecision.model_validate_json(delivery_raw)
                         if delivery_raw
@@ -214,6 +324,11 @@ class RedisObservationLedger:
                     )
                     current = (
                         ReconciledResource.model_validate_json(current_raw) if current_raw else None
+                    )
+                    processing = (
+                        ObservationProcessingRecord.model_validate_json(processing_raw)
+                        if processing_raw
+                        else None
                     )
                     if prior is not None:
                         if _revision_metadata_conflicts(prior.observation, observation):
@@ -262,14 +377,141 @@ class RedisObservationLedger:
                             updated_at=decision.decided_at,
                         )
                         pipeline.set(resource_key, reconciled.model_dump_json())
+                    if (
+                        processing is None
+                        and ticket_key
+                        and decision.disposition is ObservationDisposition.ACCEPTED
+                    ):
+                        processing = ObservationProcessingRecord(
+                            delivery_identity=observation.delivery_identity,
+                            observation=observation,
+                            ticket_key=ticket_key,
+                            ingress_message=ingress_message or {},
+                            created_at=decision.decided_at,
+                            updated_at=decision.decided_at,
+                        )
+                        pipeline.set(processing_key, processing.model_dump_json())
+                        pipeline.zadd(
+                            _PROCESSING_PENDING,
+                            {observation.delivery_identity: decision.decided_at.timestamp()},
+                        )
+                        pipeline.zadd(
+                            f"{_PROCESSING_PENDING}:ticket:{ticket_key}",
+                            {observation.delivery_identity: decision.decided_at.timestamp()},
+                        )
+                        pipeline.zadd(
+                            f"{_PROCESSING_HISTORY}:ticket:{ticket_key}",
+                            {observation.delivery_identity: decision.decided_at.timestamp()},
+                        )
+                    elif (
+                        processing is None
+                        and ticket_key
+                        and prior is not None
+                        and prior.disposition is ObservationDisposition.ACCEPTED
+                    ):
+                        processing = _legacy_ambiguous_processing(
+                            prior.observation, ticket_key, ingress_message or {}
+                        )
+                        pipeline.set(processing_key, processing.model_dump_json())
+                        pipeline.zadd(
+                            f"{_PROCESSING_HISTORY}:ticket:{ticket_key}",
+                            {processing.delivery_identity: processing.created_at.timestamp()},
+                        )
                     await pipeline.execute()
-                    return decision
+                    if ticket_key and processing is not None:
+                        await refresh_processing_metrics(redis)
+                    return decision, processing
                 except WatchError:
                     continue
 
     async def latest(self, observation: Observation) -> ReconciledResource | None:
         value = await (await self._client()).get(self._resource_key(observation))
         return ReconciledResource.model_validate_json(value) if value else None
+
+    async def get_processing(self, delivery_identity: str) -> ObservationProcessingRecord | None:
+        value = await (await self._client()).get(f"{_PROCESSING_PREFIX}{delivery_identity}")
+        return ObservationProcessingRecord.model_validate_json(value) if value else None
+
+    async def save_processing(self, record: ObservationProcessingRecord) -> None:
+        redis = await self._client()
+        key = f"{_PROCESSING_PREFIX}{record.delivery_identity}"
+        while True:
+            async with owned_transaction(redis) as pipeline:
+                try:
+                    await pipeline.watch(key)
+                    pipeline.multi()
+                    pipeline.set(key, record.model_dump_json())
+                    pipeline.zadd(
+                        f"{_PROCESSING_HISTORY}:ticket:{record.ticket_key}",
+                        {record.delivery_identity: record.created_at.timestamp()},
+                    )
+                    if record.phase in {
+                        ProcessingPhase.PENDING,
+                        ProcessingPhase.RUNNING,
+                        ProcessingPhase.PREPARED,
+                    }:
+                        pipeline.zadd(
+                            _PROCESSING_PENDING,
+                            {record.delivery_identity: record.created_at.timestamp()},
+                        )
+                        pipeline.zadd(
+                            f"{_PROCESSING_PENDING}:ticket:{record.ticket_key}",
+                            {record.delivery_identity: record.created_at.timestamp()},
+                        )
+                    else:
+                        pipeline.zrem(_PROCESSING_PENDING, record.delivery_identity)
+                        pipeline.zrem(
+                            f"{_PROCESSING_PENDING}:ticket:{record.ticket_key}",
+                            record.delivery_identity,
+                        )
+                    await pipeline.execute()
+                    await refresh_processing_metrics(redis)
+                    return
+                except WatchError:
+                    continue
+
+    async def pending_processing(
+        self, *, ticket_key: str | None = None, limit: int = 100
+    ) -> Sequence[ObservationProcessingRecord]:
+        redis = await self._client()
+        index_key = (
+            f"{_PROCESSING_PENDING}:ticket:{ticket_key}"
+            if ticket_key is not None
+            else _PROCESSING_PENDING
+        )
+        identities = await redis.zrange(index_key, 0, max(limit - 1, 0))
+        pending: list[ObservationProcessingRecord] = []
+        for identity in identities:
+            if isinstance(identity, bytes):
+                identity = identity.decode()
+            record = await self.get_processing(str(identity))
+            if record is None or record.phase not in {
+                ProcessingPhase.PENDING,
+                ProcessingPhase.RUNNING,
+                ProcessingPhase.PREPARED,
+            }:
+                continue
+            if ticket_key is None or record.ticket_key == ticket_key:
+                pending.append(record)
+            if len(pending) >= limit:
+                break
+        return tuple(pending)
+
+    async def processing_for_ticket(
+        self, ticket_key: str, limit: int = 100
+    ) -> Sequence[ObservationProcessingRecord]:
+        redis = await self._client()
+        identities = await redis.zrange(
+            f"{_PROCESSING_HISTORY}:ticket:{ticket_key}", max(-limit, -10000), -1
+        )
+        records: list[ObservationProcessingRecord] = []
+        for identity in identities:
+            if isinstance(identity, bytes):
+                identity = identity.decode()
+            record = await self.get_processing(str(identity))
+            if record is not None:
+                records.append(record)
+        return tuple(records)
 
     async def history(self, observation: Observation) -> Sequence[ObservationDecision]:
         values = await (await self._client()).lrange(self._history_key(observation), 0, -1)
@@ -406,4 +648,26 @@ def _decision(
         reason=reason,
         decided_at=datetime.now(UTC),
         supersedes_delivery_identity=supersedes,
+    )
+
+
+def _legacy_ambiguous_processing(
+    observation: Observation, ticket_key: str, ingress_message: dict[str, Any]
+) -> ObservationProcessingRecord:
+    """Fail closed when an old accepted ledger entry has no handoff record.
+
+    A pre-migration delivery may already have changed the checkpoint, so
+    replaying it could apply an approval/retry twice. Keep it visible for
+    operator reconciliation instead of guessing whether it ran.
+    """
+    now = datetime.now(UTC)
+    return ObservationProcessingRecord(
+        delivery_identity=observation.delivery_identity,
+        observation=observation,
+        ticket_key=ticket_key,
+        ingress_message=ingress_message,
+        phase=ProcessingPhase.BLOCKED,
+        last_error="legacy accepted observation has no processing record; application status is ambiguous",
+        created_at=now,
+        updated_at=now,
     )

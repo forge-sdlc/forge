@@ -2,12 +2,15 @@
 
 import asyncio
 import contextlib
+import hashlib
+import json
 import logging
 import os
 import signal
 import sys
 import uuid
 from dataclasses import replace as dataclass_replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +26,8 @@ from forge.domain import (
     EffectCommand,
     JsonValue,
     ResourceIdentity,
+    WorkflowCommand,
+    WorkflowCommandType,
     WorkflowIdentity,
     stable_identity,
 )
@@ -44,6 +49,7 @@ from forge.orchestrator.command_handlers import (
 from forge.orchestrator.event_adapters import (
     AdaptedEvent,
     CommandDecision,
+    CommandDecisionStatus,
     EventAdapterRegistry,
     create_default_event_adapter_registry,
     interpret_event,
@@ -54,8 +60,9 @@ from forge.orchestrator.review_enrichment import ReviewEnrichmentService
 from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
 from forge.reconciliation import (
-    ObservationDisposition,
     ObservationLedger,
+    ObservationProcessingRecord,
+    ProcessingPhase,
     RedisObservationLedger,
 )
 from forge.skills.orchestrator import ensure_skills
@@ -122,6 +129,121 @@ async def _cleanup_terminal_workspace(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def _stop_effect_runner(
+    effect_stop: asyncio.Event, effect_task: asyncio.Task[Any], timeout: float
+) -> None:
+    """Request effect shutdown without letting a stuck provider block worker exit."""
+    effect_stop.set()
+    done, _ = await asyncio.wait({effect_task}, timeout=timeout)
+    if effect_task in done:
+        # Surface unexpected runner failures during orderly shutdown.
+        try:
+            await effect_task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Effect runner failed during shutdown")
+        return
+
+    logger.warning(
+        "Effect runner did not stop within %.1f seconds; cancelling it and leaving active claims recoverable",
+        timeout,
+    )
+    effect_task.cancel()
+    # Do not await cancellation indefinitely: a provider adapter may be inside
+    # a blocking call. The durable claim lease is the recovery boundary.
+    effect_task.add_done_callback(_consume_background_task_result)
+
+
+def _consume_background_task_result(task: asyncio.Task[Any]) -> None:
+    """Retrieve a detached task's exception to avoid an unhandled-task warning."""
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        task.exception()
+
+
+def _snapshot_queue_message(message: QueueMessage) -> dict[str, Any]:
+    return {"message_id": message.message_id, **message.to_dict()}
+
+
+def _queue_message_from_snapshot(snapshot: dict[str, Any]) -> QueueMessage:
+    message_id = str(snapshot.get("message_id", ""))
+    return QueueMessage.from_redis(
+        message_id, {key: str(value) for key, value in snapshot.items() if key != "message_id"}
+    )
+
+
+def _checkpoint_identity(state: dict[str, Any] | None) -> str:
+    """Hash a checkpoint snapshot for command compare-before-apply semantics."""
+    canonical = json.dumps(state or {}, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _command_decision_payload(decision: CommandDecision) -> dict[str, Any]:
+    return {
+        "status": decision.status.value,
+        "reason": decision.reason,
+        "command": decision.command.model_dump(mode="json") if decision.command else None,
+    }
+
+
+def _command_decision_from_payload(value: dict[str, Any]) -> CommandDecision:
+    raw_command = value.get("command")
+    return CommandDecision(
+        status=CommandDecisionStatus(value["status"]),
+        reason=str(value.get("reason", "recovered prepared decision")),
+        command=(
+            WorkflowCommand.model_validate_json(json.dumps(raw_command)) if raw_command else None
+        ),
+    )
+
+
+def _handoff_for_delivery(state: dict[str, Any], delivery_identity: str) -> dict[str, Any] | None:
+    return next(
+        (
+            item
+            for item in state.get("command_handoffs", [])
+            if item.get("delivery_identity") == delivery_identity
+        ),
+        None,
+    )
+
+
+def _with_command_handoff(
+    state: dict[str, Any], processing: ObservationProcessingRecord, decision: CommandDecision
+) -> dict[str, Any]:
+    handoffs = [
+        item
+        for item in state.get("command_handoffs", [])
+        if item.get("delivery_identity") != processing.delivery_identity
+    ]
+    handoffs.append(
+        {
+            "delivery_identity": processing.delivery_identity,
+            "command_id": decision.command.command_id if decision.command else None,
+            "command_type": decision.command.command_type.value if decision.command else None,
+            "decision_status": decision.status.value,
+            "expected_checkpoint_identity": processing.expected_checkpoint_identity,
+            "checkpoint_identity": _checkpoint_identity(state),
+            "phase": "applied",
+        }
+    )
+    return {**state, "command_handoffs": handoffs}
+
+
+def _workflow_pin(workflow_instance: Any) -> dict[str, Any]:
+    pin: dict[str, Any] = {"name": str(getattr(workflow_instance, "name", "legacy"))}
+    if isinstance(workflow_instance, DeclarativeWorkflow):
+        definition = workflow_instance.definition
+        pin.update(
+            {
+                "revision": definition.metadata.revision,
+                "digest": definition.digest,
+                "definition": definition.canonical_dict(),
+            }
+        )
+    return pin
+
+
 _FRESH_INVOKE_NODES = (
     "ci_evaluator",
     "attempt_ci_fix",
@@ -156,6 +278,7 @@ class OrchestratorWorker:
         self.consumer = QueueConsumer(
             self.consumer_name,
             terminal_failure_handler=self._handle_terminal_failure,
+            prepare_message=self._prepare_message,
         )
         self.router = router or create_default_router()
         self.event_adapters = event_adapters or create_default_event_adapter_registry()
@@ -355,16 +478,31 @@ class OrchestratorWorker:
 
     async def _handle_event(self, message: QueueMessage) -> None:
         """Handle any registered ingress source through its adapter."""
-        adapted = self._event_adapter_registry().adapt(message)
-        if adapted.requires_ticket_correlation:
-            message = await self._resolve_ticket_from_pr_index(message)
-            if not message.ticket_key:
-                logger.info(
-                    f"Dropping source-control event {message.event_id}: "
-                    "no ticket key in message and PR URL not found in Redis index"
-                )
-                return
+        prepared = await self._prepare_message(message)
+        if prepared is None:
+            return
+        message = prepared
         await self._process_workflow(message)
+
+    async def _prepare_message(self, message: QueueMessage) -> QueueMessage | None:
+        """Resolve ticket identity before QueueConsumer enters a ticket lock.
+
+        An event without a correlation target is explicitly irrelevant. A PR
+        URL whose index entry has not appeared yet is transient and raises so
+        the queue retry path retains responsibility for it.
+        """
+        adapted = self._event_adapter_registry().adapt(message)
+        if not adapted.requires_ticket_correlation or message.ticket_key:
+            return message
+        if not adapted.change_request_url:
+            logger.info("Ignoring uncorrelatable source-control event %s", message.event_id)
+            return None
+        resolved = await self._resolve_ticket_from_pr_index(message)
+        if not resolved.ticket_key:
+            raise LookupError(
+                f"PR index has no ticket mapping yet for {adapted.change_request_url}"
+            )
+        return resolved
 
     async def _resolve_ticket_from_pr_index(self, message: QueueMessage) -> QueueMessage:
         """Attempt to resolve ticket key from Redis PR index when not in message.
@@ -386,29 +524,111 @@ class OrchestratorWorker:
         if not pr_url:
             return message
 
-        try:
-            ticket_key = await get_ticket_from_pr_index(pr_url)
-            if ticket_key:
-                logger.info(
-                    f"Resolved ticket key {ticket_key} for GitHub event "
-                    f"{message.event_id} from PR index ({pr_url})"
-                )
-                return dataclass_replace(message, ticket_key=ticket_key)
-        except Exception:
-            logger.warning(
-                f"PR index lookup failed for {pr_url}",
-                exc_info=True,
+        ticket_key = await get_ticket_from_pr_index(pr_url)
+        if ticket_key:
+            logger.info(
+                f"Resolved ticket key {ticket_key} for GitHub event "
+                f"{message.event_id} from PR index ({pr_url})"
             )
-
+            return dataclass_replace(message, ticket_key=ticket_key)
         return message
 
-    async def _process_workflow(self, message: QueueMessage) -> None:
+    async def _process_workflow(self, message: QueueMessage, *, _pending_depth: int = 0) -> None:
         """Process a message through the workflow.
 
         Args:
             message: The queue message to process.
         """
-        ticket_key = message.ticket_key
+        incoming_message = message
+        incoming = self._event_adapter_registry().adapt(incoming_message)
+        ledger = self._observation_ledger()
+        observation_decision, processing = await ledger.accept(
+            incoming.observation,
+            incoming_message.ticket_key,
+            _snapshot_queue_message(incoming_message),
+        )
+        if processing is None:
+            logger.info(
+                "Observation %s has disposition %s and no accepted processing record",
+                incoming.observation.observation_id,
+                observation_decision.disposition.value,
+            )
+            return
+        if processing.phase in {
+            ProcessingPhase.APPLIED,
+            ProcessingPhase.IGNORED,
+            ProcessingPhase.BLOCKED,
+        }:
+            logger.info(
+                "Observation delivery %s already reached %s",
+                processing.delivery_identity,
+                processing.phase.value,
+            )
+            return
+
+        while True:
+            earlier = sorted(
+                (
+                    item
+                    for item in await ledger.pending_processing(
+                        ticket_key=processing.ticket_key, limit=100
+                    )
+                    if item.delivery_identity != processing.delivery_identity
+                    and (item.created_at, item.delivery_identity)
+                    < (processing.created_at, processing.delivery_identity)
+                ),
+                key=lambda item: (item.created_at, item.delivery_identity),
+            )
+            if not earlier:
+                break
+            if _pending_depth >= 50:
+                raise RuntimeError(
+                    "too many earlier accepted observations are pending for this ticket"
+                )
+            oldest = earlier[0]
+            if oldest.phase is ProcessingPhase.BLOCKED:
+                raise RuntimeError(
+                    f"earlier accepted observation {oldest.delivery_identity} is blocked: "
+                    f"{oldest.last_error or 'operator action required'}"
+                )
+            await self._process_workflow(
+                _queue_message_from_snapshot(oldest.ingress_message),
+                _pending_depth=_pending_depth + 1,
+            )
+            oldest_after = await ledger.get_processing(oldest.delivery_identity)
+            if oldest_after is None or oldest_after.phase not in {
+                ProcessingPhase.APPLIED,
+                ProcessingPhase.IGNORED,
+            }:
+                raise RuntimeError(
+                    f"earlier accepted observation {oldest.delivery_identity} did not reach completion"
+                )
+            # Continue with the next older record before interpreting this
+            # delivery. This loop keeps backlog size out of the Python stack.
+
+        # A duplicate always resumes the original accepted transport context,
+        # including its provider payload and canonical ticket identity.
+        message = _queue_message_from_snapshot(processing.ingress_message)
+        ticket_key = processing.ticket_key
+        processing = processing.model_copy(
+            update={
+                "phase": processing.phase
+                if processing.phase is ProcessingPhase.PREPARED
+                else ProcessingPhase.RUNNING,
+                "attempts": processing.attempts + 1,
+                "last_error": None,
+                "updated_at": datetime.now(UTC),
+            }
+        )
+        await ledger.save_processing(processing)
+
+        async def finish(phase: ProcessingPhase, *, error: str | None = None) -> None:
+            nonlocal processing
+            processing = processing.model_copy(
+                update={"phase": phase, "last_error": error, "updated_at": datetime.now(UTC)}
+            )
+            await ledger.save_processing(processing)
+
         logger.info(f"Processing {message.source.value} event for {ticket_key}")
 
         # Synchronise skills before any workflow resolution so that both new
@@ -432,19 +652,6 @@ class OrchestratorWorker:
 
         try:
             ingress = self.event_adapters.adapt(message)
-            observation_decision = await self._observation_ledger().record(ingress.observation)
-            if observation_decision.disposition in {
-                ObservationDisposition.DUPLICATE,
-                ObservationDisposition.STALE,
-                ObservationDisposition.CONFLICT,
-            }:
-                logger.info(
-                    "Ignoring %s observation %s: %s",
-                    observation_decision.disposition.value,
-                    ingress.observation.observation_id,
-                    observation_decision.reason,
-                )
-                return
             # Determine ticket type early to select workflow
             ticket_type = self._extract_ticket_type(message)
 
@@ -459,9 +666,12 @@ class OrchestratorWorker:
                 else []
             ) or []
             try:
-                custom_workflow = await self._resolve_custom_workflow(ticket_key, labels)
+                custom_workflow = await self._resolve_custom_workflow(
+                    ticket_key, labels, pinned=processing.workflow_pin
+                )
             except Exception as exc:
                 await self._report_custom_workflow_configuration_error(ticket_key, str(exc))
+                await finish(ProcessingPhase.BLOCKED, error=str(exc))
                 return
 
             if custom_workflow is not None:
@@ -471,6 +681,10 @@ class OrchestratorWorker:
                         f"workflow '{custom_workflow.name}' uses state profile "
                         f"'{custom_workflow.definition.spec.state}', which is incompatible with "
                         f"ticket type '{ticket_type.value}'",
+                    )
+                    await finish(
+                        ProcessingPhase.BLOCKED,
+                        error="custom workflow is incompatible with ticket type",
                     )
                     return
                 workflow_instance = custom_workflow
@@ -483,6 +697,9 @@ class OrchestratorWorker:
                     logger.warning(
                         f"No existing workflow state found for {ticket_key} "
                         f"({message.source.value} event with unknown ticket type). Skipping."
+                    )
+                    await finish(
+                        ProcessingPhase.IGNORED, error="no existing workflow state for event"
                     )
                     return
                 # Recover ticket type from checkpointed state so metrics are accurate.
@@ -506,6 +723,7 @@ class OrchestratorWorker:
                     logger.error(
                         f"No workflow found for ticket {ticket_key} (type={ticket_type}). Skipping."
                     )
+                    await finish(ProcessingPhase.BLOCKED, error="no workflow selected for ticket")
                     return
 
             # Get or compile the workflow graph
@@ -534,7 +752,18 @@ class OrchestratorWorker:
                         )
                 except Exception as exc:
                     await self._report_custom_workflow_configuration_error(ticket_key, str(exc))
+                    await finish(ProcessingPhase.BLOCKED, error=str(exc))
                     return
+
+            selected_pin = _workflow_pin(workflow_instance)
+            if processing.workflow_pin is not None and processing.workflow_pin != selected_pin:
+                error = "selected workflow differs from the workflow pinned by accepted processing"
+                await finish(ProcessingPhase.BLOCKED, error=error)
+                return
+            processing = processing.model_copy(
+                update={"workflow_pin": selected_pin, "updated_at": datetime.now(UTC)}
+            )
+            await ledger.save_processing(processing)
 
             # Debug logging for checkpoint state
             logger.debug(f"Existing state for {ticket_key}: {existing_state}")
@@ -563,43 +792,100 @@ class OrchestratorWorker:
                         logger.info(f"Workflow has error at {current_node}, resuming")
                     else:
                         logger.info(f"Workflow in progress at {current_node}, resuming")
+                if _handoff_for_delivery(dict(values), processing.delivery_identity):
+                    should_resume = True
 
             if should_resume:
-                # Resume workflow - check for approval/rejection signals
                 adapted_event = self.event_adapters.adapt(message)
-                command_decision = interpret_event(message, adapted_event, existing_state.values)
-                command_decision = validate_command_decision(
-                    command_decision, existing_state.values
+                current_values = dict(existing_state.values)
+                prior_handoff = _handoff_for_delivery(current_values, processing.delivery_identity)
+                handoff_already_applied = bool(
+                    prior_handoff and prior_handoff.get("phase") == "applied"
                 )
-                updated_values = await self._apply_observation_transition(
-                    message,
-                    existing_state.values,
-                    adapted_event=adapted_event,
-                    command_decision=command_decision,
-                    policy=(
-                        ObservationTransitionPolicy(
-                            identifier=workflow_instance.resolve_observation_policy() or "default",
-                            definition=workflow_instance.definition.canonical_dict(),
+                handoff_is_complete = handoff_already_applied and not getattr(
+                    existing_state, "next", ()
+                )
+                if handoff_already_applied:
+                    if processing.command_decision is None:
+                        await finish(
+                            ProcessingPhase.BLOCKED,
+                            error="checkpoint has a handoff marker without its prepared processing decision",
                         )
-                        if isinstance(workflow_instance, DeclarativeWorkflow)
-                        else ObservationTransitionPolicy()
-                    ),
-                )
-                if (
-                    updated_values is not existing_state.values
-                    and command_decision.command is not None
-                    and command_decision.command.command_type.value == "rebase"
-                ):
-                    updated_values = await execute_command_operation(
-                        command_decision.command, updated_values
+                        return
+                    command_decision = _command_decision_from_payload(processing.command_decision)
+                    updated_values = current_values
+                    state_changed = True
+                else:
+                    if processing.phase is ProcessingPhase.PREPARED:
+                        if processing.expected_checkpoint_identity != _checkpoint_identity(
+                            current_values
+                        ):
+                            await finish(
+                                ProcessingPhase.BLOCKED,
+                                error="workflow checkpoint moved after command preparation; refusing to reinterpret",
+                            )
+                            return
+                        if processing.command_decision is None:
+                            await finish(
+                                ProcessingPhase.BLOCKED,
+                                error="prepared processing record is missing its command decision",
+                            )
+                            return
+                        command_decision = _command_decision_from_payload(
+                            processing.command_decision
+                        )
+                    else:
+                        command_decision = interpret_event(message, adapted_event, current_values)
+                        command_decision = validate_command_decision(
+                            command_decision, current_values
+                        )
+                        processing = processing.model_copy(
+                            update={
+                                "phase": ProcessingPhase.PREPARED,
+                                "command_decision": _command_decision_payload(command_decision),
+                                "command_id": command_decision.command.command_id
+                                if command_decision.command
+                                else None,
+                                "expected_checkpoint_identity": _checkpoint_identity(
+                                    current_values
+                                ),
+                                "updated_at": datetime.now(UTC),
+                            }
+                        )
+                        await ledger.save_processing(processing)
+                    updated_values = await self._apply_observation_transition(
+                        message,
+                        current_values,
+                        adapted_event=adapted_event,
+                        command_decision=command_decision,
+                        policy=(
+                            ObservationTransitionPolicy(
+                                identifier=workflow_instance.resolve_observation_policy()
+                                or "default",
+                                definition=workflow_instance.definition.canonical_dict(),
+                            )
+                            if isinstance(workflow_instance, DeclarativeWorkflow)
+                            else ObservationTransitionPolicy()
+                        ),
                     )
-                state_changed = updated_values is not existing_state.values
-                updated_values = record_command_decision(
-                    updated_values,
-                    message=message,
-                    adapted=adapted_event,
-                    decision=command_decision,
-                )
+                    if (
+                        updated_values is not current_values
+                        and command_decision.command is not None
+                        and command_decision.command.command_type.value == "rebase"
+                    ):
+                        updated_values = await execute_command_operation(
+                            command_decision.command, updated_values
+                        )
+                    state_changed = updated_values is not current_values
+                    updated_values = record_command_decision(
+                        updated_values,
+                        message=message,
+                        adapted=adapted_event,
+                        decision=command_decision,
+                    )
+                    updated_values = _with_command_handoff(
+                        updated_values, processing, command_decision
+                    )
 
                 # _apply_observation_transition returns early (unchanged current_node) when
                 # the workflow is at a terminal state without an explicit retry signal.
@@ -609,7 +895,7 @@ class OrchestratorWorker:
                 is_terminal_or_blocked = updated_values.get(
                     "current_node"
                 ) in terminal_nodes or updated_values.get("is_blocked", False)
-                if is_terminal_or_blocked:
+                if is_terminal_or_blocked and not handoff_already_applied:
                     state_desc = (
                         "terminal"
                         if updated_values.get("current_node") in terminal_nodes
@@ -620,6 +906,7 @@ class OrchestratorWorker:
                         f"'{updated_values.get('current_node')}', skipping invocation"
                     )
                     await compiled_workflow.aupdate_state(config, updated_values)
+                    await finish(ProcessingPhase.APPLIED)
                     return
 
                 # If _apply_observation_transition returned the state object unchanged (identity
@@ -627,15 +914,24 @@ class OrchestratorWorker:
                 # Without this guard, nodes in needs_fresh_invoke (e.g. human_review_gate)
                 # would be re-invoked with is_paused=True and immediately re-pause,
                 # producing a misleading "Resuming workflow" log with no real effect.
-                if not state_changed:
+                if not state_changed and not handoff_already_applied:
                     await compiled_workflow.aupdate_state(config, updated_values)
+                    await finish(ProcessingPhase.IGNORED)
                     return
 
                 logger.info(f"Resuming workflow for {ticket_key}")
 
-                was_errored = _is_workflow_errored(existing_state.values)
+                was_errored = (
+                    False
+                    if handoff_already_applied
+                    else _is_workflow_errored(existing_state.values)
+                )
                 resume_context = updated_values.get("context", {})
-                force_fresh_invoke = bool(resume_context.get("force_fresh_invoke"))
+                force_fresh_invoke = (
+                    False
+                    if handoff_already_applied
+                    else bool(resume_context.get("force_fresh_invoke"))
+                )
                 if force_fresh_invoke:
                     updated_values = {
                         **updated_values,
@@ -649,13 +945,22 @@ class OrchestratorWorker:
                 # must be re-invoked fresh so route_by_ticket_type re-runs them.
                 # ainvoke(None) only replays the routing edge after the node, not
                 # the node itself, so setup/retry work would never be attempted.
-                needs_fresh_invoke = (
+                needs_fresh_invoke = not handoff_already_applied and (
                     force_fresh_invoke or updated_values.get("current_node") in _FRESH_INVOKE_NODES
                 )
 
-                error_before_invoke = updated_values.get("last_error")
+                error_before_invoke = (
+                    current_values.get("last_error")
+                    if handoff_is_complete
+                    else updated_values.get("last_error")
+                )
 
-                if was_errored or needs_fresh_invoke:
+                if handoff_is_complete:
+                    # The graph already reached a durable wait or terminal
+                    # boundary before the processing record was finalized.
+                    # Re-run only idempotent post-invocation projections below.
+                    result = current_values
+                elif was_errored or needs_fresh_invoke:
                     logger.info(
                         f"{'Retrying' if was_errored else 'Re-invoking'} workflow "
                         f"from {updated_values.get('current_node')}"
@@ -677,11 +982,12 @@ class OrchestratorWorker:
                     # conditional edge from the new approval state.  Leaving ``as_node``
                     # implicit can select the last writer instead, which records the
                     # unpaused state but leaves no next task to invoke.
-                    await compiled_workflow.aupdate_state(
-                        config,
-                        updated_values,
-                        as_node=updated_values["current_node"],
-                    )
+                    if not handoff_already_applied:
+                        await compiled_workflow.aupdate_state(
+                            config,
+                            updated_values,
+                            as_node=updated_values["current_node"],
+                        )
                     result = await self._invoke_workflow(
                         compiled_workflow,
                         None,
@@ -695,6 +1001,66 @@ class OrchestratorWorker:
                 # New workflow - build initial state
                 state = self._build_initial_state(message, workflow_instance)
                 logger.info(f"Starting new workflow for {ticket_key}")
+
+                if processing.phase is ProcessingPhase.PREPARED:
+                    if processing.expected_checkpoint_identity != _checkpoint_identity({}):
+                        await finish(
+                            ProcessingPhase.BLOCKED,
+                            error="initial workflow checkpoint differs from prepared command expectation",
+                        )
+                        return
+                    if processing.command_decision is None:
+                        await finish(
+                            ProcessingPhase.BLOCKED,
+                            error="prepared start record is missing its command decision",
+                        )
+                        return
+                    start_decision = _command_decision_from_payload(processing.command_decision)
+                else:
+                    start_command = WorkflowCommand(
+                        command_id=stable_identity(
+                            "workflow-command",
+                            {
+                                "observation_delivery_identity": processing.delivery_identity,
+                                "run_id": str(state.get("thread_id") or ticket_key),
+                                "command_type": WorkflowCommandType.START.value,
+                            },
+                        ),
+                        command_type=WorkflowCommandType.START,
+                        workflow=WorkflowIdentity(
+                            run_id=str(state.get("thread_id") or ticket_key),
+                            workflow_name=str(state.get("workflow_name") or ticket_type.value),
+                            definition_revision=int(
+                                state.get("workflow_definition_revision")
+                                or state.get("workflow_revision")
+                                or 1
+                            ),
+                            definition_digest=state.get("workflow_definition_digest"),
+                        ),
+                        requested_at=message.timestamp,
+                        observation_ids=(ingress.observation.observation_id,),
+                    )
+                    start_decision = CommandDecision(
+                        CommandDecisionStatus.ACCEPTED, "initial workflow invocation", start_command
+                    )
+                    processing = processing.model_copy(
+                        update={
+                            "phase": ProcessingPhase.PREPARED,
+                            "command_decision": _command_decision_payload(start_decision),
+                            "command_id": start_command.command_id,
+                            "expected_checkpoint_identity": _checkpoint_identity({}),
+                            "updated_at": datetime.now(UTC),
+                        }
+                    )
+                    await ledger.save_processing(processing)
+
+                state = record_command_decision(
+                    state,
+                    message=message,
+                    adapted=ingress,
+                    decision=start_decision,
+                )
+                state = _with_command_handoff(state, processing, start_decision)
 
                 # Record workflow started metric
                 ticket_type_str = state.get("ticket_type", "unknown")
@@ -740,11 +1106,19 @@ class OrchestratorWorker:
                 ticket_type = result.get("ticket_type", "unknown")
                 record_workflow_completed(ticket_type=ticket_type, final_node=final_node)
 
+            await finish(ProcessingPhase.APPLIED)
+
         except Exception as e:
             import traceback
 
             logger.error(f"Workflow failed for {ticket_key}: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            await finish(
+                processing.phase
+                if processing.phase is ProcessingPhase.PREPARED
+                else ProcessingPhase.RUNNING,
+                error=str(e),
+            )
             # Record workflow failed metric
             record_workflow_failed(ticket_type="unknown", error_type=type(e).__name__)
             raise  # Let consumer handle retry logic
@@ -1072,7 +1446,11 @@ class OrchestratorWorker:
         return None, None
 
     async def _resolve_custom_workflow(
-        self, ticket_key: str, labels: list[str]
+        self,
+        ticket_key: str,
+        labels: list[str],
+        *,
+        pinned: dict[str, Any] | None = None,
     ) -> DeclarativeWorkflow | None:
         """Resolve a pinned identity or a workflow selected by a label.
 
@@ -1081,6 +1459,20 @@ class OrchestratorWorker:
         use the publication store and fail closed if that exact artifact is
         unavailable.
         """
+        if pinned and pinned.get("definition"):
+            from forge.workflow.declarative.publication import DefinitionPublisher
+
+            project_key = ticket_key.split("-", 1)[0]
+            return await load_project_workflow(
+                None,
+                project_key,
+                str(pinned["name"]),
+                pinned_revision=int(pinned["revision"]),
+                pinned_digest=str(pinned["digest"]),
+                pinned_definition=pinned["definition"],
+                definition_reader=DefinitionPublisher(project_key),
+            )
+
         raw_checkpoint: dict[str, Any] | None = None
         config = {"configurable": {"thread_id": ticket_key}}
         with contextlib.suppress(Exception):
@@ -1270,8 +1662,11 @@ class OrchestratorWorker:
         except asyncio.CancelledError:
             pass
         finally:
-            effect_stop.set()
-            await effect_task
+            await _stop_effect_runner(
+                effect_stop,
+                effect_task,
+                self.settings.queue_shutdown_timeout_seconds,
+            )
             await self.consumer.stop()
             await get_registry().aclose()
             logger.info("Worker shut down gracefully")
@@ -1283,6 +1678,16 @@ class OrchestratorWorker:
 
 
 async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
+    """Run a manually selected ticket under the same distributed fence as workers."""
+    consumer = QueueConsumer(f"manual-{uuid.uuid4().hex[:8]}")
+    async with (
+        consumer._ticket_locks[ticket_key],
+        consumer._distributed_ticket_lock(ticket_key),
+    ):
+        return await _run_single_ticket_owned(ticket_key)
+
+
+async def _run_single_ticket_owned(ticket_key: str) -> dict[str, Any]:
     """Run workflow for a single ticket (for testing/CLI use).
 
     Args:
