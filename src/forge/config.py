@@ -601,6 +601,30 @@ class Settings(BaseSettings):
         default=20,
         description="Maximum number of in-flight message processing tasks in the queue consumer. Prevents resource exhaustion during message bursts.",
     )
+    queue_max_outstanding_deliveries: int = Field(
+        default=40,
+        ge=2,
+        description=(
+            "Maximum number of active and buffered stream, retry, and recovered "
+            "deliveries per consumer. Stream reads reserve capacity before fetching."
+        ),
+    )
+    queue_pending_idle_ms: int = Field(
+        default=60_000,
+        ge=1,
+        description=(
+            "Minimum Redis pending-entry idle time before another consumer may "
+            "reclaim a delivery. Active consumers refresh the pending idle time."
+        ),
+    )
+    queue_shutdown_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description=(
+            "Maximum seconds to drain active queue deliveries during shutdown "
+            "before cancelling them and leaving their stream entries pending."
+        ),
+    )
 
     # Worker Metrics Configuration
     worker_metrics_port: int = Field(

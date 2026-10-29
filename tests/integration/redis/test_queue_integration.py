@@ -302,7 +302,8 @@ class TestRetryQueue:
 
         assert sorted(len(claim) for claim in claims) == [0, 1]
         assert sum(claim[0].message.event_id == message.event_id for claim in claims if claim) == 1
-        lease_score = await redis_client.zscore(RETRY_QUEUE_KEY, serialized_entry)
+        assert await redis_client.zscore(RETRY_QUEUE_KEY, serialized_entry) is None
+        lease_score = await redis_client.zscore(RETRY_QUEUE_KEY, first._identity(message))
         assert lease_score is not None
         assert lease_score > datetime.now(UTC).replace(tzinfo=None).timestamp()
 
