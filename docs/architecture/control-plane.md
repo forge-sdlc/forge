@@ -72,6 +72,14 @@ Planning and review run on the host. Implementation runs in a rootless Podman
 container. Containers do not receive Jira, Redis, or source-control
 credentials; provider writes return through effects.
 
+### Durable processing and recovery
+
+Observation acceptance and workflow application are separate durable facts. A
+processing record retains unfinished work and its command/checkpoint handoff.
+Canonical ticket locks serialize execution, while ownership checks at Redis
+write boundaries reject expired writers. See [Delivery recovery and
+ownership](recovery.md) for recovery paths and their limits.
+
 ### Durable effects and read models
 
 Nodes request external writes through `EffectCommand` values. The effect journal

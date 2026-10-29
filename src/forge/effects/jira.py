@@ -54,6 +54,7 @@ def _find_effect_comment(comments: list[Any], idempotency_key: str) -> Any | Non
 
 class JiraCommentExecutor:
     operation = JIRA_COMMENT_OPERATION
+    retry_safe_after_ambiguous_failure = True
 
     def __init__(self, client_factory: Callable[[], JiraClient] = JiraClient) -> None:
         self._client_factory = client_factory
@@ -87,6 +88,12 @@ class JiraCommentExecutor:
 
 class JiraMutationExecutor:
     """Execute naturally idempotent Jira mutations from durable intent."""
+
+    @property
+    def retry_safe_after_ambiguous_failure(self) -> bool:
+        # Attachments created by add_attachment have no stable provider marker
+        # or read API that can prove whether a timed-out upload succeeded.
+        return self.operation != JIRA_ATTACHMENT_ADD_OPERATION
 
     def __init__(
         self,

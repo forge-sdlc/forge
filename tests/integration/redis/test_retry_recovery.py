@@ -54,7 +54,8 @@ async def test_failed_message_succeeds_on_retry_and_clears_pending_state(redis_c
     message = await _claim_one(redis_client, consumer)
 
     await consumer._process_message(message, JIRA_STREAM)
-    assert await _pending_count(redis_client) == 1
+    # The retry record and original acknowledgement commit atomically.
+    assert await _pending_count(redis_client) == 0
     assert (await consumer._retry_queue.get_queue_stats())["retry_queue_depth"] == 1
 
     await _make_retries_due(redis_client)

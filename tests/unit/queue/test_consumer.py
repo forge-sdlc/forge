@@ -6,6 +6,7 @@ All tests use pytest-asyncio and mock Redis via unittest.mock.AsyncMock.
 import asyncio
 import time
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,6 +26,7 @@ class _FakeRedisLock:
 
     def __init__(self, lock: asyncio.Lock) -> None:
         self._lock = lock
+        self.local = SimpleNamespace(token=b"test-owner-token")
         self.extend_calls = 0
 
     async def acquire(self) -> bool:

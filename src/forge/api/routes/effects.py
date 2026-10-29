@@ -3,9 +3,10 @@
 import secrets
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
 
 from forge.config import get_settings
 from forge.domain import stable_identity
@@ -43,6 +44,14 @@ def get_timeline_store() -> RedisExecutionTimelineStore:
 
 
 TimelineStoreDep = Annotated[RedisExecutionTimelineStore, Depends(get_timeline_store)]
+
+
+class EffectReconciliationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["applied", "not_applied"]
+    note: str = Field(min_length=1, max_length=2000)
+    provider_reference: str | None = None
 
 
 @router.get("/workflow/{run_id}", response_model=list[EffectRecord])
@@ -112,3 +121,57 @@ async def replay_effect(
         ),
     )
     return replayed
+
+
+@router.post("/{idempotency_key}/reconcile", response_model=EffectRecord)
+async def reconcile_effect(
+    idempotency_key: str,
+    request: EffectReconciliationRequest,
+    service: EffectServiceDep,
+    timeline_store: TimelineStoreDep,
+    authorization: OperatorAuth = None,
+) -> EffectRecord:
+    """Record an operator's provider-side determination for an ambiguous attempt."""
+    authorize_operator(authorization)
+    try:
+        reconciled = await service.reconcile(
+            idempotency_key,
+            applied=request.decision == "applied",
+            note=request.note,
+            provider_reference=request.provider_reference,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Effect not found"
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    await timeline_store.append(
+        reconciled.command.workflow.run_id,
+        TimelineEntry(
+            event_id=stable_identity(
+                "operator-action",
+                {
+                    "run_id": reconciled.command.workflow.run_id,
+                    "action": "effect-reconcile",
+                    "effect_id": reconciled.command.effect_id,
+                    "reconciliation_count": len(reconciled.reconciliation_history),
+                },
+            ),
+            kind="operator_action",
+            occurred_at=reconciled.updated_at,
+            status="accepted",
+            summary="Effect outcome reconciled",
+            details={
+                "action": "effect-reconcile",
+                "effect_id": reconciled.command.effect_id,
+                "idempotency_key": reconciled.command.idempotency_key,
+                "decision": request.decision,
+                "note": request.note,
+                "provider_reference": request.provider_reference,
+                "result_status": reconciled.status.value,
+            },
+        ),
+    )
+    return reconciled

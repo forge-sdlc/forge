@@ -2,7 +2,11 @@
 
 import logging
 import os
+import signal
 import subprocess
+import threading
+import time
+from contextlib import suppress
 from pathlib import Path
 
 from forge.config import get_settings
@@ -13,10 +17,20 @@ from forge.workspace.manager import Workspace
 logger = logging.getLogger(__name__)
 
 
+class GitOperationCancelled(RuntimeError):
+    """A Git operation was stopped after its effect claim was lost."""
+
+
 class GitOperations:
     """Git operations for cloning, branching, committing, and pushing."""
 
-    def __init__(self, workspace: Workspace, credentials: GitCredentials):
+    def __init__(
+        self,
+        workspace: Workspace,
+        credentials: GitCredentials,
+        *,
+        cancellation_event: threading.Event | None = None,
+    ):
         """Initialize git operations for a workspace.
 
         Args:
@@ -36,6 +50,7 @@ class GitOperations:
         # alone cannot identify that case because managed workspaces reuse a
         # deterministic path for each ticket and repository.
         self.workspace_recreated = False
+        self._cancellation_event = cancellation_event
 
     @property
     def repo_path(self) -> Path:
@@ -66,6 +81,7 @@ class GitOperations:
         *args: str,
         capture_output: bool = True,
         check: bool = True,
+        timeout: int = 120,
     ) -> subprocess.CompletedProcess[str]:
         """Run a git command in the workspace.
 
@@ -81,20 +97,63 @@ class GitOperations:
         safe_cmd = redact_secrets(" ".join(cmd))
         logger.debug(f"Running: {safe_cmd} in {self.repo_path}")
 
-        result = subprocess.run(
-            cmd,
-            cwd=self.repo_path,
-            capture_output=capture_output,
-            text=True,
-            check=False,
-            env=self._git_env(),
-        )
+        if self._cancellation_event is None:
+            result = subprocess.run(
+                cmd,
+                cwd=self.repo_path,
+                capture_output=capture_output,
+                text=True,
+                check=False,
+                env=self._git_env(),
+                timeout=timeout,
+            )
+        else:
+            result = self._run_git_cancellable(cmd, capture_output=capture_output, timeout=timeout)
 
         if check and result.returncode != 0:
             error_msg = result.stderr or result.stdout or "Unknown error"
             raise GitError(f"Git command failed: {safe_cmd}\n{error_msg}")
 
         return result
+
+    def _run_git_cancellable(
+        self, cmd: list[str], *, capture_output: bool, timeout: int
+    ) -> subprocess.CompletedProcess[str]:
+        """Run one Git command and stop its process when the owner is cancelled."""
+        event = self._cancellation_event
+        assert event is not None
+        if event.is_set():
+            raise GitOperationCancelled("Git operation was cancelled before command start")
+
+        process = subprocess.Popen(
+            cmd,
+            cwd=self.repo_path,
+            stdout=subprocess.PIPE if capture_output else None,
+            stderr=subprocess.PIPE if capture_output else None,
+            text=True,
+            env=self._git_env(),
+            start_new_session=True,
+        )
+        deadline = time.monotonic() + timeout
+        while True:
+            if event.is_set():
+                _stop_process_group(process)
+                raise GitOperationCancelled("Git operation was cancelled")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _stop_process_group(process)
+                stdout, stderr = process.communicate()
+                raise subprocess.TimeoutExpired(
+                    cmd,
+                    timeout,
+                    output=stdout,
+                    stderr=stderr,
+                )
+            try:
+                stdout, stderr = process.communicate(timeout=min(0.1, remaining))
+                return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
+            except subprocess.TimeoutExpired:
+                continue
 
     def clone(
         self,
@@ -519,6 +578,22 @@ class GitOperations:
         except Exception as e:
             logger.warning(f"Error checking branch commits for {self.repo_path}: {e}")
             return False
+
+
+def _stop_process_group(process: subprocess.Popen[str]) -> None:
+    """Terminate Git and any helper processes it started, then reap them."""
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.communicate(timeout=0.5)
+    except subprocess.TimeoutExpired:
+        with suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        process.communicate()
 
 
 class GitError(Exception):

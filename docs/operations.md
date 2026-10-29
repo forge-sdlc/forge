@@ -69,6 +69,7 @@ GET  /api/v1/org-pulse/workflows/{ticket_key}
 GET  /api/v1/effects/workflow/{run_id}
 GET  /api/v1/effects/{idempotency_key}
 POST /api/v1/effects/{idempotency_key}/replay
+POST /api/v1/effects/{idempotency_key}/reconcile
 ```
 
 Start with the execution view, then use the timeline to find the accepted
@@ -88,11 +89,73 @@ and retains attempt and provider evidence under a stable idempotency key.
   closed while a required effect remains unresolved.
 - **Terminal/precondition failure:** correct the underlying provider,
   repository, or configuration problem before recovery.
+- **Indeterminate:** the provider may have accepted a write, but Forge cannot
+  safely establish the outcome. Inspect the provider before taking action;
+  automatic execution and ordinary replay do not repeat this write.
 - **Replay:** `POST .../replay` requeues an eligible terminal effect. It repeats
   only that provider mutation; it does not rerun an agent or advance the graph.
 
 Use replay only after confirming the intended write and correcting its cause.
 Do not use it as a substitute for inspecting the effect history.
+
+For an indeterminate effect, `POST .../reconcile` requires the same operator token
+and an explicit provider-side determination. Its JSON body includes `decision`
+(`applied` or `not_applied`), a required `note` describing the evidence, and an
+optional `provider_reference`. `applied` records success; `not_applied` returns
+the effect to pending execution. The journal retains reconciliation history and
+accepts this operation only for an unclaimed indeterminate record. Confirm that
+any prior request has settled before choosing `not_applied`.
+
+```json
+{
+  "decision": "applied",
+  "note": "Verified the attachment exists on the issue with the expected content.",
+  "provider_reference": "attachment-12345"
+}
+```
+
+## Upgrading the recovery protocol
+
+Drain and stop all old workers before deploying the ownership-aware worker.
+Mixed versions are unsafe: an old worker cannot enforce new claim tokens. Keep
+Redis and provider evidence intact throughout the cutover. Gateway delivery may
+continue while workers are stopped if Redis has adequate capacity.
+
+1. Snapshot Redis and record pending stream deliveries, retry schedules, running
+   effect leases, and active workflow checkpoints.
+2. Allow legacy running effect leases to expire before the new worker recovers
+   them. Retain completed effect records and their stable idempotency identities.
+3. Inspect accepted observations lacking processing records. They are ambiguous;
+   do not bulk replay them or mark them complete merely because a checkpoint
+   exists. Reconcile individual cases against command, checkpoint, and provider
+   evidence.
+4. Start the new worker at low concurrency and verify pending/retry recovery,
+   effect outcomes, and lease-loss logs using a controlled test ticket.
+5. Increase concurrency after recovery converges and outstanding work remains
+   within the configured dispatch bound.
+
+For rollback, stop the new workers first and preserve their records. Do not run
+an old writer against new active ownership records. Restore only from a reviewed
+snapshot/reconciliation procedure that accounts for provider writes made since
+that snapshot.
+
+Monitor `forge_queue_active_deliveries`, `forge_queue_buffered_deliveries`,
+`forge_queue_reclaimed_deliveries_total`, and `forge_queue_lease_losses_total`
+alongside stream pending counts. Dispatch gauges describe admitted local work;
+the backlog remains in Redis.
+
+`forge_observation_processing_pending` reports the accepted work still awaiting
+completion. `forge_observation_processing_oldest_age_seconds` advances with time
+between ledger updates, making stalled pending work visible.
+
+The counter `forge_ticket_stale_writes_rejected_total` identifies rejected stale
+checkpoint operations. Inspect ownership-loss logs alongside delivery recovery
+and effect history; a rejection protects state and does not itself establish
+that the underlying provider operation failed.
+
+See [Delivery recovery and ownership](architecture/recovery.md) for the actual
+boundaries. Recovery requires durable Redis data and can repeat model work that
+had not yet been checkpointed.
 
 ## Managing blocked workflows
 

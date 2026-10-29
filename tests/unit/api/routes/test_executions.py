@@ -4,7 +4,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from forge.api.routes.executions import load_execution_read_model
+from forge.domain import Observation, ObservationSource, ResourceIdentity
 from forge.read_models.models import TimelineEntry
+from forge.reconciliation import InMemoryObservationLedger, ProcessingPhase
 
 
 @pytest.mark.asyncio
@@ -54,6 +56,105 @@ async def test_load_execution_read_model_returns_none_for_unknown_workflow() -> 
     checkpointer.aget.return_value = None
 
     assert await load_execution_read_model("MISSING-1", checkpointer=checkpointer) is None
+
+
+@pytest.mark.asyncio
+async def test_execution_read_model_shows_accepted_processing_without_checkpoint() -> None:
+    now = datetime.now(UTC)
+    observation = Observation(
+        observation_id="observation-no-checkpoint",
+        source=ObservationSource.WEBHOOK,
+        source_system="jira",
+        resource=ResourceIdentity(resource_type="issue", external_id="FORGE-3"),
+        resource_revision="revision-1",
+        revision_order=1,
+        observed_at=now,
+        received_at=now,
+        facts={"status": "open"},
+        correlation={"ticket_key": "FORGE-3"},
+    )
+    ledger = InMemoryObservationLedger()
+    await ledger.accept(observation, "FORGE-3", {"message_id": "stream-1"})
+    checkpointer = AsyncMock()
+    checkpointer.aget.return_value = None
+    journal = AsyncMock()
+    journal.list_for_workflow.return_value = []
+
+    model = await load_execution_read_model(
+        "FORGE-3",
+        checkpointer=checkpointer,
+        effect_journal=journal,
+        observation_ledger=ledger,
+    )
+
+    assert model is not None
+    assert model.ticket_key == "FORGE-3"
+    assert model.current_position == "entry"
+    assert len(model.observation_processing) == 1
+    assert model.observation_processing[0].phase == "pending"
+    assert any(item.kind == "observation_processing" for item in model.timeline)
+
+
+@pytest.mark.asyncio
+async def test_execution_read_model_loads_pinned_prepared_work_without_checkpoint() -> None:
+    definition = {
+        "apiVersion": "forge/v1",
+        "kind": "Workflow",
+        "metadata": {"name": "short-feature", "revision": 2},
+        "spec": {
+            "state": "feature",
+            "entry": "generate_prd",
+            "steps": {"generate_prd": {"next": "__end__"}},
+        },
+    }
+    from forge.workflow.declarative.loader import load_workflow_value
+
+    digest = load_workflow_value(definition).digest
+    now = datetime.now(UTC)
+    observation = Observation(
+        observation_id="observation-prepared-no-checkpoint",
+        source=ObservationSource.WEBHOOK,
+        source_system="jira",
+        resource=ResourceIdentity(resource_type="issue", external_id="FORGE-4"),
+        resource_revision="revision-1",
+        revision_order=1,
+        observed_at=now,
+        received_at=now,
+        facts={"status": "open"},
+        correlation={"ticket_key": "FORGE-4"},
+    )
+    ledger = InMemoryObservationLedger()
+    _, accepted = await ledger.accept(observation, "FORGE-4", {"message_id": "stream-4"})
+    assert accepted is not None
+    await ledger.save_processing(
+        accepted.model_copy(
+            update={
+                "phase": ProcessingPhase.PREPARED,
+                "workflow_pin": {
+                    "name": "short-feature",
+                    "revision": 2,
+                    "digest": digest,
+                    "definition": definition,
+                },
+            }
+        )
+    )
+    checkpointer = AsyncMock()
+    checkpointer.aget.return_value = None
+    journal = AsyncMock()
+    journal.list_for_workflow.return_value = []
+
+    model = await load_execution_read_model(
+        "FORGE-4",
+        checkpointer=checkpointer,
+        effect_journal=journal,
+        observation_ledger=ledger,
+    )
+
+    assert model is not None
+    assert model.definition.digest == digest
+    assert model.definition.revision == 2
+    assert model.observation_processing[0].phase == "prepared"
 
 
 @pytest.mark.asyncio

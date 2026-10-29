@@ -1160,6 +1160,7 @@ class TestEnsureSkillsIntegration:
                 "is_blocked": False,
                 "ticket_type": "Feature",
                 "command_decisions": ANY,
+                "command_handoffs": ANY,
             },
             as_node="prd_approval_gate",
         )
@@ -1214,7 +1215,11 @@ class TestEnsureSkillsIntegration:
         invocation = fake_compiled.ainvoke.await_args
         assert isinstance(invocation.args[0], Command)
         assert invocation.args[0].goto == "setup_workspace"
-        assert invocation.args[0].update == {**retry_cleared_state, "command_decisions": ANY}
+        assert invocation.args[0].update == {
+            **retry_cleared_state,
+            "command_decisions": ANY,
+            "command_handoffs": ANY,
+        }
         assert invocation.kwargs["config"] == {"configurable": {"thread_id": "TEST-123"}}
 
     @pytest.mark.asyncio
@@ -1243,6 +1248,7 @@ class TestEnsureSkillsIntegration:
             **retry_cleared_state,
             "context": {},
             "command_decisions": ANY,
+            "command_handoffs": ANY,
         }
 
         fake_workflow = MagicMock()

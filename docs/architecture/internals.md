@@ -19,6 +19,9 @@ as a command, validated, and applied through the selected workflow's transition 
 a checkpoint does not claim ownership of Jira issue content, pull-request state, or CI results; a
 new provider revision can cause those facts to be reconciled and re-evaluated.
 
+See [Delivery recovery and ownership](recovery.md) for the processing handoff,
+write fencing, and recovery guarantees.
+
 ## Delivery and concurrency
 
 Queue delivery is at least once. The observation `delivery_identity` makes equivalent webhook and

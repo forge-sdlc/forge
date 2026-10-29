@@ -37,6 +37,18 @@ class SourceControlMutationExecutor:
         self.operation = operation
         self._registry_factory = registry_factory
 
+    @property
+    def retry_safe_after_ambiguous_failure(self) -> bool:
+        # These operations read provider state or use a stable marker before
+        # writing. CR create adapters deduplicate by source/base branch.
+        return self.operation in {
+            SC_FILE_PUT_OPERATION,
+            SC_CHANGE_REQUEST_CREATE_OPERATION,
+            SC_CHANGE_REQUEST_UPDATE_OPERATION,
+            SC_COMMENT_CREATE_OPERATION,
+            SC_COMMENT_REPLY_OPERATION,
+        }
+
     async def execute(self, command: EffectCommand) -> EffectResult:
         resolved = self._registry_factory().resolve(
             str(

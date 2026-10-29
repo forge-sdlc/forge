@@ -27,3 +27,7 @@ class EffectExecutorRegistry:
             return self._executors[operation]
         except KeyError as exc:
             raise ValueError(f"No effect executor registered for {operation}") from exc
+
+    def maybe_resolve(self, operation: str) -> EffectExecutor | None:
+        """Return an executor when registered, without manufacturing an error."""
+        return self._executors.get(operation)
