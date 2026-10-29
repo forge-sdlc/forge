@@ -503,3 +503,18 @@ Evaluate skill outputs against gold standards. See [Skill Evaluation](../dev/ski
 | `--results-dir DIR` | Batch mode | Runner output directory |
 | `--mlflow URI` | No | MLflow tracking URI |
 | `--mlflow-experiment NAME` | No | MLflow experiment name |
+
+## Queue recovery capacity
+
+`QUEUE_MAX_CONCURRENT_TASKS` controls executing handlers. The additional
+`QUEUE_MAX_OUTSTANDING_DELIVERIES` setting bounds active plus buffered deliveries
+(default 40). New stream reads reserve capacity before claiming work, leaving
+capacity for retries and recovery.
+
+`QUEUE_PENDING_IDLE_MS` sets the minimum idle time for recovering abandoned
+stream deliveries (default 60000 milliseconds). Active deliveries refresh their
+ownership; increasing this value delays recovery after a crash.
+
+`QUEUE_SHUTDOWN_TIMEOUT_SECONDS` bounds graceful draining (default 30 seconds).
+Unfinished work remains recoverable when that deadline expires. Choose the
+container termination grace period to allow this drain plus process cleanup.

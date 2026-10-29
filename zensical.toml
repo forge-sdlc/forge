@@ -30,6 +30,7 @@ nav = [
       {"Control-plane Architecture" = "architecture/control-plane.md"},
       {"System and Components" = "architecture/overview.md"},
       {"Runtime Internals" = "architecture/internals.md"},
+      {"Delivery Recovery" = "architecture/recovery.md"},
       {"Structured Model Output" = "architecture/structured-output.md"},
       {"Reference" = "architecture/reference.md"},
     ]},
