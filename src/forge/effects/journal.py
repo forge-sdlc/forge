@@ -410,6 +410,8 @@ class RedisEffectJournal:
 
     async def claim_due(self, limit: int = 1) -> Sequence[EffectRecord]:
         redis = await self._client()
+        if limit <= 0:
+            return []
         now = _now()
         # Inspect a small batch beyond the requested claim count so stale index
         # entries cannot hold the first slot and starve valid due effects.
@@ -422,6 +424,8 @@ class RedisEffectJournal:
             record = await self._claim_member(redis, key)
             if record is not None:
                 claimed.append(record)
+                if len(claimed) >= limit:
+                    break
         return claimed
 
     async def _claim_member(self, redis: Any, idempotency_key: str) -> EffectRecord | None:

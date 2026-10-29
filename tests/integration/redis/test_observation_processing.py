@@ -64,3 +64,36 @@ async def test_accepted_start_record_survives_ledger_restart_and_redelivery(redi
         )
         is not None
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize("resolved_phase", [ProcessingPhase.APPLIED, ProcessingPhase.IGNORED])
+async def test_blocked_observation_remains_pending_until_resolved(
+    redis_client, legacy, resolved_phase
+):
+    message = _message()
+    ledger = RedisObservationLedger(redis_client)
+    observation = create_default_event_adapter_registry().adapt(message).observation
+    if legacy:
+        await ledger.record(observation)
+    _, record = await ledger.accept(
+        observation, message.ticket_key, {"message_id": message.message_id, **message.to_dict()}
+    )
+    assert record is not None
+    if not legacy:
+        record = record.model_copy(
+            update={"phase": ProcessingPhase.BLOCKED, "last_error": "operator action required"}
+        )
+        await ledger.save_processing(record)
+    assert record.phase is ProcessingPhase.BLOCKED
+
+    restarted = RedisObservationLedger(redis_client)
+    assert await restarted.pending_processing() == (record,)
+    assert await restarted.pending_processing(ticket_key=message.ticket_key) == (record,)
+    assert await restarted.pending_processing(ticket_key="OTHER-1") == ()
+
+    await restarted.save_processing(record.model_copy(update={"phase": resolved_phase}))
+    assert await restarted.pending_processing() == ()
+    assert await restarted.pending_processing(ticket_key=message.ticket_key) == ()

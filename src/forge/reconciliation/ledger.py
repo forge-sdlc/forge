@@ -55,6 +55,13 @@ _RUN_HISTORY_PREFIX = "forge:observations:run:"
 _PROCESSING_PREFIX = "forge:observations:processing:"
 _PROCESSING_PENDING = "forge:observations:processing:pending"
 _PROCESSING_HISTORY = "forge:observations:processing:history"
+# Blocked decisions remain ordering barriers until an operator resolves them.
+_UNFINISHED_PROCESSING_PHASES = {
+    ProcessingPhase.PENDING,
+    ProcessingPhase.RUNNING,
+    ProcessingPhase.PREPARED,
+    ProcessingPhase.BLOCKED,
+}
 
 
 class ObservationLedger(Protocol):
@@ -72,7 +79,9 @@ class ObservationLedger(Protocol):
 
     async def pending_processing(
         self, *, ticket_key: str | None = None, limit: int = 100
-    ) -> Sequence[ObservationProcessingRecord]: ...
+    ) -> Sequence[ObservationProcessingRecord]:
+        """Return unfinished observations, including blocked ordering barriers."""
+        ...
 
     async def processing_for_ticket(
         self, ticket_key: str, limit: int = 100
@@ -236,8 +245,7 @@ class InMemoryObservationLedger:
         return tuple(
             item
             for item in pending
-            if item.phase
-            in {ProcessingPhase.PENDING, ProcessingPhase.RUNNING, ProcessingPhase.PREPARED}
+            if item.phase in _UNFINISHED_PROCESSING_PHASES
             and (ticket_key is None or item.ticket_key == ticket_key)
         )[:limit]
 
@@ -414,6 +422,14 @@ class RedisObservationLedger:
                         )
                         pipeline.set(processing_key, processing.model_dump_json())
                         pipeline.zadd(
+                            _PROCESSING_PENDING,
+                            {processing.delivery_identity: processing.created_at.timestamp()},
+                        )
+                        pipeline.zadd(
+                            f"{_PROCESSING_PENDING}:ticket:{ticket_key}",
+                            {processing.delivery_identity: processing.created_at.timestamp()},
+                        )
+                        pipeline.zadd(
                             f"{_PROCESSING_HISTORY}:ticket:{ticket_key}",
                             {processing.delivery_identity: processing.created_at.timestamp()},
                         )
@@ -445,11 +461,7 @@ class RedisObservationLedger:
                         f"{_PROCESSING_HISTORY}:ticket:{record.ticket_key}",
                         {record.delivery_identity: record.created_at.timestamp()},
                     )
-                    if record.phase in {
-                        ProcessingPhase.PENDING,
-                        ProcessingPhase.RUNNING,
-                        ProcessingPhase.PREPARED,
-                    }:
+                    if record.phase in _UNFINISHED_PROCESSING_PHASES:
                         pipeline.zadd(
                             _PROCESSING_PENDING,
                             {record.delivery_identity: record.created_at.timestamp()},
@@ -485,11 +497,7 @@ class RedisObservationLedger:
             if isinstance(identity, bytes):
                 identity = identity.decode()
             record = await self.get_processing(str(identity))
-            if record is None or record.phase not in {
-                ProcessingPhase.PENDING,
-                ProcessingPhase.RUNNING,
-                ProcessingPhase.PREPARED,
-            }:
+            if record is None or record.phase not in _UNFINISHED_PROCESSING_PHASES:
                 continue
             if ticket_key is None or record.ticket_key == ticket_key:
                 pending.append(record)

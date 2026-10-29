@@ -13,7 +13,7 @@ from forge.models.events import EventSource
 from forge.orchestrator.event_adapters import create_default_event_adapter_registry
 from forge.orchestrator.worker import OrchestratorWorker, _stop_effect_runner
 from forge.queue.models import QueueMessage
-from forge.reconciliation import InMemoryObservationLedger, ObservationDisposition
+from forge.reconciliation import InMemoryObservationLedger, ObservationDisposition, ProcessingPhase
 
 
 def _jira_message() -> QueueMessage:
@@ -50,6 +50,55 @@ async def test_duplicate_observation_does_not_reinterpret_or_start_workflow() ->
 
     interpret.assert_not_called()
     invoke.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("legacy", [False, True])
+async def test_blocked_predecessor_prevents_newer_observation_execution(legacy) -> None:
+    ledger = InMemoryObservationLedger()
+    worker = OrchestratorWorker(consumer_name="blocked-test", observation_ledger=ledger)
+    original = _jira_message()
+    original.payload["issue"]["fields"]["updated"] = "2026-10-29T10:00:00Z"
+    observation = worker.event_adapters.adapt(original).observation
+    if legacy:
+        await ledger.record(observation)
+    _, record = await ledger.accept(
+        observation, original.ticket_key, {"message_id": original.message_id, **original.to_dict()}
+    )
+    assert record is not None
+    if not legacy:
+        await ledger.save_processing(record.model_copy(update={"phase": ProcessingPhase.BLOCKED}))
+    newer = _jira_message()
+    newer.message_id = "message-2"
+    newer.event_id = "provider-event-2"
+    newer.payload["issue"]["fields"]["updated"] = "2026-10-29T10:00:01Z"
+
+    with (
+        patch("forge.orchestrator.worker.ensure_skills", new=AsyncMock()) as sync_skills,
+        patch("forge.orchestrator.worker.interpret_event") as interpret,
+        patch.object(worker, "_resolve_custom_workflow", new=AsyncMock(return_value=None)),
+        patch.object(worker.router, "resolve", return_value=SimpleNamespace(name="feature")),
+        patch.object(
+            worker,
+            "_get_compiled_workflow",
+            return_value=SimpleNamespace(aget_state=AsyncMock(return_value=None)),
+        ),
+        patch.object(
+            worker,
+            "_invoke_workflow",
+            new=AsyncMock(return_value={"current_node": "waiting", "is_paused": True}),
+        ) as invoke,
+        pytest.raises(RuntimeError, match="earlier accepted observation .* is blocked"),
+    ):
+        await worker._process_workflow(newer)
+
+    sync_skills.assert_not_awaited()
+    interpret.assert_not_called()
+    invoke.assert_not_awaited()
+    pending = await ledger.pending_processing(ticket_key=original.ticket_key)
+    assert [item.phase for item in pending] == [ProcessingPhase.BLOCKED, ProcessingPhase.PENDING]
+    await ledger.save_processing(record.model_copy(update={"phase": ProcessingPhase.IGNORED}))
+    assert [item.phase for item in await ledger.pending_processing()] == [ProcessingPhase.PENDING]
 
 
 @pytest.mark.asyncio

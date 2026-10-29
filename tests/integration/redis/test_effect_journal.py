@@ -15,7 +15,12 @@ from forge.domain import (
     ResourceIdentity,
     WorkflowIdentity,
 )
-from forge.effects import EffectClaimLostError, RedisEffectJournal
+from forge.effects import (
+    EffectClaimLostError,
+    EffectExecutorRegistry,
+    EffectService,
+    RedisEffectJournal,
+)
 from forge.orchestrator.ownership import (
     TicketOwnership,
     TicketOwnershipLost,
@@ -68,10 +73,13 @@ async def test_submit_is_fenced_by_ticket_ownership(redis_client) -> None:
             await journal.submit(command)
         assert await journal.get(command.idempotency_key) is None
         assert await redis_client.zscore("forge:effects:due", command.idempotency_key) is None
-        assert await redis_client.sismember(
-            f"forge:effects:workflow:{command.workflow.run_id}",
-            command.idempotency_key,
-        ) == 0
+        assert (
+            await redis_client.sismember(
+                f"forge:effects:workflow:{command.workflow.run_id}",
+                command.idempotency_key,
+            )
+            == 0
+        )
 
         with ownership_scope(TicketOwnership(redis_client, lock_key, "current-owner")):
             submitted = await journal.submit(command)
@@ -118,9 +126,7 @@ async def test_concurrent_services_have_one_claim_and_stale_owner_cannot_commit(
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_long_running_claim_renews_and_json_empty_arrays_round_trip(redis_client) -> None:
-    command = _command(
-        payload={"empty_array": [], "empty_object": {}, "nested": {"values": []}}
-    )
+    command = _command(payload={"empty_array": [], "empty_object": {}, "nested": {"values": []}})
     journal_a = RedisEffectJournal(redis_client, lease=timedelta(milliseconds=150))
     journal_b = RedisEffectJournal(redis_client, lease=timedelta(milliseconds=150))
     try:
@@ -183,6 +189,60 @@ async def test_orphan_due_index_entry_does_not_starve_valid_effect(redis_client)
     finally:
         await _cleanup(redis_client, command)
         await redis_client.zrem("forge:effects:due", orphan)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [0, 1, 2])
+async def test_claim_due_leaves_excess_effects_unclaimed(redis_client, limit) -> None:
+    journal = RedisEffectJournal(redis_client)
+    commands = [_command() for _ in range(3)]
+    for command in commands:
+        await journal.submit(command)
+    await redis_client.zadd("forge:effects:due", {"orphan": 0})
+
+    claimed = await journal.claim_due(limit)
+
+    assert len(claimed) == limit
+    claimed_keys = {record.command.idempotency_key for record in claimed}
+    for command in commands:
+        record = await journal.get(command.idempotency_key)
+        assert record is not None
+        if command.idempotency_key not in claimed_keys:
+            assert record.status.value == "pending"
+            assert record.claim_token is None
+            assert record.lease_until is None
+            assert record.attempt == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_sweep_executes_all_due_effects_without_stranding_claims(redis_client) -> None:
+    journal = RedisEffectJournal(redis_client)
+    commands = [_command() for _ in range(3)]
+    calls = []
+
+    class Executor:
+        operation = "test.write"
+        retry_safe_after_ambiguous_failure = False
+
+        async def execute(self, command):
+            calls.append(command.idempotency_key)
+            return _result(command)
+
+    executors = EffectExecutorRegistry()
+    executors.register(Executor())
+    service = EffectService(journal, executors)
+    for command in commands:
+        await service.submit(command)
+
+    completed = await service.run_due(limit=len(commands))
+
+    assert len(completed) == len(commands)
+    assert set(calls) == {command.idempotency_key for command in commands}
+    assert all(record.status.value == "succeeded" for record in completed)
+    assert all(record.attempt == 1 for record in completed)
+    assert await redis_client.zcard("forge:effects:due") == 0
 
 
 @pytest.mark.integration

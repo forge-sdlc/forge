@@ -52,6 +52,10 @@ waits, explicit ignores, and terminal results are durable boundaries; receiving
 an observation or finding any checkpoint for a ticket is not sufficient evidence
 of completion.
 
+Blocked observations remain in the pending processing index. Later observations
+for the same ticket wait until the blocked decision is explicitly resolved;
+acknowledging its transport delivery does not remove that ordering barrier.
+
 Pending stream recovery and scheduled retries use the same bounded dispatch and
 execution protocol as new messages. Retry schedules and ownership remain
 transport state, separate from command application. A backlog remains in Redis
