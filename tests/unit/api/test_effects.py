@@ -69,6 +69,8 @@ async def test_authenticated_effect_replay_is_durable_operator_timeline_evidence
     service = EffectService(journal, EffectExecutorRegistry())
     command = _command()
     await service.submit(command)
+    claimed = await journal.claim(command.idempotency_key)
+    assert claimed is not None
     await journal.complete(
         EffectResult(
             effect_id=command.effect_id,
@@ -76,7 +78,8 @@ async def test_authenticated_effect_replay_is_durable_operator_timeline_evidence
             status=EffectResultStatus.TERMINAL_FAILURE,
             completed_at=datetime.now(UTC),
             error_message="provider unavailable",
-        )
+        ),
+        claimed.claim_token or "",
     )
     timeline = InMemoryExecutionTimelineStore()
     app.dependency_overrides[get_effect_service] = lambda: service
@@ -118,4 +121,55 @@ async def test_unauthenticated_effect_replay_does_not_write_operator_evidence(mo
         assert response.status_code == 401
         assert await timeline.list("FORGE-1") == ()
     finally:
+        app.dependency_overrides.pop(get_timeline_store, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("decision", "expected_status"),
+    [("not_applied", "pending"), ("applied", "succeeded")],
+)
+async def test_operator_reconciles_indeterminate_effect_explicitly(
+    monkeypatch, decision: str, expected_status: str
+) -> None:
+    class AmbiguousExecutor:
+        operation = "test.write"
+        retry_safe_after_ambiguous_failure = False
+
+        async def execute(self, _command):
+            raise TimeoutError("provider response was lost")
+
+    journal = InMemoryEffectJournal()
+    registry = EffectExecutorRegistry()
+    registry.register(AmbiguousExecutor())
+    service = EffectService(journal, registry)
+    command = _command()
+    await service.submit(command)
+    await service.run_due()
+    timeline = InMemoryExecutionTimelineStore()
+    app.dependency_overrides[get_effect_service] = lambda: service
+    app.dependency_overrides[get_timeline_store] = lambda: timeline
+    monkeypatch.setattr(
+        "forge.api.routes.effects.get_settings",
+        lambda: SimpleNamespace(effect_operator_token=SecretStr("operator-secret")),
+    )
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post(
+                "/api/v1/effects/effect-1/reconcile",
+                headers={"Authorization": "Bearer operator-secret"},
+                json={
+                    "decision": decision,
+                    "note": "Confirmed the provider has no matching mutation.",
+                },
+            )
+        assert response.status_code == 200
+        assert response.json()["status"] == expected_status
+        assert response.json()["reconciliation_history"][0]["decision"] == decision
+        entries = await timeline.list("FORGE-1")
+        assert entries[0].details["action"] == "effect-reconcile"
+        assert entries[0].details["decision"] == decision
+    finally:
+        app.dependency_overrides.pop(get_effect_service, None)
         app.dependency_overrides.pop(get_timeline_store, None)

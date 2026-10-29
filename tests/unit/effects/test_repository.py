@@ -1,3 +1,5 @@
+import asyncio
+import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -75,3 +77,40 @@ async def test_stale_push_is_superseded_by_newer_local_commit() -> None:
 
     git.push_to_fork.assert_not_called()
     assert result.output == {"superseded_by": "newer456"}
+
+
+@pytest.mark.asyncio
+async def test_executor_cancellation_signals_and_joins_blocking_git_call() -> None:
+    adapter = MagicMock()
+    adapter.get_git_credentials = AsyncMock(return_value=MagicMock())
+    registry = MagicMock()
+    registry.resolve.return_value = MagicMock(adapter=adapter, repo_ref=MagicMock())
+    started = threading.Event()
+    finished = threading.Event()
+    state: dict[str, threading.Event] = {}
+
+    class BlockingGit:
+        def get_current_sha(self) -> str:
+            started.set()
+            state["cancel"].wait(timeout=2)
+            finished.set()
+            return "abc123"
+
+        def get_remote_branch_sha(self, *_args, **_kwargs):
+            raise AssertionError("canceled execution must not start another git command")
+
+    git = BlockingGit()
+
+    def make_git(*_args, **kwargs):
+        state["cancel"] = kwargs["cancellation_event"]
+        return git
+
+    with patch("forge.effects.repository.GitOperations", side_effect=make_git):
+        task = asyncio.create_task(RepositoryPushExecutor(lambda: registry).execute(_command()))
+        await asyncio.wait_for(asyncio.to_thread(started.wait), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert state["cancel"].is_set()
+    assert finished.is_set()

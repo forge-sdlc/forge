@@ -16,6 +16,7 @@ class EffectResultStatus(StrEnum):
     PRECONDITION_FAILED = "precondition_failed"
     RETRYABLE_FAILURE = "retryable_failure"
     TERMINAL_FAILURE = "terminal_failure"
+    INDETERMINATE = "indeterminate"
 
 
 class EffectCommand(VersionedDomainModel):
