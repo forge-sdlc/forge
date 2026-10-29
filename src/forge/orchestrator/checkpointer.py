@@ -45,12 +45,14 @@ import redis.asyncio as redis
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
 from forge.config import get_settings
+from forge.orchestrator.ownership import OwnedRedis
 
 logger = logging.getLogger(__name__)
 
 # Global instances
 _checkpointer: AsyncRedisSaver | None = None
 _checkpointer_context = None
+_checkpoint_client: OwnedRedis | None = None
 _redis_pool: redis.ConnectionPool | None = None
 
 
@@ -64,13 +66,14 @@ async def get_checkpointer() -> AsyncRedisSaver:
     Returns:
         Configured AsyncRedisSaver instance.
     """
-    global _checkpointer, _checkpointer_context
+    global _checkpointer, _checkpointer_context, _checkpoint_client
 
     if _checkpointer is None:
         settings = get_settings()
 
         # from_conn_string returns an async context manager
-        _checkpointer_context = AsyncRedisSaver.from_conn_string(settings.redis_url)
+        _checkpoint_client = OwnedRedis.from_url(settings.redis_url)
+        _checkpointer_context = AsyncRedisSaver.from_conn_string(redis_client=_checkpoint_client)
         # Manually enter the context manager for long-running use
         _checkpointer = await _checkpointer_context.__aenter__()
         # Initialize Redis indices for checkpointing
@@ -81,12 +84,15 @@ async def get_checkpointer() -> AsyncRedisSaver:
 
 async def close_checkpointer() -> None:
     """Close the checkpointer connection."""
-    global _checkpointer, _checkpointer_context
+    global _checkpointer, _checkpointer_context, _checkpoint_client
 
     if _checkpointer is not None and _checkpointer_context is not None:
         await _checkpointer_context.__aexit__(None, None, None)
         _checkpointer = None
         _checkpointer_context = None
+    if _checkpoint_client is not None:
+        await _checkpoint_client.aclose()
+        _checkpoint_client = None
 
 
 async def get_redis_client() -> redis.Redis:
